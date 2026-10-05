@@ -7,7 +7,7 @@
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { Component, type ReactNode } from 'react';
-import { columnLabel, formatDuration, formatNumber, SECONDS_PER_UNIT, type BaseTimeUnit } from '@lila-modeler/engine/format';
+import { columnLabel, SECONDS_PER_UNIT, type BaseTimeUnit } from '@lila-modeler/engine/format';
 import type { ResolvedScenario } from '@lila-modeler/engine/schema';
 import type { EventLogRow, ProcessIR, RunResult } from '@lila-modeler/engine';
 import {
@@ -29,6 +29,7 @@ import {
   type GraficaBarrasProps,
   type HistogramaProps,
 } from './GraficasSvg';
+import { formatDisplay, formatDisplayDuration } from './formatDisplay';
 import { strings, useStrings } from './i18n';
 
 /** The event log sample the shell keeps for the run (`App.tsx`, `logs`). */
@@ -50,14 +51,14 @@ const unaSerie = (titulo: string, serie: string, puntos: readonly Punto[], texto
 export function graficaUtilizacion(result: RunResult, nombres: Readonly<Record<string, string>>): GraficaBarrasProps | null {
   const puntos = utilizacionPorRecurso(result, nombres);
   if (puntos.length === 0) return null;
-  return unaSerie(strings().graficas.utilizacion, columnLabel('resources', 'utilization'), puntos, formatNumber, 100);
+  return unaSerie(strings().graficas.utilizacion, columnLabel('resources', 'utilization'), puntos, formatDisplay, 100);
 }
 
 /** Instances started per task; `null` without tasks. Same value and text as the Elements table. */
 export function graficaInstancias(ir: ProcessIR, result: RunResult): GraficaBarrasProps | null {
   const puntos = instanciasPorTarea(ir, result);
   if (puntos.length === 0) return null;
-  return unaSerie(strings().graficas.instancias, columnLabel('elements', 'started'), puntos, formatNumber);
+  return unaSerie(strings().graficas.instancias, columnLabel('elements', 'started'), puntos, formatDisplay);
 }
 
 /**
@@ -77,7 +78,7 @@ export function graficaPercentiles(result: RunResult, unit: BaseTimeUnit): Grafi
         id: p,
         etiqueta: p,
         valores: segundos.map((s) => s / SECONDS_PER_UNIT[unit]),
-        textos: segundos.map((s) => formatDuration(s, unit)),
+        textos: segundos.map((s) => formatDisplayDuration(s, unit)),
       };
     }),
   };
@@ -202,7 +203,7 @@ function HistogramaDeCasos({ scenario, unit, log }: { scenario: ResolvedScenario
             {histograma(histo.props.valores).map((c) => (
               <tr key={c.desde}>
                 <td style={{ padding: '2px 8px' }}>{textoClase(c)}</td>
-                <td style={{ padding: '2px 8px', textAlign: 'right' }}>{formatNumber(c.casos)}</td>
+                <td style={{ padding: '2px 8px', textAlign: 'right' }}>{formatDisplay(c.casos)}</td>
               </tr>
             ))}
           </tbody>

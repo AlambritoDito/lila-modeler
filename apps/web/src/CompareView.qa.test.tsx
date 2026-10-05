@@ -21,6 +21,7 @@ import { beforeAll, describe, expect, test } from 'vitest';
 import { parseBpmn } from '@lila-modeler/engine/bpmn';
 import { resolveExtends } from '@lila-modeler/engine/schema';
 import { formatDuration } from '@lila-modeler/engine/format';
+import { formatDisplayDuration } from './formatDisplay';
 import {
   compare,
   simulate,
@@ -74,6 +75,20 @@ function textOf(cell: string): string {
 
 /** La marca de significancia va separada en el HTML (`… *`) y pegada en la CLI (`…*`). */
 const normalizeMark = (text: string): string => text.replace(/\s+\*$/, '*');
+
+/**
+ * Valor exacto de una celda (#578): las celdas numéricas muestran dos decimales y guardan el
+ * texto de `lila compare` en su `title`; las de identidad (Id/Name/Metric) no llevan `title`.
+ * La marca de significancia vive fuera del `title`, en su propio `<span role="img">`.
+ */
+function exactOf(cell: string): string {
+  const title = /^<t[dh][^>]*\stitle="([^"]*)"/.exec(cell)?.[1];
+  if (title === undefined) return textOf(cell);
+  return textOf(title) + (cell.includes('role="img"') ? ' *' : '');
+}
+
+/** Ningún número visible de la celda pasa de dos decimales. */
+const maxDecimals = (text: string): number => Math.max(0, ...(text.match(/\d+\.\d+/g) ?? []).map((n) => n.split('.')[1]!.length));
 
 /* ------------------------------------------------------------------ *
  * Fixture real: examples/pedido AS-IS vs TO-BE 3 cajeros, más la salida de `lila compare`.
@@ -166,9 +181,10 @@ describe('CompareView QA: paridad con `lila compare`', () => {
     expect(cellsOf(head!).map(textOf)).toEqual(cli.headers);
     expect(body).toHaveLength(cli.rows.length);
     for (const [index, tr] of body.entries()) {
-      expect(cellsOf(tr).map((cell) => normalizeMark(textOf(cell))), `${title} fila ${index}`).toEqual(
+      expect(cellsOf(tr).map((cell) => normalizeMark(exactOf(cell))), `${title} fila ${index}`).toEqual(
         cli.rows[index],
       );
+      for (const cell of cellsOf(tr).slice(3)) expect(maxDecimals(textOf(cell)), cell).toBeLessThanOrEqual(2);
     }
   });
 });
@@ -301,8 +317,9 @@ describe('CompareView QA: baseTimeUnit', () => {
       ['h', enHoras],
       ['min', html],
     ] as const) {
-      const cells = cellsOf(findRow(source, 'Task_Revisar', 'Average time')).map(textOf);
-      expect(cells[3], `base en ${unit}`).toBe(formatDuration(duracion.values[0]!, unit));
+      const cells = cellsOf(findRow(source, 'Task_Revisar', 'Average time'));
+      expect(textOf(cells[3]!), `base en ${unit}`).toBe(formatDisplayDuration(duracion.values[0]!, unit));
+      expect(exactOf(cells[3]!), `base exacta en ${unit}`).toBe(formatDuration(duracion.values[0]!, unit));
     }
 
     // Conteos, utilización y `queueLength.mean` no son segundos: su texto no puede cambiar.

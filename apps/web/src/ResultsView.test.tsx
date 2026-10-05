@@ -17,6 +17,7 @@ import type { ResolvedScenario } from '@lila-modeler/engine/schema';
 import type { BottleneckEntry, ProcessIR, RunResult } from '@lila-modeler/engine';
 
 import { buildResultCsvExports, ResultsView, sortRows, type ColumnDef } from './ResultsView.js';
+import { formatDisplay, formatDisplayDuration } from './formatDisplay';
 import { setLocale, strings } from './i18n';
 
 // This suite pins the Spanish translation. English is the app's base language since
@@ -54,7 +55,7 @@ async function loadIr(): Promise<ProcessIR> {
 }
 
 describe('ResultsView (LILA-062)', () => {
-  it('la tabla de Elementos usa el mismo formato que `lila run` (formatDuration/formatNumber)', async () => {
+  it('la tabla de Elementos muestra dos decimales y guarda en `title` el valor de `lila run` (#578)', async () => {
     const ir = await loadIr();
     const result = loadGolden();
     const scenario = scenarioWithUnit('min');
@@ -63,10 +64,14 @@ describe('ResultsView (LILA-062)', () => {
     const task = result.elements['Task_TomarPedido']!;
     // La pestaña "Elementos del proceso" es la que se ve por defecto (sin clics).
     expect(html).toContain('Minimum time (min)');
-    expect(html).toContain(formatDuration(task.processing.min, 'min'));
-    expect(html).toContain(formatDuration(task.processing.mean, 'min'));
-    expect(html).toContain(formatNumber(task.started));
+    for (const segundos of [task.processing.min, task.processing.mean]) {
+      expect(html).toContain(`title="${formatDuration(segundos, 'min')}">${formatDisplayDuration(segundos, 'min')}</td>`);
+    }
+    expect(html).toContain(`title="${formatNumber(task.started)}">${formatDisplay(task.started)}</td>`);
     expect(html).toContain('Task_TomarPedido');
+    // Ninguna celda visible pasa de dos decimales; el golden sí los tiene (si no, no prueba nada).
+    expect(formatDuration(task.processing.mean, 'min')).toMatch(/\.\d{3,}$/);
+    for (const [, texto] of html.matchAll(/<td[^>]*>([^<]*)<\/td>/g)) expect(texto).not.toMatch(/\d\.\d{3,}/);
   });
 
   it('cambiar baseTimeUnit a "h" cambia etiqueta y valores de la tabla, igual que la CLI', async () => {
@@ -83,8 +88,10 @@ describe('ResultsView (LILA-062)', () => {
 
     expect(minHtml).toContain('Average time (min)');
     expect(hourHtml).toContain('Average time (h)');
-    expect(minHtml).toContain(formatDuration(task.processing.mean, 'min'));
-    expect(hourHtml).toContain(formatDuration(task.processing.mean, 'h'));
+    expect(minHtml).toContain(`>${formatDisplayDuration(task.processing.mean, 'min')}</td>`);
+    expect(hourHtml).toContain(`>${formatDisplayDuration(task.processing.mean, 'h')}</td>`);
+    expect(minHtml).toContain(`title="${formatDuration(task.processing.mean, 'min')}"`);
+    expect(hourHtml).toContain(`title="${formatDuration(task.processing.mean, 'h')}"`);
     // El mismo segundo crudo formatea distinto en cada unidad (no es casualidad de redondeo).
     expect(formatDuration(task.processing.mean, 'min')).not.toBe(formatDuration(task.processing.mean, 'h'));
   });

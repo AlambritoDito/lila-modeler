@@ -121,11 +121,11 @@ describe('overlayModel (LILA-064)', () => {
     // #226: la etiqueta larga («espera media 3000.559774 min · utilización 34.354969%») medía
     // 311 px sobre una tarea de 100 px. La corta redondea a un decimal en la unidad más gruesa
     // que siga valiendo 1 o más (días, aquí) y el texto completo se conserva en el `title`.
-    it('la etiqueta cabe sobre la tarea y el texto completo va en el title', () => {
+    it('la etiqueta cabe sobre la tarea y el detalle, con dos decimales (#578), va en el title', () => {
       const entry = overlayModel(resultAsIs, asIs)['Task_Preparar'];
 
       expect(entry?.etiqueta).toBe('2.1 d · 34%');
-      expect(entry?.titulo).toBe('espera media 3000.559774 min · utilización 34.354969%');
+      expect(entry?.titulo).toBe('espera media 3000.56 min · utilización 34.35%');
     });
 
     // TO-BE triplica la capacidad de cajero (2 -> 3) y la espera media de Task_TomarPedido baja

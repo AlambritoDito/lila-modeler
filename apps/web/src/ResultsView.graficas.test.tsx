@@ -17,12 +17,13 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, describe, expect, test } from 'vitest';
 
 import { parseBpmn } from '@lila-modeler/engine/bpmn';
-import { columnLabel, formatNumber } from '@lila-modeler/engine/format';
+import { columnLabel, formatDuration, formatNumber, SECONDS_PER_UNIT } from '@lila-modeler/engine/format';
 import { resolveExtends, type ResolvedScenario } from '@lila-modeler/engine/schema';
 import { simulate, type ProcessIR, type RunResult } from '@lila-modeler/engine';
 
 import { graficasDelDocumento, type LogDeCorrida } from './GraficasResultados';
 import { ResultsView, tabLabels } from './ResultsView';
+import { formatDisplay, formatDisplayDuration } from './formatDisplay';
 import { setLocale, strings } from './i18n';
 import { SERIES_CLARO } from './graficas';
 
@@ -71,11 +72,11 @@ async function pestana(tab: 'elements' | 'resources' | 'process'): Promise<void>
 }
 
 /** The first table on screen as `{ header: cell text }` rows. */
-function tabla(): Record<string, string>[] {
+function tabla(exacto = false): Record<string, string>[] {
   const t = container.querySelector('table')!;
   const headers = [...t.querySelectorAll('thead th')].map((th) => th.textContent!.replace(/ [▲▼]$/, ''));
   return [...t.querySelectorAll('tbody tr')].map((tr) =>
-    Object.fromEntries([...tr.querySelectorAll('td')].map((td, i) => [headers[i]!, td.textContent!])),
+    Object.fromEntries([...tr.querySelectorAll('td')].map((td, i) => [headers[i]!, exacto ? td.title || td.textContent! : td.textContent!])),
   );
 }
 
@@ -103,7 +104,7 @@ describe('(a) each chart shows the values of its table', () => {
     for (const b of grafica) {
       const fila = tareas.find((f) => f.Id === b.grupo)!;
       expect(b.texto).toBe(fila[columnLabel('elements', 'started')]);
-      expect(formatNumber(Number(b.valor))).toBe(b.texto);
+      expect(formatDisplay(Number(b.valor))).toBe(b.texto);
     }
   });
 
@@ -114,10 +115,13 @@ describe('(a) each chart shows the values of its table', () => {
     const grafica = barras('utilizacion');
     expect(filas.length).toBeGreaterThan(0);
     expect(grafica.map((b) => b.grupo)).toEqual(filas.map((f) => f.Id));
+    const exactas = tabla(true);
     for (const b of grafica) {
       const texto = filas.find((f) => f.Id === b.grupo)![columnLabel('resources', 'utilization')];
       expect(b.texto).toBe(texto);
-      expect(formatNumber(Number(b.valor))).toBe(texto);
+      expect(formatDisplay(Number(b.valor))).toBe(texto);
+      // The cell shows two decimals (#578) and keeps the exact value in its title.
+      expect(exactas.find((f) => f.Id === b.grupo)![columnLabel('resources', 'utilization')]).toBe(formatNumber(Number(b.valor)));
     }
   });
 
@@ -125,12 +129,14 @@ describe('(a) each chart shows the values of its table', () => {
     await montar();
     await pestana('process');
     const [fila] = tabla();
+    const [exacta] = tabla(true);
     const grafica = barras('percentiles');
     expect(grafica).toHaveLength(6);
     for (const b of grafica) {
       const metrica = `${b.serie === 0 ? 'cycleTime' : 'waitTime'}.${b.grupo}`;
       expect(b.texto).toBe(fila![unidad(columnLabel('process', metrica))]);
-      expect(formatNumber(Number(b.valor))).toBe(b.texto);
+      expect(formatDisplayDuration(Number(b.valor) * SECONDS_PER_UNIT.min, 'min')).toBe(b.texto);
+      expect(exacta![unidad(columnLabel('process', metrica))]).toBe(formatDuration(Number(b.valor) * SECONDS_PER_UNIT.min, 'min'));
     }
     const clases = [...container.querySelectorAll('[data-grafica="histograma"] g.marca')];
     expect(clases.length).toBeGreaterThanOrEqual(5);

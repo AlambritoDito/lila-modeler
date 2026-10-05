@@ -16,6 +16,7 @@ import type { ResolvedScenario } from '@lila-modeler/engine/schema';
 import type { ProcessIR, RunResult } from '@lila-modeler/engine';
 import { BottleneckCard, buildResultCsvExports, downloadCsv, tableStyle, tdStyle, thStyle } from './ResultsView';
 import { GraficaDeInstancias, GraficaDeUtilizacion, type LogDeCorrida } from './GraficasResultados';
+import { formatDisplay } from './formatDisplay';
 import { useStrings } from './i18n';
 import { agruparAvisos, AvisoAgrupado, type GrupoAvisos } from './avisos';
 import { esperaCorta } from './BottleneckOverlay';
@@ -197,8 +198,6 @@ export function DockSimular(props: DockSimularProps): ReactNode {
   );
 }
 
-const redondear = (valor: number, decimales: number): number => Math.round(valor * 10 ** decimales) / 10 ** decimales;
-
 /**
  * The scenario's KPIs, the Process figures of the Results view rounded for a summary (the exact
  * value is the `title`), and the main bottleneck as a button that picks it on the canvas, so it is
@@ -213,8 +212,8 @@ function Kpis({ ir, result, scenario, onSeleccionar }: {
   const kpis: [string, string, string][] = [
     [S.dock.kpis.completados, formatNumber(Math.round(p.completed)), formatNumber(p.completed)],
     [S.dock.kpis.cicloMedio, p.completed > 0 ? esperaCorta(p.cycleTime.mean) : '—', formatNumber(p.cycleTime.mean)],
-    [S.dock.kpis.throughput, formatNumber(redondear(p.throughputPerHour, 2)), formatNumber(p.throughputPerHour)],
-    [S.dock.kpis.costoTotal, `${formatNumber(redondear(p.totalCost, 2))}${moneda}`, `${formatNumber(p.totalCost)}${moneda}`],
+    [S.dock.kpis.throughput, formatDisplay(p.throughputPerHour), formatNumber(p.throughputPerHour)],
+    [S.dock.kpis.costoTotal, `${formatDisplay(p.totalCost)}${moneda}`, `${formatNumber(p.totalCost)}${moneda}`],
   ];
   const cuello = result.bottlenecks[0];
   return (
@@ -249,7 +248,7 @@ function Rapidos({ ir, result, scenario, log }: { ir: ProcessIR; result: RunResu
   const { filas, total } = filasRapidas(ir, result, scenario, log);
   // Without a usable sample there is no p95 column at all; the note says why (QA of #394).
   const conP95 = p95Fiable(log);
-  const tiempo = (segundos: number): string => formatNumber(redondear(segundos / SECONDS_PER_UNIT[unit], 2));
+  const tiempo = (segundos: number): string => formatDisplay(segundos / SECONDS_PER_UNIT[unit]);
   const celdas = (f: FilaRapida): ReactNode => (
     <>
       {/* Whole cases: a mean over replications (1485.23…) reads as a count (QA of #394). */}
@@ -257,8 +256,8 @@ function Rapidos({ ir, result, scenario, log }: { ir: ProcessIR; result: RunResu
       {/* Rounded like the KPIs, the exact value as the title (QA of #394). */}
       <td style={numero()} title={guion(f.esperaMedia, (v) => formatDuration(v, unit))}>{guion(f.esperaMedia, tiempo)}</td>
       {conP95 && <td style={numero()} title={guion(f.esperaP95, (v) => formatDuration(v, unit))}>{guion(f.esperaP95, tiempo)}</td>}
-      <td style={numero()} title={guion(f.utilizacion, (v) => formatNumber(v * 100))}>{guion(f.utilizacion, (v) => formatNumber(redondear(v * 100, 1)))}</td>
-      <td style={numero()} title={formatNumber(f.costo)}>{formatNumber(redondear(f.costo, 2))}</td>
+      <td style={numero()} title={guion(f.utilizacion, (v) => formatNumber(v * 100))}>{guion(f.utilizacion, (v) => formatDisplay(v * 100, 1))}</td>
+      <td style={numero()} title={formatNumber(f.costo)}>{formatDisplay(f.costo)}</td>
     </>
   );
   return (
@@ -297,7 +296,8 @@ function Log({ ir, scenario, log }: { ir: ProcessIR; scenario: ResolvedScenario;
   if (log === undefined) return <p className="vacio">{S.dock.sinLog}</p>;
   const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
   const filas = log.rows.slice(0, FILAS_LOG);
-  const tiempo = (v: number | null): string => guion(v, (x) => formatDuration(x, unit));
+  const tiempo = (v: number | null): string => guion(v, (x) => formatDisplay(x / SECONDS_PER_UNIT[unit]));
+  const exacto = (v: number | null): string => guion(v, (x) => formatDuration(x, unit));
   return (
     <>
       {log.truncated && <p className="dock-nota" role="note">{S.dock.logTruncado(log.rows.length)}</p>}
@@ -316,11 +316,11 @@ function Log({ ir, scenario, log }: { ir: ProcessIR; scenario: ResolvedScenario;
               <td style={tdStyle}>{f.caseId}</td>
               <td style={tdStyle}>{ir.nodes[f.elementId]?.name || f.elementId}</td>
               <td style={tdStyle}>{f.resourceId === null ? '—' : scenario.resources?.[f.resourceId]?.name ?? f.resourceId}</td>
-              <td style={numero()}>{tiempo(f.enabledAt)}</td>
-              <td style={numero()}>{tiempo(f.startedAt)}</td>
-              <td style={numero()}>{tiempo(f.endedAt)}</td>
-              <td style={numero()}>{tiempo(f.resourceWait)}</td>
-              <td style={numero()}>{formatNumber(f.cost)}</td>
+              <td style={numero()} title={exacto(f.enabledAt)}>{tiempo(f.enabledAt)}</td>
+              <td style={numero()} title={exacto(f.startedAt)}>{tiempo(f.startedAt)}</td>
+              <td style={numero()} title={exacto(f.endedAt)}>{tiempo(f.endedAt)}</td>
+              <td style={numero()} title={exacto(f.resourceWait)}>{tiempo(f.resourceWait)}</td>
+              <td style={numero()} title={formatNumber(f.cost)}>{formatDisplay(f.cost)}</td>
             </tr>
           ))}
         </tbody>

@@ -20,6 +20,7 @@
 
 /** Node kinds of the IR (`packages/engine/src/core/ir.ts`) plus the sequence flow. */
 import type { PasoId } from './ids.js';
+import { SECONDS_PER_UNIT } from '@lila-modeler/engine/format';
 
 export type ClaseElemento =
   | 'start'
@@ -119,13 +120,8 @@ export function fieldsForStep(paso: PasoId, clase: ClaseElemento | null): readon
 
 export type UnidadTiempo = 's' | 'min' | 'h' | 'day';
 
-/** Seconds in one unit. `baseTimeUnit` is the only thing that scales a displayed time. */
-export const SEGUNDOS_POR_UNIDAD: Record<UnidadTiempo, number> = {
-  s: 1,
-  min: 60,
-  h: 3600,
-  day: 86_400,
-};
+/** Seconds in one unit (the engine's table). `baseTimeUnit` is the only thing that scales a displayed time. */
+export const SEGUNDOS_POR_UNIDAD: Readonly<Record<UnidadTiempo, number>> = SECONDS_PER_UNIT;
 
 export function esUnidadTiempo(valor: unknown): valor is UnidadTiempo {
   return valor === 's' || valor === 'min' || valor === 'h' || valor === 'day';
