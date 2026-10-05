@@ -11,7 +11,7 @@
  *
  * Los iconos son las clases `bpmn-icon-*` de `bpmn-font`, que la app ya carga en `App.tsx`.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Servicios } from './Modeler';
 import { strings, useStrings } from './i18n';
 
@@ -379,6 +379,9 @@ export function Paleta({ servicios, compacta, onCompacta, id, seleccion = null }
   const [filtro, setFiltro] = useState('');
   // The lane tool waiting for a click on a pool (#580).
   const [eligiendo, setEligiendo] = useState(false);
+  // The palette only lives in Model mode: leaving it must not leave the canvas waiting for a pool
+  // click, or a lane would be added from Simulate (QA of #588).
+  useEffect(() => () => servicios?.carriles?.cancelar(), [servicios]);
   const grupos = filtrar(gruposDeFiguras(), filtro);
 
   return (
