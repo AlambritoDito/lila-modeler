@@ -60,6 +60,9 @@ const lila = {
   forgetProject: () => {
     ipcRenderer.send('lila:forgetProject');
   },
+  watchProject: (dir: string, file?: string) => {
+    ipcRenderer.send('lila:watchProject', dir, file);
+  },
   onExternalChange: (cb: (dir: string) => void) => {
     const listener = (_event: unknown, dir: string) => cb(dir);
     ipcRenderer.on('lila:reload', listener);

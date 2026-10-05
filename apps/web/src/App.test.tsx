@@ -368,6 +368,29 @@ it("the native menu's Import BPMN… opens a .bpmn where it is, through the doub
   // It is the file on disk now: Save writes back to it, so the adapter keeps it.
   expect(session.forget).not.toHaveBeenCalled();
 });
+it('QA #593: a failed Import BPMN… of a broken .bpmn leaves the open project saveable in place (#591)', async () => {
+  let abrirRuta: (p: unknown) => void = () => {};
+  const writeProject = vi.fn().mockResolvedValue(undefined);
+  const roto = { version: 1, id: 'roto', name: 'roto', loose: true, model: { id: 'x', name: 'model.bpmn', xml: '<html>no</html>', revision: 0 }, scenarios: {}, scenarioRevisions: {}, runs: [] };
+  const puente = puenteRecuperacion(null, {
+    onOpenPath: (cb: (p: unknown) => void) => { abrirRuta = cb; return () => {}; },
+    openRecent: vi.fn(async (dir: string) => (dir === '/p/proj' ? proyecto('p1', 'Proyecto') : roto)),
+    importBpmn: vi.fn().mockResolvedValue({ dir: '/descargas', file: 'roto.bpmn' }),
+    writeProject, setDirty: vi.fn(), onCloseRequested: () => () => {},
+  });
+  await montar(new DesktopStore(puente as never));
+  await act(async () => { abrirRuta({ dir: '/p/proj' }); });
+  expect(container.textContent).toContain('Proyecto');
+  await act(async () => { puente.menu('importarBpmn'); });
+  if (container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open === true) await click(T.app.descartar);
+  expect(container.querySelector('[role="alert"].error')?.textContent).toMatch(new RegExp(`^${T.app.errorAbrirDiagrama('')}`));
+  expect(container.textContent).toContain('Proyecto');
+  // The canvas still shows «Proyecto», so ⌘S must write it back to /p/proj — not fail with
+  // E-PROYECTO-DISTINTO because the store already moved to the broken file.
+  await act(async () => { puente.menu('guardar'); });
+  expect(container.querySelector('[role="alert"].error')?.textContent ?? '').not.toContain('E-PROYECTO-DISTINTO');
+  expect(writeProject).toHaveBeenCalledWith('/p/proj', expect.objectContaining({ id: 'p1' }), expect.anything());
+});
 
 it('guardar cancelado mantiene cambios pendientes', async () => {
   await act(async () => mocks.changed());

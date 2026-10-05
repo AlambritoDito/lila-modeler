@@ -874,3 +874,37 @@ describe('DesktopStore.importBpmn (#591)', () => {
     await expect(new DesktopStore(new FakeBridge()).importBpmn()).resolves.toBeNull();
   });
 });
+
+describe('DesktopStore.undoOpen (QA of #593)', () => {
+  it('a read that did not open goes back to the project on screen: Save writes there and main watches it again', async () => {
+    const bridge = new FakeBridge();
+    const watchProject = vi.fn();
+    Object.assign(bridge, { watchProject });
+    const proyecto = documentoBase();
+    bridge.openRecentImpl = async (dir) => (dir === '/p/proj'
+      ? { ...proyecto, problems: [] }
+      : { ...documentoBase({ id: 'roto' }), problems: [], loose: true });
+    const store = new DesktopStore(bridge);
+    await store.openRecent('/p/proj');
+    await store.openRecent('/descargas', 'roto.bpmn');
+    store.undoOpen();
+    expect(watchProject).toHaveBeenCalledWith('/p/proj', undefined);
+    await store.saveProject(proyecto);
+    expect(bridge.writes.at(-1)?.dir).toBe('/p/proj');
+    expect(bridge.writes.at(-1)?.options?.modelFile).toBeUndefined();
+    // Only once: a second undo has nothing left to undo.
+    store.undoOpen();
+    expect(watchProject).toHaveBeenCalledOnce();
+  });
+
+  it('with nothing open before, main stops watching the file that did not open', async () => {
+    const bridge = new FakeBridge();
+    let olvidos = 0;
+    bridge.forgetProject = () => { olvidos += 1; };
+    bridge.openRecentImpl = async () => ({ ...documentoBase(), problems: [], loose: true });
+    const store = new DesktopStore(bridge);
+    await store.openRecent('/descargas', 'roto.bpmn');
+    store.undoOpen();
+    expect(olvidos).toBe(1);
+  });
+});

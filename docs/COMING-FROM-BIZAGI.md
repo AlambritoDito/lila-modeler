@@ -210,7 +210,7 @@ In the web app ([Pages build](https://alambritodito.github.io/lila-modeler/app/)
 app) the example is opened as a diagram plus a pasted scenario, because a `.lila` project also
 needs a manifest that the repository does not ship for this example:
 
-1. File → **Open .bpmn**, pick `examples/bizagi-levels/level-3/model.bpmn`.
+1. File → **Import BPMN…**, pick `examples/bizagi-levels/level-3/model.bpmn`.
 2. Go to **Simulate**, open **Advanced: scenario JSON** at the bottom of Parameters, replace its text
    with the contents of `examples/bizagi-levels/level-3/scenario.json`, and press **Apply**.
 3. Set Replications to 30 in Parameters and press **Run simulation**.

@@ -108,6 +108,7 @@ export class DesktopStore implements ProjectSessionStore {
     if (dir === null) return null;
     const raw = await this.bridge.readProject(dir);
     const { document, problems } = toProjectDocument(raw);
+    this.anterior = this.estado();
     this.occupied = new Set(raw.occupiedSlugs ?? []);
     this.activeDir = dir;
     this.activeDocument = document;
@@ -229,6 +230,27 @@ export class DesktopStore implements ProjectSessionStore {
     return [...this.occupied];
   }
 
+  /** The active project as `openProject`/`openRecent` found it, for `undoOpen` (QA of #593). */
+  private anterior: ReturnType<DesktopStore['estado']> | null = null;
+  private estado() {
+    return { dir: this.activeDir, document: this.activeDocument, problems: this.problems, modelFile: this.activeModelFile, loose: this.activeLoose, occupied: this.occupied };
+  }
+
+  /**
+   * What the last `openProject`/`openRecent` read did not open on the canvas (it does not parse):
+   * the store and main's watcher go back to the project still on screen, so its Save still writes
+   * in place instead of failing with E-PROYECTO-DISTINTO (QA of #593).
+   */
+  undoOpen(): void {
+    const a = this.anterior;
+    if (a === null) return;
+    this.anterior = null;
+    this.activeDir = a.dir; this.activeDocument = a.document; this.problems = a.problems;
+    this.activeModelFile = a.modelFile; this.activeLoose = a.loose; this.occupied = a.occupied;
+    if (a.dir === null) this.bridge.forgetProject?.();
+    else this.bridge.watchProject?.(a.dir, a.loose ? a.modelFile : undefined);
+  }
+
   forget(): void {
     this.bridge.forgetProject?.(); // #539: nothing on disk to watch any more.
     this.occupied = new Set();
@@ -260,20 +282,21 @@ export class DesktopStore implements ProjectSessionStore {
     return this.bridge.listRecents();
   }
 
-  /**
-   * Reabre un proyecto de `listRecents()` sin selector de carpetas. `null` si la carpeta ya no
-   * existe (el bridge ya la quitó de recientes); no lanza por eso. `file` es el `.bpmn` que se
-   * pulsó cuando no es el `model.bpmn` del proyecto (LILA-072): la misma puerta, otro modelo.
-   */
   /** #591: main's dialog; a `.bpmn` comes back authorized, to open with `openRecent` like a double-click. */
   async importBpmn(): Promise<ImportedBpmn | null> {
     return await this.bridge.importBpmn?.() ?? null;
   }
 
+  /**
+   * Reabre un proyecto de `listRecents()` sin selector de carpetas. `null` si la carpeta ya no
+   * existe (el bridge ya la quitó de recientes); no lanza por eso. `file` es el `.bpmn` que se
+   * pulsó cuando no es el `model.bpmn` del proyecto (LILA-072): la misma puerta, otro modelo.
+   */
   async openRecent(dir: string, file?: string): Promise<ProjectDocument | null> {
     const raw = await this.bridge.openRecent(dir, file);
     if (raw === null) return null;
     const { document, problems } = toProjectDocument(raw);
+    this.anterior = this.estado();
     this.occupied = new Set(raw.occupiedSlugs ?? []);
     this.activeDir = dir;
     this.activeDocument = document;

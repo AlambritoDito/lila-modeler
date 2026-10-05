@@ -1036,6 +1036,17 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       .finally(() => { ioLock.current = false; setIoBusy(false); });
   }, [modelador, adapter]);
 
+  /**
+   * Activates what Open, Open recent, a double-click or Import BPMN… just read. The adapter took it
+   * as the active project when it read it; if it does not open (it does not parse), the adapter goes
+   * back to the project still on the canvas, or its Save would fail with E-PROYECTO-DISTINTO
+   * (QA of #593).
+   */
+  async function activarLeido(doc: ProjectDocument, beforeToken: string): Promise<void> {
+    let abierto = false;
+    try { abierto = await activate(doc, true, beforeToken); } finally { if (!abierto) adapter?.undoOpen?.(); }
+  }
+
   async function projectAction(kind: ProjectAction, confirmed = false): Promise<void> {
     // QA de #258: el diálogo de pérdida es modal para el ratón, pero Cmd+O/Cmd+N —y en Electron
     // los aceleradores del menú nativo— llegan igual por `window`. Sin esta puerta, abrir otro
@@ -1051,7 +1062,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     try {
       if (kind === 'open' || kind === 'openFile') {
         const doc = await adapter.openProject(kind === 'openFile' ? { fileOnly: true } : undefined);
-        if (doc) await activate(doc, true, beforeToken); return;
+        if (doc) await activarLeido(doc, beforeToken); return;
       }
       if (typeof kind === 'object' && 'ejemplo' in kind) {
         // #458, QA of #505 (S2c, N3): forget the adapter's previously active folder/document so
@@ -1066,7 +1077,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       }
       if (typeof kind === 'object') {
         const doc = await adapter.openRecent?.(kind.recent, kind.file);
-        if (doc) await activate(doc, true, beforeToken);
+        if (doc) await activarLeido(doc, beforeToken);
         else if (doc === null) setIoError(S.app.errorRecienteAusente);
         return;
       }
@@ -1079,7 +1090,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         if (elegido === null) return;
         if ('dir' in elegido) {
           const doc = await adapter.openRecent?.(elegido.dir, elegido.file);
-          if (doc) await activate(doc, true, beforeToken);
+          if (doc) await activarLeido(doc, beforeToken);
           return;
         }
         data = elegido;

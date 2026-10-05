@@ -71,7 +71,9 @@ Preferencias…** (`Ctrl+,`), go to **General** and set **Idioma** to **English*
     changes, choose **Save**. Then, in File Explorer, **double-click the `.lila` file**. Lila
     Modeler should open with both processes. If Windows asks which app to use, choose **Lila
     Modeler**. If double-clicking does nothing, open the app and use **File ▸ Open project file
-    (.lila)…** instead, and say in your report that the double-click failed.
+    (.lila)…** instead, and say in your report that the double-click failed. If you have a `.bpmn`
+    or `.xml` exported from another tool (Bizagi, Camunda, Signavio…), also try **File ▸ Import
+    BPMN…** with it and say whether its diagram appeared.
 13. **Uninstall.** Open **Settings ▸ Apps ▸ Installed apps** (Windows 10: **Apps & features**), find
     **Lila Modeler**, and choose **Uninstall**. Check that it disappears from the list. Your `.lila`
     and exported files stay where you saved them.

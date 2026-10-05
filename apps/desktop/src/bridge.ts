@@ -145,6 +145,11 @@ export interface LilaBridge {
   onExternalChange?(cb: (dir: string) => void): () => void;
   /** The renderer left the project on disk for one with no file (a gallery example): main stops watching it. */
   forgetProject?(): void;
+  /**
+   * A read that did not open on the canvas (QA of #593): main watches `dir` again (and, for a
+   * loose diagram, its `file`), the project still on screen, instead of what `openRecent` just read.
+   */
+  watchProject?(dir: string, file?: string): void;
 
   /**
    * Acciones del menú nativo (Archivo, Preferencias…): main las manda por `lila:menu` y el shell

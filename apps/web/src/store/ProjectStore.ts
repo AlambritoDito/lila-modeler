@@ -114,4 +114,6 @@ export interface ProjectSessionStore extends ProjectStore {
    * (`{ dir, file }`, the double-click's loose diagram). `null` is a cancel.
    */
   importBpmn?(): Promise<ImportedBpmn | null>;
+  /** The project just read did not open: back to the previous one (QA of #593). Only `DesktopStore`. */
+  undoOpen?(): void;
 }

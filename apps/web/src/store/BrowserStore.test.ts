@@ -90,7 +90,7 @@ describe('BrowserStore', () => {
 
     // Lo que dispara de verdad cerrar el diálogo nativo: `cancel`, no `change`. Antes no se
     // escuchaba, así que la promesa se quedaba pendiente para siempre y el `<input>` vivía en
-    // el `<body>` hasta recargar la página: seis «Abrir .bpmn» cancelados, seis huérfanos.
+    // el `<body>` hasta recargar la página: seis «Importar BPMN…» cancelados, seis huérfanos.
     it('resuelve con null y limpia el DOM si el diálogo se cierra sin elegir nada', async () => {
       const store = new BrowserStore();
       const promesa = store.getProcess('nuevo');

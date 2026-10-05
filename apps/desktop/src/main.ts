@@ -625,6 +625,11 @@ function registerIpcHandlers(win: BrowserWindow): void {
       chosen = result.filePaths[0]!;
     }
     await e2eLog('importBpmn', { result: chosen });
+    // Same cap as an export (QA of #593): a diagram of any real size is far below it, and the
+    // whole `.xml` would otherwise be read and sent over IPC.
+    if ((await stat(chosen)).size > MAX_EXPORTACION) {
+      throw new Error(`E-ARGUMENTO: "${path.basename(chosen)}" pasa de ${String(MAX_EXPORTACION / 1024 / 1024)} MB.`);
+    }
     if (!isBpmnPath(chosen)) return { xml: await readFile(chosen, 'utf8'), name: path.basename(chosen) };
     const dir = await realpath(path.dirname(chosen));
     authorizedFolders.add(dir);
@@ -685,6 +690,14 @@ function registerIpcHandlers(win: BrowserWindow): void {
 
   // A project with no file behind it (a gallery example) replaces the one being watched (#539).
   guardedOn(win, 'lila:forgetProject', () => unwatchProject(win));
+  // What `openRecent` just read did not open (QA of #593): back to the project still on screen.
+  guardedOn(win, 'lila:watchProject', (_event, dirArg: unknown, fileArg: unknown) => {
+    void (async () => {
+      const real = await requireAuthorizedDir(dirArg);
+      const file = isLilaPath(real) ? undefined : requireBpmnName(real, fileArg);
+      watchOpenProject(win, file === undefined ? real : path.join(real, file), dirArg as string);
+    })().catch(() => {});
+  });
 
   guardedOn(win, 'lila:setDirty', (_event, value: unknown) => {
     if (typeof value === 'boolean') setDirty(value);

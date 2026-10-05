@@ -74,7 +74,9 @@ abre **File ▸ Preferences…** (`Ctrl+,`), ve a **General** y pon **Language**
     por cambios sin guardar, elige **Guardar**. Luego, en el Explorador de archivos, **haz doble clic
     en el archivo `.lila`**. Lila Modeler debería abrirse con los dos procesos. Si Windows pregunta
     con qué app abrirlo, elige **Lila Modeler**. Si el doble clic no hace nada, abre la app y usa
-    **Archivo ▸ Abrir archivo de proyecto (.lila)…**, y di en tu reporte que el doble clic falló.
+    **Archivo ▸ Abrir archivo de proyecto (.lila)…**, y di en tu reporte que el doble clic falló. Si
+    tienes un `.bpmn` o `.xml` exportado de otra herramienta (Bizagi, Camunda, Signavio…), prueba
+    también **Archivo ▸ Importar BPMN…** con él y di si apareció su diagrama.
 13. **Desinstala.** Abre **Configuración ▸ Aplicaciones ▸ Aplicaciones instaladas** (Windows 10:
     **Aplicaciones y características**), busca **Lila Modeler** y elige **Desinstalar**. Comprueba que
     desaparece de la lista. Tu `.lila` y los archivos exportados se quedan donde los guardaste.
