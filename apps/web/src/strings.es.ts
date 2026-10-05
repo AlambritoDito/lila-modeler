@@ -420,7 +420,8 @@ export const es: Strings = {
     pieSufijo: ' para insertar',
     sinCoincidencias: (filtro: string): string => `Ninguna figura coincide con «${filtro}».`,
     requiereActividad: (figura: string): string => `${figura}: selecciona una tarea o un subproceso para adjuntarlo`,
-    requiereContenedor: (figura: string): string => `${figura}: selecciona un pool o un carril para añadirlo`,
+    requiereContenedor: (figura: string): string => `${figura}: añade antes un pool`,
+    eligePool: 'Haz clic en el pool o carril donde añadir el carril. Esc cancela.',
     comandos: {
       titulo: 'Paleta de comandos',
       pista: 'Busca elementos, escenarios, modos y acciones',
@@ -1359,6 +1360,8 @@ export const es: Strings = {
     plegarMinimapa: 'Plegar minimapa',
     desplegarMinimapa: 'Desplegar minimapa',
     errorSinBpmn: 'El modelador todavía no tiene un BPMN abierto.',
+    moverCarrilArriba: 'Mover carril arriba',
+    moverCarrilAbajo: 'Mover carril abajo',
 
     /** Etiqueta flotante del overlay de cuellos (#226): corta arriba, completa en el `title`. */
     cuelloEtiqueta: (espera: string, utilizacion: number): string => `${espera} · ${utilizacion}%`,
