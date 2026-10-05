@@ -74,4 +74,10 @@ describe('formatDisplayDuration (#578)', () => {
   it('the exact value carries its unit', () => {
     expect(exactDuration(478_642.787_34, 'min')).toBe('7977.379789 min');
   });
+
+  it('float noise below 1e-6 reads "0", like the title and the CLI', () => {
+    expect(formatDisplay(1.2e-7)).toBe('0');
+    expect(formatDisplay(-3.5e-13)).toBe('0');
+    expect(formatDisplay(0.000_004_2)).toBe('0.0000042');
+  });
 });

@@ -28,7 +28,9 @@ export function roundDisplay(value: number, decimals = 2): number {
  * 0.01 it keeps two significant digits (0.004158 → "0.0042").
  */
 export function formatDisplay(value: number, decimals = 2): string {
-  if (value !== 0 && Math.abs(value) < 10 ** -decimals) return String(Number(value.toPrecision(2)));
+  // Below the CLI's own 1e-6 rounding it is float noise: show "0" like the title, not "1.2e-7".
+  if (formatNumber(value) === '0') return '0';
+  if (Math.abs(value) < 10 ** -decimals) return String(Number(value.toPrecision(2)));
   return formatNumber(roundDisplay(value, decimals));
 }
 
