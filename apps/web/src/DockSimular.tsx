@@ -16,7 +16,7 @@ import type { ResolvedScenario } from '@lila-modeler/engine/schema';
 import type { ProcessIR, RunResult } from '@lila-modeler/engine';
 import { BottleneckCard, buildResultCsvExports, downloadCsv, tableStyle, tdStyle, thStyle } from './ResultsView';
 import { GraficaDeInstancias, GraficaDeUtilizacion, type LogDeCorrida } from './GraficasResultados';
-import { exactDuration, formatDisplay, formatDisplayDuration } from './formatDisplay';
+import { exactDuration, formatDisplay, formatDisplayDuration, formatDisplayDurationWithUnit } from './formatDisplay';
 import { useStrings } from './i18n';
 import { agruparAvisos, AvisoAgrupado, type GrupoAvisos } from './avisos';
 import { esperaCorta } from './BottleneckOverlay';
@@ -209,9 +209,10 @@ function Kpis({ ir, result, scenario, onSeleccionar }: {
   const S = useStrings();
   const moneda = scenario.run.currency === undefined ? '' : ` ${scenario.run.currency}`;
   const p = result.process;
+  const unidad = scenario.run.baseTimeUnit;
   const kpis: [string, string, string][] = [
     [S.dock.kpis.completados, formatNumber(Math.round(p.completed)), formatNumber(p.completed)],
-    [S.dock.kpis.cicloMedio, p.completed > 0 ? esperaCorta(p.cycleTime.mean) : '—', formatNumber(p.cycleTime.mean)],
+    [S.dock.kpis.cicloMedio, p.completed > 0 ? formatDisplayDurationWithUnit(p.cycleTime.mean, unidad) : '—', exactDuration(p.cycleTime.mean, unidad)],
     [S.dock.kpis.throughput, formatDisplay(p.throughputPerHour), formatNumber(p.throughputPerHour)],
     [S.dock.kpis.costoTotal, `${formatDisplay(p.totalCost)}${moneda}`, `${formatNumber(p.totalCost)}${moneda}`],
   ];

@@ -21,7 +21,7 @@ import { DockSimular, FILAS_LOG, filasRapidas, PESTANAS_DOCK, type DockSimularPr
 import type { LogDeCorrida } from './GraficasResultados';
 import { agruparAvisos } from './avisos';
 import { ESPERA_RECURSO, percentilesPorElemento } from './percentilesPorElemento';
-import { exactDuration, formatDisplayDuration } from './formatDisplay';
+import { exactDuration, formatDisplayDuration, formatDisplayDurationWithUnit } from './formatDisplay';
 import { setLocale, strings } from './i18n';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -113,6 +113,10 @@ describe('quick results (#394)', () => {
     expect(kpis.textContent).toContain(S.dock.kpis.completados);
     const costo = [...kpis.querySelectorAll('dd')].find((dd) => dd.title.startsWith(formatNumber(result.process.totalCost)))!;
     expect(costo.textContent).toBe(`${formatNumber(Math.round(result.process.totalCost * 100) / 100)} ${scenario.run.currency}`);
+    // The mean cycle reads like Results, with the unit in the title (costuras QA of Lote L).
+    const ciclo = [...kpis.querySelectorAll('div')].find((d) => d.querySelector('dt')!.textContent === S.dock.kpis.cicloMedio)!.querySelector('dd')!;
+    expect(ciclo.textContent).toBe(formatDisplayDurationWithUnit(result.process.cycleTime.mean, unidad));
+    expect(ciclo.title).toBe(exactDuration(result.process.cycleTime.mean, unidad));
   });
 
   test('a truncated log hides the p95 column and the note says why, the quick view\'s rule', async () => {
