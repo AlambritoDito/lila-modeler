@@ -1,6 +1,6 @@
 # Releasing
 
-How a version of Lila Modeler is cut and how the engine reaches npm. Owner-facing; kept out of the
+How a version of Lila Modeler is cut and how the engine and the MCP server reach npm. Owner-facing; kept out of the
 public docs site (`INTERNAL` in `tools/build-docs.mjs`).
 
 ## What is published
@@ -8,15 +8,18 @@ public docs site (`INTERNAL` in `tools/build-docs.mjs`).
 | Package | npm | Notes |
 | --- | --- | --- |
 | `@lila-modeler/engine` | public | Engine library and the `lila` CLI |
-| `@lila-modeler/mcp`, `@lila-modeler/web`, `@lila-modeler/desktop` | private | Not published |
+| `@lila-modeler/mcp` | public | MCP server, `lila-mcp` bin (`npx -y @lila-modeler/mcp`); pins the same engine version (ADR-030) |
+| `@lila-modeler/web`, `@lila-modeler/desktop` | private | Not published |
 
-- Registry: <https://www.npmjs.com/package/@lila-modeler/engine>. The `@lila-modeler` npm org is
+- Registry: <https://www.npmjs.com/package/@lila-modeler/engine> and
+  <https://www.npmjs.com/package/@lila-modeler/mcp>. The `@lila-modeler` npm org is
   owned by the maintainer's account. The `@lila` scope belongs to another npm account: do not go
   back to it. Changelog entries before 1.0.0-beta.9 and `docs/releases/` keep the old names on purpose.
 - Install: `npm install -g @lila-modeler/engine` (or `npx -p @lila-modeler/engine lila --help`;
   `npx lila --version` hands `--version` to npx, not to `lila`).
-- First publications: 1.0.0-beta.9 by hand (2026-09-26), 1.0.0-beta.11 from GitHub Actions with
-  provenance (same day).
+- First publications of the engine: 1.0.0-beta.9 by hand (2026-09-26), 1.0.0-beta.11 from GitHub
+  Actions with provenance (same day). `@lila-modeler/mcp` is public from 1.0.0-beta.19 (#569); its
+  first publication is by hand (see below).
 
 ## Cutting a version
 
@@ -32,8 +35,9 @@ public docs site (`INTERNAL` in `tools/build-docs.mjs`).
    git push origin v1.0.0-beta.N
    ```
 
-   The tag push runs `release.yml`: version check, build, test, typecheck, `test:package` and a
-   pack dry run. It never publishes to npm. The desktop workflow opens a draft GitHub Release
+   The tag push runs `release.yml`: version check, build, test, typecheck, `test:package` (which
+   installs both packed packages in a clean directory and lists the MCP server's tools) and a pack
+   dry run of each package. It never publishes to npm. The desktop workflow opens a draft GitHub Release
    (see below).
 
 ## Desktop installers on the GitHub Release
@@ -83,8 +87,13 @@ gh workflow run release.yml --ref v1.0.0-beta.N -f publish_npm=true
 
 or Actions → Release → Run workflow → pick the tag → tick `publish_npm`.
 
+- The job publishes `@lila-modeler/engine` first and then `@lila-modeler/mcp`, same version and
+  dist-tag: the server depends on that exact engine version, so the engine must be on the registry
+  first. If the engine publishes and the server fails, publish the server by hand (below) rather
+  than re-running the job, which would fail on the engine version that already exists.
 - Authentication is **npm trusted publishing (OIDC)**; no npm token is stored in the repository.
-  On npmjs.com, `@lila-modeler/engine` → Settings → Trusted publishing trusts GitHub Actions
+  On npmjs.com, each package (`@lila-modeler/engine`, `@lila-modeler/mcp`) → Settings → Trusted
+  publishing trusts GitHub Actions
   `AlambritoDito/lila-modeler`, workflow `release.yml`, no environment, with **Allow npm publish**
   ticked. Renaming the workflow file or adding an environment breaks publication until that
   connection is recreated (it cannot be edited).
@@ -95,11 +104,13 @@ or Actions → Release → Run workflow → pick the tag → tick `publish_npm`.
 
 ### Moving `latest` during the beta line
 
-The workflow never moves `latest` for a prerelease. The package's very first publish set `latest`
-to 1.0.0-beta.9. Until 1.0.0, point it at the newest beta by hand (npm asks for 2FA in the browser):
+The workflow never moves `latest` for a prerelease. The engine's very first publish set `latest`
+to 1.0.0-beta.9 (and the MCP server's first publish sets it too). Until 1.0.0, point it at the
+newest beta by hand (npm asks for 2FA in the browser):
 
 ```bash
 npm dist-tag add @lila-modeler/engine@1.0.0-beta.N latest
+npm dist-tag add @lila-modeler/mcp@1.0.0-beta.N latest
 ```
 
 ### Publishing by hand (fallback)
@@ -109,11 +120,18 @@ From a clean checkout of the tag, logged in with `npm login` (2FA through the br
 ```bash
 npm publish -w @lila-modeler/engine --tag beta --access public --dry-run
 npm publish -w @lila-modeler/engine --tag beta --access public
+npm publish -w @lila-modeler/mcp --tag beta --access public --dry-run
+npm publish -w @lila-modeler/mcp --tag beta --access public
 ```
 
 Read the dry run's warnings. npm 11 silently drops a `bin` entry whose path starts with `./`, and
-without it the published package has no `lila` command. The package's `bin` is `bin/lila.js` for
-that reason.
+without it the published package has no command. The `bin` entries are `bin/lila.js` and
+`bin/lila-mcp.js` for that reason.
+
+**First publication of `@lila-modeler/mcp`.** A trusted publisher can only be configured for a
+package that exists, so the first version goes out by hand with the two `@lila-modeler/mcp` lines
+above, after the engine of the same version is on the registry. Then, on npmjs.com, configure its
+trusted publisher exactly like the engine's; from the next tag, `release.yml` publishes both.
 
 ## Checking a publication
 
@@ -121,6 +139,7 @@ The registry can answer 404 for a minute or two after a publish.
 
 ```bash
 npm view @lila-modeler/engine dist-tags --prefer-online
-cd "$(mktemp -d)" && npm init -y >/dev/null && npm i @lila-modeler/engine@beta \
+npm view @lila-modeler/mcp dist-tags --prefer-online
+cd "$(mktemp -d)" && npm init -y >/dev/null && npm i @lila-modeler/engine@beta @lila-modeler/mcp@beta \
   && ./node_modules/.bin/lila --version && npm audit signatures
 ```

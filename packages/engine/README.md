@@ -19,9 +19,10 @@ npx @lila-modeler/engine@beta --version
 ```
 
 English is the default. Use `--lang es` or `LILA_LANG=es` for Spanish diagnostics. Diagnostic
-codes, model IDs and result columns remain stable. The optional `lila mcp` command requires the
-separate MCP workspace from a repository checkout; the engine package alone does not include the
-server. Full reference, worked examples and a "for agents" section:
+codes, model IDs and result columns remain stable. The MCP server for AI agents is a separate
+package, [`@lila-modeler/mcp`](https://www.npmjs.com/package/@lila-modeler/mcp)
+(`npx -y @lila-modeler/mcp`); `lila mcp` starts it when both packages are installed. Full
+reference, worked examples and a "for agents" section:
 [docs/CLI.md](https://github.com/AlambritoDito/lila-modeler/blob/main/docs/CLI.md).
 
 ## Library

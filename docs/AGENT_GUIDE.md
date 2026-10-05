@@ -4,13 +4,14 @@
 
 This guide is for an agent (Claude Code, Claude Desktop, Codex, Hermes Agent or any MCP client)
 that turns what people say about a process into a model, a simulation and a document, with no one
-clicking in the app. Every step is an MCP tool of `lila mcp` ([`MCP.md`](MCP.md), where each tool
+clicking in the app. Every step is an MCP tool of the Lila MCP server ([`MCP.md`](MCP.md), where each tool
 has its full contract) or the matching `lila` command ([`CLI.md`](CLI.md)). Steps 2 to 7 below,
 one tool call at a time, run in CI with no UI: `packages/mcp/test/agent-flow.e2e.test.ts`, starting
 from the synthetic interview `packages/mcp/test/fixtures/entrevista-tarjeta.txt`. Step 8 needs the
 desktop app, so it is checked by hand with `tools/agent-live-check.mjs`.
 
-Setting up the server for each client is in [`MCP.md`](MCP.md#installation).
+The server is its own npm package, started with `npx -y @lila-modeler/mcp`; setting it up in each
+client is in [`MCP.md`](MCP.md#installation).
 
 ## The flow
 
@@ -245,6 +246,3 @@ the same `.lila`.
   Arrivals, calendars, costs and capacities go through `patch_scenario` or a sheet.
 - **Simulation is synchronous** in the server: a long run blocks the server until it finishes. Keep
   replications reasonable while iterating.
-- **Installation.** `npx -y @lila-modeler/engine mcp` does not work yet: the published engine does
-  not include the MCP server, which lives in the unpublished `@lila-modeler/mcp`. Run the server
-  from a checkout ([`MCP.md`](MCP.md#installation)).

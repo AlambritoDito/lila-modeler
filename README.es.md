@@ -170,19 +170,19 @@ y una sección «para agentes»: [`docs/es/CLI.md`](docs/es/CLI.md).
 
 ### MCP
 
-`lila mcp` arranca un servidor MCP por stdio con dieciséis tools sobre el mismo motor:
-`validate_bpmn`,
-`describe_process`, `run_simulation`, `compare_scenarios`, `patch_scenario`, `create_process`,
+`@lila-modeler/mcp` es un servidor MCP por stdio con dieciséis tools sobre el mismo motor:
+`validate_bpmn`, `describe_process`, `run_simulation`, `compare_scenarios`, `patch_scenario`, `create_process`,
 `get_process_outline`, `edit_process`, `export_diagram`, `export_document`, `export_results`,
 `annotate_element`, `get_raci_matrix`, `import_scenario_sheet`, `export_scenario_template`,
 `create_project`.
 
 ```bash
-claude mcp add lila -- node /ruta/a/lila-modeler/packages/engine/bin/lila.js mcp
+claude mcp add lila -- npx -y @lila-modeler/mcp
 ```
 
-El repo trae un `.mcp.json` de proyecto, así que abrir Claude Code en la raíz del repo registra el
-servidor solo. Contratos de cada tool y límites conocidos (sin cancelación; todo I/O contra el
+Los demás clientes llevan `"command": "npx"` y `"args": ["-y", "@lila-modeler/mcp"]`. Desde un clon,
+`lila mcp` arranca el mismo servidor, y el repo trae un `.mcp.json` de proyecto, así que abrir Claude
+Code en la raíz del repo lo registra solo. Contratos de cada tool y límites conocidos (sin cancelación; todo I/O contra el
 disco del servidor) en [`docs/es/MCP.md`](docs/es/MCP.md), con la configuración para Claude Desktop,
 Codex y Hermes Agent. La [guía para agentes](docs/es/GUIA-AGENTES.md) recorre el flujo completo de un
 agente: entrevista, esquema, escenario, corrida, documento y la app abierta que se recarga sola.
@@ -226,7 +226,7 @@ usuarios, en [`docs/es/COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md).
 
 - `packages/engine` — `@lila-modeler/engine`: el núcleo del motor (`src/core/`, sin dependencias), el
   parser BPMN, los esquemas, los escritores CSV/XLSX y la CLI `lila`.
-- `packages/mcp` — `@lila-modeler/mcp` (privado): el servidor MCP, capa fina sobre el motor.
+- `packages/mcp` — `@lila-modeler/mcp` (en npm): el servidor MCP, capa fina sobre el motor.
 - `apps/web` — editor y visor en React 19 + Vite + bpmn-js.
 - `apps/desktop` — empaquetado Electron de `apps/web`; `.github/workflows/desktop.yml` construye
   los tres instaladores con tags `v*` y adjunta el DMG de macOS y el `.exe` de Windows (más los
@@ -252,7 +252,7 @@ El inglés es el idioma base; las versiones en español viven en `docs/es/`.
 - [`MCP.md`](docs/es/MCP.md) — el servidor MCP y sus dieciséis tools.
 - [`THEMES.md`](docs/es/THEMES.md) — el formato de tema.
 - [`DECISIONS.md`](docs/es/DECISIONS.md) — registros de decisiones de arquitectura (ADR-001 …
-  ADR-028).
+  ADR-030).
 - [`BIZAGI_PARITY.md`](docs/es/BIZAGI_PARITY.md) — checklist de comportamiento de referencia y
   diferencias documentadas.
 - [`COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md) — guía pantalla por pantalla para

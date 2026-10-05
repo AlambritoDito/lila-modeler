@@ -538,6 +538,36 @@ dashboards and records, the release workflow, the server's CRDT.
 
 ---
 
+## ADR-030 — The MCP server is its own npm package, `@lila-modeler/mcp`
+
+**Status:** Accepted (decided by Brito on 2026-10-05).
+
+The MCP server ships as a separate public package, `@lila-modeler/mcp`, with the `lila-mcp` bin,
+instead of being moved into `@lila-modeler/engine`. Agents install it the usual way for MCP
+servers: `npx -y @lila-modeler/mcp`. Before this, `packages/mcp` was `private`, so the published
+engine had the `lila mcp` subcommand but not the server it loads, and
+`npx -y @lila-modeler/engine mcp` stopped with «the package @lila-modeler/mcp is missing».
+
+- **The engine stays light.** It depends only on `bpmn-moddle`, `bpmn-auto-layout`, `fflate` and
+  `zod`, and the web and desktop apps consume it too. Folding the server in would make every
+  consumer install `@modelcontextprotocol/server`.
+- **The package already existed.** `packages/mcp` had the bin, `files`, a build script and a pinned
+  engine dependency; publishing it means removing `private` and adding the npm metadata.
+- **Independent cadence for the protocol SDK.** The MCP SDK (v2) changes on its own schedule; a
+  bump there does not touch the engine's dependency tree.
+- **Same version, same release.** Both packages carry the version of the batch (the six places
+  `release.yml` checks), and `@lila-modeler/mcp` pins the exact engine version. `release.yml`
+  publishes the engine first and then the server, with the same dist-tag (`beta` for a prerelease,
+  `latest` otherwise), `--provenance` and the same `publish_npm` guard. The package contains only
+  `dist`, `bin`, `README.md` and `package.json`.
+- **`lila mcp` stays.** It still loads `@lila-modeler/mcp` with a dynamic `import()` (no package
+  cycle), so it works wherever both packages are installed, as in a repository checkout.
+
+The first publication is by hand by the owner, and then the npm trusted publisher (OIDC) is set up
+for the new package, as was done for the engine. *(test: #569)*
+
+---
+
 ## See also
 
 - `LILA_MODELER_ESTRUCTURA.md` — the full structure document (source of truth for every ADR in this file).

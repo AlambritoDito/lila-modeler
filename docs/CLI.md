@@ -240,6 +240,10 @@ run directly in a terminal and read from. Details, tool contracts and client reg
 node packages/engine/bin/lila.js mcp
 ```
 
+`lila mcp` needs `@lila-modeler/mcp` installed next to the engine; the CLI alone stops with
+`lila mcp: the package @lila-modeler/mcp is missing`. Outside a checkout, the usual way to start
+the server is the package's own command, `npx -y @lila-modeler/mcp`.
+
 ## `process`
 
 Creates a process from an **outline**, reads one back (#97) and edits one (#98). An outline is the process as data —

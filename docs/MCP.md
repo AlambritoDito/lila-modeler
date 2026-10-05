@@ -423,43 +423,46 @@ summaries, catalogued engine diagnostics and tool messages use the selected lang
 
 ## Installation
 
-**`@lila-modeler/mcp` is not published.** The engine on npm (`@lila-modeler/engine`) has the `lila`
-command, but `lila mcp` loads the MCP server from the separate `@lila-modeler/mcp` workspace (a
-dynamic `import()`, to avoid a package cycle), and that workspace is `private`. So
-`npx -y @lila-modeler/engine mcp` does **not** work today: it installs the engine and stops with
-`lila mcp: the package @lila-modeler/mcp is missing`. Until the MCP server is published, run it from
-a repository checkout with Node 22 or later:
+The server is published on npm as its own package, `@lila-modeler/mcp` (ADR-030), with Node 22 or
+later. An MCP client starts it with:
+
+```bash
+npx -y @lila-modeler/mcp
+```
+
+`-y` lets npx install it without asking. The package pins the exact `@lila-modeler/engine` version
+it was released with, so the server and the `lila` CLI of the same version give the same numbers.
+`lila mcp`, the engine's subcommand, loads this package (a dynamic `import()`, to avoid a package
+cycle) and starts the same server when both are installed
+(`npm install -g @lila-modeler/engine @lila-modeler/mcp`).
+
+To run unreleased changes, start it from a repository checkout instead:
 
 ```bash
 git clone https://github.com/AlambritoDito/lila-modeler.git
 cd lila-modeler
 npm ci
 npm run build
+node packages/engine/bin/lila.js mcp    # or ./node_modules/.bin/lila-mcp, the same server
 ```
 
-Both commands below start the same server:
-
-```bash
-node packages/engine/bin/lila.js mcp
-./node_modules/.bin/lila-mcp
-```
-
-Every client below starts the server as a subprocess over stdio: `command` is `node` (an
-absolute path to it when the client does not inherit your `PATH`) and `args` are the absolute path
-to `packages/engine/bin/lila.js` and `mcp`. Missing packages and startup diagnostics go to stderr;
-stdout carries only MCP protocol messages. Add `--lang es` (or the environment variable
-`LILA_LANG=es`) for Spanish messages.
+Every client below starts the server as a subprocess over stdio: `command` is `npx` and `args` are
+`-y` and `@lila-modeler/mcp`. When the client does not inherit your `PATH`, give `command` as an
+absolute path (`which npx`), and add the directory of `node` to the server's `PATH` if it still
+cannot find it. From a checkout, `command` is `node` and `args` are the absolute path to
+`packages/engine/bin/lila.js` and `mcp`. Missing packages and startup diagnostics go to stderr;
+stdout carries only MCP protocol messages. Set the environment variable `LILA_LANG=es` for Spanish
+messages (`lila mcp` also takes `--lang es`).
 
 ## Register with Claude Code
 
-Use an absolute checkout path when registering outside this repository:
-
 ```bash
-claude mcp add lila -- node /path/to/repo/packages/engine/bin/lila.js mcp
+claude mcp add lila -- npx -y @lila-modeler/mcp
 ```
 
 `-s user` registers across projects; otherwise the registration is local. Check with
-`claude mcp list`. The repository already includes a project `.mcp.json`:
+`claude mcp list`. Inside this repository there is nothing to register: it includes a project
+`.mcp.json` that starts the checkout's own server:
 
 ```json
 {
@@ -477,15 +480,15 @@ client does not launch the server from the repository root.
 
 ## Register with Claude Desktop
 
-Configure the client with the Node executable and the absolute path to
-`packages/engine/bin/lila.js`, followed by `mcp`. For example:
+Claude Desktop does not inherit your shell's `PATH`, so give `npx` as an absolute path
+(`which npx`):
 
 ```json
 {
   "mcpServers": {
     "lila": {
-      "command": "/absolute/path/to/node",
-      "args": ["/absolute/path/to/repo/packages/engine/bin/lila.js", "mcp"]
+      "command": "/absolute/path/to/npx",
+      "args": ["-y", "@lila-modeler/mcp"]
     }
   }
 }
@@ -499,15 +502,15 @@ Use absolute model and scenario paths rather than relying on a client-specific w
 ## Register with Codex
 
 ```bash
-codex mcp add lila -- node /absolute/path/to/repo/packages/engine/bin/lila.js mcp
+codex mcp add lila -- npx -y @lila-modeler/mcp
 ```
 
 or, in `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.lila]
-command = "node"
-args = ["/absolute/path/to/repo/packages/engine/bin/lila.js", "mcp"]
+command = "npx"
+args = ["-y", "@lila-modeler/mcp"]
 ```
 
 ## Register with Hermes Agent
@@ -518,8 +521,8 @@ servers from `mcp_servers` in `~/.hermes/config.yaml`:
 ```yaml
 mcp_servers:
   lila:
-    command: "/absolute/path/to/node"
-    args: ["/absolute/path/to/repo/packages/engine/bin/lila.js", "mcp"]
+    command: "/absolute/path/to/npx"
+    args: ["-y", "@lila-modeler/mcp"]
     cwd: "/absolute/path/to/your/projects"
     env:
       LILA_LANG: "es"
@@ -528,8 +531,8 @@ mcp_servers:
 
 - Hermes does not hand the server your whole environment: it passes a safe baseline (`PATH`,
   `HOME`, `LANG`, `TMPDIR`, `XDG_*` and similar) plus the variables listed in `env`. Put `LILA_LANG`
-  or anything else Lila should see in `env`, and give `command` as an absolute path to `node`
-  (`which node`) when the `PATH` Hermes runs with may not find it.
+  or anything else Lila should see in `env`, and give `command` as an absolute path to `npx`
+  (`which npx`) when the `PATH` Hermes runs with may not find it.
 - `cwd` is where relative tool paths (`project: "card.lila"`, `saveTo`) land. Only recent Hermes
   versions pass it to the server; older ones (v0.17.0, for one) ignore it. Absolute paths in the
   calls work with every version, so prefer them.
