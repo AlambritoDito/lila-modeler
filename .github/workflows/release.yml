@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_npm:
-        description: 'Publish @lila-modeler/engine to npm (owner decision; run it on a v* tag ref)'
+        description: 'Publish @lila-modeler/engine and @lila-modeler/mcp to npm (owner decision; run it on a v* tag ref)'
         type: boolean
         default: false
 
@@ -48,6 +48,8 @@ jobs:
           }
           versions['packages/engine/src/version.ts'] = /version = '([^']+)'/.exec(readFileSync('packages/engine/src/version.ts', 'utf8'))[1];
           versions['packages/mcp/src/server.ts'] = /const VERSION = '([^']+)'/.exec(readFileSync('packages/mcp/src/server.ts', 'utf8'))[1];
+          // @lila-modeler/mcp pins the engine it was released with; both are published together.
+          versions['packages/mcp/package.json dependencies @lila-modeler/engine'] = JSON.parse(readFileSync('packages/mcp/package.json', 'utf8')).dependencies['@lila-modeler/engine'];
           const distinct = new Set(Object.values(versions));
           console.log(versions);
           if (distinct.size !== 1) throw new Error(`Release manifests disagree: ${JSON.stringify(versions)}`);
@@ -59,20 +61,25 @@ jobs:
       - run: npm run typecheck
       - run: npm run test:package
       - run: npm pack --workspace @lila-modeler/engine --dry-run
+      - run: npm pack --workspace @lila-modeler/mcp --dry-run
       - name: Publish to npm (explicit owner action only)
         if: env.PUBLISH_NPM == 'true'
         # A prerelease version (1.0.0-beta.1) goes to the `beta` dist-tag so `latest` never
         # points at a beta; a stable version goes to `latest`. Publication is only possible from
         # a dispatch on a `v*` tag. Note: the registry sets `latest` on a package's very first
         # publish regardless of --tag; check `npm view @lila-modeler/engine dist-tags` after a first publish.
+        # @lila-modeler/mcp goes right after the engine it pins (same version, same dist-tag), so
+        # `npx -y @lila-modeler/mcp` never resolves an engine that is not on the registry yet.
         run: |
           version=$(node -p "require('./packages/engine/package.json').version")
           tag=latest
           case "$version" in *-*) tag=$(echo "$version" | sed -E 's/^[^-]+-([A-Za-z]+).*$/\1/');; esac
-          echo "Publishing @lila-modeler/engine@$version with dist-tag $tag"
           npm --version
-          npm publish --workspace @lila-modeler/engine --provenance --access public --tag "$tag"
+          for package in @lila-modeler/engine @lila-modeler/mcp; do
+            echo "Publishing $package@$version with dist-tag $tag"
+            npm publish --workspace "$package" --provenance --access public --tag "$tag"
+          done
       - name: Report that publication was skipped
         if: env.PUBLISH_NPM != 'true'
         run: |
-          echo "::notice title=npm publish skipped::@lila-modeler/engine was not published. Publication only happens from a manual run with publish_npm=true on a v* tag; a tag push only proves the package builds, type-checks, tests and packs."
+          echo "::notice title=npm publish skipped::@lila-modeler/engine and @lila-modeler/mcp were not published. Publication only happens from a manual run with publish_npm=true on a v* tag; a tag push only proves the package builds, type-checks, tests and packs."
