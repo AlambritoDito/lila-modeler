@@ -1189,8 +1189,9 @@ export const en = {
 
     cuellos: 'Bottlenecks',
     sinCuellos: 'No resource wait detected.',
-    cuelloDetalle: (espera: string, unidad: string, utilizacion: string): string =>
-      ` — total wait ${espera} ${unidad}, utilization ${utilizacion}%`,
+    /** `espera` carries its unit, as in the tables (`3000.56 min`, `50.01 h (3000.56 min)`). */
+    cuelloDetalle: (espera: string, utilizacion: string): string =>
+      ` — total wait ${espera}, utilization ${utilizacion}%`,
 
     avisos: 'Warnings',
 
@@ -1426,8 +1427,9 @@ export const en = {
 
     /** Floating label of the bottleneck overlay (#226): short above, complete in the `title`. */
     cuelloEtiqueta: (espera: string, utilizacion: number): string => `${espera} · ${utilizacion}%`,
-    cuelloTitulo: (espera: string, unidad: string, utilizacion: string): string =>
-      `mean wait ${espera} ${unidad} · utilization ${utilizacion}%`,
+    /** `espera` carries its unit, as in the tables. */
+    cuelloTitulo: (espera: string, utilizacion: string): string =>
+      `mean wait ${espera} · utilization ${utilizacion}%`,
     /** Short unit for the label; the `title` uses the scenario code. */
     unidadesCortas: { day: 'd', h: 'h', min: 'min', s: 's' },
 

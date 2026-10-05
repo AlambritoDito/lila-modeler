@@ -13,7 +13,7 @@ import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 
 import { parseBpmn } from '@lila-modeler/engine/bpmn';
 import { elementsCsv } from '@lila-modeler/engine/csv';
-import { formatDuration, formatNumber, SECONDS_PER_UNIT, type BaseTimeUnit } from '@lila-modeler/engine/format';
+import { formatNumber, type BaseTimeUnit } from '@lila-modeler/engine/format';
 import { resolveExtends, type ResolvedScenario } from '@lila-modeler/engine/schema';
 import { simulate, type ProcessIR, type RunResult } from '@lila-modeler/engine';
 
@@ -21,6 +21,7 @@ import { DockSimular, FILAS_LOG, filasRapidas, PESTANAS_DOCK, type DockSimularPr
 import type { LogDeCorrida } from './GraficasResultados';
 import { agruparAvisos } from './avisos';
 import { ESPERA_RECURSO, percentilesPorElemento } from './percentilesPorElemento';
+import { exactDuration, formatDisplayDuration } from './formatDisplay';
 import { setLocale, strings } from './i18n';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -95,9 +96,16 @@ describe('quick results (#394)', () => {
     const id = tareas[0]!;
     const media = primera.querySelectorAll('td')[1]!;
     const unidad = scenario.run.baseTimeUnit as BaseTimeUnit;
-    expect(media.title).toBe(formatDuration(result.elements[id]!.resourceWait.mean, unidad));
-    // Shown rounded to two decimals, like the KPIs.
-    expect(media.textContent).toBe(formatNumber(Math.round(result.elements[id]!.resourceWait.mean / SECONDS_PER_UNIT[unidad] * 100) / 100));
+    expect(media.title).toBe(exactDuration(result.elements[id]!.resourceWait.mean, unidad));
+    // Shown like the Results tables: two decimals, hours from an hour on (QA of #585).
+    expect(media.textContent).toBe(formatDisplayDuration(result.elements[id]!.resourceWait.mean, unidad));
+    // A wait of an hour or more reads in hours here too, not in minutes only (QA of #585).
+    const largas = [...tabla.querySelectorAll('tbody tr')].filter((tr) => {
+      const tarea = tareas.find((t) => (ir.nodes[t]?.name || t) === tr.querySelector('th')!.textContent);
+      return tarea !== undefined && result.elements[tarea]!.resourceWait.mean >= 3600;
+    });
+    expect(largas.length).toBeGreaterThan(0);
+    for (const tr of largas) expect(tr.querySelectorAll('td')[1]!.textContent).toMatch(/^[\d.]+ h \([\d.]+ min\)$/);
     // The note says which population each wait column covers.
     expect(container.querySelector('.dock-nota')!.textContent).toBe(S.dock.notaPercentiles(log.rows.length));
     // The scenario KPIs head the dock, rounded, with the exact value as the title.
