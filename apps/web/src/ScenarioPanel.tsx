@@ -37,7 +37,7 @@
  *    guardan en segundos (R1, R2), y `run.start` se compone de una fecha y un desfase (R8).
  *    El JSON crudo sigue estando, plegado al final: es la vista avanzada, no la principal.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ProcessIR } from '@lila-modeler/engine';
 import { resolveExtends, resolveScenarioPath, type ScenarioReader, type ValidateScenarioOptions } from '@lila-modeler/engine/schema';
@@ -58,15 +58,16 @@ import {
   type Problema,
   type Ruta,
 } from './escenarioModelo.js';
+import { atajoPorId, etiqueta, MAC } from './atajos.js';
 import { PASO_IDS, type PasoId } from './ids.js';
 import { ImportarExcel } from './ImportarExcel.js';
 import { BotonElemento, type Rotulo } from './ListaElementos.js';
 import { PasoCalendarios } from './PasoCalendarios.js';
-import { PasoLlegadas, ListaLlegadas } from './PasoLlegadas.js';
+import { FichaLlegada, ListaLlegadas } from './PasoLlegadas.js';
 import { PasoEjecucion } from './PasoEjecucion.js';
 import { ListaRutas, VistaCompuerta } from './PasoRutas.js';
-import { ListaTiempos } from './PasoTiempos.js';
-import { agruparPorPaso, tareasSinDuracion } from './pasoDeProblema.js';
+import { ListaTiempos, ResumenTiempo } from './PasoTiempos.js';
+import { agruparPorPaso, elementoDeProblema, tareasSinDuracion } from './pasoDeProblema.js';
 import { PasoRecursos, ListaRecursos } from './PasoRecursos.js';
 import { esEscenarioBase } from './RailEscenarios.js';
 import { entradasHuerfanas, sinHuerfanas } from './simulationGate.js';
@@ -125,51 +126,125 @@ export function bloquea(problema: Problema): boolean {
 }
 
 /**
- * The step bar: Arrivals, Times, Routes, Resources, Calendars and Run, in order, as the only
- * navigation of the panel.
+ * The step bar (Lote M): six numbered tabs — Arrivals, Times, Routes, Resources, Calendars and
+ * Run — each with «✓» or «! n», the problems that hold the step back.
  *
- * Each carries `aria-pressed` (this one is the one chosen) plus `aria-current="step"` (this one
- * is where you are in the sequence), and a «! n» with the problems that hold the step back.
+ * A `tablist` with a roving tabindex: Tab reaches the current step only, ←/→ (and Home/End) move
+ * between steps and open them, Alt+1…6 open one from anywhere (handled by the panel). In the
+ * detached window (`compacta`) only the current step shows its name and the others a bare «!»
+ * when they have problems, the design's compact header.
  */
 function BarraPasos({
   paso,
   onPaso,
   conteos,
+  compacta,
 }: {
   paso: PasoId;
-  onPaso: (paso: PasoId) => void;
+  onPaso: (paso: PasoId, foco?: boolean) => void;
   conteos: Readonly<Record<PasoId, number>>;
+  compacta: boolean;
 }): React.JSX.Element {
   const S = useStrings();
+  const indice = PASO_IDS.indexOf(paso);
   return (
-    <>
-      <nav className="pasos" aria-label={S.escenario.pasos}>
-        {PASO_IDS.map((p) => (
+    <div
+      role="tablist"
+      className="pasos"
+      aria-label={S.escenario.pasos}
+      onKeyDown={(e) => {
+        let destino: number | null = null;
+        if (e.key === 'ArrowRight') destino = (indice + 1) % PASO_IDS.length;
+        else if (e.key === 'ArrowLeft') destino = (indice + PASO_IDS.length - 1) % PASO_IDS.length;
+        else if (e.key === 'Home') destino = 0;
+        else if (e.key === 'End') destino = PASO_IDS.length - 1;
+        if (destino === null) return;
+        e.preventDefault();
+        onPaso(PASO_IDS[destino]!, true);
+      }}
+    >
+      {PASO_IDS.map((p, i) => {
+        const activo = p === paso;
+        const n = conteos[p];
+        const tecla = etiqueta(atajoPorId(`paso:${p}`), MAC);
+        return (
           <button
             key={p}
+            id={`sim-paso-${p}`}
             type="button"
-            className={p === paso ? 'paso activo' : 'paso'}
-            aria-pressed={p === paso}
-            aria-current={p === paso ? 'step' : undefined}
+            role="tab"
+            className={['paso', activo ? 'activo' : '', n > 0 ? 'con-problemas' : ''].filter(Boolean).join(' ')}
+            aria-selected={activo}
+            aria-controls="sim-cuerpo"
+            tabIndex={activo ? 0 : -1}
             data-paso={p}
+            title={S.pasosSim.tabTitulo(S.pasosSim.titulos[p] ?? '', tecla)}
             onClick={() => {
               onPaso(p);
             }}
           >
-            {S.escenario.paso[p]}
-            {conteos[p] > 0 && (
-              <span className="paso-problemas" aria-label={S.escenario.pasoProblemas(conteos[p])}>
-                {` ! ${conteos[p]}`}
+            <span className="paso-num" aria-hidden="true">{i + 1}</span>
+            {(!compacta || activo) && <span className="paso-nombre">{S.escenario.paso[p]}</span>}
+            {compacta && !activo && <span className="sr-only">{S.escenario.paso[p]}</span>}
+            {n > 0 ? (
+              <span className="paso-problemas" aria-label={S.escenario.pasoProblemas(n)}>
+                {compacta && !activo ? '!' : `! ${n}`}
               </span>
+            ) : (
+              !compacta && <span className="paso-ok" aria-label={S.pasosSim.sinProblemas}>✓</span>
             )}
           </button>
-        ))}
-      </nav>
-      <p className="ayuda">{S.escenario.pasoAyuda[paso]}</p>
-    </>
+        );
+      })}
+    </div>
   );
 }
 
+/**
+ * Lote M: what a selected element reads in the selection header — the kind of BPMN element in the
+ * properties catalog (`S.propiedades.tipos`), from the class of the IR.
+ */
+const TIPO_BPMN: Partial<Record<ClaseElemento, string>> = {
+  task: 'bpmn:Task',
+  start: 'bpmn:StartEvent',
+  end: 'bpmn:EndEvent',
+  terminate: 'bpmn:EndEvent',
+  xor: 'bpmn:ExclusiveGateway',
+  or: 'bpmn:InclusiveGateway',
+  and: 'bpmn:ParallelGateway',
+  eventGateway: 'bpmn:EventBasedGateway',
+  timer: 'bpmn:IntermediateCatchEvent',
+  flow: 'bpmn:SequenceFlow',
+};
+
+/** Which tip the «nothing here» note gives for a class (`S.pasosSim.consejos`). */
+function consejoDe(clase: ClaseElemento | null): { clave: string; paso: PasoId | null } {
+  switch (clase) {
+    case 'task':
+      return { clave: 'task', paso: 'times' };
+    case 'start':
+      return { clave: 'start', paso: 'arrivals' };
+    case 'xor':
+    case 'or':
+      return { clave: 'gateway', paso: 'routes' };
+    case 'flow':
+      return { clave: 'flow', paso: 'routes' };
+    case 'end':
+    case 'terminate':
+      return { clave: 'end', paso: null };
+    default:
+      return { clave: 'otro', paso: null };
+  }
+}
+
+/** The nearest ancestor that scrolls: the docked panel (`.panel`) or the window's body. */
+function desplazable(nodo: HTMLElement | null): HTMLElement | null {
+  for (let n = nodo?.parentElement ?? null; n !== null; n = n.parentElement) {
+    const estilo = n.ownerDocument.defaultView?.getComputedStyle(n);
+    if (estilo !== undefined && /(auto|scroll)/.test(estilo.overflowY) && n.scrollHeight > n.clientHeight) return n;
+  }
+  return null;
+}
 
 /* ------------------------------------------------------------------ *
  * #332: la vista avanzada, que es el JSON crudo del archivo en edición
@@ -279,6 +354,20 @@ export interface ScenarioPanelProps {
    */
   pasoPedido?: PasoId | null;
   onPasoAtendido?: () => void;
+  /**
+   * Lote M: «▶ Simulate» of the panel (and of the shell's top bar, through `irAlProblema`). The
+   * panel calls it only when no step is held back by a problem; otherwise it takes the person to
+   * the first problem — its step, its element selected, the step's banner — and says why.
+   */
+  onSimular?: () => void;
+  /** Lote M: the number of problems that hold the run back, for the shell's «▶ Simulate» badge. */
+  onConteoProblemas?: (n: number) => void;
+  /**
+   * Lote M: a request from the shell to go to the first problem (its «▶ Simulate» or ⌘↩ with
+   * problems pending). A new number is a new request; `null` asks for nothing. Like `pasoPedido`,
+   * the panel acts once per value.
+   */
+  irAlProblema?: number | null;
 }
 
 /** Default of `problemasExtra`, one array for every render so the memo below keeps its cache. */
@@ -301,6 +390,9 @@ export function ScenarioPanel({
   enVentana = false,
   pasoPedido = null,
   onPasoAtendido,
+  onSimular,
+  onConteoProblemas,
+  irAlProblema = null,
 }: ScenarioPanelProps): React.JSX.Element {
   const S = useStrings();
   /**
@@ -473,7 +565,6 @@ export function ScenarioPanel({
   /** Qué es lo seleccionado (#332): decide qué campos se ofrecen y si sale la vista de compuerta. */
   const clase = claseDeElemento(ir, idSeleccionado);
 
-  const elementos = esObjeto(resuelto['elements']) ? resuelto['elements'] : {};
   const heredaDe = typeof delta['extends'] === 'string' ? delta['extends'] : null;
 
   /**
@@ -510,6 +601,123 @@ export function ScenarioPanel({
   /** #430: orphan entries of the whole project, since Run resolves any of its scenarios. */
   const huerfanas = useMemo(() => (ir === null ? [] : entradasHuerfanas(escenarios, ir)), [escenarios, ir]);
 
+  /** Lote M: the problems that hold the run back, in step order, then the ones no step owns. */
+  const bloqueantes = useMemo(
+    () => [...PASO_IDS.flatMap((p) => porPaso.porPaso[p]), ...porPaso.sinPaso],
+    [porPaso],
+  );
+  /** «Cannot simulate…»: said once after «▶ Simulate» with problems, cleared by the next click. */
+  const [aviso, setAviso] = useState<string | null>(null);
+  useEffect(() => {
+    if (bloqueantes.length === 0) setAviso(null);
+  }, [bloqueantes.length]);
+
+  const raizRef = useRef<HTMLDivElement>(null);
+  const cabeceraRef = useRef<HTMLDivElement>(null);
+  const cuerpoRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Opens `p`. `foco` moves the keyboard focus to its tab (arrow keys and Alt+n): the roving
+   * tabindex has to follow the step or Tab would land on the old one.
+   */
+  function irAPaso(p: PasoId, foco = false): void {
+    setPaso(p);
+    if (foco) {
+      // After the render that gives the new tab its `tabIndex=0`.
+      queueMicrotask(() => raizRef.current?.querySelector<HTMLElement>(`[data-paso="${p}"]`)?.focus());
+    }
+  }
+
+  /** Jumps to a problem: its step, its element selected (or nothing selected), the banner shown. */
+  function irAProblema(problema: Problema): void {
+    const destino = pasoDeProblemaPanel(problema.ruta);
+    if (destino !== null) setPaso(destino);
+    onSeleccionar(elementoDeProblema(problema.ruta, ir));
+  }
+  function pasoDeProblemaPanel(ruta: string): PasoId | null {
+    for (const p of PASO_IDS) if (porPaso.porPaso[p].some((x) => x.ruta === ruta)) return p;
+    return null;
+  }
+
+  /** «▶ Simulate»: runs when nothing holds it back, else goes to the first problem and says why. */
+  function simular(): void {
+    const primero = bloqueantes[0];
+    if (primero === undefined) {
+      setAviso(null);
+      onSimular?.();
+      return;
+    }
+    setAviso(S.pasosSim.noSePuede(bloqueantes.length));
+    irAProblema(primero);
+  }
+
+  const conteoRef = useRef(onConteoProblemas);
+  conteoRef.current = onConteoProblemas;
+  useEffect(() => {
+    conteoRef.current?.(bloqueantes.length);
+  }, [bloqueantes.length]);
+
+  // The shell's request to go to the first problem (its own «▶ Simulate», ⌘↩): once per value.
+  const simularRef = useRef(simular);
+  simularRef.current = simular;
+  useEffect(() => {
+    if (irAlProblema === null) return;
+    simularRef.current();
+  }, [irAlProblema]);
+
+  /**
+   * Alt+1…6 open a step and Esc clears the selection, on the panel's own document: the docked
+   * panel listens on the app's, the detached one on its window's, so both work wherever the panel
+   * is. `App.tsx` never dispatches Alt+1…6 (they are `panel` entries of `atajos.ts`) and handles Esc
+   * first while a run is in flight (it cancels the run and marks the event handled), so the two
+   * never fight over a key. Esc inside a field, a label being edited or an open dialog is theirs.
+   */
+  const teclasRef = useRef({ irAPaso, seleccion: idSeleccionado, onSeleccionar });
+  teclasRef.current = { irAPaso, seleccion: idSeleccionado, onSeleccionar };
+  useEffect(() => {
+    const doc = raizRef.current?.ownerDocument;
+    if (doc === undefined) return;
+    const alPulsar = (e: KeyboardEvent): void => {
+      if (e.defaultPrevented || e.isComposing) return;
+      const digito = /^Digit([1-6])$/.exec(e.code);
+      if (digito !== null && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        e.preventDefault();
+        if (e.repeat) return;
+        teclasRef.current.irAPaso(PASO_IDS[Number(digito[1]) - 1]!, true);
+        return;
+      }
+      if (e.key !== 'Escape' || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      if (teclasRef.current.seleccion === null) return;
+      const objetivo = e.target as Element | null;
+      if (objetivo?.closest?.('input, textarea, select, [contenteditable="true"], dialog, .djs-direct-editing-parent') != null) return;
+      if (doc.querySelector('dialog[open]') !== null) return;
+      teclasRef.current.onSeleccionar(null);
+    };
+    doc.addEventListener('keydown', alPulsar);
+    return () => {
+      doc.removeEventListener('keydown', alPulsar);
+    };
+  }, []);
+
+  /**
+   * After a step change or a new selection, the top of the step goes back under the fixed header:
+   * staying where the previous step left the scroll is what sent people hunting (baseline, step 2).
+   */
+  const primeraVez = useRef(true);
+  useEffect(() => {
+    if (primeraVez.current) {
+      primeraVez.current = false;
+      return;
+    }
+    const cuerpo = cuerpoRef.current;
+    const cabecera = cabeceraRef.current;
+    if (cuerpo === null || cabecera === null) return;
+    const contenedor = desplazable(cuerpo);
+    if (contenedor === null) return;
+    const hueco = cuerpo.getBoundingClientRect().top - cabecera.getBoundingClientRect().bottom;
+    if (hueco < 0) contenedor.scrollTop += hueco;
+  }, [paso, idSeleccionado]);
+
   const guardarBoton = (
     <button type="button" className={enVentana ? 'boton primario' : 'boton'} onClick={onGuardar}>
       {S.escenario.guardar}
@@ -528,126 +736,294 @@ export function ScenarioPanel({
     </button>
   );
 
+  const elementos = esObjeto(resuelto['elements']) ? resuelto['elements'] : {};
+  const nombreEscenario = typeof resuelto['name'] === 'string' ? resuelto['name'] : archivo;
+  const indicePaso = PASO_IDS.indexOf(paso);
+  const anterior = PASO_IDS[indicePaso - 1];
+  const siguiente = PASO_IDS[indicePaso + 1];
+  const delPaso = porPaso.porPaso[paso];
+  const tareas = new Set(idsPorTipo(['task']));
+  const atajoSimular = etiqueta(atajoPorId('ejecutar'), MAC);
+  const pista = `${etiqueta(atajoPorId('paso:arrivals'), MAC).replace(/1$/, '1…6')} · ${atajoSimular}`;
+
+  /* --- What the step shows for the selected element (Lote M: only this step's parameters). --- */
+  const visibles = idSeleccionado === null ? [] : fieldsForStep(paso, clase);
+  const definidos = idSeleccionado === null ? [] : CAMPOS_DE_PASO[paso].filter((campo) => leer(resuelto, ['elements', idSeleccionado, campo]) !== undefined);
+  const esCompuerta = clase === 'xor' || clase === 'or';
+  /** Whether the selected element has anything to set in this step; if not, the panel says where. */
+  const tieneAlgo =
+    idSeleccionado !== null &&
+    (paso === 'run' ||
+      (paso === 'routes' && esCompuerta && ir !== null) ||
+      visibles.some((campo) => !['priority', 'preempt', 'batch', 'conditions'].includes(campo)) ||
+      definidos.length > 0);
+  const nombreSeleccion = idSeleccionado === null ? '' : rotulo(idSeleccionado).principal;
+  const tipoSeleccion =
+    clase === null ? '' : (S.propiedades.tipos[TIPO_BPMN[clase] ?? ''] ?? TIPO_BPMN[clase]?.replace('bpmn:', '') ?? clase);
+  const consejo = consejoDe(clase);
+
+  const inicios = idsPorTipo(['start']);
+
+  /** The step's content without a selection: its overview (lists, pools, calendars, the run). */
+  function vistaGeneral(): React.JSX.Element | null {
+    switch (paso) {
+      case 'arrivals':
+        if (inicios.length === 1 && ir !== null) {
+          return <FichaLlegada id={inicios[0]!} nombre={rotulo(inicios[0]!).principal} ctx={ctx} />;
+        }
+        return <ListaLlegadas ids={inicios} {...lista} />;
+      case 'times':
+        return <ListaTiempos ids={idsPorTipo(['task', 'timer'])} tareas={tareas} {...lista} />;
+      case 'routes':
+        return <ListaRutas ids={idsPorTipo(['xor', 'or'])} ir={ir} {...lista} />;
+      case 'resources':
+        return (
+          <>
+            <PasoRecursos ctx={ctx} ir={ir} avanzado={avanzado} />
+            <ListaRecursos ids={idsPorTipo(['task'])} {...lista} />
+          </>
+        );
+      case 'calendars':
+        return <PasoCalendarios ctx={ctx} onIrARecursos={() => { irAPaso('resources'); }} />;
+      case 'run':
+        return <PasoEjecucion ctx={ctx} />;
+    }
+  }
+
+  /** The selected element in this step: its fields of the step, or where it is set instead. */
+  function vistaSeleccion(id: string): React.JSX.Element {
+    if (paso === 'run') return <PasoEjecucion ctx={ctx} />;
+    if (!tieneAlgo) {
+      return (
+        <div className="sim-nota">
+          <p>
+            {S.pasosSim.nada(tipoSeleccion, S.escenario.paso[paso] ?? paso)}{' '}
+            {S.pasosSim.consejos[consejo.clave]}
+          </p>
+          {consejo.paso !== null && consejo.paso !== paso && (
+            <button type="button" className="boton" onClick={() => { irAPaso(consejo.paso!); }}>
+              {S.pasosSim.irA(S.escenario.paso[consejo.paso] ?? consejo.paso)}
+            </button>
+          )}
+        </div>
+      );
+    }
+    if (paso === 'arrivals' && clase === 'start') {
+      return <FichaLlegada id={id} nombre={nombreSeleccion} ctx={ctx} />;
+    }
+    return (
+      <>
+        <Propiedades
+          esquema={esquemaEntrada(esquemaDe('elements'))}
+          ruta={['elements', id]}
+          ctx={ctx}
+          visibles={visibles}
+          siDefinido={CAMPOS_DE_PASO[paso]}
+        />
+        <Problemas ruta={['elements', id]} ctx={ctx} />
+        {paso === 'times' && (clase === 'task' || clase === 'timer') && (
+          <ResumenTiempo id={id} esTarea={clase === 'task'} ctx={ctx} unidad={unidad} />
+        )}
+        {/* The gateway is where the branching is parameterised, and branching is what the
+            Routes step is about: its outgoing flows have to add up. */}
+        {paso === 'routes' && ir !== null && esCompuerta && (
+          <VistaCompuerta ir={ir} id={id} clase={clase} ctx={ctx} avanzado={avanzado} />
+        )}
+      </>
+    );
+  }
+
   return (
-    <div className="escenario">
-      <div className="escenario-cabecera">
-        <strong>{S.escenario.titulo(typeof resuelto['name'] === 'string' ? resuelto['name'] : archivo)}</strong>
-        {esEscenarioBase(delta) && <span className="insignia-base">{S.rail.base}</span>}
-        <span className={errores > 0 ? 'error' : 'aviso'}>
-          {S.escenario.conteo(errores, avisos)}
-        </span>
-        {!enVentana && guardarBoton}
-        {!enVentana && duplicarBoton}
-      </div>
-
-      <p className="escenario-archivo">{S.escenario.archivoHereda(archivo, heredaDe)}</p>
-      <Problemas ruta={['extends']} ctx={ctx} />
-
-      <ImportarExcel key={archivo} archivo={archivo} resuelto={resuelto} delta={delta} padre={padre} ir={ir} onCambio={onCambio} />
-
-      {huerfanas.length > 0 && ir !== null && (
-        <div className="lista-paso huerfanas">
-          <p className="etiqueta">{S.escenario.huerfanas}</p>
-          <ul className="ids">
-            {huerfanas.map((id) => <li key={id} className="mono">{id}</li>)}
-          </ul>
+    <div ref={raizRef} className={enVentana ? 'escenario sim-panel compacto' : 'escenario sim-panel'}>
+      {/* Lote M: the header stays put while the step scrolls under it (`position: sticky`), at
+          any panel width: the scenario, «▶ Simulate» and the six steps are always one click away. */}
+      <div ref={cabeceraRef} className="sim-cabecera">
+        <div className="escenario-cabecera">
+          <strong className="sim-escenario" title={nombreEscenario}>
+            {enVentana ? nombreEscenario : S.escenario.titulo(nombreEscenario)}
+          </strong>
+          {esEscenarioBase(delta) && <span className="insignia-base">{S.rail.base}</span>}
+          <span className={errores > 0 ? 'error sim-conteo' : 'aviso sim-conteo'}>
+            {S.escenario.conteo(errores, avisos)}
+          </span>
+          {!enVentana && guardarBoton}
+          {!enVentana && duplicarBoton}
           <button
             type="button"
-            className="boton"
-            onClick={() => {
-              for (const [otro, escenario] of Object.entries(sinHuerfanas(escenarios, ir))) onCambio(otro, escenario);
-            }}
+            className="boton primario sim-simular"
+            title={`${S.pasosSim.simular} (${atajoSimular})`}
+            onClick={simular}
           >
-            {S.escenario.quitarHuerfanas}
+            <span aria-hidden="true">▶ </span>
+            {S.pasosSim.simular}
+            {bloqueantes.length > 0 && (
+              <span className="sim-insignia" aria-label={S.pasosSim.insignia(bloqueantes.length)}>
+                {bloqueantes.length}
+              </span>
+            )}
           </button>
         </div>
-      )}
+        <BarraPasos paso={paso} onPaso={irAPaso} conteos={conteos} compacta={enVentana} />
+        {!enVentana && <p className="sim-pista mono">{pista}</p>}
+      </div>
 
-      <BarraPasos paso={paso} onPaso={setPaso} conteos={conteos} />
+      <div ref={cuerpoRef} id="sim-cuerpo" role="tabpanel" aria-labelledby={`sim-paso-${paso}`} className="sim-cuerpo">
+        <p className="escenario-archivo">{S.escenario.archivoHereda(archivo, heredaDe)}</p>
+        <Problemas ruta={['extends']} ctx={ctx} />
 
-      {/* Each step is its own component (Lote M): the section it owns goes here, and what it adds
-          to the element section goes in the lists below. */}
-      {paso === 'run' && <PasoEjecucion ctx={ctx} />}
-      {paso === 'calendars' && (
-        <PasoCalendarios ctx={ctx} onIrARecursos={() => { setPaso('resources'); }} />
-      )}
-      {paso === 'resources' && <PasoRecursos ctx={ctx} ir={ir} avanzado={avanzado} />}
-      {paso === 'arrivals' && <PasoLlegadas />}
-
-      <details open>
-        <summary>{S.escenario.seccionElemento}</summary>
-        {idSeleccionado === null ? (
-          <ul className="ids">
-            {Object.keys(elementos).map((id) => (
-              <li key={id}>
-                <BotonElemento id={id} rotulo={rotulo(id)} onSeleccionar={onSeleccionar} />
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <>
-            <p className="vacio">
-              {rotulo(idSeleccionado).principal}
-              {rotulo(idSeleccionado).id !== undefined && (
-                <span className="id mono">{S.escenario.nombreEntreParentesis(idSeleccionado)}</span>
-              )}
-            </p>
-            <Propiedades
-              esquema={esquemaEntrada(esquemaDe('elements'))}
-              ruta={['elements', idSeleccionado]}
-              ctx={ctx}
-              visibles={fieldsForStep(paso, clase)}
-              siDefinido={CAMPOS_DE_PASO[paso]}
-            />
-            <Problemas ruta={['elements', idSeleccionado]} ctx={ctx} />
-            {/* The gateway is where the branching is parameterised, and branching is what the
-                Routes step is about: its outgoing flows have to add up. */}
-            {paso === 'routes' && ir !== null && (clase === 'xor' || clase === 'or') && (
-              <VistaCompuerta ir={ir} id={idSeleccionado} clase={clase} ctx={ctx} avanzado={avanzado} />
-            )}
-          </>
+        {huerfanas.length > 0 && ir !== null && (
+          <div className="lista-paso huerfanas">
+            <p className="etiqueta">{S.escenario.huerfanas}</p>
+            <ul className="ids">
+              {huerfanas.map((id) => <li key={id} className="mono">{id}</li>)}
+            </ul>
+            <button
+              type="button"
+              className="boton"
+              onClick={() => {
+                for (const [otro, escenario] of Object.entries(sinHuerfanas(escenarios, ir))) onCambio(otro, escenario);
+              }}
+            >
+              {S.escenario.quitarHuerfanas}
+            </button>
+          </div>
         )}
 
-        {/* Arrivals, Times, Routes and Resources list the elements they are about with what is
-            already written on each, selected or not: «which task still has no time» is the
-            question of the step, and the form of one element cannot answer it. */}
-        {paso === 'times' && <ListaTiempos ids={idsPorTipo(['task', 'timer'])} {...lista} />}
-        {paso === 'routes' && <ListaRutas ids={idsPorTipo(['xor', 'or'])} ir={ir} {...lista} />}
-        {paso === 'arrivals' && <ListaLlegadas ids={idsPorTipo(['start'])} {...lista} />}
-        {paso === 'resources' && <ListaRecursos ids={idsPorTipo(['task'])} {...lista} />}
-      </details>
+        <div className="sim-paso-cabeza">
+          <p className="sim-paso-n">{S.pasosSim.pasoDe(indicePaso + 1, PASO_IDS.length, nombreEscenario)}</p>
+          <h3 className="sim-paso-titulo">{S.pasosSim.titulos[paso]}</h3>
+          <p className="ayuda">{S.escenario.pasoAyuda[paso]}</p>
+        </div>
 
-      <VistaJson
-        delta={delta}
-        onAplicar={(escenario) => {
-          onCambio(archivo, escenario);
-        }}
-      />
+        {aviso !== null && (
+          <p role="status" className="sim-aviso">{aviso}</p>
+        )}
 
-      {/* The validation list is live in **every** step: a resource you break in Resources has to
-          be told there, and `docs/COMING-FROM-BIZAGI.md` promises exactly this
-          ("the validation list at the bottom of the panel is live in every step"). */}
-      {problemas.length > 0 && (
-        <details>
-          <summary>{S.escenario.seccionValidacion(errores)}</summary>
-          <ul className="ids">
-            {problemas.map((problema, i) => (
-              <li key={i} className={problema.severidad === 'error' ? 'error' : 'aviso'}>
-                {problema.mensaje}
-              </li>
-            ))}
-          </ul>
+        {delPaso.length > 0 && (
+          <section className="sim-banner" aria-label={delPaso.length === 1 ? S.pasosSim.bannerUno : S.pasosSim.bannerVarios(delPaso.length)}>
+            <p className="sim-banner-titulo">
+              {delPaso.length === 1 ? S.pasosSim.bannerUno : S.pasosSim.bannerVarios(delPaso.length)}
+            </p>
+            <ul>
+              {delPaso.map((problema, i) => (
+                <li key={`${problema.ruta}-${i}`}>
+                  <span>{problema.mensaje}</span>
+                  <button type="button" className="boton" onClick={() => { irAProblema(problema); }}>
+                    {S.pasosSim.ir}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        <details open className="sim-elemento">
+          <summary>{S.escenario.seccionElemento}</summary>
+          {idSeleccionado !== null && paso !== 'run' && (
+            <>
+              <p className="vacio">
+                {nombreSeleccion}
+                {rotulo(idSeleccionado).id !== undefined && (
+                  <span className="id mono">{S.escenario.nombreEntreParentesis(idSeleccionado)}</span>
+                )}
+              </p>
+              <div className="sim-seleccion">
+                <span className="sim-seleccion-tipo">{S.pasosSim.soloEstePaso(tipoSeleccion)}</span>
+                <button
+                  type="button"
+                  className="boton"
+                  title={S.pasosSim.verTodoTitulo}
+                  onClick={() => { onSeleccionar(null); }}
+                >
+                  {S.pasosSim.verTodo}
+                </button>
+              </div>
+            </>
+          )}
+          {idSeleccionado === null ? vistaGeneral() : vistaSeleccion(idSeleccionado)}
+          {/* Every entry the scenario already has, whatever the step: a flow or an element that is
+              hard to click on the canvas is still one click away (#447 rows). */}
+          {idSeleccionado === null && Object.keys(elementos).length > 0 && (
+            <details className="sim-entradas">
+              <summary>{S.pasosSim.entradas(Object.keys(elementos).length)}</summary>
+              <ul className="ids">
+                {Object.keys(elementos).map((id) => (
+                  <li key={id}>
+                    <BotonElemento id={id} rotulo={rotulo(id)} onSeleccionar={onSeleccionar} />
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
         </details>
-      )}
 
-      {enVentana && (
-        <footer className="escenario-pie">
-          <span>{S.escenario.pieVentana}</span>
-          {/* Duplicate, then Save: the order they are painted in is the order Tab visits. */}
-          {duplicarBoton}
-          {guardarBoton}
-        </footer>
-      )}
+        <nav className="sim-navegacion" aria-label={S.escenario.pasos}>
+          {anterior !== undefined && (
+            <button type="button" className="boton" onClick={() => { irAPaso(anterior); }}>
+              {S.pasosSim.anterior(S.escenario.paso[anterior] ?? anterior)}
+            </button>
+          )}
+          <span className="sim-hueco" />
+          {siguiente !== undefined ? (
+            <button type="button" className="boton sim-siguiente" onClick={() => { irAPaso(siguiente); }}>
+              {S.pasosSim.siguiente(S.escenario.paso[siguiente] ?? siguiente)}
+            </button>
+          ) : (
+            <button type="button" className="boton primario" onClick={simular}>
+              <span aria-hidden="true">▶ </span>
+              {S.pasosSim.simular}
+            </button>
+          )}
+        </nav>
+
+        {/* Problems no step owns (a broken `extends`, `model`, an entry for an element the diagram
+            does not have): they hold the run back too, so they are listed here, always open. */}
+        {porPaso.sinPaso.length > 0 && (
+          <section className="sim-banner sim-sinpaso" aria-label={S.pasosSim.sinPaso}>
+            <p className="sim-banner-titulo">{S.pasosSim.sinPaso}</p>
+            <ul>
+              {porPaso.sinPaso.map((problema, i) => (
+                <li key={`${problema.ruta}-${i}`}>
+                  <span>{problema.mensaje}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        <ImportarExcel key={archivo} archivo={archivo} resuelto={resuelto} delta={delta} padre={padre} ir={ir} onCambio={onCambio} />
+
+        <VistaJson
+          delta={delta}
+          onAplicar={(escenario) => {
+            onCambio(archivo, escenario);
+          }}
+        />
+
+        {/* The validation list is live in **every** step: a resource you break in Resources has to
+            be told there, and `docs/COMING-FROM-BIZAGI.md` promises exactly this. */}
+        {problemas.length > 0 && (
+          <details>
+            <summary>{S.escenario.seccionValidacion(errores)}</summary>
+            <ul className="ids">
+              {problemas.map((problema, i) => (
+                <li key={i} className={problema.severidad === 'error' ? 'error' : 'aviso'}>
+                  {problema.mensaje}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+
+        {enVentana && (
+          <footer className="escenario-pie">
+            <span>{S.escenario.pieVentana}</span>
+            {/* Duplicate, then Save: the order they are painted in is the order Tab visits. */}
+            {duplicarBoton}
+            {guardarBoton}
+          </footer>
+        )}
+      </div>
     </div>
   );
 }

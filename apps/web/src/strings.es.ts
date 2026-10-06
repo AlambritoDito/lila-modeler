@@ -1720,6 +1720,74 @@ export const es: Strings = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Lote M, C1: el panel guiado de Simular — pasos numerados, «▶ Simular», el aviso del paso,
+   * la cabecera de la selección y las etiquetas del paso en el lienzo (`etiquetasPaso.ts`).
+   * ------------------------------------------------------------------ */
+  pasosSim: {
+    simular: 'Simular',
+    insignia: (n: number): string => `${n} ${n === 1 ? 'problema' : 'problemas'} por resolver`,
+    noSePuede: (n: number): string =>
+      `No se puede simular: ${n} ${n === 1 ? 'problema' : 'problemas'} por resolver. Te llevo al primero.`,
+    pasoDe: (n: number, total: number, escenario: string): string => `Paso ${n} de ${total} · ${escenario}`,
+    titulos: {
+      arrivals: 'Cuándo entran los casos',
+      times: 'Cuánto dura cada tarea',
+      routes: 'Qué parte sigue cada camino',
+      resources: 'Quién hace cada tarea',
+      calendars: 'Cuándo trabaja cada recurso',
+      run: 'Horizonte y réplicas',
+    } as Record<string, string>,
+    tabTitulo: (titulo: string, tecla: string): string => `${titulo} (${tecla})`,
+    sinProblemas: 'sin problemas',
+    bannerUno: 'Un problema en este paso',
+    bannerVarios: (n: number): string => `${n} problemas en este paso`,
+    sinPaso: 'Problemas fuera de los pasos',
+    ir: 'Ir',
+    soloEstePaso: (tipo: string): string => `${tipo} · solo lo de este paso`,
+    verTodo: 'Ver todo',
+    verTodoTitulo: 'Quitar la selección (Esc)',
+    nada: (tipo: string, paso: string): string => `${tipo} sin parámetros en ${paso}.`,
+    consejos: {
+      task: 'Una tarea se configura en Tiempos, Recursos y Calendarios.',
+      start: 'El evento de inicio se configura en Llegadas.',
+      gateway: 'Sus porcentajes se editan en Rutas.',
+      flow: 'Un flujo se edita en Rutas, desde su compuerta.',
+      end: 'Los eventos de fin no tienen parámetros: solo cuentan los casos que terminan.',
+      otro: 'Aquí no hay nada que configurar.',
+    } as Record<string, string>,
+    irA: (paso: string): string => `Ir a ${paso}`,
+    anterior: (paso: string): string => `← ${paso}`,
+    siguiente: (paso: string): string => `${paso} →`,
+    inicioDe: (nombre: string): string => `Evento de inicio · ${nombre}`,
+    patron: 'Patrón de llegada',
+    limites: 'Límites',
+    tasaHora: (porHora: string): string => `≈ ${porHora} por hora · las 24 h`,
+    tasaSemana: (porHora: string, porSemana: string, calendario: string): string =>
+      `≈ ${porHora} por hora · ≈ ${porSemana} por semana dentro de «${calendario}»`,
+    tasaSinMedia: 'Indica una media mayor que 0 para ver la tasa de llegada.',
+    soloDentro: 'Solo llegan dentro de',
+    siempre: 'Siempre (24/7)',
+    limitesAyuda: 'Deja el máximo vacío para que lleguen casos durante todo el horizonte.',
+    duracionMedia: 'Duración media',
+    sinDuracion: 'Sin duración',
+    faltaDuracion: 'Falta la duración: sin ella esta tarea no tarda nada.',
+    horizonte: 'Horizonte',
+    replicas: 'Réplicas',
+    avanzado: 'Avanzado',
+    calentamientoAyuda: 'Los casos del calentamiento no cuentan: así el proceso se mide ya en marcha.',
+    replicasAyuda: '30 réplicas suelen bastar. Con la misma semilla, el mismo escenario da siempre el mismo resultado.',
+    confianza: 'Los resultados dan un intervalo de confianza del 95 %.',
+    etiquetas: {
+      sinDuracion: 'Sin duración',
+      sinRecurso: 'Sin recurso',
+      siempre: '24 h',
+      cada: (tiempo: string): string => `cada ${tiempo}`,
+    },
+    entradas: (n: number): string => `Entradas de este escenario (${n})`,
+    masAcciones: 'Más',
+  },
+
+  /* ------------------------------------------------------------------ *
    * Mapa de atajos (`atajos.ts`, #413): un rótulo por id de entrada y un título por grupo.
    * ------------------------------------------------------------------ */
   atajos: {
@@ -1746,6 +1814,12 @@ export const es: Strings = {
     'modo:rutas': 'Validar rutas',
     ejecutar: 'Ejecutar la simulación',
     cancelar: 'Cancelar la corrida',
+    'paso:arrivals': 'Paso 1: Llegadas',
+    'paso:times': 'Paso 2: Tiempos',
+    'paso:routes': 'Paso 3: Rutas',
+    'paso:resources': 'Paso 4: Recursos',
+    'paso:calendars': 'Paso 5: Calendarios',
+    'paso:run': 'Paso 6: Ejecución',
     zoomMas: 'Acercar',
     zoomMenos: 'Alejar',
     ajustarVista: 'Ajustar el diagrama',

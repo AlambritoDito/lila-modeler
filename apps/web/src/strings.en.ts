@@ -1755,6 +1755,81 @@ export const en = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Lote M, C1: the guided Simulate panel — numbered steps, «▶ Simulate», the step banner,
+   * the selection header and the canvas labels of the step (`etiquetasPaso.ts`).
+   * ------------------------------------------------------------------ */
+  pasosSim: {
+    simular: 'Simulate',
+    /** Badge of «▶ Simulate»: problems that hold the run back. */
+    insignia: (n: number): string => `${n} ${n === 1 ? 'problem' : 'problems'} to fix`,
+    noSePuede: (n: number): string =>
+      `Cannot simulate: ${n} ${n === 1 ? 'problem' : 'problems'} to fix. Taking you to the first one.`,
+    pasoDe: (n: number, total: number, escenario: string): string => `Step ${n} of ${total} · ${escenario}`,
+    /** The question each step answers: its heading, and the tab's tooltip. */
+    titulos: {
+      arrivals: 'When cases come in',
+      times: 'How long each task takes',
+      routes: 'Which share follows each path',
+      resources: 'Who does each task',
+      calendars: 'When each resource works',
+      run: 'Horizon and replications',
+    } as Record<string, string>,
+    tabTitulo: (titulo: string, tecla: string): string => `${titulo} (${tecla})`,
+    sinProblemas: 'no problems',
+    bannerUno: 'One problem in this step',
+    bannerVarios: (n: number): string => `${n} problems in this step`,
+    sinPaso: 'Problems outside the steps',
+    ir: 'Go',
+    /** Selection header: the element, its kind, and that only this step's fields are shown. */
+    soloEstePaso: (tipo: string): string => `${tipo} · only this step`,
+    verTodo: 'Show all',
+    verTodoTitulo: 'Clear the selection (Esc)',
+    nada: (tipo: string, paso: string): string => `${tipo} without parameters in ${paso}.`,
+    consejos: {
+      task: 'A task is set in Times, Resources and Calendars.',
+      start: 'A start event is set in Arrivals.',
+      gateway: 'Its percentages are edited in Routes.',
+      flow: 'A flow is edited in Routes, from its gateway.',
+      end: 'End events have no parameters: they only count the cases that finish.',
+      otro: 'Nothing to set here.',
+    } as Record<string, string>,
+    irA: (paso: string): string => `Go to ${paso}`,
+    anterior: (paso: string): string => `← ${paso}`,
+    siguiente: (paso: string): string => `${paso} →`,
+    /** Arrivals */
+    inicioDe: (nombre: string): string => `Start event · ${nombre}`,
+    patron: 'Arrival pattern',
+    limites: 'Limits',
+    tasaHora: (porHora: string): string => `≈ ${porHora} per hour · around the clock`,
+    tasaSemana: (porHora: string, porSemana: string, calendario: string): string =>
+      `≈ ${porHora} per hour · ≈ ${porSemana} per week within «${calendario}»`,
+    tasaSinMedia: 'Enter a mean above 0 to see the arrival rate.',
+    soloDentro: 'Only arrive within',
+    siempre: 'Always (24/7)',
+    limitesAyuda: 'Leave the maximum empty for cases to keep arriving for the whole horizon.',
+    /** Times */
+    duracionMedia: 'Mean duration',
+    sinDuracion: 'No duration',
+    faltaDuracion: 'Missing duration: without one this task takes no time.',
+    /** Run */
+    horizonte: 'Horizon',
+    replicas: 'Replications',
+    avanzado: 'Advanced',
+    calentamientoAyuda: 'Cases of the warmup do not count, so the process is measured once it is running.',
+    replicasAyuda: '30 replications are usually enough. With the same seed, the same scenario always gives the same result.',
+    confianza: 'Results report a 95 % confidence interval.',
+    /** Canvas labels under each element (`etiquetasPaso.ts`). */
+    etiquetas: {
+      sinDuracion: 'No duration',
+      sinRecurso: 'No resource',
+      siempre: '24 h',
+      cada: (tiempo: string): string => `every ${tiempo}`,
+    },
+    entradas: (n: number): string => `Entries of this scenario (${n})`,
+    masAcciones: 'More',
+  },
+
+  /* ------------------------------------------------------------------ *
    * Shortcut map (`atajos.ts`, #413): one label per entry id, and one title per group. The keys
    * themselves are not text: `etiqueta()` formats them per platform.
    * ------------------------------------------------------------------ */
@@ -1782,6 +1857,12 @@ export const en = {
     'modo:rutas': 'Validate paths',
     ejecutar: 'Run simulation',
     cancelar: 'Cancel the run',
+    'paso:arrivals': 'Step 1: Arrivals',
+    'paso:times': 'Step 2: Times',
+    'paso:routes': 'Step 3: Routes',
+    'paso:resources': 'Step 4: Resources',
+    'paso:calendars': 'Step 5: Calendars',
+    'paso:run': 'Step 6: Run',
     zoomMas: 'Zoom in',
     zoomMenos: 'Zoom out',
     ajustarVista: 'Fit the diagram',

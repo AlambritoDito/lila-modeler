@@ -99,6 +99,7 @@ export function ListaElementos({
   ids,
   rotulo,
   resumen,
+  falta,
   seleccion,
   onSeleccionar,
 }: {
@@ -106,6 +107,8 @@ export function ListaElementos({
   ids: readonly string[];
   rotulo: (id: string) => Rotulo;
   resumen: (id: string) => string;
+  /** Lote M: the rows whose summary says something is missing (drawn in the error colour). */
+  falta?: (id: string) => boolean;
   seleccion: string | null;
   onSeleccionar: (id: string) => void;
 }): React.JSX.Element | null {
@@ -117,7 +120,7 @@ export function ListaElementos({
         {ids.map((id) => (
           <li key={id} className={id === seleccion ? 'activa' : undefined}>
             <BotonElemento id={id} rotulo={rotulo(id)} onSeleccionar={onSeleccionar} />
-            <span className="resumen">{resumen(id)}</span>
+            <span className={falta?.(id) === true ? 'resumen falta' : 'resumen'}>{resumen(id)}</span>
           </li>
         ))}
       </ul>

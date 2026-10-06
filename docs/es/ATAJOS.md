@@ -48,6 +48,12 @@ paleta de comandos (`⌘K`).
 | --- | --- | --- |
 | Ejecutar la simulación | `⌘↩` | `Ctrl+Enter` |
 | Cancelar la corrida (solo mientras corre) | `Esc` | `Esc` |
+| Panel de Simular: abrir el paso 1–6 (Llegadas, Tiempos, Rutas, Recursos, Calendarios, Ejecución) | `⌥1` `⌥2` `⌥3` `⌥4` `⌥5` `⌥6` | `Alt+1` `Alt+2` `Alt+3` `Alt+4` `Alt+5` `Alt+6` |
+| Panel de Simular: quitar la selección (sin corrida en curso) | `Esc` | `Esc` |
+
+En el panel de Simular, `←`/`→` recorren las pestañas de los pasos cuando una de ellas tiene el
+foco, y `Alt+1…6` funcionan también en la ventana desacoplada. «▶ Simular» del panel te lleva al
+primer problema en vez de correr mientras algún paso marque «! n».
 
 ## Lienzo
 

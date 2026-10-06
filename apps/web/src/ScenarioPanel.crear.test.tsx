@@ -98,6 +98,15 @@ function pulsar(texto: string): void {
   });
 }
 
+/** A step of the Simulate panel, by `data-paso`: its tab also carries its number and «✓»/«! n» (Lote M). */
+function irAPaso(paso: 'resources' | 'calendars'): void {
+  const destino = document.querySelector<HTMLButtonElement>(`.pasos button[data-paso="${paso}"]`);
+  if (destino === null) throw new Error(`no step ${paso}`);
+  act(() => {
+    destino.click();
+  });
+}
+
 /** El equivalente de `getByLabelText`: el control al que apunta un `<label>` visible. */
 function porRotulo(texto: string): HTMLInputElement {
   const etiqueta = [...document.querySelectorAll('label')].find((l) => l.textContent?.trim() === texto);
@@ -122,7 +131,7 @@ function antes(a: Node, b: Node): boolean {
 
 it('en Calendarios el control para crear va arriba, con rótulo visible y ejemplo', () => {
   montar();
-  pulsar('Calendarios');
+  irAPaso('calendars');
   const caja = porRotulo(es.escenario.nuevoCalendario);
   expect(caja.placeholder).toBe('turno-noche');
   expect(caja.getAttribute('aria-label')).toBeNull();
@@ -139,7 +148,7 @@ it('en Calendarios el control para crear va arriba, con rótulo visible y ejempl
 
 it('crear «turno-noche» lo añade, le da el foco y queda elegible en resources.<x>.calendar', () => {
   montar();
-  pulsar('Calendarios');
+  irAPaso('calendars');
   teclear(porRotulo(es.escenario.nuevoCalendario), 'turno-noche');
   pulsar(es.escenario.crearCalendario);
 
@@ -149,7 +158,7 @@ it('crear «turno-noche» lo añade, le da el foco y queda elegible en resources
   expect(nuevo!.contains(document.activeElement)).toBe(true);
   expect(porRotulo(es.escenario.nuevoCalendario).value).toBe('');
 
-  pulsar('Recursos');
+  irAPaso('resources');
   // Lote M (C2): the calendar is in the resource sheet, tab «Calendario y uso».
   act(() => {
     document.querySelector<HTMLButtonElement>('button.rec-fila[data-clave="analyst"]')!.click();
@@ -165,7 +174,7 @@ it('crear «turno-noche» lo añade, le da el foco y queda elegible en resources
 
 it('en Recursos «+ Nuevo recurso» va arriba de la lista y el recurso nuevo abre su ficha con el foco en el nombre (Lote M)', () => {
   montar();
-  pulsar('Recursos');
+  irAPaso('resources');
   const boton = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === es.recursos.nuevo)!;
   expect(antes(boton, document.querySelector('button.rec-fila[data-clave="analyst"]')!)).toBe(true);
   pulsar(es.recursos.nuevo);
@@ -175,7 +184,7 @@ it('en Recursos «+ Nuevo recurso» va arriba de la lista y el recurso nuevo abr
 
 it('Enter en la caja crea desde la primera plantilla, con horas (Lote M)', () => {
   montar();
-  pulsar('Calendarios');
+  irAPaso('calendars');
   const caja = porRotulo(es.escenario.nuevoCalendario);
   teclear(caja, 'sabado');
   act(() => {
@@ -189,7 +198,7 @@ it('Enter en la caja crea desde la primera plantilla, con horas (Lote M)', () =>
 
 it('una clave repetida no se crea y se avisa', () => {
   montar();
-  pulsar('Calendarios');
+  irAPaso('calendars');
   teclear(porRotulo(es.escenario.nuevoCalendario), 'oficina');
   expect(document.querySelector('[role="alert"]')?.textContent).toBe(es.escenario.claveRepetida('oficina'));
   pulsar(es.escenario.crearCalendario);
@@ -199,7 +208,7 @@ it('una clave repetida no se crea y se avisa', () => {
 it('en inglés: «New calendar» y «+ Blank»; la franja dice «Add range»', () => {
   setLocale('en');
   montar();
-  pulsar('Calendars');
+  irAPaso('calendars');
   expect(porRotulo(en.escenario.nuevoCalendario).placeholder).toBe('night-shift');
   expect(en.escenario.crearCalendario).toBe('+ Blank');
   expect(en.escenario.nuevoRecurso).toBe('New resource');
