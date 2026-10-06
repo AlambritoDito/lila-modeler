@@ -860,7 +860,6 @@ export const en = {
     pasoProblemas: (n: number): string => `${n} ${n === 1 ? 'problem' : 'problems'}`,
     /** Lote M: a task the scenario gives no `processingTime` (the engine would run it in zero time). */
     sinDuracion: (tarea: string): string => `${tarea}: no duration, so it would take no time.`,
-    listaRutas: 'Branches by gateway',
 
     /** Element lists of the steps: what is already parameterised and what is still missing. */
     listaTiempos: 'Times by element',
@@ -1046,15 +1045,8 @@ export const en = {
     fechaHora: 'Date and time',
     desfase: 'UTC offset',
 
-    /** Gateway view (#332): the probabilities of its outgoing flows, together. */
-    seccionCompuerta: 'Outgoing flows',
+    /** Routes step (#332, Lote M C4): a gateway without exits. */
     compuertaSinSalientes: 'This gateway has no outgoing flows.',
-    compuertaPorDefecto: 'default flow: takes the remainder',
-    /** #332: what a flow with no `probability` contributes to the XOR total (R-XOR-1…3). */
-    compuertaImplicita: (parte: number): string => `(implied: ${parte})`,
-    compuertaSuma: (suma: number): string => `Total: ${suma}`,
-    compuertaSumaAviso: 'The probabilities of an XOR gateway are normalised to 1 with a warning.',
-    compuertaIndependiente: 'On an inclusive gateway each path is independent: they need not add up to 1.',
 
     /** Advanced view: the raw delta of the file being edited (§ 6), for when the form is not enough. */
     seccionJson: 'Advanced: scenario JSON',
@@ -1597,6 +1589,42 @@ export const en = {
     marcadorAcciones: (renombrar: string, panel: string): string => `${renombrar} rename · ${panel} properties`,
     marcadorTitulo: (mensajes: readonly string[], acciones: string): string =>
       `${mensajes.join('\n')}\n${acciones}`,
+  },
+
+  /* ------------------------------------------------------------------ *
+   * Routes step and the canvas percentage fields (Lote M, C4: `PasoRutas.tsx`,
+   * `etiquetasPorcentaje.ts`, the gateway block of the properties panel)
+   * ------------------------------------------------------------------ */
+  rutas: {
+    cajaTitulo: (flujo: string, destino: string): string => `${flujo} → ${destino}`,
+    campoLienzo: (flujo: string, compuerta: string): string => `Percentage of flow «${flujo}» of «${compuerta}»`,
+    porciento: (n: number): string => `${n} %`,
+    resto: (n: number): string => `rest ${n} %`,
+    listaTitulo: 'Gateways',
+    listaVacia: 'This process has no gateway that splits cases between two or more exits. Add an exclusive or inclusive gateway in Model to give it percentages.',
+    listaAyuda: 'Percentages are also edited on the canvas, on the label of each flow.',
+    volver: '← Gateways',
+    flujosSalientes: 'Outgoing flows',
+    tipoXor: 'Exclusive: each case takes a single exit',
+    tipoOr: 'Inclusive: each exit is taken on its own',
+    barraAria: (reparto: string, suma: number): string => `Split: ${reparto}. Adds up to ${suma} %`,
+    porcentajeDe: (flujo: string): string => `Percentage of «${flujo}»`,
+    haciaDestino: (destino: string): string => `→ ${destino}`,
+    porDefecto: 'Default flow: takes the rest',
+    suma100: 'Adds up to 100 %',
+    listo: 'Ready to simulate.',
+    sumaMal: (suma: number, diferencia: number): string =>
+      `Adds up to ${suma} %: ${diferencia > 0 ? `${diferencia} points missing` : `${-diferencia} points over`}`,
+    sumaMalCuerpo: 'The simulation will scale the split to 100 % and warn about it.',
+    sumaCero: 'Every exit is at 0 %: no case can leave this gateway.',
+    arreglo: (flujo: string, porcentaje: number): string => `Set «${flujo}» to ${porcentaje} %`,
+    repartirIgual: 'Split evenly',
+    notaTeclas: '↑/↓ adds or takes 5 %. On an inclusive gateway each exit has its own probability and they do not need to add up to 100 %.',
+    union: 'Join gateway: it merges paths and does not split cases. It takes no parameters.',
+    sumaPildora: (suma: number): string => `${suma} %`,
+    propiedadesTitulo: 'Route split',
+    invalido: 'Write a number from 0 to 100.',
+    editarReparto: 'Edit the route split',
   },
 
   /* ------------------------------------------------------------------ *

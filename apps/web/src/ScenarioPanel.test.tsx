@@ -330,17 +330,18 @@ describe('validación en vivo', () => {
     const guardados: Guardado[] = [];
     montar(
       <Anfitrion
-        inicial={{ 'as-is.scenario.json': asIsCorto() }}
+        inicial={{ 'as-is.scenario.json': escribir(asIsCorto(), ['elements', 'Flow_Aprobado', 'probability'], 1.5) }}
         archivoInicial="as-is.scenario.json"
         guardados={guardados}
         irActual={ir}
       />,
     );
 
-    // Sin selección, el panel lista los ids con parámetros; se elige el flujo desde ahí.
+    // Lote M, C4: Routes types percentages and does not write a value outside 0–100 (the field
+    // shows itself invalid). A 1.5 that arrives in the file (the JSON view, an Excel import) is still
+    // marked on its flow with the validator's text, and nothing blocks saving it.
     pulsar('Flow_Aprobado');
     irAPaso('routes');
-    teclear('campo-elements.Flow_Aprobado.probability', '1.5');
 
     // El texto es el del validador, no uno inventado por el panel. Desde LILA-198 el rango de
     // `probability` lo comprueba el lint (`E-PROB-RANGO`, § 17 de SEMANTICS) y no el esquema.

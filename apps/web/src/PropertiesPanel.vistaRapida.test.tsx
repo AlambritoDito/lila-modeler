@@ -83,12 +83,27 @@ describe('datosVistaRapida', () => {
     expect(truncado?.espera).toEqual({ texto: '2 min', p95: false });
   });
 
-  it('a timer has a time and no resource row; gateways, events and flows have no quick view', () => {
+  it('a timer has a time and no resource row; events, flows and AND gateways have no quick view', () => {
     expect(datosVistaRapida({ id: 'Timer_Reposo', ir, escenario: asIs, resultado: null, S: S() }))
       .toEqual({ tiempo: 'Constant 10 min', recurso: null, espera: null });
-    for (const id of ['Gateway_Aprobacion', 'StartEvent_Pedido', 'Flow_Aprobado', 'Participant_Restaurante']) {
+    for (const id of ['Gateway_ANDFork', 'StartEvent_Pedido', 'Flow_Aprobado', 'Participant_Restaurante']) {
       expect(datosVistaRapida({ id, ir, escenario: asIs, resultado: null, S: S() }), id).toBeNull();
     }
+  });
+
+  it('a splitting gateway shows its route split (Lote M, C4)', () => {
+    expect(datosVistaRapida({ id: 'Gateway_Aprobacion', ir, escenario: asIs, resultado: null, S: S() }))
+      .toEqual({ tiempo: '', recurso: null, espera: null, rutas: { resumen: 'Approved 78 % · Rejected 22 %', cuadra: true } });
+  });
+
+  it('the gateway block links to Routes', () => {
+    const { panel, onEditar } = montar({ tiempo: '', recurso: null, espera: null, rutas: { resumen: 'Approved 70 % · Rejected 22 %', cuadra: false } });
+    const bloque = panel.querySelector('.vista-rapida')!;
+    expect(bloque.textContent).toContain('Approved 70 % · Rejected 22 %');
+    expect(bloque.querySelector('.vista-rapida-rutas.error')).not.toBeNull();
+    const enlace = [...bloque.querySelectorAll('button')].find((b) => b.textContent === 'Edit the route split')!;
+    act(() => { enlace.click(); });
+    expect(onEditar).toHaveBeenCalledWith('routes');
   });
 
   it('a task with nothing written reads «—»; a broken scenario hides the block', () => {

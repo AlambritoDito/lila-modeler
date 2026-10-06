@@ -3942,3 +3942,305 @@ button.gcal-uso-fila:hover {
   color: var(--status-error);
   font-weight: 700;
 }
+
+/* ---------- Lote M · C4: Routes step (`PasoRutas.tsx`) and canvas percentage fields
+   (`etiquetasPorcentaje.ts`). Design screen 04: inline % fields, a bar that adds up to 100 and a
+   status with the one-click fix. Square corners and theme tokens only, like the rest of the panel. */
+
+.rutas {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.rutas-volver {
+  align-self: flex-start;
+}
+
+.rutas-cabecera {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  justify-content: space-between;
+}
+
+.rutas-cabecera strong {
+  white-space: nowrap;
+}
+
+.rutas-tipo,
+.rutas-destino,
+.rutas-fila-resumen {
+  color: var(--fg-muted);
+  font-size: 0.92em;
+}
+
+.rutas-barra {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  display: flex;
+  height: 14px;
+  overflow: hidden;
+}
+
+.rutas-barra.mal {
+  border-color: var(--status-error);
+}
+
+.rutas-barra span {
+  border-right: 1px solid var(--bg-base);
+  flex: none;
+}
+
+.rutas-lista,
+.rutas-flujos {
+  border: 1px solid var(--border);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rutas-lista li + li,
+.rutas-flujos li + li {
+  border-top: 1px solid var(--border);
+}
+
+.rutas-fila {
+  align-items: center;
+  background: var(--bg-base);
+  border: 0;
+  color: var(--fg-primary);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 10px;
+  padding: 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.rutas-fila:hover {
+  background: var(--bg-hover);
+}
+
+.rutas-fila:focus-visible,
+.rutas-campo input:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.rutas-rombo {
+  border: 1.5px solid var(--fg-primary);
+  flex: none;
+  height: 10px;
+  margin: 0 3px;
+  transform: rotate(45deg);
+  width: 10px;
+}
+
+.rutas-fila-texto,
+.rutas-flujo-texto {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rutas-fila-nombre,
+.rutas-flujo-nombre {
+  font-weight: 600;
+}
+
+.rutas-destino {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rutas-pildora {
+  border: 1px solid currentColor;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+}
+
+.rutas-pildora.ok {
+  color: var(--status-success);
+}
+
+.rutas-pildora.mal {
+  color: var(--status-error);
+}
+
+.rutas-flujo {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 10px minmax(0, 1fr) 92px;
+  padding: 8px 10px;
+}
+
+.rutas-flujo.activa {
+  background: var(--bg-elevated);
+}
+
+.rutas-color {
+  height: 10px;
+  width: 10px;
+}
+
+.rutas-campo {
+  display: flex;
+}
+
+.rutas-campo input {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  box-sizing: border-box;
+  color: var(--fg-primary);
+  flex: 1;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  height: 32px;
+  min-width: 0;
+  padding: 0 6px;
+  text-align: right;
+}
+
+.rutas-unidad {
+  align-items: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-left: 0;
+  color: var(--fg-muted);
+  display: flex;
+  padding: 0 7px;
+}
+
+.rutas-campo-fijo {
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  justify-content: flex-end;
+}
+
+.rutas-estado {
+  border: 1px solid var(--border-strong);
+  border-left-width: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+}
+
+.rutas-estado.ok {
+  border-color: var(--status-success);
+}
+
+.rutas-estado.ok strong {
+  color: var(--status-success);
+}
+
+.rutas-estado.mal {
+  border-color: var(--status-error);
+}
+
+.rutas-estado.mal strong {
+  color: var(--status-error);
+}
+
+.rutas-arreglos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* The boxes on the canvas: label + % field (Routes) or text (elsewhere in Simulate). */
+.lila-pct {
+  background: var(--bg-elevated);
+  border: 1.5px solid var(--border-strong);
+  color: var(--fg-primary);
+  cursor: text;
+  display: flex;
+  flex-direction: column;
+  font: 11px var(--font-ui, system-ui);
+  min-width: 52px;
+  max-width: 96px;
+}
+
+.lila-pct.lila-pct-sel {
+  border-color: var(--accent-primary);
+}
+
+.lila-pct.lila-pct-error {
+  border-color: var(--status-error);
+}
+
+.lila-pct-nombre {
+  font-size: 10px;
+  font-weight: 700;
+  overflow: hidden;
+  padding: 2px 5px 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lila-pct-campo {
+  align-items: center;
+  display: flex;
+  padding: 1px 4px 3px;
+}
+
+.lila-pct-campo input {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border-strong);
+  color: var(--fg-primary);
+  font: 700 11.5px var(--font-mono);
+  padding: 0 2px;
+  text-align: right;
+  width: 38px;
+}
+
+.lila-pct-campo input:focus-visible {
+  border-bottom-color: var(--accent-primary);
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.lila-pct-unidad,
+.lila-pct-valor {
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  margin-left: 2px;
+}
+
+.lila-pct-valor {
+  color: var(--fg-primary);
+  font-weight: 700;
+  padding: 1px 5px 3px;
+}
+
+/* While the share boxes are on the canvas (Simulate), bpmn-js's context pad would sit on top of the
+   boxes of a selected gateway: modelling actions belong to Model anyway. */
+.lila-pct-activas .djs-context-pad {
+  display: none;
+}
+
+.lila-pct.lila-pct-invalido,
+.rutas-flujo.invalido .rutas-campo input {
+  border-color: var(--status-error);
+}
+
+.lila-pct-invalido .lila-pct-campo input {
+  border-bottom-color: var(--status-error);
+  color: var(--status-error);
+}
+
+.rutas-invalido {
+  color: var(--status-error);
+  font-size: 0.92em;
+}

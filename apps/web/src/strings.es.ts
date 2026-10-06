@@ -835,7 +835,6 @@ export const es: Strings = {
     pasoProblemas: (n: number): string => `${n} ${n === 1 ? 'problema' : 'problemas'}`,
     /** Lote M: una tarea sin `processingTime` en el escenario (el motor la correría en tiempo cero). */
     sinDuracion: (tarea: string): string => `${tarea}: sin duración, así que no tardaría nada.`,
-    listaRutas: 'Ramas por compuerta',
 
     /** Listas de elementos de los pasos: qué está parametrizado y qué falta. */
     listaTiempos: 'Tiempos por elemento',
@@ -1018,15 +1017,8 @@ export const es: Strings = {
     fechaHora: 'Fecha y hora',
     desfase: 'Desfase UTC',
 
-    /** Vista de compuerta (#332): las probabilidades de sus flujos salientes, juntas. */
-    seccionCompuerta: 'Flujos salientes',
+    /** Paso Rutas (#332, Lote M C4): una compuerta sin salidas. */
     compuertaSinSalientes: 'Esta compuerta no tiene flujos salientes.',
-    compuertaPorDefecto: 'flujo por defecto: se lleva el resto',
-    /** #332: lo que aporta a la suma de la XOR un flujo sin `probability` (R-XOR-1…3). */
-    compuertaImplicita: (parte: number): string => `(implícito: ${parte})`,
-    compuertaSuma: (suma: number): string => `Total: ${suma}`,
-    compuertaSumaAviso: 'Las probabilidades de una compuerta XOR se normalizan a 1 con un aviso.',
-    compuertaIndependiente: 'En una compuerta inclusiva cada camino es independiente: no tienen por qué sumar 1.',
 
     /** Vista avanzada: el delta crudo del archivo en edición (§ 6), para lo que el formulario no da. */
     seccionJson: 'Avanzado: JSON del escenario',
@@ -1526,6 +1518,42 @@ export const es: Strings = {
     marcadorAcciones: (renombrar: string, panel: string): string => `${renombrar} renombrar · ${panel} propiedades`,
     marcadorTitulo: (mensajes: readonly string[], acciones: string): string =>
       `${mensajes.join('\n')}\n${acciones}`,
+  },
+
+  /* ------------------------------------------------------------------ *
+   * Paso Rutas y campos de porcentaje del lienzo (Lote M, C4: `PasoRutas.tsx`,
+   * `etiquetasPorcentaje.ts`, el bloque de compuerta del panel de propiedades)
+   * ------------------------------------------------------------------ */
+  rutas: {
+    cajaTitulo: (flujo: string, destino: string): string => `${flujo} → ${destino}`,
+    campoLienzo: (flujo: string, compuerta: string): string => `Porcentaje del flujo «${flujo}» de «${compuerta}»`,
+    porciento: (n: number): string => `${n} %`,
+    resto: (n: number): string => `resto ${n} %`,
+    listaTitulo: 'Compuertas',
+    listaVacia: 'Este proceso no tiene ninguna compuerta que reparta casos entre dos o más salidas. Añade una compuerta exclusiva o inclusiva en Modelar para darle porcentajes.',
+    listaAyuda: 'Los porcentajes también se editan sobre el lienzo, en la etiqueta de cada flujo.',
+    volver: '← Compuertas',
+    flujosSalientes: 'Flujos salientes',
+    tipoXor: 'Exclusiva: cada caso toma una sola salida',
+    tipoOr: 'Inclusiva: cada salida se toma por su cuenta',
+    barraAria: (reparto: string, suma: number): string => `Reparto: ${reparto}. Suma ${suma} %`,
+    porcentajeDe: (flujo: string): string => `Porcentaje de «${flujo}»`,
+    haciaDestino: (destino: string): string => `→ ${destino}`,
+    porDefecto: 'Flujo por defecto: se lleva el resto',
+    suma100: 'Suma 100 %',
+    listo: 'Listo para simular.',
+    sumaMal: (suma: number, diferencia: number): string =>
+      `Suma ${suma} %: ${diferencia > 0 ? `faltan ${diferencia} puntos` : `sobran ${-diferencia} puntos`}`,
+    sumaMalCuerpo: 'La simulación ajustará el reparto a 100 % y lo avisará.',
+    sumaCero: 'Todas las salidas están en 0 %: ningún caso puede salir de esta compuerta.',
+    arreglo: (flujo: string, porcentaje: number): string => `Poner «${flujo}» en ${porcentaje} %`,
+    repartirIgual: 'Repartir a partes iguales',
+    notaTeclas: '↑/↓ suma o resta 5 %. En una compuerta inclusiva cada salida tiene su propia probabilidad y no hace falta que sumen 100 %.',
+    union: 'Compuerta de unión: junta caminos y no reparte casos. No necesita parámetros.',
+    sumaPildora: (suma: number): string => `${suma} %`,
+    propiedadesTitulo: 'Reparto de rutas',
+    invalido: 'Escribe un número de 0 a 100.',
+    editarReparto: 'Editar el reparto de rutas',
   },
 
   /* ------------------------------------------------------------------ *

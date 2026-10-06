@@ -65,7 +65,8 @@ import { BotonElemento, type Rotulo } from './ListaElementos.js';
 import { PasoCalendarios } from './PasoCalendarios.js';
 import { FichaLlegada, ListaLlegadas } from './PasoLlegadas.js';
 import { PasoEjecucion } from './PasoEjecucion.js';
-import { ListaRutas, VistaCompuerta } from './PasoRutas.js';
+import { PasoRutas } from './PasoRutas.js';
+import { compuertaDeSeleccion } from './repartoRutas.js';
 import { ListaTiempos, ResumenTiempo } from './PasoTiempos.js';
 import { agruparPorPaso, elementoDeProblema, tareasSinDuracion } from './pasoDeProblema.js';
 import { PasoRecursos, ListaRecursos } from './PasoRecursos.js';
@@ -370,6 +371,11 @@ export interface ScenarioPanelProps {
   irAlProblema?: number | null;
   /** Called once the panel has acted on `irAlProblema`, so the shell clears it (like `onPasoAtendido`). */
   onProblemaAtendido?: () => void;
+  /**
+   * Lote M, C4: the step on screen, every time it changes (and once on mount). The shell needs it
+   * for the canvas percentage fields, which are fields only in Routes (`Modelador.porcentajes`).
+   */
+  onPasoVisible?: (paso: PasoId) => void;
 }
 
 /** Default of `problemasExtra`, one array for every render so the memo below keeps its cache. */
@@ -396,6 +402,7 @@ export function ScenarioPanel({
   onConteoProblemas,
   irAlProblema = null,
   onProblemaAtendido,
+  onPasoVisible,
 }: ScenarioPanelProps): React.JSX.Element {
   const S = useStrings();
   /**
@@ -567,6 +574,22 @@ export function ScenarioPanel({
 
   /** Qué es lo seleccionado (#332): decide qué campos se ofrecen y si sale la vista de compuerta. */
   const clase = claseDeElemento(ir, idSeleccionado);
+
+  useEffect(() => {
+    onPasoVisible?.(paso);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- report the step, not a new callback
+  }, [paso]);
+
+  /**
+   * Lote M, C4: picking a gateway that splits cases on the canvas — or one of its outgoing flows,
+   * which is what a canvas share box selects — opens Routes, where the split is edited. Before, the
+   * panel stayed on whatever step it was on with nothing editable. Only on a new selection, so
+   * changing step afterwards with the gateway still selected sticks.
+   */
+  useEffect(() => {
+    if (compuertaDeSeleccion(ir, idSeleccionado) !== null) setPaso('routes');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a new selection, not a new IR
+  }, [idSeleccionado]);
 
   const heredaDe = typeof delta['extends'] === 'string' ? delta['extends'] : null;
 
@@ -778,6 +801,19 @@ export function ScenarioPanel({
   const tipoSeleccion =
     clase === null ? '' : (S.propiedades.tipos[TIPO_BPMN[clase] ?? ''] ?? TIPO_BPMN[clase]?.replace('bpmn:', '') ?? clase);
   const consejo = consejoDe(clase);
+  /**
+   * Lote M, C4: in Routes a gateway (or a flow out of a splitting one) is edited in `PasoRutas` —
+   * outgoing flows with their % inline. A flow's `conditions` stay below it; its `probability` is
+   * not repeated there as a fraction field.
+   */
+  const compuertaRutas =
+    paso !== 'routes' || ir === null || idSeleccionado === null
+      ? null
+      : esCompuerta
+        ? idSeleccionado
+        : clase === 'flow'
+          ? compuertaDeSeleccion(ir, idSeleccionado)
+          : null;
 
   const inicios = idsPorTipo(['start']);
 
@@ -792,7 +828,7 @@ export function ScenarioPanel({
       case 'times':
         return <ListaTiempos ids={idsPorTipo(['task', 'timer'])} tareas={tareas} {...lista} />;
       case 'routes':
-        return <ListaRutas ids={idsPorTipo(['xor', 'or'])} ir={ir} {...lista} />;
+        return <PasoRutas ctx={ctx} ir={ir} seleccion={null} onSeleccionar={onSeleccionar} avanzado={avanzado} />;
       case 'resources':
         return (
           <>
@@ -840,11 +876,6 @@ export function ScenarioPanel({
         <Problemas ruta={['elements', id]} ctx={ctx} />
         {paso === 'times' && (clase === 'task' || clase === 'timer') && (
           <ResumenTiempo id={id} esTarea={clase === 'task'} ctx={ctx} unidad={unidad} />
-        )}
-        {/* The gateway is where the branching is parameterised, and branching is what the
-            Routes step is about: its outgoing flows have to add up. */}
-        {paso === 'routes' && ir !== null && esCompuerta && (
-          <VistaCompuerta ir={ir} id={id} clase={clase} ctx={ctx} avanzado={avanzado} />
         )}
       </>
     );
@@ -934,7 +965,25 @@ export function ScenarioPanel({
           </section>
         )}
 
-        {idSeleccionado !== null && paso !== 'run' ? (
+        {compuertaRutas !== null && idSeleccionado !== null ? (
+          <div className="sim-elemento">
+            <PasoRutas ctx={ctx} ir={ir} seleccion={idSeleccionado} onSeleccionar={onSeleccionar} avanzado={avanzado} />
+            {idSeleccionado !== compuertaRutas && (
+              <details open className="sim-elemento">
+                <summary>{S.escenario.seccionElemento}</summary>
+                <p className="vacio">{nombreSeleccion}</p>
+                <Propiedades
+                  esquema={esquemaEntrada(esquemaDe('elements'))}
+                  ruta={['elements', idSeleccionado]}
+                  ctx={ctx}
+                  visibles={visibles.filter((c) => c !== 'probability')}
+                  siDefinido={CAMPOS_DE_PASO.routes.filter((c) => c !== 'probability')}
+                />
+                <Problemas ruta={['elements', idSeleccionado]} ctx={ctx} />
+              </details>
+            )}
+          </div>
+        ) : idSeleccionado !== null && paso !== 'run' ? (
           <details open className="sim-elemento">
             <summary>{S.escenario.seccionElemento}</summary>
             <p className="vacio">
