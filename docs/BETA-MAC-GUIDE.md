@@ -103,8 +103,10 @@ before any theme loads.
 
 ## Usage walkthrough
 
-The top bar has six modes: **Model**, **Simulate**, **Results**, **Compare**, **Animate**, and
-**Validate paths**.
+The top bar has three modes: **Model**, **Simulate** and **Results** (since 1.0.0-beta.22).
+Comparing scenarios («Compare with…») and the token replay live in Results; **Validate paths** is a
+Model tool (the button over the canvas, or `⌘K`). The sections below about Compare, Animate and
+Validate paths describe those same features in their new place.
 English is the base language and Spanish is available as a translation. The app follows the system
 language unless you select English or Spanish in Settings. The native File menu and close dialogs
 follow that same setting. This walkthrough uses the English labels.
@@ -200,7 +202,7 @@ same content, byte for byte, that `npx lila run --csv` writes to disk (`elements
 
 ### Validate paths («Validar rutas»)
 
-- Animation is entered only from this mode: pressing plain `T` on the canvas does not toggle it
+- A Model tool: the «Validate paths» button over the canvas, or `⌘K`. Animation is entered only from there: pressing plain `T` on the canvas does not toggle it
   (it used to switch the token simulation on and off in any mode).
 - **This is not the engine's DES simulation**: it animates `bpmn-js-token-simulation` tokens on top
   of the open diagram. It does not read the active scenario or produce results, and the tab itself
@@ -319,7 +321,7 @@ This is real, working functionality: `DesktopStore` is wired up in `main.tsx` an
   the status bar. The native menu also carries **New project** (`⌘N`), **Open project…** (`⌘O`), **Import BPMN…** (a
   `.bpmn` or `.xml` from another tool), **Save project**
   (`⌘S`), **Save as…** (`⇧⌘S`), and **Preferences…** (`⌘,`) in the app
-  menu; **View** carries the command palette (`⌘K`) and the six modes (`⌘1`…`⌘6`), and
+  menu; **View** carries the command palette (`⌘K`) and the three modes (`⌘1`…`⌘3`), and
   **Simulation** runs the simulation (`⌘↩`). Every shortcut is listed in
   [Keyboard shortcuts](SHORTCUTS.md).
 
