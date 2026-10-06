@@ -31,7 +31,7 @@ proyecto que se mantiene estable.
 
 ## Funciones
 
-- **Seis modos en una ventana** — Modelar, Simular, Resultados, Comparar, Animar y Validar rutas.
+- **Tres modos en una ventana** — Modelar, Simular y Resultados. Resultados muestra la corrida sobre el propio diagrama (mapa de calor, cuellos, tokens) y contiene la comparación.
 - **Simular en seis pasos** — Llegadas, Tiempos, Rutas, Recursos, Calendarios y Ejecución, que cubren los
   cuatro niveles de Bizagi (validación, tiempos, recursos, calendarios) sin interruptor de nivel.
 - **Distribuciones** — las 13 de BPSim 2.0 (incluida la empírica) más la constante.
@@ -46,12 +46,13 @@ proyecto que se mantiene estable.
 - **Resultados** — los nombres de columna de Bizagi más las extras de Lila: p50/p90/p95, longitud
   de cola, throughput, costo por caso, ranking de cuellos de botella, espera fuera de horario
   separada de la espera por recurso. Exportación a CSV y XLSX.
-- **Comparar** — dos o más escenarios con deltas por métrica y marca de significancia (IC 95 % sin
-  solape).
-- **Animar** — reproduce el log de eventos de la corrida sobre el diagrama con contadores por elemento y
-  puntos en los flujos; sin volver a simular.
-- **Validar rutas** — la animación didáctica de tokens de `bpmn-js-token-simulation`; no lee el
-  escenario ni produce resultados.
+- **Comparar** — «Comparar con…» en Resultados (un escenario sin resultados se simula al elegirlo):
+  seis KPI con su cambio, dos mapas lado a lado con la diferencia de espera por tarea y las tablas
+  por métrica con marca de significancia (IC 95 % sin solape).
+- **Tokens** — reproduce el log de eventos de la corrida sobre el mapa de Resultados con contadores
+  por elemento y puntos en los flujos (`Espacio` reproduce y pausa); sin volver a simular.
+- **Validar rutas** — una herramienta de Modelar (botón sobre el lienzo o `⌘K`): la animación
+  didáctica de tokens de `bpmn-js-token-simulation`; no lee el escenario ni produce resultados.
 - **Archivo de proyecto `.lila`** — la carpeta de proyecto zipeada. Guardar/abrir desde la app web
   (descarga), doble clic en el escritorio.
 - **Temas** — `eva-01` (oscuro, por defecto), `papel` (claro), `tieso` (claro, azules del ITESO), `akira` (oscuro, Neo-Tokio) y `montana` (morado, rosa chicle y dorado, inspirado en Hannah Montana Linux), archivos JSON.
@@ -201,10 +202,10 @@ usuarios, en [`docs/es/COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md).
 | Cuatro niveles: validación, tiempos, recursos, calendarios | ✓ | ✓ como los pasos de Simular (Llegadas, Tiempos, Rutas, Recursos, Calendarios, Ejecución); sin recursos ⇒ capacidad infinita, sin calendario ⇒ 24×7 |
 | Distribuciones | subconjunto no documentado | las 13 de BPSim 2.0 (incl. empírica) + constante |
 | Replicaciones y determinismo | replicaciones solo en what-if; semilla parcial | siempre, con IC 95 %; determinista byte a byte |
-| Comparación what-if | ✓ | ✓ modo Comparar y `lila compare`, con deltas y marca de significancia |
+| Comparación what-if | ✓ | ✓ «Comparar con…» en Resultados y `lila compare`, con deltas y marca de significancia |
 | Exportación de resultados | Excel | CSV y XLSX |
 | Percentiles, longitud de cola, throughput, costo por caso, ranking de cuellos, espera fuera de horario | ✗ | ✓ |
-| Animación con contadores en vivo | ✓ | ✓ Animar reproduce el log de eventos |
+| Animación con contadores en vivo | ✓ | ✓ los tokens sobre el mapa de Resultados reproducen el log de eventos |
 | Plataformas | solo Windows | app web (probada en Chrome), macOS (probado); instalador de Windows sin firmar y sin probar; AppImage de Linux sin probar |
 | Importar un `.bpmn` de Bizagi | — | solo el diagrama: Bizagi no exporta sus parámetros de simulación |
 | Publicación de documentos (Word/PDF/web) | ✓ | ✓ documento del proceso en Word (.docx) o en un HTML imprimible de una página; sin plantillas ni repositorio compartido |

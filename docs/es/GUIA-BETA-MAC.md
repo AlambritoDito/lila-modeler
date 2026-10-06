@@ -105,8 +105,10 @@ Eva-01 como pintura previa a cualquier tema.
 
 ## Recorrido de uso
 
-La barra superior tiene seis modos: **Modelar**, **Simular**, **Resultados**, **Comparar**,
-**Animar** y **Validar rutas**. Los textos de abajo son literales de la interfaz (desde LILA-066 todos viven en
+La barra superior tiene tres modos: **Modelar**, **Simular** y **Resultados** (desde 1.0.0-beta.22).
+Comparar escenarios («Comparar con…») y la reproducción de tokens viven en Resultados; **Validar
+rutas** es una herramienta de Modelar (el botón sobre el lienzo, o `⌘K`). Las secciones de abajo sobre
+Comparar, Animar y Validar rutas describen esas mismas funciones en su sitio nuevo. Los textos de abajo son literales de la interfaz (desde LILA-066 todos viven en
 `apps/web/src/strings.es.ts`), no paráfrasis.
 
 ### Modelar
@@ -200,7 +202,7 @@ contenido, byte a byte, que `npx lila run --csv` escribe en disco (`elements.csv
 
 ### Validar rutas
 
-- La animación se entra solo desde este modo: pulsar `T` a secas sobre el lienzo no la activa (antes
+- Es una herramienta de Modelar: el botón «Validar rutas» sobre el lienzo, o `⌘K`. La animación se entra solo desde ahí: pulsar `T` a secas sobre el lienzo no la activa (antes
   encendía y apagaba la simulación de tokens en cualquier modo).
 - **No es la simulación DES del motor**: anima los tokens de `bpmn-js-token-simulation` sobre el
   diagrama abierto. No lee el escenario activo ni produce resultados, y la propia pestaña lo dice:
@@ -316,7 +318,7 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
   estado. El menú nativo trae además Nuevo (`⌘N`), Abrir (`⌘O`), **Importar BPMN…** (un
   `.bpmn` o `.xml` de otra herramienta), Guardar (`⌘S`), Guardar como
   (`⇧⌘S`) y **Preferencias… (`⌘,`)** en el menú de la app; **Vista** trae la paleta de comandos
-  (`⌘K`) y los seis modos (`⌘1`…`⌘6`), y **Simulación** ejecuta la simulación (`⌘↩`). Todos los
+  (`⌘K`) y los tres modos (`⌘1`…`⌘3`), y **Simulación** ejecuta la simulación (`⌘↩`). Todos los
   atajos están en [Atajos de teclado](ATAJOS.md).
 
 ### Ajustes

@@ -53,7 +53,7 @@ import { abrirVentanaFlotante, geometriaDe, geometriaValida, VentanaFlotante, ty
 import { Bienvenida } from './Bienvenida';
 import { proyectoDeEjemplo, type EjemploId } from './ejemplos';
 import type { Recent } from '../../desktop/src/bridge.js';
-import { LOCALES, PREFERENCIAS, setLocale, strings, useLocale, useStrings, type Preferencia } from './i18n';
+import { LOCALES, PREFERENCIAS, setLocale, strings, useLocale, useStrings, type Locale, type Preferencia } from './i18n';
 import { ATAJOS, atajoPorId, coincide, etiqueta, MAC, tooltip, type AtajoId, type AtajoPropio } from './atajos';
 import { aPng, descargar, imprimirSvg, nombreArchivo } from './exportarDiagrama';
 import { DENSIDAD_IDS, MODO_IDS, PESTANA_IDS, type Densidad, type ModoId, type PasoId, type PestanaId, type VerboPerdida } from './ids';
@@ -457,6 +457,31 @@ type EstadoSim =
   | { tipo: 'inactivo' }
   | { tipo: 'simulando'; progreso: SimulationProgress | null }
   | { tipo: 'error'; mensaje: string };
+
+/**
+ * What the Compare mode showed (`CompareView`: every scenario with a current run, the reference
+ * first) plus the summary line of each run, inside Compare's disclosure. Its own component so the
+ * comparison is only computed when it is drawn.
+ */
+function DetalleComparar({ ir, runs, escenarios, locale }: { ir: ProcessIR; runs: readonly StoredRun[]; escenarios: Escenarios; locale: Locale }): React.JSX.Element {
+  const S = useStrings();
+  const resuelto = (r: StoredRun): ResolvedScenario => r.inputs.scenario as unknown as ResolvedScenario;
+  return <>
+    <CompareView ir={ir} comparison={compare(runs.map((r) => r.result), { locale })}
+      entries={runs.map((r) => ({ result: r.result, scenario: resuelto(r) }))}
+      runs={runs.map((r) => runMetaFrom(etiquetaEscenario(r.scenarioName, escenarios), resuelto(r), r.result))}
+      scenarioNames={runs.map((r) => etiquetaEscenario(r.scenarioName, escenarios))}
+      seriesSlots={runs.map((r) => Object.keys(escenarios).indexOf(r.scenarioName))}
+      baseTimeUnit={resuelto(runs[0]!).run.baseTimeUnit ?? 's'} />
+    {runs.map((run) => <p key={run.id} className="c5-nota">{S.app.corridaResumen(
+      etiquetaEscenario(run.scenarioName, escenarios),
+      run.inputs.modelRevision,
+      run.inputs.scenarioRevision,
+      String((run.inputs.scenario.run as Record<string, unknown>).seed ?? 1),
+      String((run.inputs.scenario.run as Record<string, unknown>).currency ?? ''),
+    )}</p>)}
+  </>;
+}
 
 /** A card over the Results map: running, the run failed, or nothing simulated yet (design 05). */
 function Tarjeta({ tono, kicker, titulo, texto, children, lila = false }: { tono: 'acento' | 'error'; kicker: string; titulo: string; texto?: string | undefined; children?: React.ReactNode; lila?: boolean }): React.JSX.Element {
@@ -2267,7 +2292,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (region === 'dock' && modo !== 'resultados') return false;
     const mostrar = !pulsado[region];
     // Hiding the region that holds the focus would drop it on `<body>`: it goes to the toggle.
-    if (!mostrar && !(region === 'estado' && hayAlerta) && document.getElementById(ID_REGION[region])?.contains(document.activeElement)) enfocarToggle(region);
+    // The collapsed results table keeps its header, so the focus can stay where it is.
+    if (!mostrar && region !== 'dock' && !(region === 'estado' && hayAlerta) && document.getElementById(ID_REGION[region])?.contains(document.activeElement)) enfocarToggle(region);
     // While detached the right toggle only peeks at the docked panel: the saved choice stays.
     if (region === 'derecha' && ocultoPorVentana) {
       setVerConVentana(mostrar);
@@ -2497,21 +2523,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         onElegir={compararCon}
         onIntercambiar={() => setComparacion({ ref: comparacion.otro, otro: comparacion.ref })}
         onCerrar={() => setComparacion(null)}
-        detalle={<>
-          <CompareView ir={ir} comparison={compare(todos.map((r) => r.result), { locale })}
-            entries={todos.map((r) => ({ result: r.result, scenario: r.inputs.scenario as unknown as ResolvedScenario }))}
-            runs={todos.map((r) => runMetaFrom(etiquetaEscenario(r.scenarioName, escenarios), r.inputs.scenario as unknown as ResolvedScenario, r.result))}
-            scenarioNames={todos.map((r) => etiquetaEscenario(r.scenarioName, escenarios))}
-            seriesSlots={todos.map((r) => Object.keys(escenarios).indexOf(r.scenarioName))}
-            baseTimeUnit={(a.inputs.scenario as unknown as ResolvedScenario).run.baseTimeUnit ?? 's'} />
-          {todos.map((run) => <p key={run.id} className="c5-nota">{S.app.corridaResumen(
-            etiquetaEscenario(run.scenarioName, escenarios),
-            run.inputs.modelRevision,
-            run.inputs.scenarioRevision,
-            String((run.inputs.scenario.run as Record<string, unknown>).seed ?? 1),
-            String((run.inputs.scenario.run as Record<string, unknown>).currency ?? ''),
-          )}</p>)}
-        </>}
+        detalle={<DetalleComparar ir={ir} runs={todos} escenarios={escenarios} locale={locale} />}
       />
     );
   })();
@@ -2780,8 +2792,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         }}>
           <summary className="boton icono" aria-label={S.app.vista} title={S.app.vista}><IconoRegion region={null} /></summary>
           <div>
-            {/* The dock (#394) has no top-bar button; in Simulate it is listed here (QA of #394). */}
-            {[...REGIONES, ...(modo === 'simular' ? ['dock' as const] : [])].map((r) => (
+            {/* The results table has no top-bar button; in Results it is listed here (QA of #394). */}
+            {[...REGIONES, ...(modo === 'resultados' && !comparando ? ['dock' as const] : [])].map((r) => (
               <button key={r} type="button" data-region={r} aria-pressed={pulsado[r]} title={`${tituloRegion(r)}${atajo(r)}`}
                 disabled={r === 'izquierda' && !hayIzquierda}
                 onClick={(e) => {

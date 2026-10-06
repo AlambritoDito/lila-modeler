@@ -58,7 +58,7 @@ cite it; it does not imply a public promise that Lila matches Bizagi Modeler.
 | macOS / Windows / Linux / browser | ✗ (4.3 is still Windows-only, no web editor) | partial: web and macOS tested; Windows and Linux built by CI, untested | M5 | Implemented: web app (Chrome tested; Safari pending) and macOS beta (tested). The Windows installer is attached to the beta release but is unsigned and has not been tested on a real Windows machine; the Linux AppImage is built by CI, untested and not attached ([platform status](../README.md#desktop-beta)) |
 | Import scenario parameters from Excel/CSV, reviewed before anything is applied | ✗ (Modeler exports the results grid to Excel; no path back into the simulation parameters was found in the public docs) | ✓ download a filled-in template, import a matching Excel/CSV, review the field-by-field report (unmatched/ambiguous rows and invalid values flagged), then apply or undo | M5 | Implemented (#514, #449) |
 | **Later** | | | | |
-| Live-counter animation | ✓ | ✓ Animate mode replays the event log with per-element counters; token-simulation (MIT) keeps the didactic part | — | Implemented (#331) |
+| Live-counter animation | ✓ | ✓ the tokens on the Results map replay the event log with per-element counters; token-simulation (MIT) keeps the didactic part | — | Implemented (#331) |
 | Start quantity / completion quantity | ✓ | reserved | — | Not planned (v1) |
 | Interrupting boundary timer on a task | ✓ | ✓ | — | Implemented (#81, first slice: `SEMANTICS.md` R-BND-1…9) |
 | Non-interrupting boundary timer on a task | ✓ | ✓ | — | Implemented (#81, second slice: `SEMANTICS.md` R-BND-10…14) |

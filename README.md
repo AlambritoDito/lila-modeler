@@ -30,7 +30,7 @@ stable.
 
 ## Features
 
-- **Six modes in one window** — Model, Simulate, Results, Compare, Animate and Validate paths.
+- **Three modes in one window** — Model, Simulate and Results. Results shows the run on the diagram itself (heat map, bottlenecks, tokens) and holds the comparison.
 - **Simulate in six steps** — Arrivals, Times, Routes, Resources, Calendars and Run, which cover
   Bizagi's four levels (validation, time, resources, calendars) without a level switch.
 - **Distributions** — the 13 from BPSim 2.0 (including the empirical one) plus constant.
@@ -44,12 +44,13 @@ stable.
 - **Results** — Bizagi's column names plus Lila's extras: p50/p90/p95, queue lengths, throughput,
   cost per case, bottleneck ranking, off-hours wait separated from resource wait. Export to CSV
   and XLSX.
-- **Compare** — two or more scenarios with per-metric deltas and a significance marker (95% CI
-  without overlap).
-- **Animate** — replays the run's event log over the diagram with per-element counters and dots
-  on the flows; no re-run.
-- **Validate paths** — the didactic token animation of `bpmn-js-token-simulation`; it reads no
-  scenario and produces no results.
+- **Compare** — «Compare with…» in Results (a scenario without results is simulated when picked):
+  six KPIs with their change, two maps side by side with the wait difference per task, and the
+  per-metric tables with a significance marker (95% CI without overlap).
+- **Tokens** — replays the run's event log over the Results map with per-element counters and dots
+  on the flows (`Space` plays and pauses); no re-run.
+- **Validate paths** — a Model tool (button over the canvas or `⌘K`): the didactic token animation
+  of `bpmn-js-token-simulation`; it reads no scenario and produces no results.
 - **`.lila` project file** — the project folder zipped. Save/open from the web app (download),
   double-click on the desktop.
 - **Themes** — `eva-01` (dark, default), `papel` (light), `tieso` (light, ITESO blues), `akira` (dark, Neo-Tokyo) and `montana` (purple, bubblegum pink and gold, inspired by Hannah Montana Linux), plain JSON files.
@@ -195,10 +196,10 @@ not a claim of parity: the full checklist, with every documented difference and 
 | Four levels: validation, time, resources, calendars | ✓ | ✓ as the steps of Simulate (Arrivals, Times, Routes, Resources, Calendars, Run); no resources ⇒ infinite capacity, no calendar ⇒ 24×7 |
 | Distributions | undocumented subset | the 13 from BPSim 2.0 (incl. empirical) + constant |
 | Replications and determinism | replications only in what-if; partial seeding | always, with 95% CI; byte-for-byte deterministic |
-| What-if comparison | ✓ | ✓ Compare mode and `lila compare`, with deltas and significance marker |
+| What-if comparison | ✓ | ✓ «Compare with…» in Results and `lila compare`, with deltas and significance marker |
 | Results export | Excel | CSV and XLSX |
 | Percentiles, queue lengths, throughput, cost per case, bottleneck ranking, off-hours wait | ✗ | ✓ |
-| Live-counter animation | ✓ | ✓ Animate replays the event log |
+| Live-counter animation | ✓ | ✓ tokens on the Results map replay the event log |
 | Platforms | Windows only | web app (Chrome tested), macOS (tested); Windows installer unsigned and untested; Linux AppImage untested |
 | Importing a Bizagi `.bpmn` | — | diagram only: Bizagi does not export its simulation parameters |
 | Document publishing (Word/PDF/web) | ✓ | ✓ process document in Word (.docx) or one printable HTML page; no templates or shared repository |
