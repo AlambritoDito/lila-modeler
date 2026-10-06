@@ -4486,3 +4486,6 @@ button.gcal-uso-fila:hover {
 .c5-comparar-detalle > summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
 
 .c5-tiempo .aviso { font-size: 11px; }
+
+/* In Results the time bar takes the bottom of the canvas: the minimap moves above it. */
+.app.modo-resultados .lienzo .djs-minimap { bottom: 92px; }

@@ -2056,6 +2056,7 @@ export const en = {
       posicion: 'Simulated time',
       leyenda: 'Tint: wait compared with the task’s own processing time',
       niveles: { low: 'little wait', mid: 'comparable', high: 'waits longer than it works' },
+      truncadoCorto: (filas: number): string => `Partial replay: first ${filas} log rows`,
       ocupacion: (recurso: string, ocupados: number, capacidad: number): string => `${recurso} ${ocupados}/${capacidad}`,
     },
     mapa: {

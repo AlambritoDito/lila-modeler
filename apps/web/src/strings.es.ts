@@ -2016,6 +2016,7 @@ export const es: Strings = {
       posicion: 'Tiempo simulado',
       leyenda: 'Color: la espera frente al tiempo de proceso de la propia tarea',
       niveles: { low: 'poca espera', mid: 'comparable', high: 'espera más de lo que trabaja' },
+      truncadoCorto: (filas: number): string => `Reproducción parcial: primeras ${filas} filas del log`,
       ocupacion: (recurso: string, ocupados: number, capacidad: number): string => `${recurso} ${ocupados}/${capacidad}`,
     },
     mapa: {
