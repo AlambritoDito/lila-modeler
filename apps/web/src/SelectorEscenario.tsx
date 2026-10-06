@@ -95,6 +95,12 @@ export function SelectorEscenario(props: SelectorEscenarioProps): React.JSX.Elem
     setAbierto(false);
     if (enfocar) boton.current?.focus();
   }
+  function duplicar(): void {
+    const copia = props.onDuplicar();
+    setBorrador(copia.nombre);
+    setEditando(copia.archivo);
+    setAbierto(true);
+  }
   function empezarNombre(id: string): void {
     setBorrador(nombreEscenario(id, escenarios));
     setEditando(id);
@@ -144,6 +150,13 @@ export function SelectorEscenario(props: SelectorEscenarioProps): React.JSX.Elem
         {esEscenarioBase(delta) && <span className="insignia-base">{S.rail.base}</span>}
         <span aria-hidden="true" className="c5-flecha">▾</span>
       </button>
+      {/* Duplicate is one click (step 7 of the baseline): visible next to the dropdown, which
+          opens with the copy's name ready to edit. */}
+      {!props.compacto && (
+        <button type="button" className="boton c5-duplicar" title={S.c5.escenario.duplicarTitulo} onClick={duplicar}>
+          <span aria-hidden="true">⧉ </span>{S.c5.escenario.duplicar}
+        </button>
+      )}
       {(validacion.errores > 0 || validacion.avisos > 0) && (
         <span className="chips-validacion c5-chips" role="group" aria-label={S.c5.escenario.problemas}>
           {validacion.errores > 0 && (
@@ -186,7 +199,7 @@ export function SelectorEscenario(props: SelectorEscenarioProps): React.JSX.Elem
           {!props.compacto && <>
             <div className="c5-escenario-acciones">
               <button type="button" className="boton" title={S.c5.escenario.duplicarTitulo}
-                onClick={() => { const copia = props.onDuplicar(); setBorrador(copia.nombre); setEditando(copia.archivo); }}>
+                onClick={duplicar}>
                 {S.c5.escenario.duplicar}
               </button>
               <button type="button" className="boton" onClick={() => empezarNombre(activo)}>{S.c5.escenario.renombrar}</button>
