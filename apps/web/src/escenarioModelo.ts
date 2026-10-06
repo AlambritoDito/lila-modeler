@@ -7,6 +7,7 @@
 import type { ProcessIR } from '@lila-modeler/engine';
 import {
   parseScenario,
+  resolveScenarioPath,
   toJsonSchema,
   validateScenario,
   type ValidateScenarioOptions,
@@ -318,6 +319,147 @@ export function porRuta(problemas: readonly Problema[]): Map<string, Problema[]>
 }
 
 /* ------------------------------------------------------------------ *
+ * Renombrar un calendario (Lote M, C3)
+ * ------------------------------------------------------------------ */
+
+/**
+ * The delta after renaming calendar `viejo` to `nuevo`, with every reference updated.
+ *
+ * The format has no calendar `name`: the key of `calendars` **is** the name (ANALISIS § B), so a
+ * rename moves the entry and rewrites the three places that point at it (§ 2.3–2.5): a pool's
+ * `calendar`, a shift of its per-shift `capacity` (the whole array, § 6 replaces arrays) and an
+ * element's `calendar`. The moved entry is the **resolved** calendar, so a calendar inherited
+ * through `extends` keeps every hour; the old key is then deleted with `null` when the parent
+ * declares it (§ 6) and dropped otherwise. The entry keeps its place in the delta's map, so the
+ * list does not reorder under the person typing.
+ *
+ * Returns `delta` untouched when the rename is not possible: same name, empty name, or a name
+ * that already exists.
+ */
+export function renombrarCalendario(
+  delta: Record<string, unknown>,
+  resuelto: Record<string, unknown>,
+  padre: Record<string, unknown> | null,
+  viejo: string,
+  nuevo: string,
+): Record<string, unknown> {
+  const calendarios = esObjeto(resuelto['calendars']) ? resuelto['calendars'] : {};
+  if (nuevo === '' || nuevo === viejo || nuevo in calendarios || !(viejo in calendarios)) return delta;
+  const valor = calendarios[viejo];
+  const propios = esObjeto(delta['calendars']) ? delta['calendars'] : {};
+  const movidos: Record<string, unknown> = {};
+  for (const [clave, entrada] of Object.entries(propios)) {
+    if (clave === viejo) movidos[nuevo] = valor;
+    else movidos[clave] = entrada;
+  }
+  if (!(viejo in propios)) movidos[nuevo] = valor;
+  if (padre !== null && leer(padre, ['calendars', viejo]) !== undefined) movidos[viejo] = null;
+  let salida: Record<string, unknown> = { ...delta, calendars: movidos };
+
+  const recursos = esObjeto(resuelto['resources']) ? resuelto['resources'] : {};
+  for (const [id, recurso] of Object.entries(recursos)) {
+    if (!esObjeto(recurso)) continue;
+    if (recurso['calendar'] === viejo) salida = escribir(salida, ['resources', id, 'calendar'], nuevo);
+    const capacidad = recurso['capacity'];
+    if (Array.isArray(capacidad) && capacidad.some((t: unknown) => esObjeto(t) && t['calendar'] === viejo)) {
+      const tramos = capacidad.map((t: unknown) => (esObjeto(t) && t['calendar'] === viejo ? { ...t, calendar: nuevo } : t));
+      salida = escribir(salida, ['resources', id, 'capacity'], tramos);
+    }
+  }
+  const elementos = esObjeto(resuelto['elements']) ? resuelto['elements'] : {};
+  for (const [id, elemento] of Object.entries(elementos)) {
+    if (esObjeto(elemento) && elemento['calendar'] === viejo) {
+      salida = escribir(salida, ['elements', id, 'calendar'], nuevo);
+    }
+  }
+  return salida;
+}
+
+/**
+ * The scenarios that inherit from `archivo`, directly or through others (`extends` is resolved
+ * relative to the child, § 6), in the order of `escenarios`. Not `archivo` itself.
+ */
+export function descendientesDe(
+  archivo: string,
+  escenarios: Readonly<Record<string, Record<string, unknown>>>,
+): string[] {
+  const afectados = new Set([archivo]);
+  let crecio = true;
+  while (crecio) {
+    crecio = false;
+    for (const [nombre, delta] of Object.entries(escenarios)) {
+      const padre = delta['extends'];
+      if (afectados.has(nombre) || typeof padre !== 'string') continue;
+      if (afectados.has(resolveScenarioPath(nombre, padre))) {
+        afectados.add(nombre);
+        crecio = true;
+      }
+    }
+  }
+  return Object.keys(escenarios).filter((nombre) => nombre !== archivo && afectados.has(nombre));
+}
+
+/**
+ * A descendant's **own** delta after its ancestor renamed calendar `viejo` to `nuevo` (QA of
+ * #599): its override or deletion of `calendars.<viejo>` moves to `nuevo` (or a Duplicate's
+ * what-if hours would silently stop applying and its KPIs change), and its own references —
+ * pool `calendar`, shifts, element `calendar` — follow (or it would fail with
+ * E-REF-DESCONOCIDA). What it inherits is already fixed by the ancestor's own rewrite.
+ */
+export function renombrarEnDescendiente(
+  delta: Record<string, unknown>,
+  viejo: string,
+  nuevo: string,
+): Record<string, unknown> {
+  let salida = delta;
+  const propios = delta['calendars'];
+  if (esObjeto(propios) && viejo in propios) {
+    const movidos: Record<string, unknown> = {};
+    for (const [clave, entrada] of Object.entries(propios)) movidos[clave === viejo ? nuevo : clave] = entrada;
+    salida = { ...salida, calendars: movidos };
+  }
+  const recursos = delta['resources'];
+  for (const [id, recurso] of Object.entries(esObjeto(recursos) ? recursos : {})) {
+    if (!esObjeto(recurso)) continue;
+    if (recurso['calendar'] === viejo) salida = escribir(salida, ['resources', id, 'calendar'], nuevo);
+    const capacidad = recurso['capacity'];
+    if (Array.isArray(capacidad) && capacidad.some((t: unknown) => esObjeto(t) && t['calendar'] === viejo)) {
+      const tramos = capacidad.map((t: unknown) => (esObjeto(t) && t['calendar'] === viejo ? { ...t, calendar: nuevo } : t));
+      salida = escribir(salida, ['resources', id, 'capacity'], tramos);
+    }
+  }
+  const elementos = delta['elements'];
+  for (const [id, elemento] of Object.entries(esObjeto(elementos) ? elementos : {})) {
+    if (esObjeto(elemento) && elemento['calendar'] === viejo) salida = escribir(salida, ['elements', id, 'calendar'], nuevo);
+  }
+  return salida;
+}
+
+/** `true` if a delta names calendar `clave` itself: an entry (override or `null`) or a reference. */
+export function nombraCalendario(delta: Record<string, unknown>, clave: string): boolean {
+  return renombrarEnDescendiente(delta, clave, `${clave}\u0000`) !== delta;
+}
+
+/** `true` if a delta declares a calendar `clave` of its own (not deleted with `null`). */
+export function declaraCalendario(delta: Record<string, unknown>, clave: string): boolean {
+  const propios = delta['calendars'];
+  return esObjeto(propios) && propios[clave] !== undefined && propios[clave] !== null;
+}
+
+/**
+ * `despues` as the top-level writes `Contexto.editarVarios` takes: one per root key that changed,
+ * so a whole rename is one write of the delta and one undo step.
+ */
+export function cambiosDeDelta(
+  antes: Record<string, unknown>,
+  despues: Record<string, unknown>,
+): { ruta: Ruta; valor: unknown }[] {
+  return Object.keys(despues)
+    .filter((clave) => despues[clave] !== antes[clave])
+    .map((clave) => ({ ruta: [clave], valor: despues[clave] }));
+}
+
+/* ------------------------------------------------------------------ *
  * Duplicar (§ 6: el what-if de la casa es un delta con `extends`)
  * ------------------------------------------------------------------ */
 
@@ -378,4 +520,13 @@ export interface Contexto {
    * el array completo como valor, que es lo que § 6 dice de los arrays.
    */
   editarVarios?(cambios: readonly { ruta: Ruta; valor: unknown }[]): void;
+  /**
+   * Lote M (C3): the file being edited and every scenario of the process (file → raw delta), so
+   * an edit that changes a key other files point at (renaming a calendar) can follow it into the
+   * scenarios that `extends` this one. Optional: test probes that never rename do not pass them.
+   */
+  archivo?: string;
+  escenarios?: Readonly<Record<string, Record<string, unknown>>>;
+  /** Writes another scenario's whole delta (a descendant of this one), in the same gesture. */
+  editarArchivo?(archivo: string, escenario: Record<string, unknown>): void;
 }

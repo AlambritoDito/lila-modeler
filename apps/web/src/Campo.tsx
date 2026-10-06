@@ -6,7 +6,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 
-import { CalendarEditor, Festivos, tieneMinutos, type Intervalo } from './CalendarEditor.js';
+import { CampoFestivos, CampoIntervalos, esFestivosCalendario, esIntervalosCalendario } from './CamposCalendario.js';
 import {
   borrar,
   esObjeto,
@@ -313,110 +313,6 @@ function CampoCapacidadRecurso({
       ) : (
         <EntradaNumero valor={valor} ruta={ruta} ctx={ctx} id={idFija} />
       )}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ *
- * `calendars[clave].intervals` (LILA-203): rejilla semanal o lista
- * ------------------------------------------------------------------ */
-
-/** `['calendars', <clave>, 'intervals']`: la única ruta donde la rejilla semanal significa algo. */
-function esIntervalosCalendario(ruta: Ruta): boolean {
-  return ruta.length === 3 && ruta[0] === 'calendars' && ruta[2] === 'intervals';
-}
-
-/**
- * The range picker, the grid of artboard 3 and the toggle to the schema's generic list.
- *
- * The grid is a **partial** view of the format —its cell is a whole hour and § 2.3 accepts any
- * `"HH:MM"`—, so for a calendar with minute slots the grid is hidden, with the warning, and the
- * range picker and the list keep editing it (#448): rounding it to draw it would change the
- * scenario just to show it.
- *
- * ponytail: la lista se dibuja llamando al mismo `Campo` con un `sufijo`, que es lo que corta la
- * recursión (la intercepción de arriba solo mira el campo sin sufijo). Un `Campo` que ya sabe
- * dibujar arrays de objetos desde el esquema no se duplica aquí por tener dos vistas.
- */
-function CampoIntervalos({
-  esquema,
-  ruta,
-  ctx,
-}: {
-  esquema: EsquemaJson;
-  ruta: Ruta;
-  ctx: Contexto;
-}): React.JSX.Element {
-  const S = useStrings();
-  const [rejilla, setRejilla] = useState(true);
-  const valor = leer(ctx.resuelto, ruta);
-  const intervals = (Array.isArray(valor) ? valor : []) as Intervalo[];
-  const conMinutos = tieneMinutos(intervals);
-  const enRejilla = rejilla && !conMinutos;
-  return (
-    <div className="campo-schema">
-      <span className="etiqueta">{S.escenario.claves.intervals}</span>
-      {conMinutos ? (
-        <p className="aviso">{S.escenario.calendarioConMinutos}</p>
-      ) : (
-        <button
-          type="button"
-          className="enlace"
-          onClick={() => {
-            setRejilla(!rejilla);
-          }}
-        >
-          {enRejilla ? S.escenario.editarComoLista : S.escenario.editarComoRejilla}
-        </button>
-      )}
-      {/* #448: the range picker and its list stay in both views; only the grid follows the toggle. */}
-      <CalendarEditor
-        intervals={intervals}
-        rejilla={enRejilla}
-        onCambio={(nuevos) => {
-          // § 6: el array entero en el delta, siempre; un intervalo suelto no significaría nada.
-          ctx.editar(ruta, nuevos);
-        }}
-      />
-      {enRejilla ? (
-        <Problemas ruta={ruta} ctx={ctx} />
-      ) : (
-        <Campo esquema={esquema} ruta={ruta} etiqueta="intervals" requerido ctx={ctx} sufijo="-lista" />
-      )}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ *
- * `calendars[clave].holidays` (#82, R-CAL-14): date picker and list
- * ------------------------------------------------------------------ */
-
-/** `['calendars', <clave>, 'holidays']`. */
-function esFestivosCalendario(ruta: Ruta): boolean {
-  return ruta.length === 3 && ruta[0] === 'calendars' && ruta[2] === 'holidays';
-}
-
-/**
- * The holidays of a calendar with a date picker instead of the schema's generic list of strings.
- * Removing the last one removes the key, so a calendar edited back to no holidays reads as it did
- * before (the file does not grow an empty `holidays: []`).
- */
-function CampoFestivos({ ruta, ctx }: { ruta: Ruta; ctx: Contexto }): React.JSX.Element {
-  const S = useStrings();
-  const valor = leer(ctx.resuelto, ruta);
-  const holidays = Array.isArray(valor) ? valor.filter((f): f is string => typeof f === 'string') : [];
-  return (
-    <div className="campo-schema">
-      <span className="etiqueta">{S.escenario.campos['holidays'] ?? 'holidays'}</span>
-      <Festivos
-        holidays={holidays}
-        onCambio={(nuevos) => {
-          // § 6: the whole array in the delta, as with `intervals`.
-          if (nuevos.length === 0) ctx.quitar(ruta);
-          else ctx.editar(ruta, nuevos);
-        }}
-      />
-      <Problemas ruta={ruta} ctx={ctx} />
     </div>
   );
 }

@@ -433,6 +433,12 @@ export function ScenarioPanel({
       for (const { ruta, valor } of cambios) siguiente = escribir(siguiente, ruta, valor);
       onCambio(archivo, siguiente);
     },
+    // Lote M (C3): renaming a calendar follows it into the scenarios that extend this one.
+    archivo,
+    escenarios,
+    editarArchivo(otro, escenario) {
+      onCambio(otro, escenario);
+    },
     quitar(ruta) {
       const corte = baseDeArray(ruta);
       if (corte !== -1) {

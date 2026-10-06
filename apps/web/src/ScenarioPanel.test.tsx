@@ -37,8 +37,8 @@ import {
   type EsquemaJson,
   ScenarioPanel,
 } from './ScenarioPanel.js';
-import { DIAS, aCeldas, aIntervals, celda, type Intervalo } from './CalendarEditor.js';
-import { setLocale } from './i18n';
+import { DIAS, aCeldas, aIntervals, celda, type Dia, type Intervalo } from './CalendarEditor.js';
+import { setLocale, strings } from './i18n';
 import { en } from './strings.en';
 import { es } from './strings.es';
 
@@ -154,10 +154,19 @@ function irAPaso(paso: 'arrivals' | 'times' | 'routes' | 'resources' | 'calendar
  * sintetiza `onPointerEnter`: su plugin de enter/leave se desentiende del `pointerover` cuando el
  * `relatedTarget` también está dentro del árbol React, y deja el trabajo al `pointerout`.
  */
+/**
+ * `'SAT 09:00'` → the cell's accessible name in the active language (Lote M: «sábado 09:00»; it
+ * used to be the format's day code, untranslated).
+ */
+function etiquetaCelda(etiqueta: string): string {
+  const [dia, hora] = etiqueta.split(' ') as [Dia, string];
+  return strings().calendario.celda(strings().calendario.diasLargos[dia], hora);
+}
+
 function arrastrar(etiquetas: readonly string[]): void {
   const celdas = etiquetas.map((etiqueta) => {
     const encontrada = [...document.querySelectorAll('button')].find(
-      (b) => b.getAttribute('aria-label') === etiqueta,
+      (b) => b.getAttribute('aria-label') === etiquetaCelda(etiqueta),
     );
     if (encontrada === undefined) throw new Error(`no hay celda «${etiqueta}»`);
     return encontrada;
@@ -186,7 +195,7 @@ function arrastrar(etiquetas: readonly string[]): void {
 function arrastrarRapido(etiquetas: readonly string[]): void {
   const celdas = etiquetas.map((etiqueta) => {
     const encontrada = [...document.querySelectorAll('button')].find(
-      (b) => b.getAttribute('aria-label') === etiqueta,
+      (b) => b.getAttribute('aria-label') === etiquetaCelda(etiqueta),
     );
     if (encontrada === undefined) throw new Error(`no hay celda «${etiqueta}»`);
     return encontrada;
@@ -1025,6 +1034,10 @@ describe('editor semanal de calendarios (LILA-203)', () => {
       />,
     );
     irAPaso('calendars');
+    // Lote M (C3): holidays are their own tab of the calendar editor.
+    act(() => {
+      (document.getElementById('gcal-tab-festivos') as HTMLButtonElement).click();
+    });
     const campo = document.querySelector<HTMLInputElement>('.festivos input[type="date"]')!;
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
     act(() => {

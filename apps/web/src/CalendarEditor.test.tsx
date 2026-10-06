@@ -274,7 +274,7 @@ it('describes monthly and yearly ranges in the list', () => {
 it('painting the grid keeps monthly and yearly ranges as written', () => {
   const mensual: Intervalo = { monthDays: [15], from: '09:00', to: '12:00' };
   const onCambio = montar([mensual]);
-  const celda = document.querySelector<HTMLButtonElement>(`[aria-label="${T.calendario.celda('MON', '09:00')}"]`)!;
+  const celda = document.querySelector<HTMLButtonElement>(`[aria-label="${T.calendario.celda(T.calendario.diasLargos.MON, '09:00')}"]`)!;
   act(() => celda.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })));
   expect(onCambio).toHaveBeenLastCalledWith([mensual, { days: ['MON'], from: '09:00', to: '10:00' }]);
 });
