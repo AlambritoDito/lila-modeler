@@ -16,7 +16,7 @@
  * `CHROME_PATH` overrides the browser (the default is the macOS Google Chrome bundle), and
  * `LILA_E2E_PORT` / `LILA_E2E_CDP_PORT` move the static server and the debugging port.
  * `LILA_E2E_CONCURRENT=1` selects the synthetic #363 boundary/fork regression.
- * `LILA_E2E_SCREENSHOT` saves the final Animate view to the given PNG path.
+ * `LILA_E2E_SCREENSHOT` saves the final Results view, tokens at the end, to the given PNG path.
  * Prints a JSON report and exits non-zero on the first failed expectation.
  */
 import { spawn } from 'node:child_process';
@@ -237,8 +237,7 @@ async function main() {
     await waitFor(`[...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Run simulation')`, 'the run to finish');
     await waitFor(`document.body.innerText.includes('Bottlenecks')`, 'the results view');
 
-    // 3. «Play» switches to the replay; «Instant» takes it to the end of the replication.
-    await click('Play', '.zona-resultados');
+    // 3. The time bar is already over the Results map (Lote M); «Instant» takes it to the end.
     await waitFor(`!!document.querySelector('.replay select')`, 'the replay controls');
     check('the replay starts at the beginning', await evaluate(
       `document.querySelector('[data-replay-progress]')?.getAttribute('data-replay-progress') === '0'`));

@@ -62,8 +62,9 @@ try {
   assert.equal(await page.getByLabel('Seed', { exact: true }).inputValue(), '43');
   await page.getByLabel('Seed', { exact: true }).fill('42'); await page.getByLabel('Seed', { exact: true }).press('Tab');
   await run();
-  await button('Simulate').click(); await page.locator('.rail-fila', { hasText: 'TO-BE' }).click(); await run();
-  await button('Compare').click();
+  // Lote M: the scenario is picked in «Scenario ▾», and Compare lives in Results («Compare with…»).
+  await page.locator('.c5-escenario-boton').click(); await page.locator('.c5-escenario-fila', { hasText: 'TO-BE' }).click(); await run();
+  await page.locator('.c5-comparar-con .c5-comparar-boton').click(); await page.locator('.c5-comparar-lista .c5-escenario-fila', { hasText: 'AS-IS' }).click();
   assert.match(await page.locator('body').innerText(), /TO-BE 3 cashiers/);
   const saved = await save(); assert.equal(saved.document.runs.length, 2);
   assert.deepEqual(saved.document.runs.map(r => r.scenarioName).sort(), ['as-is.scenario.json', 'to-be-3-cajeros.scenario.json']);
@@ -110,19 +111,19 @@ try {
   await page.locator('nav.pasos').getByRole('button', { name: 'Calendars', exact: true }).click(); await capture('calendar'); // Calendars step of the Simulate panel (#333, #396).
   await page.locator('.djs-container').first().click({ position: { x: 600, y: 650 } });
   await run(); await capture('results', false);
-  // Animate (#331): the replay of the event log, paused mid-run so the counters are readable.
-  await page.locator('.zona-resultados').getByRole('button', { name: 'Play', exact: true }).click();
+  // The tokens on the Results map (#331, Lote M), paused mid-run so the counters are readable.
   await page.locator('.replay select').waitFor();
   await page.locator('.replay select').selectOption('600'); // 600x: ~2.5 simulated hours in 15 s, with cases still in flight.
   await page.locator('.replay').getByRole('button', { name: 'Play', exact: true }).click();
   await page.waitForTimeout(15000);
   await page.locator('.replay').getByRole('button', { name: 'Pause', exact: true }).click();
   await capture('animate', false);
-  await button('Simulate').click(); await capture('overlay');
-  await page.locator('.rail-fila', { hasText: 'TO-BE' }).click(); await run();
-  await button('Compare').click(); await save(); await page.reload(); await ready(); await button('Compare').click();
+  await capture('overlay');
+  await page.locator('.c5-escenario-boton').click(); await page.locator('.c5-escenario-fila', { hasText: 'TO-BE' }).click(); await run();
+  const comparar = async () => { await page.locator('.c5-comparar-con .c5-comparar-boton').click(); await page.locator('.c5-comparar-lista .c5-escenario-fila', { hasText: 'AS-IS' }).click(); };
+  await comparar(); await save(); await page.reload(); await ready(); await button('Results').click(); await comparar();
   await capture('compare', false);
-  await button('Validate paths').click(); await button('Properties').click(); await capture('routes');
+  await button('Model').click(); await button('Validate paths').click(); await button('Properties').click(); await capture('routes');
   await button('Model').click(); await button('Fit to screen').click(); await button('Settings').click(); await page.getByRole('tab', { name: 'Appearance' }).click(); await capture('appearance', false); await button('Close').click();
   assert.deepEqual(errors, []);
   // Lila Dark is what a dark-mode system gets on first launch (#404): one Model capture per size,

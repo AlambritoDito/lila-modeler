@@ -174,7 +174,7 @@ export function Replay({ modelador, replay, originalIds, motivo, leyenda, ...con
         </span>
       )}
       {replay.replications > 1 && <span className="vacio" title={S.animacion.replicacion(replay.replications)}>{`1/${replay.replications}`}</span>}
-      {replay.truncated && <span role="alert" className="aviso">{S.animacion.truncado(replay.rows)}</span>}
+      {replay.truncated && <span role="note" className="aviso" title={S.animacion.truncado(replay.rows)}>{S.c5.tiempo.truncadoCorto(replay.rows)}</span>}
       {leyenda}
     </div>
   );
