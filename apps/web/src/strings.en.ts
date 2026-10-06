@@ -1250,6 +1250,7 @@ export const en = {
       vacia: 'The id cannot be empty.',
       repetida: 'Another resource already has this id.',
       heredada: 'This resource comes from the parent scenario: its id is renamed there.',
+      enDerivado: 'A scenario derived from this one already has a resource with this id.',
     } as Record<string, string>,
     apartados: 'Resource sections',
     apartado: { cap: 'Capacity', cost: 'Costs', uso: 'Calendar and use' },
@@ -1282,6 +1283,15 @@ export const en = {
     ningunaTarea: 'None yet.',
     cantidad: (n: number): string => `×${n}`,
     eliminar: 'Delete resource',
+    eliminarUsado: (tareas: number): string =>
+      `${tareas} ${tareas === 1 ? 'task uses' : 'tasks use'} this resource: ${tareas === 1 ? 'it' : 'they'} will be left pointing at nothing.`,
+    eliminarConfirmar: 'Delete anyway',
+    eliminarCancelar: 'Cancel',
+    eliminarBloqueado: (escenarios: string): string => `It cannot be deleted: the derived scenarios ${escenarios} use it.`,
+    descartarTurnos: (n: number): string =>
+      `Fixed keeps only shift 1; ${n === 1 ? 'the other shift is' : `the other ${n} shifts are`} discarded.`,
+    descartarConfirmar: 'Switch to fixed',
+    descartarCancelar: 'Cancel',
     carrilEntero: 'Assign a whole lane',
     carrilEnteroAyuda: 'Or click a lane’s name on the canvas.',
     carrilTitulo: (carril: string, tareas: number): string =>

@@ -3,7 +3,7 @@
  * tasks use it, the key a new one gets, and the one write that changes several fields of a
  * resource at once (switching capacity between fixed and per-shift, R16).
  */
-import { esObjeto, leer, type Contexto } from './escenarioModelo.js';
+import { descendientesDe, escribir, esObjeto, leer, type Contexto } from './escenarioModelo.js';
 import { enMinutos, type Intervalo } from './CalendarEditor.js';
 
 /** `resources` of the resolved scenario, or `{}`. */
@@ -114,20 +114,68 @@ export function problemasBajo(ctx: Contexto, prefijo: string): number {
 }
 
 /** Why a resource key cannot be renamed to `nueva`, or `null` when it can. */
-export type MotivoClave = 'vacia' | 'repetida' | 'heredada' | null;
+export type MotivoClave = 'vacia' | 'repetida' | 'heredada' | 'enDerivado' | null;
+
+/** The scenarios that `extends` the one being edited (directly or not), when the host gives them. */
+export function derivadosDe(ctx: Contexto): string[] {
+  return ctx.archivo !== undefined && ctx.escenarios !== undefined ? descendientesDe(ctx.archivo, ctx.escenarios) : [];
+}
+
+/** `true` if a delta declares a resource `clave` of its own (not deleted with `null`). */
+export function declaraRecurso(delta: Record<string, unknown>, clave: string): boolean {
+  const propios = delta['resources'];
+  return esObjeto(propios) && propios[clave] !== undefined && propios[clave] !== null;
+}
+
+/**
+ * A descendant's **own** delta after an ancestor renamed resource `viejo` to `nuevo` (QA of #601):
+ * its override or deletion of `resources.<viejo>` moves to `nuevo` (or a TO-BE's «3 cashiers»
+ * would become an orphan resource and the inherited tasks would run with the parent's capacity),
+ * and its own `elements.*.resources[].ref` follow. What it inherits is fixed by the ancestor.
+ */
+export function renombrarRecursoEnDescendiente(
+  delta: Record<string, unknown>,
+  viejo: string,
+  nuevo: string,
+): Record<string, unknown> {
+  let salida = delta;
+  const propios = delta['resources'];
+  if (esObjeto(propios) && viejo in propios) {
+    const movidos: Record<string, unknown> = {};
+    for (const [clave, entrada] of Object.entries(propios)) movidos[clave === viejo ? nuevo : clave] = entrada;
+    salida = { ...salida, resources: movidos };
+  }
+  const elementos = delta['elements'];
+  for (const [id, elemento] of Object.entries(esObjeto(elementos) ? elementos : {})) {
+    const usos = esObjeto(elemento) ? elemento['resources'] : undefined;
+    if (!Array.isArray(usos) || !usos.some((u) => esObjeto(u) && u['ref'] === viejo)) continue;
+    salida = escribir(salida, ['elements', id, 'resources'], usos.map((u) => (esObjeto(u) && u['ref'] === viejo ? { ...u, ref: nuevo } : u)));
+  }
+  return salida;
+}
+
+/** `true` if a delta names resource `clave` itself: an entry (override or `null`) or a task reference. */
+export function nombraRecurso(delta: Record<string, unknown>, clave: string): boolean {
+  return renombrarRecursoEnDescendiente(delta, clave, `${clave}\u0000`) !== delta;
+}
 
 export function motivoRenombrar(ctx: Contexto, de: string, nueva: string): MotivoClave {
   if (nueva.trim() === '') return 'vacia';
-  if (nueva !== de && Object.keys(recursosDe(ctx.resuelto)).includes(nueva)) return 'repetida';
+  if (nueva === de) return null;
+  if (Object.keys(recursosDe(ctx.resuelto)).includes(nueva)) return 'repetida';
   // A key the parent declares cannot leave the child: § 6 merges by key, so the parent's entry
   // would come back under the old name.
   if (ctx.padre != null && leer(ctx.padre, ['resources', de]) !== undefined) return 'heredada';
+  // A descendant with its own resource of that name would end up with two merged into one.
+  const escenarios = ctx.escenarios ?? {};
+  if (derivadosDe(ctx).some((h) => declaraRecurso(escenarios[h] ?? {}, nueva))) return 'enDerivado';
   return null;
 }
 
 /**
  * Renames `resources[de]` to `resources[a]` and every `elements.*.resources[].ref` that named it,
- * as one change of the delta. The caller checks `motivoRenombrar` first. The order of the
+ * as one change of the delta, and then each descendant scenario's own delta in the same gesture
+ * (`renombrarRecursoEnDescendiente`). The caller checks `motivoRenombrar` first. The order of the
  * resources is kept, so the list does not reshuffle under the person typing.
  */
 export function renombrarRecurso(ctx: Contexto, de: string, a: string): void {
@@ -147,4 +195,11 @@ export function renombrarRecurso(ctx: Contexto, de: string, a: string): void {
   }
   if (ctx.editarVarios !== undefined) ctx.editarVarios(cambios);
   else for (const { ruta, valor } of cambios) ctx.editar(ruta, valor);
+  const escenarios = ctx.escenarios ?? {};
+  for (const hijo of derivadosDe(ctx)) {
+    const antes = escenarios[hijo];
+    if (antes === undefined) continue;
+    const despues = renombrarRecursoEnDescendiente(antes, de, a);
+    if (despues !== antes) ctx.editarArchivo?.(hijo, despues);
+  }
 }

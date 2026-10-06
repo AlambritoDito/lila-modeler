@@ -6,12 +6,14 @@
  * while that calendar is open (R-CAL-11). The design's shift row (name, from, to, units) is
  * therefore translated to «which calendar, how many units», and the hours are edited where they
  * live, in Calendars. A per-shift capacity excludes the resource's own `calendar` (R16), so the
- * switch moves it: Fixed → By shifts turns the calendar into the first shift, and back again the
- * first shift's calendar becomes the resource's calendar. Each switch is one write of the delta.
+ * switch moves it: Fixed → By shifts turns the calendar into the first shift (none, for a 24/7
+ * resource), and back again the first shift's calendar becomes the resource's calendar. Each switch is one write of the delta.
  *
  * The ids are the ones the field always had (`campo-resources.<id>.capacity` for the fixed units,
  * `…capacity[i].calendar` / `…capacity[i].capacity` for a shift), so tests and QA keep finding it.
  */
+import { useState } from 'react';
+
 import { EntradaNumero, Problemas } from './Campo.js';
 import { esObjeto, leer, rutaTexto, variantes, type Contexto, type EsquemaJson, type Ruta } from './escenarioModelo.js';
 import { horasSemana, editarRecurso } from './recursosModelo.js';
@@ -49,15 +51,27 @@ export function CampoCapacidadRecurso({
 
   function aTurnos(): void {
     if (porTurno) return;
+    // A resource with no calendar works 24/7: its first shift starts with no calendar either
+    // (to be chosen), never with someone else's hours, so the round trip comes back unchanged.
     const propio = esObjeto(recurso) ? recurso['calendar'] : undefined;
-    const calendario = typeof propio === 'string' && propio !== '' ? propio : (calendarios[0] ?? '');
+    const calendario = typeof propio === 'string' && propio !== '' ? propio : '';
     editarRecurso(ctx, clave, {
       capacity: [{ calendar: calendario, capacity: unidadesDe(valor, 1) }],
       calendar: undefined,
     });
   }
 
+  /** By shifts → Fixed with more than one shift asks first: shifts 2+ are discarded. */
+  const [descartar, setDescartar] = useState(false);
+
+  function pedirFija(): void {
+    if (!porTurno) return;
+    if ((valor as unknown[]).length > 1) setDescartar(true);
+    else aFija();
+  }
+
   function aFija(): void {
+    setDescartar(false);
     if (!porTurno) return;
     const primero = (valor as unknown[])[0];
     const turno = esObjeto(primero) ? primero : {};
@@ -77,7 +91,7 @@ export function CampoCapacidadRecurso({
       <fieldset className="rec-modo">
         <legend>{S.recursos.capacidad}</legend>
         <label className={porTurno ? 'rec-opcion' : 'rec-opcion activa'}>
-          <input type="radio" id={`${idFija}-fija`} name={nombreGrupo} checked={!porTurno} onChange={aFija} />
+          <input type="radio" id={`${idFija}-fija`} name={nombreGrupo} checked={!porTurno} onChange={pedirFija} />
           {S.recursos.fija}
         </label>
         <label className={porTurno ? 'rec-opcion activa' : 'rec-opcion'}>
@@ -85,6 +99,25 @@ export function CampoCapacidadRecurso({
           {S.recursos.porTurno}
         </label>
       </fieldset>
+      {descartar && porTurno && (
+        <div className="rec-confirmar" role="alert">
+          <p className="aviso">{S.recursos.descartarTurnos((valor as unknown[]).length - 1)}</p>
+          <div className="rec-acciones">
+            <button type="button" className="boton primario" onClick={aFija}>
+              {S.recursos.descartarConfirmar}
+            </button>
+            <button
+              type="button"
+              className="boton"
+              onClick={() => {
+                setDescartar(false);
+              }}
+            >
+              {S.recursos.descartarCancelar}
+            </button>
+          </div>
+        </div>
+      )}
 
       {porTurno ? (
         <div className="rec-turnos">

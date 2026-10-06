@@ -24,8 +24,10 @@ import { LaneAssign, nombreDeCarril } from './LaneAssign.js';
 import { carrilesDelPanel } from './laneToPool.js';
 import { useCarriles } from './carrilClic.js';
 import {
+  derivadosDe,
   horasSemana,
   motivoRenombrar,
+  nombraRecurso,
   nombreRecurso,
   problemasBajo,
   renombrarRecurso,
@@ -122,6 +124,16 @@ export function FichaRecurso({
   const carriles = useMemo(() => carrilesDelPanel(ir, visuales), [ir, visuales]);
   const costeHora = typeof datos['costPerHour'] === 'number' ? datos['costPerHour'] : 0;
   const costeFijo = typeof datos['fixedCost'] === 'number' ? datos['fixedCost'] : 0;
+
+  /** Descendant scenarios that name this resource themselves: deleting it would break them. */
+  const escenarios = ctx.escenarios ?? {};
+  const usadoEnDerivados = derivadosDe(ctx).filter((h) => nombraRecurso(escenarios[h] ?? {}, clave));
+  const [confirmarEliminar, setConfirmarEliminar] = useState(false);
+
+  function eliminar(): void {
+    ctx.quitar(rutaRecurso);
+    onVolver();
+  }
 
   function resumenCalendario(id: string): string {
     const cal = tablaCalendarios[id];
@@ -319,16 +331,41 @@ export function FichaRecurso({
 
       <Problemas ruta={rutaRecurso} ctx={ctx} />
 
-      <button
-        type="button"
-        className="boton rec-eliminar"
-        onClick={() => {
-          ctx.quitar(rutaRecurso);
-          onVolver();
-        }}
-      >
-        {S.recursos.eliminar}
-      </button>
+      {usadoEnDerivados.length > 0 && (
+        <p className="ayuda">{S.recursos.eliminarBloqueado(usadoEnDerivados.join(', '))}</p>
+      )}
+      {confirmarEliminar ? (
+        <div className="rec-confirmar" role="alert">
+          <p className="aviso">{S.recursos.eliminarUsado(tareas.length)}</p>
+          <div className="rec-acciones">
+            <button type="button" className="boton rec-eliminar" onClick={eliminar}>
+              {S.recursos.eliminarConfirmar}
+            </button>
+            <button
+              type="button"
+              className="boton"
+              onClick={() => {
+                setConfirmarEliminar(false);
+              }}
+            >
+              {S.recursos.eliminarCancelar}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="boton rec-eliminar"
+          disabled={usadoEnDerivados.length > 0}
+          onClick={() => {
+            // Tasks that use it would be left with a dangling reference: ask first.
+            if (tareas.length > 0) setConfirmarEliminar(true);
+            else eliminar();
+          }}
+        >
+          {S.recursos.eliminar}
+        </button>
+      )}
     </div>
   );
 }

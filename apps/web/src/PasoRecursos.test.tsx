@@ -14,7 +14,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import type { ProcessIR } from '@lila-modeler/engine';
 import { parseBpmn } from '@lila-modeler/engine/bpmn';
-import { ScenarioSchema, scenarioErrors, validateScenario } from '@lila-modeler/engine/schema';
+import { ScenarioSchema, resolveExtends, scenarioErrors, validateScenario, type Scenario } from '@lila-modeler/engine/schema';
 
 import { apply, publicarCarriles, elegirCarril, type FormaCarril, type LienzoCarriles } from './carrilClic.js';
 import { ScenarioPanel } from './ScenarioPanel.js';
@@ -339,6 +339,10 @@ describe('the sheet', () => {
     clic(document.querySelector('nav.pasos button[data-paso="resources"]'));
     clic(fila('horno'));
     clic(botonTexto(es.recursos.eliminar));
+    // «Prepare food» uses the oven: deleting asks first (QA of #601).
+    expect(Object.keys(recursos())).toEqual(['cajero', 'cocinero', 'horno']);
+    expect(document.querySelector('.rec-confirmar')?.textContent).toContain(es.recursos.eliminarUsado(1));
+    clic(botonTexto(es.recursos.eliminarConfirmar));
     expect(Object.keys(recursos())).toEqual(['cajero', 'cocinero']);
     expect(document.querySelector('.rec-ficha')).toBeNull();
   });
@@ -449,5 +453,159 @@ describe('lanes', () => {
     }
     // And the sheet lists them now as the tasks it performs.
     expect(document.querySelectorAll('.rec-tareas li')).toHaveLength(operador.length);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * QA of #601: scenarios that extend the one being edited, and the R16 round trip
+ * ------------------------------------------------------------------ */
+
+const HIJO = 'to-be-3-cajeros.scenario.json';
+let todos: Readonly<Record<string, Json>> = {};
+
+/** Several scenarios, like the rail: `onCambio` writes whichever file it is told to. */
+function Varios({ inicial, archivo }: { inicial: Record<string, Json>; archivo: string }): React.JSX.Element {
+  const [escenarios, setEscenarios] = useState<Readonly<Record<string, Json>>>(inicial);
+  todos = escenarios;
+  actual = escenarios[archivo] ?? {};
+  return (
+    <ScenarioPanel
+      archivo={archivo}
+      escenarios={escenarios}
+      onCambio={(a, e) => {
+        setEscenarios((previos) => ({ ...previos, [a]: e }));
+      }}
+      onGuardar={() => {}}
+      onDuplicar={() => {}}
+      ir={irPedido}
+      seleccion={null}
+      onSeleccionar={() => {}}
+      avanzado
+    />
+  );
+}
+
+function montarVarios(inicial: Record<string, Json>, archivo: string): void {
+  contenedor = document.createElement('div');
+  document.body.appendChild(contenedor);
+  raiz = createRoot(contenedor);
+  act(() => {
+    raiz!.render(<Varios inicial={inicial} archivo={archivo} />);
+  });
+}
+
+type Resuelto = Scenario & { resources: Record<string, Json>; elements: Record<string, Json> };
+
+function comoLilaRun(archivo: string): Resuelto {
+  return ScenarioSchema.parse(
+    resolveExtends(archivo, (ruta) => {
+      const crudo = todos[ruta];
+      if (crudo === undefined) throw new Error(`escenario desconocido: ${ruta}`);
+      return crudo;
+    }),
+  ) as Resuelto;
+}
+
+function conHijo(): Record<string, Json> {
+  const hijo = leerJson(`examples/pedido/${HIJO}`);
+  // The child also names the cashier in a task of its own.
+  hijo['elements'] = { Task_Revisar: { resources: [{ ref: 'cajero', quantity: 2 }], selection: 'or' } };
+  return { 'as-is.scenario.json': pedido(), [HIJO]: hijo };
+}
+
+function renombrar(nueva: string): void {
+  const caja = document.querySelector<HTMLInputElement>('.rec-ficha input[id$=".__clave"]')!;
+  teclear(caja, nueva);
+  tecla(caja, 'Enter');
+}
+
+function pasoRecursos(): void {
+  clic(document.querySelector('nav.pasos button[data-paso="resources"]'));
+}
+
+describe('QA of #601', () => {
+  it('renaming in the parent carries the child: its override and its own references move to the new id', () => {
+    montarVarios(conHijo(), 'as-is.scenario.json');
+    const antes = comoLilaRun(HIJO);
+    pasoRecursos();
+    clic(fila('cajero'));
+    renombrar('caja');
+
+    expect(todos[HIJO]!['resources']).toEqual({ caja: { capacity: 3 } });
+    const hijo = comoLilaRun(HIJO);
+    expect(scenarioErrors(validateScenario(hijo, irPedido))).toEqual([]);
+    expect(Object.keys(hijo.resources)).toEqual(['caja', 'cocinero', 'horno']);
+    expect(hijo.resources['caja']).toEqual(antes.resources['cajero']);
+    expect(hijo.elements['Task_Revisar']).toMatchObject({ selection: 'or', resources: [{ ref: 'caja', quantity: 2 }] });
+    expect(JSON.stringify(hijo)).not.toContain('"cajero"');
+  });
+
+  it('a name the child already declares is refused, and nothing is written', () => {
+    const inicial = conHijo();
+    inicial[HIJO]!['resources'] = { cajero: { capacity: 3 }, caja: { capacity: 1 } };
+    montarVarios(inicial, 'as-is.scenario.json');
+    pasoRecursos();
+    clic(fila('cajero'));
+    renombrar('caja');
+    expect(document.querySelector('.rec-ficha [role="alert"]')?.textContent).toBe(es.recursos.claveMotivo['enDerivado']);
+    expect(Object.keys(recursos())).toEqual(['cajero', 'cocinero', 'horno']);
+  });
+
+  it('a resource a child names cannot be deleted from the parent', () => {
+    montarVarios(conHijo(), 'as-is.scenario.json');
+    pasoRecursos();
+    clic(fila('cajero'));
+    const borrar = botonTexto(es.recursos.eliminar);
+    expect(borrar.disabled).toBe(true);
+    expect(document.querySelector('.rec-ficha')?.textContent).toContain(es.recursos.eliminarBloqueado(HIJO));
+  });
+
+  it('renaming an inherited resource from the child is refused', () => {
+    montarVarios(conHijo(), HIJO);
+    pasoRecursos();
+    clic(fila('horno'));
+    renombrar('horno2');
+    expect(document.querySelector('.rec-ficha [role="alert"]')?.textContent).toBe(es.recursos.claveMotivo['heredada']);
+    expect(Object.keys(comoLilaRun(HIJO).resources)).toContain('horno');
+  });
+
+  it('R16 round trip in the child comes back to the same resolved resource', () => {
+    montarVarios(conHijo(), HIJO);
+    const antes = comoLilaRun(HIJO);
+    pasoRecursos();
+    clic(fila('cajero'));
+    clic(document.getElementById('campo-resources.cajero.capacity-turno'));
+    expect(scenarioErrors(validateScenario(comoLilaRun(HIJO), irPedido))).toEqual([]);
+    clic(document.getElementById('campo-resources.cajero.capacity-fija'));
+    const vuelta = comoLilaRun(HIJO);
+    expect(vuelta.resources['cajero']).toEqual(antes.resources['cajero']);
+    expect(vuelta.elements).toEqual(antes.elements);
+  });
+
+  it('R16 round trip on a 24/7 resource never gives it a calendar', () => {
+    montar(pedido());
+    pasoRecursos();
+    clic(fila('horno'));
+    clic(document.getElementById('campo-resources.horno.capacity-turno'));
+    // The shift starts with no calendar to choose, not with the office hours.
+    expect(recursos()['horno']!['capacity']).toEqual([{ calendar: '', capacity: 1 }]);
+    clic(document.getElementById('campo-resources.horno.capacity-fija'));
+    expect(recursos()['horno']).toEqual(pedido()['resources'] && (pedido()['resources'] as Record<string, Json>)['horno']);
+  });
+
+  it('By shifts → Fixed with two shifts asks before discarding the second', () => {
+    montar(pedido());
+    pasoRecursos();
+    clic(fila('cajero'));
+    clic(document.getElementById('campo-resources.cajero.capacity-turno'));
+    clic(botonTexto(es.recursos.anadirTurno));
+    clic(document.getElementById('campo-resources.cajero.capacity-fija'));
+    expect((recursos()['cajero']!['capacity'] as unknown[]).length).toBe(2);
+    expect(document.querySelector('.rec-confirmar')?.textContent).toContain(es.recursos.descartarTurnos(1));
+    clic(botonTexto(es.recursos.descartarCancelar));
+    expect((recursos()['cajero']!['capacity'] as unknown[]).length).toBe(2);
+    clic(document.getElementById('campo-resources.cajero.capacity-fija'));
+    clic(botonTexto(es.recursos.descartarConfirmar));
+    expect(recursos()['cajero']).toMatchObject({ capacity: 2, calendar: 'oficina' });
   });
 });

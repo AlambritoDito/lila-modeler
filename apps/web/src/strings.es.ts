@@ -1221,6 +1221,7 @@ export const es: Strings = {
       vacia: 'El id no puede quedar vacío.',
       repetida: 'Otro recurso ya tiene este id.',
       heredada: 'Este recurso viene del escenario padre: su id se cambia allí.',
+      enDerivado: 'Un escenario derivado de este ya tiene un recurso con este id.',
     } as Record<string, string>,
     apartados: 'Apartados del recurso',
     apartado: { cap: 'Capacidad', cost: 'Costos', uso: 'Calendario y uso' },
@@ -1253,6 +1254,15 @@ export const es: Strings = {
     ningunaTarea: 'Ninguna todavía.',
     cantidad: (n: number): string => `×${n}`,
     eliminar: 'Eliminar recurso',
+    eliminarUsado: (tareas: number): string =>
+      `${tareas} ${tareas === 1 ? 'tarea usa' : 'tareas usan'} este recurso: ${tareas === 1 ? 'quedará' : 'quedarán'} apuntando a nada.`,
+    eliminarConfirmar: 'Eliminar igualmente',
+    eliminarCancelar: 'Cancelar',
+    eliminarBloqueado: (escenarios: string): string => `No se puede eliminar: lo usan los escenarios derivados ${escenarios}.`,
+    descartarTurnos: (n: number): string =>
+      `Fija conserva solo el turno 1; ${n === 1 ? 'se descarta el otro turno' : `se descartan los otros ${n} turnos`}.`,
+    descartarConfirmar: 'Pasar a fija',
+    descartarCancelar: 'Cancelar',
     carrilEntero: 'Asignar un carril entero',
     carrilEnteroAyuda: 'O haz clic en el nombre de un carril en el lienzo.',
     carrilTitulo: (carril: string, tareas: number): string =>

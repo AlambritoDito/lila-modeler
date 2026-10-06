@@ -1729,6 +1729,10 @@ button.rec-fila.error {
   gap: 6px;
 }
 
+.rec-confirmar .aviso {
+  margin: 0 0 6px;
+}
+
 .rec-vista {
   background: var(--bg-surface);
   border: 1px solid var(--border);
