@@ -2028,7 +2028,7 @@ export const es: Strings = {
       comparando: 'Comparando',
       intercambiar: 'Intercambiar lados',
       elegir: 'Elegir escenario',
-      leyenda: '▼ verde = mejora · ▲ rojo = empeora',
+      leyenda: 'verde = mejora · rojo = empeora · ▲▼ sube o baja',
       cerrar: 'Cerrar comparación',
       referencia: 'Referencia',
       mapaDe: (nombre: string): string => `Mapa de ${nombre}`,

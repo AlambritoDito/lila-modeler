@@ -2068,7 +2068,7 @@ export const en = {
       comparando: 'Comparing',
       intercambiar: 'Swap sides',
       elegir: 'Choose scenario',
-      leyenda: '▼ green = better · ▲ red = worse',
+      leyenda: 'green = better · red = worse · ▲▼ up or down',
       cerrar: 'Close comparison',
       referencia: 'Reference',
       mapaDe: (nombre: string): string => `Map of ${nombre}`,

@@ -121,7 +121,6 @@ export interface VistaCompararProps {
   detalle: ReactNode;
 }
 
-const FLECHA: Record<DeltaKpi['estado'], string> = { mejora: '▼', empeora: '▲', igual: '' };
 
 export function VistaComparar(props: VistaCompararProps): React.JSX.Element {
   const S = useStrings();
@@ -145,7 +144,7 @@ export function VistaComparar(props: VistaCompararProps): React.JSX.Element {
             <dd>
               <span className="c5-delta-valor">{d.kpi.texto}</span>
               <span className={`c5-delta ${d.estado}`} aria-label={S.c5.comparar[d.estado]}>
-                {d.estado === 'igual' ? '=' : `${FLECHA[d.estado]} ${d.fraccion === null ? '' : `${d.fraccion > 0 ? '+' : '−'}${formatDisplay(Math.abs(d.fraccion) * 100)} %`}`}
+                {d.estado === 'igual' ? '=' : `${d.kpi.valor > d.ref.valor ? '▲' : '▼'} ${d.fraccion === null ? '' : `${d.fraccion > 0 ? '+' : '−'}${formatDisplay(Math.abs(d.fraccion) * 100)} %`}`}
               </span>
             </dd>
             <dd className="c5-delta-ref">{S.c5.comparar.valorRef(props.nombreRef, d.ref.texto)}</dd>
