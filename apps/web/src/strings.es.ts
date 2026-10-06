@@ -1073,10 +1073,10 @@ export const es: Strings = {
 
     /** «Asignar carril a pool» (LILA-334): una edición en bloque de `elements[task].resources`. */
     carrilCarril: 'Carril',
-    carrilPool: 'Pool',
-    carrilAsignar: 'Asignar carril',
+    carrilPool: 'Recurso',
+    carrilAsignar: 'Asignar carril → recurso',
     carrilAyuda: (tareas: number): string =>
-      `Rellena resources en cada tarea del carril (${tareas}); el carril no se guarda en ninguna parte.`,
+      `Cada tarea del carril (${tareas}) pasa a usar este recurso; el carril no se guarda en ninguna parte.`,
     carrilYaAsignadas: (tareas: number): string =>
       `${tareas} ${tareas === 1 ? 'tarea ya tiene' : 'tareas ya tienen'} recursos; asignar los reemplaza:`,
     carrilSobrescribir: 'Sobrescribir',
@@ -1190,6 +1190,90 @@ export const es: Strings = {
     asignado: (nombre: string): string => `Asignado a ${nombre}.`,
     sinRecursos: 'Aún no hay recursos: créalos en Recursos.',
     todosAsignados: 'Todos los recursos ya lo usan o tienen capacidad por turnos (esos eligen calendario en cada turno, en Recursos).',
+  },
+
+  /* ------------------------------------------------------------------ *
+   * Lote M, C2: el paso Recursos, maestro-detalle (`PasoRecursos.tsx`, `FichaRecurso.tsx`)
+   * ------------------------------------------------------------------ */
+  recursos: {
+    nuevo: '+ Nuevo recurso',
+    /** Prefijo de la clave de un recurso nuevo: `recurso-1`, `recurso-2`… */
+    prefijoClave: 'recurso',
+    vacioTitulo: 'Aún no hay recursos',
+    vacioTexto:
+      'Sin recursos, cada tarea empieza en cuanto llega un caso y nunca hay espera. Crea uno por cada rol o equipo.',
+    lista: 'Recursos',
+    colRecurso: 'Recurso · calendario',
+    colCapacidad: 'Cap.',
+    colCosto: (moneda: string): string => `${moneda}/h`,
+    capacidadFija: (n: string): string => `×${n}`,
+    turnos: (n: number): string => (n === 1 ? '1 turno' : `${n} turnos`),
+    siempre: '24/7',
+    porTurnos: 'por turnos',
+    conErrores: (n: number): string => (n === 1 ? '1 error' : `${n} errores`),
+    volver: '← Recursos',
+    ficha: 'Recurso',
+    nombre: 'Nombre',
+    ejemploNombre: 'p. ej. Supervisor',
+    /** Ajustes → «Avanzado» (#447): la clave del archivo de escenario, renombrada con sus referencias. */
+    clave: 'Id en el escenario',
+    claveMotivo: {
+      vacia: 'El id no puede quedar vacío.',
+      repetida: 'Otro recurso ya tiene este id.',
+      heredada: 'Este recurso viene del escenario padre: su id se cambia allí.',
+      enDerivado: 'Un escenario derivado de este ya tiene un recurso con este id.',
+    } as Record<string, string>,
+    apartados: 'Apartados del recurso',
+    apartado: { cap: 'Capacidad', cost: 'Costos', uso: 'Calendario y uso' },
+    capacidad: 'Capacidad',
+    fija: 'Fija',
+    porTurno: 'Por turnos',
+    unidades: 'Unidades disponibles',
+    capacidadCero: 'Capacidad 0: las tareas de este recurso nunca empezarán.',
+    restar: 'Restar una unidad',
+    sumar: 'Sumar una unidad',
+    turnoN: (i: number): string => `Turno ${i}`,
+    turnoCalendario: 'Calendario',
+    turnoCapacidad: 'Unidades',
+    quitarTurno: (i: number): string => `Quitar turno ${i}`,
+    anadirTurno: '+ Turno',
+    ayudaTurnos: 'Cada turno es un calendario con su propio número de unidades; sus horas se editan en Calendarios.',
+    sinCalendarios: 'Aún no hay calendarios: crea uno en Calendarios para trabajar por turnos.',
+    porHora: (moneda: string): string => `Por hora (${moneda})`,
+    fijoPorUso: (moneda: string): string => `Fijo por uso (${moneda})`,
+    costoEjemplo: (importe: string, moneda: string): string =>
+      `Un uso de una hora con una unidad cuesta ${importe} ${moneda}.`,
+    calendario: 'Calendario',
+    calendarioSiempre: 'Siempre disponible (24/7)',
+    calendarioPorTurnos: 'Por turnos: el calendario de cada turno dice cuándo trabaja.',
+    horasSemana: (horas: string, resumen: string): string => (resumen === '' ? `${horas} h por semana` : `${horas} h por semana · ${resumen}`),
+    sinCalendario: 'Sin calendario: trabaja las 24 h.',
+    tipo: 'Tipo',
+    tipos: { role: 'Persona o rol', equipment: 'Equipo' } as Record<string, string>,
+    tareas: 'Tareas que realiza',
+    ningunaTarea: 'Ninguna todavía.',
+    cantidad: (n: number): string => `×${n}`,
+    eliminar: 'Eliminar recurso',
+    eliminarUsado: (tareas: number): string =>
+      `${tareas} ${tareas === 1 ? 'tarea usa' : 'tareas usan'} este recurso: ${tareas === 1 ? 'quedará' : 'quedarán'} apuntando a nada.`,
+    eliminarConfirmar: 'Eliminar igualmente',
+    eliminarCancelar: 'Cancelar',
+    eliminarBloqueado: (escenarios: string): string => `No se puede eliminar: lo usan los escenarios derivados ${escenarios}.`,
+    descartarTurnos: (n: number): string =>
+      `Fija conserva solo el turno 1; ${n === 1 ? 'se descarta el otro turno' : `se descartan los otros ${n} turnos`}.`,
+    descartarConfirmar: 'Pasar a fija',
+    descartarCancelar: 'Cancelar',
+    carrilEntero: 'Asignar un carril entero',
+    carrilEnteroAyuda: 'O haz clic en el nombre de un carril en el lienzo.',
+    carrilTitulo: (carril: string, tareas: number): string =>
+      `Carril «${carril}» · ${tareas} ${tareas === 1 ? 'tarea' : 'tareas'}`,
+    carrilTituloAyuda: 'Asigna todas sus tareas a un mismo recurso.',
+    carrilSinNombre: (n: number): string => `Carril sin nombre ${n}`,
+    recurso: 'Recurso',
+    asignar: 'Asignar',
+    cerrarCarril: 'Cerrar',
+    carrilHecho: (tareas: number, carril: string, recurso: string): string =>
+      `${tareas} ${tareas === 1 ? 'tarea' : 'tareas'} de «${carril}» ${tareas === 1 ? 'usa' : 'usan'} ahora «${recurso}».`,
   },
 
   /* ------------------------------------------------------------------ *

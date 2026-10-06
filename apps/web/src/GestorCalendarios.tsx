@@ -73,6 +73,11 @@ function enfocarRecurso(id: string): void {
       (el) => el.dataset.clave === id && !el.closest('.gcal'),
     );
     if (destino === undefined) return;
+    // Lote M (C2): Resources is master-detail; its row opens the resource's sheet in place.
+    if (destino.matches('button.rec-fila')) {
+      destino.click();
+      return;
+    }
     destino.scrollIntoView?.({ block: 'start' });
     (destino.querySelector<HTMLElement>('input, select, button') ?? destino).focus({ preventScroll: true });
   };

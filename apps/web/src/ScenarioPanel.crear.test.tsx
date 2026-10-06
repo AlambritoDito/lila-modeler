@@ -150,22 +150,27 @@ it('crear «turno-noche» lo añade, le da el foco y queda elegible en resources
   expect(porRotulo(es.escenario.nuevoCalendario).value).toBe('');
 
   pulsar('Recursos');
+  // Lote M (C2): the calendar is in the resource sheet, tab «Calendario y uso».
+  act(() => {
+    document.querySelector<HTMLButtonElement>('button.rec-fila[data-clave="analyst"]')!.click();
+  });
+  act(() => {
+    document.getElementById('rec-tab-uso')!.click();
+  });
   const select = document.getElementById('campo-resources.analyst.calendar');
   expect(select).toBeInstanceOf(HTMLSelectElement);
   const opciones = [...(select as HTMLSelectElement).options].map((o) => o.value);
   expect(opciones).toContain('turno-noche');
 });
 
-it('en Recursos el control para crear va arriba y el recurso nuevo recibe el foco', () => {
+it('en Recursos «+ Nuevo recurso» va arriba de la lista y el recurso nuevo abre su ficha con el foco en el nombre (Lote M)', () => {
   montar();
   pulsar('Recursos');
-  const caja = porRotulo(es.escenario.nuevoRecurso);
-  expect(caja.placeholder).toBe('analista');
-  expect(antes(caja, document.querySelector('fieldset[data-clave="analyst"]')!)).toBe(true);
-  teclear(caja, 'operador');
-  pulsar(es.escenario.crearRecurso);
-  expect(Object.keys(actual['resources'] as Json)).toEqual(['analyst', 'operador']);
-  expect(document.querySelector('fieldset[data-clave="operador"]')!.contains(document.activeElement)).toBe(true);
+  const boton = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === es.recursos.nuevo)!;
+  expect(antes(boton, document.querySelector('button.rec-fila[data-clave="analyst"]')!)).toBe(true);
+  pulsar(es.recursos.nuevo);
+  expect(Object.keys(actual['resources'] as Json)).toEqual(['analyst', 'recurso-1']);
+  expect(document.activeElement?.id).toBe('campo-resources.recurso-1.name');
 });
 
 it('Enter en la caja crea desde la primera plantilla, con horas (Lote M)', () => {

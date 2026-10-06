@@ -6,6 +6,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 
+import { CampoCapacidadRecurso, esCapacidadRecurso } from './CampoCapacidadRecurso.js';
 import { CampoFestivos, CampoIntervalos, esFestivosCalendario, esIntervalosCalendario } from './CamposCalendario.js';
 import {
   borrar,
@@ -182,137 +183,6 @@ function CampoReservado({ ruta, etiqueta, ctx }: { ruta: Ruta; etiqueta: string;
         </button>
       )}
       <Problemas ruta={ruta} ctx={ctx} />
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ *
- * `resources[pool].capacity` (LILA-164): Fija (número) o Por turno (lista de tramos).
- * ------------------------------------------------------------------ */
-
-/** `['resources', <id>, 'capacity']` con una unión: la forma exacta que produce `ResourceSchema`. */
-function esCapacidadRecurso(ruta: Ruta, esquema: EsquemaJson): boolean {
-  return (
-    ruta.length === 3 &&
-    ruta[0] === 'resources' &&
-    ruta[2] === 'capacity' &&
-    variantes(esquema) !== null
-  );
-}
-
-/**
- * Selector Fija/Por turno + el cuerpo de la variante activa. A diferencia del selector genérico
- * de uniones (`vars !== null` en `Campo`), este conserva el id `campo-resources.<id>.capacity`
- * para la variante numérica —es el id que cita el ticket y el que ya usaba el campo antes de que
- * `capacity` admitiera tramos— y dibuja cada tramo como `{ calendar: <select>, capacity: <nº> }`
- * en vez de un formulario genérico, porque `calendar` tiene que ofrecer los ids ya declarados en
- * `calendars`, no una caja de texto libre.
- */
-function CampoCapacidadRecurso({
-  esquema,
-  ruta,
-  ctx,
-}: {
-  esquema: EsquemaJson;
-  ruta: Ruta;
-  ctx: Contexto;
-}): React.JSX.Element {
-  const S = useStrings();
-  const vars = variantes(esquema)!;
-  const indiceFija = vars.findIndex((v) => v.type !== 'array');
-  const indiceTurno = vars.findIndex((v) => v.type === 'array');
-  const valor = leer(ctx.resuelto, ruta);
-  const porTurno = Array.isArray(valor);
-  const idFija = `campo-${rutaTexto(ruta)}`;
-  const idVariante = `${idFija}-variante`;
-  const calendarios = esObjeto(ctx.resuelto['calendars'])
-    ? Object.keys(ctx.resuelto['calendars'] as Record<string, unknown>)
-    : [];
-
-  return (
-    <div className="campo-schema">
-      <label htmlFor={idVariante}>{S.escenario.claves.capacity}</label>
-      <select
-        id={idVariante}
-        value={porTurno ? 'turno' : 'fija'}
-        onChange={(e) => {
-          if (e.target.value === 'fija' && indiceFija >= 0) ctx.editar(ruta, valorVacio(vars[indiceFija]!));
-          else if (indiceTurno >= 0) ctx.editar(ruta, valorVacio(vars[indiceTurno]!));
-        }}
-      >
-        <option value="fija">{S.escenario.capacidadFija}</option>
-        <option value="turno">{S.escenario.capacidadPorTurno}</option>
-      </select>
-      <Problemas ruta={ruta} ctx={ctx} />
-      {porTurno ? (
-        <div className="anidado">
-          {(valor as unknown[]).map((_, i) => {
-            const rutaTramo = [...ruta, i] as Ruta;
-            const rutaCalendar = [...rutaTramo, 'calendar'] as Ruta;
-            const rutaCapacidad = [...rutaTramo, 'capacity'] as Ruta;
-            const idCalendar = `campo-${rutaTexto(rutaCalendar)}`;
-            const idCapacidad = `campo-${rutaTexto(rutaCapacidad)}`;
-            const calendarElegido = leer(ctx.resuelto, rutaCalendar);
-            const opciones =
-              typeof calendarElegido === 'string' && !calendarios.includes(calendarElegido)
-                ? [calendarElegido, ...calendarios]
-                : calendarios;
-            return (
-              <fieldset key={i} className="entrada">
-                <legend>
-                  {S.escenario.tramo(i + 1)}
-                  <button
-                    type="button"
-                    className="enlace"
-                    aria-label={S.escenario.quitarTramo(i + 1)}
-                    onClick={() => {
-                      ctx.quitar(rutaTramo);
-                    }}
-                  >
-                    {S.escenario.quitarElemento}
-                  </button>
-                </legend>
-                <label htmlFor={idCalendar}>{S.escenario.claves.calendar}</label>
-                <select
-                  id={idCalendar}
-                  value={typeof calendarElegido === 'string' ? calendarElegido : ''}
-                  onChange={(e) => {
-                    ctx.editar(rutaCalendar, e.target.value);
-                  }}
-                >
-                  <option value="">{S.escenario.sinDefinir}</option>
-                  {opciones.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-                <label htmlFor={idCapacidad}>{S.escenario.claves.capacity}</label>
-                <EntradaNumero
-                  valor={leer(ctx.resuelto, rutaCapacidad)}
-                  ruta={rutaCapacidad}
-                  ctx={ctx}
-                  id={idCapacidad}
-                />
-                <Problemas ruta={rutaTramo} ctx={ctx} />
-              </fieldset>
-            );
-          })}
-          <button
-            type="button"
-            className="boton"
-            onClick={() => {
-              const esquemaItem = indiceTurno >= 0 ? (vars[indiceTurno]!.items ?? {}) : {};
-              ctx.editar([...ruta, (valor as unknown[]).length], valorVacio(esquemaItem));
-            }}
-          >
-            {S.escenario.anadirTramo}
-          </button>
-          <Problemas ruta={ruta} ctx={ctx} />
-        </div>
-      ) : (
-        <EntradaNumero valor={valor} ruta={ruta} ctx={ctx} id={idFija} />
-      )}
     </div>
   );
 }

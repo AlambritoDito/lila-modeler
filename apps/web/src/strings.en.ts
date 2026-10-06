@@ -1100,10 +1100,10 @@ export const en = {
 
     /** «Assign lane to pool» (LILA-334): a bulk edit of `elements[task].resources`. */
     carrilCarril: 'Lane',
-    carrilPool: 'Pool',
-    carrilAsignar: 'Assign lane',
+    carrilPool: 'Resource',
+    carrilAsignar: 'Assign lane → resource',
     carrilAyuda: (tareas: number): string =>
-      `Fills resources for every task in the lane (${tareas}); the lane itself is never stored.`,
+      `Every task of the lane (${tareas}) gets this resource; the lane itself is never stored.`,
     carrilYaAsignadas: (tareas: number): string =>
       `${tareas} ${tareas === 1 ? 'task already has' : 'tasks already have'} resources; assigning replaces them:`,
     carrilSobrescribir: 'Overwrite',
@@ -1219,6 +1219,90 @@ export const en = {
     asignado: (nombre: string): string => `Assigned to ${nombre}.`,
     sinRecursos: 'There are no resources yet: create them in Resources.',
     todosAsignados: 'Every resource already uses it or has per-shift capacity (those choose a calendar per shift, in Resources).',
+  },
+
+  /* ------------------------------------------------------------------ *
+   * Lote M, C2: the Resources step, master-detail (`PasoRecursos.tsx`, `FichaRecurso.tsx`)
+   * ------------------------------------------------------------------ */
+  recursos: {
+    nuevo: '+ New resource',
+    /** Prefix of the key a new resource gets: `resource-1`, `resource-2`… */
+    prefijoClave: 'resource',
+    vacioTitulo: 'No resources yet',
+    vacioTexto:
+      'Without resources every task starts as soon as a case arrives and nobody ever waits. Create one per role or piece of equipment.',
+    lista: 'Resources',
+    colRecurso: 'Resource · calendar',
+    colCapacidad: 'Cap.',
+    colCosto: (moneda: string): string => `${moneda}/h`,
+    capacidadFija: (n: string): string => `×${n}`,
+    turnos: (n: number): string => (n === 1 ? '1 shift' : `${n} shifts`),
+    siempre: '24/7',
+    porTurnos: 'by shifts',
+    conErrores: (n: number): string => (n === 1 ? '1 error' : `${n} errors`),
+    volver: '← Resources',
+    ficha: 'Resource',
+    nombre: 'Name',
+    ejemploNombre: 'e.g. Supervisor',
+    /** Settings → «Advanced» (#447): the key the scenario file uses, renamed with its references. */
+    clave: 'Id in the scenario',
+    claveMotivo: {
+      vacia: 'The id cannot be empty.',
+      repetida: 'Another resource already has this id.',
+      heredada: 'This resource comes from the parent scenario: its id is renamed there.',
+      enDerivado: 'A scenario derived from this one already has a resource with this id.',
+    } as Record<string, string>,
+    apartados: 'Resource sections',
+    apartado: { cap: 'Capacity', cost: 'Costs', uso: 'Calendar and use' },
+    capacidad: 'Capacity',
+    fija: 'Fixed',
+    porTurno: 'By shifts',
+    unidades: 'Units available',
+    capacidadCero: 'Capacity 0: the tasks of this resource will never start.',
+    restar: 'Remove one unit',
+    sumar: 'Add one unit',
+    turnoN: (i: number): string => `Shift ${i}`,
+    turnoCalendario: 'Calendar',
+    turnoCapacidad: 'Units',
+    quitarTurno: (i: number): string => `Remove shift ${i}`,
+    anadirTurno: '+ Shift',
+    ayudaTurnos: 'Each shift is a calendar with its own number of units; its hours are edited in Calendars.',
+    sinCalendarios: 'There are no calendars yet: create one in Calendars to work by shifts.',
+    porHora: (moneda: string): string => `Per hour (${moneda})`,
+    fijoPorUso: (moneda: string): string => `Fixed per use (${moneda})`,
+    costoEjemplo: (importe: string, moneda: string): string =>
+      `One use of one hour with one unit costs ${importe} ${moneda}.`,
+    calendario: 'Calendar',
+    calendarioSiempre: 'Always available (24/7)',
+    calendarioPorTurnos: 'By shifts: each shift’s calendar says when it works.',
+    horasSemana: (horas: string, resumen: string): string => (resumen === '' ? `${horas} h a week` : `${horas} h a week · ${resumen}`),
+    sinCalendario: 'No calendar: works 24 hours a day.',
+    tipo: 'Type',
+    tipos: { role: 'Person or role', equipment: 'Equipment' } as Record<string, string>,
+    tareas: 'Tasks it performs',
+    ningunaTarea: 'None yet.',
+    cantidad: (n: number): string => `×${n}`,
+    eliminar: 'Delete resource',
+    eliminarUsado: (tareas: number): string =>
+      `${tareas} ${tareas === 1 ? 'task uses' : 'tasks use'} this resource: ${tareas === 1 ? 'it' : 'they'} will be left pointing at nothing.`,
+    eliminarConfirmar: 'Delete anyway',
+    eliminarCancelar: 'Cancel',
+    eliminarBloqueado: (escenarios: string): string => `It cannot be deleted: the derived scenarios ${escenarios} use it.`,
+    descartarTurnos: (n: number): string =>
+      `Fixed keeps only shift 1; ${n === 1 ? 'the other shift is' : `the other ${n} shifts are`} discarded.`,
+    descartarConfirmar: 'Switch to fixed',
+    descartarCancelar: 'Cancel',
+    carrilEntero: 'Assign a whole lane',
+    carrilEnteroAyuda: 'Or click a lane’s name on the canvas.',
+    carrilTitulo: (carril: string, tareas: number): string =>
+      `Lane «${carril}» · ${tareas} ${tareas === 1 ? 'task' : 'tasks'}`,
+    carrilTituloAyuda: 'Assign all its tasks to one resource.',
+    carrilSinNombre: (n: number): string => `Unnamed lane ${n}`,
+    recurso: 'Resource',
+    asignar: 'Assign',
+    cerrarCarril: 'Close',
+    carrilHecho: (tareas: number, carril: string, recurso: string): string =>
+      `${tareas} ${tareas === 1 ? 'task' : 'tasks'} of «${carril}» now ${tareas === 1 ? 'uses' : 'use'} «${recurso}».`,
   },
 
   /* ------------------------------------------------------------------ *

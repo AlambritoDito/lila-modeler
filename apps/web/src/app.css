@@ -1410,6 +1410,381 @@ body {
   margin-top: 6px;
 }
 
+/* ---------- Lote M, C2: Resources master-detail (`PasoRecursos`, `FichaRecurso`) ---------- */
+
+.rec-paso-recursos {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rec-oculto {
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.rec-nuevo {
+  align-self: stretch;
+  height: 34px;
+}
+
+.rec-vacio {
+  background: var(--bg-surface);
+  border: 1px dashed var(--border-strong);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+}
+
+.rec-vacio p {
+  color: var(--fg-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.rec-vacio .boton {
+  align-self: flex-start;
+}
+
+.rec-lista ul {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rec-fila {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 64px 72px;
+  padding: 6px 10px;
+  text-align: left;
+  width: 100%;
+}
+
+button.rec-fila {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--fg-primary);
+  cursor: pointer;
+  font: inherit;
+}
+
+button.rec-fila:hover {
+  background: var(--bg-hover);
+}
+
+button.rec-fila:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+button.rec-fila.error {
+  border-color: var(--status-error);
+  box-shadow: inset 3px 0 0 var(--status-error);
+}
+
+.rec-fila.rec-cabecera {
+  color: var(--fg-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding-bottom: 2px;
+  padding-top: 0;
+  text-transform: uppercase;
+}
+
+.rec-fila > span:not(:first-child) {
+  text-align: right;
+}
+
+.rec-celda-nombre {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rec-nombre {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rec-calendario {
+  color: var(--fg-muted);
+  font-size: 0.85em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rec-num {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.rec-ficha {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rec-ficha-cabecera {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rec-ficha-titulo {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rec-pestanas {
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 2px;
+}
+
+.rec-pestana {
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.92em;
+  margin-bottom: -1px;
+  padding: 6px 6px;
+  white-space: nowrap;
+}
+
+.rec-pestana.activa {
+  border-bottom-color: var(--accent-primary);
+  color: var(--fg-primary);
+  font-weight: 600;
+}
+
+.rec-pestana:focus-visible,
+.rec-opcion:focus-within {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.rec-insignia {
+  color: var(--status-error);
+  font-weight: 700;
+  margin-left: 3px;
+}
+
+.rec-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rec-modo {
+  border: 0;
+  display: flex;
+  margin: 0 0 6px;
+  padding: 0;
+}
+
+.rec-modo legend {
+  color: var(--fg-muted);
+  margin-bottom: 4px;
+  padding: 0;
+}
+
+.rec-opcion {
+  align-items: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  color: var(--fg-primary);
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  justify-content: center;
+  padding: 5px 8px;
+}
+
+.rec-opcion + .rec-opcion {
+  border-left: 0;
+}
+
+.rec-opcion.activa {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: var(--fg-onAccent);
+  font-weight: 600;
+}
+
+.rec-opcion input {
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+}
+
+.rec-unidades {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.rec-unidades > label {
+  flex: 1;
+}
+
+.rec-paso {
+  display: flex;
+}
+
+.rec-paso .boton {
+  height: 30px;
+  padding: 0;
+  width: 32px;
+}
+
+.campo-schema .rec-paso input[type='text'] {
+  border-left: 0;
+  border-right: 0;
+  font-family: var(--font-mono);
+  text-align: center;
+  width: 52px;
+}
+
+.rec-turnos {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rec-turno {
+  align-items: center;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: 56px minmax(0, 1fr) 56px 24px;
+}
+
+.rec-turno.rec-cabecera {
+  color: var(--fg-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rec-turno-n {
+  color: var(--fg-muted);
+  font-size: 0.9em;
+}
+
+.rec-turnos .boton {
+  align-self: flex-start;
+}
+
+.rec-quitar {
+  justify-self: center;
+}
+
+.rec-dos {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.rec-en-linea {
+  align-items: flex-end;
+  display: flex;
+  gap: 6px;
+}
+
+.rec-en-linea > .campo-schema {
+  flex: 1;
+  min-width: 0;
+}
+
+.rec-en-linea > .boton {
+  height: 30px;
+  margin: 3px 0;
+}
+
+.rec-acciones {
+  display: flex;
+  gap: 6px;
+}
+
+.rec-confirmar .aviso {
+  margin: 0 0 6px;
+}
+
+.rec-vista {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+  margin: 0;
+  padding: 8px 10px;
+}
+
+.rec-tareas .ids {
+  margin: 4px 0 0;
+}
+
+.rec-tareas .resumen {
+  color: var(--fg-muted);
+}
+
+.rec-carril-elegido {
+  background: var(--bg-surface);
+  border: 1.5px solid var(--accent-primary);
+  margin-top: 0;
+  padding: 10px 12px;
+}
+
+.rec-carril-cabecera {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.rec-hecho {
+  color: var(--accent-primary);
+  font-weight: 600;
+  margin: 4px 0 0;
+}
+
+.rec-eliminar {
+  align-self: flex-start;
+  color: var(--status-error);
+  margin-top: 4px;
+}
+
+/* A lane whose name can be clicked to assign it (`carrilClic.ts`, only in the Resources step). */
+.djs-element.lila-carril-asignable {
+  cursor: pointer;
+}
+
+.djs-element.lila-carril-asignable .djs-visual > text {
+  fill: var(--accent-primary) !important;
+  text-decoration: underline;
+}
+
 /* #333: la barra de los pasos del panel de simulación (seis desde el Lote M). Horizontal y compacta, y con
    `flex-wrap` porque el panel derecho se puede estrechar hasta que los seis rótulos no caben:
    entonces se parten en dos filas en vez de recortarse o desbordar. */

@@ -145,6 +145,26 @@ function anadirClave(titulo: string, clave: string): void {
   pulsarEn(donde, boton);
 }
 
+/** Lote M (C2): a new resource from «+ Nuevo recurso», renamed to `clave` with the «Avanzado» id field. */
+function crearRecurso(clave: string): void {
+  pulsar(es.recursos.nuevo);
+  const caja = document.querySelector<HTMLInputElement>('.rec-ficha input[id$=".__clave"]');
+  if (caja === null) throw new Error('la ficha no tiene el campo de id');
+  teclear(caja.id, clave);
+  act(() => {
+    caja.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  });
+}
+
+/** Lote M (C2): one of the three tabs of the resource sheet. */
+function apartado(cual: 'cap' | 'cost' | 'uso'): void {
+  const pestana = document.getElementById(`rec-tab-${cual}`);
+  if (pestana === null) throw new Error(`no hay pestaña ${cual}`);
+  act(() => {
+    pestana.click();
+  });
+}
+
 /* ------------------------------------------------------------------ *
  * Anfitrión: el estado que en la app vive en `main.tsx`, más la selección del lienzo
  * ------------------------------------------------------------------ */
@@ -194,6 +214,7 @@ function Anfitrion(): React.JSX.Element {
         ir={ir}
         seleccion={seleccion}
         onSeleccionar={setSeleccion}
+        avanzado
       />
     </>
   );
@@ -266,12 +287,16 @@ it('el AS-IS de la solicitud de servicio se teclea entero desde el panel, sin to
   /* --- Recursos: los tres grupos. --- */
   irAPaso('resources');
   for (const [clave, nombre, capacidad, coste] of GRUPOS) {
-    anadirClave(es.escenario.seccionRecursos, clave);
+    // Lote M (C2): «+ Nuevo recurso» opens its sheet; the file's key is set under «Avanzado».
+    crearRecurso(clave);
     teclear(`campo-resources.${clave}.name`, nombre);
-    elegir(`campo-resources.${clave}.type`, 'role');
     teclear(`campo-resources.${clave}.capacity`, capacidad);
+    apartado('cost');
     teclear(`campo-resources.${clave}.costPerHour`, coste);
+    apartado('uso');
+    elegir(`campo-resources.${clave}.type`, 'role');
     elegir(`campo-resources.${clave}.calendar`, 'tienda');
+    pulsar(es.recursos.volver);
   }
 
   /* --- Llegadas: cada cuánto llega una solicitud. --- */

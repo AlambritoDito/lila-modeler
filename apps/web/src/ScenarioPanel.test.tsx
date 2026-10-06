@@ -135,6 +135,26 @@ function pulsar(texto: string): void {
   });
 }
 
+/** Lote M (C2): resources are a list; a resource's fields live in its sheet, one tab at a time. */
+function abrirRecurso(clave: string, apartado: 'cap' | 'cost' | 'uso' = 'cap'): void {
+  const fila = document.querySelector<HTMLButtonElement>(`button.rec-fila[data-clave="${clave}"]`);
+  if (fila === null) throw new Error(`no hay fila de recurso ${clave}`);
+  act(() => {
+    fila.click();
+  });
+  act(() => {
+    document.getElementById(`rec-tab-${apartado}`)!.click();
+  });
+}
+
+function marcar(id: string): void {
+  const control = document.getElementById(id);
+  if (!(control instanceof HTMLInputElement)) throw new Error(`no hay input con id ${id}`);
+  act(() => {
+    control.click();
+  });
+}
+
 /**
  * #333: el panel abre en Tiempos (Lote M), así que una sección de otro paso hay que pedirla antes. El
  * rótulo va escrito a mano —es un test— y es el del catálogo español que fija `setLocale`.
@@ -283,6 +303,7 @@ describe('aceptación de LILA-061', () => {
     );
 
     irAPaso('resources');
+    abrirRecurso('cajero');
     teclear('campo-resources.cajero.capacity', '3');
     pulsar('Guardar');
 
@@ -646,9 +667,9 @@ describe('capacidad de recursos: Fija y Por turno', () => {
 
     irAPaso('resources');
     // `horno` no trae `calendar` de pool (R16 los hace excluyentes): es el candidato limpio.
-    const variante = 'campo-resources.horno.capacity-variante';
-    elegir(variante, 'turno');
-    pulsar('Añadir tramo');
+    // Lote M (C2): «Por turnos» is a radio, and switching starts with one shift already there.
+    abrirRecurso('horno');
+    marcar('campo-resources.horno.capacity-turno');
     elegir('campo-resources.horno.capacity[0].calendar', 'oficina');
     teclear('campo-resources.horno.capacity[0].capacity', '2');
     pulsar('Guardar');
@@ -670,14 +691,16 @@ describe('capacidad de recursos: Fija y Por turno', () => {
     }
 
     // Volver a «Fija»: el id original reaparece y no queda el array de tramos escondido detrás.
-    elegir(variante, 'fija');
+    // Lote M (C2): the first shift becomes the fixed capacity and the resource's calendar (R16).
+    marcar('campo-resources.horno.capacity-fija');
     pulsar('Guardar');
     const fija = guardados.at(-1)!.escenario;
     const horno = (fija['resources'] as Json)['horno'] as Json;
     expect(typeof horno['capacity']).toBe('number');
     expect(Array.isArray(horno['capacity'])).toBe(false);
+    expect(horno['calendar']).toBe('oficina');
     expect((document.getElementById('campo-resources.horno.capacity') as HTMLInputElement).value).toBe(
-      '1',
+      '2',
     );
   });
 });
@@ -738,6 +761,7 @@ describe('campos reservados: quitar heredado', () => {
     // Estado visible antes de tocar nada: heredado del padre, con su valor. `priority` es de un
     // pool, y los pools viven en Recursos desde #333.
     irAPaso('resources');
+    abrirRecurso('cajero', 'uso');
     expect(document.body.textContent).toContain('heredado: 1');
 
     pulsar('Quitar heredado');
@@ -1164,7 +1188,7 @@ describe('resto de LILA-203', () => {
     expect(scenarioErrors(validateScenario(resuelto, ir))).toEqual([]);
   });
 
-  it('el selector de capacity dice «Fija» y «Por turno», no «número entero» y «lista»', () => {
+  it('el selector de capacity dice «Fija» y «Por turnos», no «número entero» y «lista», ni «capacity» (Lote M)', () => {
     montar(
       <Anfitrion
         inicial={{ 'as-is.scenario.json': asIsCorto() }}
@@ -1174,12 +1198,11 @@ describe('resto de LILA-203', () => {
       />,
     );
     irAPaso('resources');
-    const selector = document.getElementById('campo-resources.horno.capacity-variante');
-    expect(selector).toBeInstanceOf(HTMLSelectElement);
-    expect([...(selector as HTMLSelectElement).options].map((o) => o.text)).toEqual([
-      'Fija',
-      'Por turno',
-    ]);
+    abrirRecurso('horno');
+    const grupo = document.querySelector('.rec-modo');
+    expect(grupo?.querySelector('legend')?.textContent).toBe('Capacidad');
+    expect([...grupo!.querySelectorAll('label')].map((l) => l.textContent)).toEqual(['Fija', 'Por turnos']);
+    expect(document.querySelector('.rec-ficha')?.textContent).not.toContain('capacity');
   });
 });
 
