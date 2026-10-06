@@ -115,8 +115,8 @@ export function claseDeElemento(ir: ProcessIR | null, id: string | null): ClaseE
  * ------------------------------------------------------------------ */
 
 /**
- * Lote M: the problems that hold a step back — what its «! n» counts and what «▶ Simulate» sends
- * the person to. Every error counts; of the warnings, only the XOR split that does not add up to
+ * Lote M: the problems that hold a step back — what its «! n» counts and its banner lists (only the
+ * errors among them stop «▶ Simulate», see `bloqueantes`). Every error counts; of the warnings, only the XOR split that does not add up to
  * 100 % (the engine normalises it, the design asks for it to be fixed) and the panel's own «no
  * duration» check. The other warnings (`W-SIN-SEED`, an entry without parameters) stay in the
  * validation list and do not mark a step: the design never marks Arrivals or Run.
@@ -601,11 +601,18 @@ export function ScenarioPanel({
   /** #430: orphan entries of the whole project, since Run resolves any of its scenarios. */
   const huerfanas = useMemo(() => (ir === null ? [] : entradasHuerfanas(escenarios, ir)), [escenarios, ir]);
 
-  /** Lote M: the problems that hold the run back, in step order, then the ones no step owns. */
-  const bloqueantes = useMemo(
+  /** Lote M: the problems that mark a step («! n»), in step order, then the ones no step owns. */
+  const marcados = useMemo(
     () => [...PASO_IDS.flatMap((p) => porPaso.porPaso[p]), ...porPaso.sinPaso],
     [porPaso],
   );
+  /**
+   * What actually stops «▶ Simulate»: the errors only (E-*), which the engine refuses to run
+   * anyway. Warnings (no duration, an XOR split that is normalised) still mark their step and
+   * show in the banner, but the run goes ahead as it always did: the same scenario must give the
+   * same results before and after Lote M, and the gallery examples run on the first click.
+   */
+  const bloqueantes = useMemo(() => marcados.filter((p) => p.severidad === 'error'), [marcados]);
   /** «Cannot simulate…»: said once after «▶ Simulate» with problems, cleared by the next click. */
   const [aviso, setAviso] = useState<string | null>(null);
   useEffect(() => {

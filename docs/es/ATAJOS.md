@@ -53,7 +53,7 @@ paleta de comandos (`⌘K`).
 
 En el panel de Simular, `←`/`→` recorren las pestañas de los pasos cuando una de ellas tiene el
 foco, y `Alt+1…6` funcionan también en la ventana desacoplada. «▶ Simular» del panel te lleva al
-primer problema en vez de correr mientras algún paso marque «! n».
+primer error en vez de correr mientras el escenario tenga alguno; los avisos («! n» en un paso) no lo detienen.
 
 ## Lienzo
 

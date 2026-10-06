@@ -125,27 +125,48 @@ function tecla(init: KeyboardEventInit, destino: EventTarget = document.body): K
   return e;
 }
 
+/** The AS-IS with `Task_PrepareService` taking a pool that does not exist: an error (E-REC-DESCONOCIDO) in Resources. */
+function conError(): Json {
+  const escenario = asIs();
+  const elementos = { ...(escenario['elements'] as Json) };
+  elementos['Task_PrepareService'] = { ...(elementos['Task_PrepareService'] as Json), resources: [{ ref: 'nobody', quantity: 1 }] };
+  return { ...escenario, elements: elementos };
+}
+
 describe('«▶ Simulate» of the panel', () => {
-  it('with a task without duration, one click leaves Times open, the task selected and the banner up', () => {
+  it('a task without duration (a warning) marks Times and its banner, and Simulate still runs at the first click', () => {
     const onSimular = vi.fn();
     montar(<Anfitrion inicial={sinTiempo()} onSimular={onSimular} />);
+    expect(paso('times').querySelector('.paso-problemas')?.textContent).toBe('! 1');
+    expect(document.querySelector('.sim-banner')?.textContent).toContain(en.pasosSim.bannerUno);
+    // Warnings do not stop the run: no badge on the button, and the click runs.
+    expect(simular().querySelector('.sim-insignia')).toBeNull();
+    act(() => { paso('calendars').click(); });
+    act(() => { simular().click(); });
+    expect(onSimular).toHaveBeenCalledTimes(1);
+    expect(abierto()).toBe('calendars');
+    expect(document.querySelector('.sim-aviso')).toBeNull();
+  });
+
+  it('with an error (E-*), one click opens its step, selects its element and shows the banner', () => {
+    const onSimular = vi.fn();
+    montar(<Anfitrion inicial={conError()} onSimular={onSimular} />);
     act(() => { paso('calendars').click(); });
     expect(simular().querySelector('.sim-insignia')?.textContent).toBe('1');
 
     act(() => { simular().click(); });
 
     expect(onSimular).not.toHaveBeenCalled();
-    expect(abierto()).toBe('times');
+    expect(abierto()).toBe('resources');
     expect(seleccionActual).toBe('Task_PrepareService');
-    expect(document.querySelector('.sim-banner')?.textContent).toContain(en.pasosSim.bannerUno);
+    expect(document.querySelector('.sim-banner')?.textContent).toContain('nobody');
     expect(document.querySelector('[role="status"].sim-aviso')?.textContent).toBe(en.pasosSim.noSePuede(1));
-    // Only this step's fields of the task: its duration, not its resources.
-    expect(document.getElementById('campo-elements.Task_PrepareService.processingTime')).not.toBeNull();
-    expect(document.getElementById('campo-elements.Task_PrepareService.resources[0].ref')).toBeNull();
-    expect(texto()).toContain(en.pasosSim.faltaDuracion);
+    // Only this step's fields of the task: its resources, not its duration.
+    expect(document.getElementById('campo-elements.Task_PrepareService.resources[0].ref')).not.toBeNull();
+    expect(document.getElementById('campo-elements.Task_PrepareService.processingTime')).toBeNull();
   });
 
-  it('runs when nothing holds it back, and the «Go» of the banner jumps to its problem', () => {
+  it('runs when nothing holds it back', () => {
     const onSimular = vi.fn();
     montar(<Anfitrion inicial={asIs()} onSimular={onSimular} />);
     expect(simular().querySelector('.sim-insignia')).toBeNull();
@@ -154,13 +175,20 @@ describe('«▶ Simulate» of the panel', () => {
     expect(document.querySelector('.sim-aviso')).toBeNull();
   });
 
-  it('reports the count to the shell and obeys its request to go to the first problem', () => {
+  it('does not report a warning to the shell as something to fix', () => {
     const conteo = vi.fn();
     montar(<Anfitrion inicial={sinTiempo()} onConteoProblemas={conteo} irAlProblema={null} />);
+    // A warning alone is not counted: nothing stops the run.
+    expect(conteo).toHaveBeenLastCalledWith(0);
+  });
+
+  it('counts the errors for the shell and goes to the first one when the shell asks', () => {
+    const conteo = vi.fn();
+    montar(<Anfitrion inicial={conError()} onConteoProblemas={conteo} irAlProblema={null} />);
     expect(conteo).toHaveBeenLastCalledWith(1);
     act(() => { paso('run').click(); });
-    act(() => { raiz!.render(<Anfitrion inicial={sinTiempo()} onConteoProblemas={conteo} irAlProblema={1} />); });
-    expect(abierto()).toBe('times');
+    act(() => { raiz!.render(<Anfitrion inicial={conError()} onConteoProblemas={conteo} irAlProblema={1} />); });
+    expect(abierto()).toBe('resources');
     expect(seleccionActual).toBe('Task_PrepareService');
   });
 

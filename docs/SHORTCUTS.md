@@ -51,7 +51,7 @@ the web app leaves them alone — click a mode tab or use the command palette (`
 
 In the Simulate panel, `←`/`→` move between the step tabs when one of them has the focus, and
 `Alt+1…6` work in the detached window too. «▶ Simulate» in the panel takes you to the first
-problem instead of running while any step shows «! n».
+error instead of running while the scenario has one; warnings («! n» on a step) do not stop it.
 
 ## Canvas
 
