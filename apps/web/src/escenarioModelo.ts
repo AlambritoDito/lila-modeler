@@ -267,6 +267,8 @@ export interface Problema {
   ruta: string;
   mensaje: string;
   severidad: 'error' | 'warning';
+  /** The engine's code (`W-XOR-NORMALIZADA`…) when the problem comes from `validateScenario`. */
+  codigo?: string;
 }
 
 /**
@@ -301,6 +303,7 @@ export function problemasEscenario(
     ruta: problema.path,
     mensaje: problema.message,
     severidad: problema.severity,
+    codigo: problema.code,
   }));
 }
 

@@ -72,34 +72,40 @@ export function fieldsForKind(clase: ClaseElemento | null): readonly string[] | 
 }
 
 /* ------------------------------------------------------------------ *
- * #333: the four steps, and which element fields belong to each
+ * #333: the steps, and which element fields belong to each
  * ------------------------------------------------------------------ */
 
 /** § 4: no class declares them, the engine rejects them, the panel only offers to delete them. */
 const RESERVADOS = new Set(['priority', 'preempt', 'batch', 'conditions']);
 
 /**
- * The element fields each step of the Simulate panel owns (#333, regrouped in #396). Every key of
- * `ElementSchema` belongs to exactly one step, so no field becomes unreachable by hiding the
- * others:
+ * The element fields each step of the Simulate panel owns (#333, regrouped in #396 and split in
+ * six for Lote M). Every key of `ElementSchema` belongs to exactly one step, so no field becomes
+ * unreachable by hiding the others:
  *
- * - `parameters`: how the work flows once a case is in — the branch probabilities and conditions
- *   of the flows, and how long each activity takes — plus the reserved fields of § 4, which have
- *   no step of their own and are only ever shown to be deleted.
- * - `resources`, `calendars`: one kind of parameter each.
  * - `arrivals`: what a start event takes — how often a case arrives and how many do.
+ * - `times`: how long each activity (and timer) takes and what it costs per case, plus the
+ *   reserved fields of § 4, which have no step of their own and are only ever shown to be deleted.
+ * - `routes`: how the work branches — the probability and conditions of the flows.
+ * - `resources`: which pools a task takes, and `selection` (whether it needs all of them or any
+ *   one, R14). The Lote M analysis put `selection` in Routes, but it is the resource choice of a
+ *   task, not a gateway's: R14 rejects it without `resources`, so it lives next to them.
+ * - `calendars`: which calendar an element follows.
+ * - `run`: no element field at all; the step edits `run.*`.
  */
 export const CAMPOS_DE_PASO: Record<PasoId, readonly string[]> = {
-  parameters: ['probability', 'conditions', 'processingTime', 'priority', 'preempt', 'batch'],
-  resources: ['resources', 'selection', 'fixedCost'],
-  calendars: ['calendar'],
   arrivals: ['interTriggerTimer', 'triggerCount'],
+  times: ['processingTime', 'fixedCost', 'priority', 'preempt', 'batch'],
+  routes: ['probability', 'conditions'],
+  resources: ['resources', 'selection'],
+  calendars: ['calendar'],
+  run: [],
 };
 
 /**
  * The fields the selected element offers in `paso`: its step's fields, kept only where they mean
  * something for `clase`. It is `fieldsForKind` composed with the table above, which is why a
- * task in Parameters offers `processingTime` and nothing else, and a gateway offers nothing at all.
+ * task in Times offers `processingTime` and `fixedCost`, and a gateway offers nothing at all.
  *
  * With `clase === null` (no IR yet, or an id that is not in it) nothing is filtered by class —
  * same rule as `fieldsForKind` — and the step's own list is what comes out.

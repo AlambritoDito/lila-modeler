@@ -124,12 +124,12 @@ follow that same setting. This walkthrough uses the English labels.
 - The **Scenarios** list on the left of Simulate shows the loaded scenarios (the project ships with
   `as-is` and `to-be-3-cajeros` as examples); pick one to make it the active scenario, or
   duplicate the active one from the list.
-- The scenario panel has four steps, in this order: **Parameters** (the run window and
-  replications, gateway branching and the time of each task and timer), **Resources** (pools,
-  units, a pool's calendar and capacity per shift, and which task takes which pool),
-  **Calendars** (calendars and holidays, and which element follows which calendar) and
-  **Arrivals** (how often each start event fires and how many cases it creates; the **Arrivals by
-  start event** list summarizes them). Each control lives in exactly one step. The panel lets you
+- The scenario panel has six steps, in this order: **Arrivals** (how often each start event fires
+  and how many cases it creates; the **Arrivals by start event** list summarizes them), **Times**
+  (the time of each task and timer), **Routes** (gateway branching), **Resources** (pools, units, a
+  pool's calendar and capacity per shift, and which task takes which pool), **Calendars**
+  (calendars and holidays, and which element follows which calendar) and **Run** (the run window
+  and replications). Each control lives in exactly one step. The panel lets you
   edit `run`, `calendars`, `resources`, and the process's per-element properties. Union-shaped fields — today only `resources.<id>.capacity` — have an explicit
   **Fija** (Fixed, a number) / **Por turno** (Per shift, a list of `{ calendar, capacity }`
   segments, with `calendar` as a dropdown of already-declared calendars) selector.
@@ -158,7 +158,7 @@ follow that same setting. This walkthrough uses the English labels.
 - **Quick view · simulation**: select an element on the canvas and the Properties panel shows
   its simulation data under the header: **Time**, **Resource** (tasks only) and the resource wait
   (p95 when the run's log sample is in memory, the mean otherwise; **no run** before the first
-  run). **Edit in Parameters** and **Edit in Resources** jump to the matching step.
+  run). **Edit in Times** and **Edit in Resources** jump to the matching step.
 - The scenario panel can be detached into its own window with the toggle in the top bar
   (**Scenario docked ↗** / **In its own window**); **Dock** in the stand-in, or closing the
   window, brings it back. While it is detached the right panel hides, so the stand-in only shows

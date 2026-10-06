@@ -108,18 +108,16 @@ function pulsar(texto: string): void {
 }
 
 /**
- * #333: the panel opens on the first step (Parameters), so a section of another step has to be asked for first. The
+ * #333: the panel opens on Times (Lote M), so a section of another step has to be asked for first. The
  * label is written by hand —this is a test— and is the English one `setLocale` pins.
  */
-function irAPaso(paso: 'parameters' | 'resources' | 'calendars' | 'arrivals'): void {
-  pulsar(
-    {
-      parameters: 'Parameters',
-      resources: 'Resources',
-      calendars: 'Calendars',
-      arrivals: 'Arrivals',
-    }[paso],
-  );
+function irAPaso(paso: 'arrivals' | 'times' | 'routes' | 'resources' | 'calendars' | 'run'): void {
+  // By `data-paso`: the button's text also carries the step's «! n» (Lote M).
+  const destino = document.querySelector<HTMLButtonElement>(`nav.pasos button[data-paso="${paso}"]`);
+  if (destino === null) throw new Error(`no step ${paso}`);
+  act(() => {
+    destino.click();
+  });
 }
 
 const ARCHIVO = 'as-is.scenario.json';

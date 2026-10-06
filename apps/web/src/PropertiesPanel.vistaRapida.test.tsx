@@ -196,12 +196,12 @@ describe('the «Quick view · simulation» block', () => {
     expect(valor(conMedia, P().vistaEsperaMedia)).toBe('3 min');
   });
 
-  it('the links ask for the Parameters or the Resources step', () => {
+  it('the links ask for the Times or the Resources step', () => {
     const { panel, onEditar } = montar({ tiempo: 't', recurso: 'r', espera: null });
     const boton = (texto: string) => [...panel.querySelectorAll('button')].find((b) => b.textContent === texto)!;
-    act(() => { boton('Edit in Parameters').click(); });
+    act(() => { boton('Edit in Times').click(); });
     act(() => { boton('Edit in Resources').click(); });
-    expect(onEditar.mock.calls).toEqual([['parameters'], ['resources']]);
+    expect(onEditar.mock.calls).toEqual([['times'], ['resources']]);
   });
 
   it('a timer gets no resource row nor «Edit in Resources»', () => {

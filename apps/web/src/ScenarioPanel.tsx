@@ -63,7 +63,10 @@ import { ImportarExcel } from './ImportarExcel.js';
 import { BotonElemento, type Rotulo } from './ListaElementos.js';
 import { PasoCalendarios } from './PasoCalendarios.js';
 import { PasoLlegadas, ListaLlegadas } from './PasoLlegadas.js';
-import { PasoParametros, ListaParametros, VistaCompuerta } from './PasoParametros.js';
+import { PasoEjecucion } from './PasoEjecucion.js';
+import { ListaRutas, VistaCompuerta } from './PasoRutas.js';
+import { ListaTiempos } from './PasoTiempos.js';
+import { agruparPorPaso, tareasSinDuracion } from './pasoDeProblema.js';
 import { PasoRecursos, ListaRecursos } from './PasoRecursos.js';
 import { esEscenarioBase } from './RailEscenarios.js';
 import { entradasHuerfanas, sinHuerfanas } from './simulationGate.js';
@@ -107,29 +110,35 @@ export function claseDeElemento(ir: ProcessIR | null, id: string | null): ClaseE
 }
 
 /* ------------------------------------------------------------------ *
- * #333: the four steps of the Simulate panel
+ * #333 / Lote M: the six steps of the Simulate panel
  * ------------------------------------------------------------------ */
 
 /**
- * The step bar: Parameters, Resources, Calendars and Arrivals (#396), in order, as the only
+ * Lote M: the problems that hold a step back — what its «! n» counts and what «▶ Simulate» sends
+ * the person to. Every error counts; of the warnings, only the XOR split that does not add up to
+ * 100 % (the engine normalises it, the design asks for it to be fixed) and the panel's own «no
+ * duration» check. The other warnings (`W-SIN-SEED`, an entry without parameters) stay in the
+ * validation list and do not mark a step: the design never marks Arrivals or Run.
+ */
+export function bloquea(problema: Problema): boolean {
+  return problema.severidad === 'error' || problema.codigo === 'W-XOR-NORMALIZADA' || problema.codigo === 'LILA-SIN-DURACION';
+}
+
+/**
+ * The step bar: Arrivals, Times, Routes, Resources, Calendars and Run, in order, as the only
  * navigation of the panel.
  *
- * They are buttons and not tabs on purpose — a step is a filter over one document, not a
- * different document — and each carries `aria-pressed` (this one is the one chosen) plus
- * `aria-current="step"` (this one is where you are in the sequence), which is what a screen
- * reader needs to announce "step 3 of 4, pressed".
- *
- * ponytail: there are exactly four, with no "All" that shows every section at once. The ceiling
- * is someone who knew the old single list and wants it back; the upgrade path is a fifth id in
- * `PASO_IDS` whose `fieldsForStep` is the union of the four, which is a dozen lines the day
- * anybody actually asks for it.
+ * Each carries `aria-pressed` (this one is the one chosen) plus `aria-current="step"` (this one
+ * is where you are in the sequence), and a «! n» with the problems that hold the step back.
  */
 function BarraPasos({
   paso,
   onPaso,
+  conteos,
 }: {
   paso: PasoId;
   onPaso: (paso: PasoId) => void;
+  conteos: Readonly<Record<PasoId, number>>;
 }): React.JSX.Element {
   const S = useStrings();
   return (
@@ -142,11 +151,17 @@ function BarraPasos({
             className={p === paso ? 'paso activo' : 'paso'}
             aria-pressed={p === paso}
             aria-current={p === paso ? 'step' : undefined}
+            data-paso={p}
             onClick={() => {
               onPaso(p);
             }}
           >
             {S.escenario.paso[p]}
+            {conteos[p] > 0 && (
+              <span className="paso-problemas" aria-label={S.escenario.pasoProblemas(conteos[p])}>
+                {` ! ${conteos[p]}`}
+              </span>
+            )}
           </button>
         ))}
       </nav>
@@ -293,7 +308,7 @@ export function ScenarioPanel({
    * this panel and of nothing else, and because keeping it here is what makes it survive picking
    * an element on the canvas and a whole run finishing: both of them only re-render the panel.
    */
-  const [paso, setPaso] = useState<PasoId>('parameters');
+  const [paso, setPaso] = useState<PasoId>('times');
   useEffect(() => {
     if (pasoPedido === null) return;
     setPaso(pasoPedido);
@@ -355,6 +370,34 @@ export function ScenarioPanel({
     // list would keep the language it was linted in until the scenario or the IR changed.
   }, [resuelto, ir, otrosProcesos, herencia.error, locale, problemasExtra]);
   const indice = useMemo(() => porRuta(problemas), [problemas]);
+  /**
+   * Lote M: the panel's own «no duration» check (`tareasSinDuracion`), on the task's
+   * `processingTime` so it lands in Times next to the field that fixes it. It is kept out of
+   * `problemas` (the header count and the validation list stay the engine's) and only feeds the
+   * step markers and the banner.
+   */
+  const sinDuracion = useMemo<Problema[]>(
+    () =>
+      tareasSinDuracion(resuelto, ir).map((id) => {
+        const nombre = ir?.nodes[id]?.name;
+        return {
+          ruta: `elements.${id}.processingTime`,
+          mensaje: S.escenario.sinDuracion(nombre !== undefined && nombre.trim() !== '' ? nombre : id),
+          severidad: 'warning' as const,
+          codigo: 'LILA-SIN-DURACION',
+        };
+      }),
+    [resuelto, ir, S],
+  );
+  /** Lote M: the problems that hold each step back (see `bloquea`), for the «! n» of the bar. */
+  const porPaso = useMemo(
+    () => agruparPorPaso([...problemas, ...sinDuracion].filter(bloquea), ir),
+    [problemas, sinDuracion, ir],
+  );
+  const conteos = useMemo(
+    () => Object.fromEntries(PASO_IDS.map((p) => [p, porPaso.porPaso[p].length])) as Record<PasoId, number>,
+    [porPaso],
+  );
   const errores = problemas.filter((p) => p.severidad === 'error').length;
   const avisos = problemas.length - errores;
 
@@ -514,11 +557,11 @@ export function ScenarioPanel({
         </div>
       )}
 
-      <BarraPasos paso={paso} onPaso={setPaso} />
+      <BarraPasos paso={paso} onPaso={setPaso} conteos={conteos} />
 
       {/* Each step is its own component (Lote M): the section it owns goes here, and what it adds
           to the element section goes in the lists below. */}
-      {paso === 'parameters' && <PasoParametros ctx={ctx} />}
+      {paso === 'run' && <PasoEjecucion ctx={ctx} />}
       {paso === 'calendars' && (
         <PasoCalendarios ctx={ctx} onIrARecursos={() => { setPaso('resources'); }} />
       )}
@@ -551,20 +594,19 @@ export function ScenarioPanel({
               siDefinido={CAMPOS_DE_PASO[paso]}
             />
             <Problemas ruta={['elements', idSeleccionado]} ctx={ctx} />
-            {/* The gateway is where the branching is parameterised, and branching is a
-                Parameters question: its outgoing flows have to add up. */}
-            {paso === 'parameters' && ir !== null && (clase === 'xor' || clase === 'or') && (
+            {/* The gateway is where the branching is parameterised, and branching is what the
+                Routes step is about: its outgoing flows have to add up. */}
+            {paso === 'routes' && ir !== null && (clase === 'xor' || clase === 'or') && (
               <VistaCompuerta ir={ir} id={idSeleccionado} clase={clase} ctx={ctx} avanzado={avanzado} />
             )}
           </>
         )}
 
-        {/* Parameters, Resources and Arrivals list the elements they are about with what is
+        {/* Arrivals, Times, Routes and Resources list the elements they are about with what is
             already written on each, selected or not: «which task still has no time» is the
             question of the step, and the form of one element cannot answer it. */}
-        {paso === 'parameters' && (
-          <ListaParametros ids={idsPorTipo(['task', 'timer'])} {...lista} />
-        )}
+        {paso === 'times' && <ListaTiempos ids={idsPorTipo(['task', 'timer'])} {...lista} />}
+        {paso === 'routes' && <ListaRutas ids={idsPorTipo(['xor', 'or'])} ir={ir} {...lista} />}
         {paso === 'arrivals' && <ListaLlegadas ids={idsPorTipo(['start'])} {...lista} />}
         {paso === 'resources' && <ListaRecursos ids={idsPorTipo(['task'])} {...lista} />}
       </details>

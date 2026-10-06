@@ -136,18 +136,16 @@ function pulsar(texto: string): void {
 }
 
 /**
- * #333: el panel abre en el primer paso (Parámetros), así que una sección de otro paso hay que pedirla antes. El
+ * #333: el panel abre en Tiempos (Lote M), así que una sección de otro paso hay que pedirla antes. El
  * rótulo va escrito a mano —es un test— y es el del catálogo español que fija `setLocale`.
  */
-function irAPaso(paso: 'parameters' | 'resources' | 'calendars' | 'arrivals'): void {
-  pulsar(
-    {
-      parameters: 'Parámetros',
-      resources: 'Recursos',
-      calendars: 'Calendarios',
-      arrivals: 'Llegadas',
-    }[paso],
-  );
+function irAPaso(paso: 'arrivals' | 'times' | 'routes' | 'resources' | 'calendars' | 'run'): void {
+  // By `data-paso`: the button's text also carries the step's «! n» (Lote M).
+  const destino = document.querySelector<HTMLButtonElement>(`nav.pasos button[data-paso="${paso}"]`);
+  if (destino === null) throw new Error(`no step ${paso}`);
+  act(() => {
+    destino.click();
+  });
 }
 
 /**
@@ -311,6 +309,7 @@ describe('validación en vivo', () => {
 
     // Sin selección, el panel lista los ids con parámetros; se elige el flujo desde ahí.
     pulsar('Flow_Aprobado');
+    irAPaso('routes');
     teclear('campo-elements.Flow_Aprobado.probability', '1.5');
 
     // El texto es el del validador, no uno inventado por el panel. Desde LILA-198 el rango de
@@ -329,6 +328,7 @@ describe('validación en vivo', () => {
       ruta: 'elements.Flow_Aprobado.probability',
       mensaje: esperado.message,
       severidad: 'error',
+      codigo: 'E-PROB-RANGO',
     });
 
     // La escritura no se bloquea: el valor inválido está en el archivo y «Guardar» lo publica.
@@ -422,7 +422,7 @@ describe('uniones del esquema', () => {
       />,
     );
     pulsar('Task_TomarPedido');
-    irAPaso('parameters');
+    irAPaso('times');
     const selector = document.getElementById(
       'campo-elements.Task_TomarPedido.processingTime',
     ) as HTMLSelectElement;
@@ -481,6 +481,7 @@ describe('extends', () => {
     );
 
     // `run` entero viene del padre: el panel lo enseña resuelto.
+    irAPaso('run');
     expect((document.getElementById('campo-run.seed') as HTMLInputElement).value).toBe('42');
 
     teclear('campo-run.seed', '7');
@@ -549,6 +550,7 @@ describe('extends', () => {
       />,
     );
 
+    irAPaso('run');
     teclear('campo-run.currency', '');
     pulsar('Guardar');
 
@@ -585,6 +587,7 @@ describe('duplicar', () => {
       escenario: { version: 1, name: 'AS-IS (copia)', extends: 'as-is.scenario.json' },
     });
     // La copia hereda todo: el panel la enseña ya resuelta.
+    irAPaso('run');
     expect((document.getElementById('campo-run.seed') as HTMLInputElement).value).toBe('42');
   });
 

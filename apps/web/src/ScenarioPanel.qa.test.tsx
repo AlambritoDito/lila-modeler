@@ -140,18 +140,16 @@ function pulsar(texto: string): void {
 }
 
 /**
- * #333: el panel abre en el primer paso (Parámetros), así que una sección de otro paso hay que pedirla antes. El
+ * #333: el panel abre en Tiempos (Lote M), así que una sección de otro paso hay que pedirla antes. El
  * rótulo va escrito a mano —es un test— y es el del catálogo español que fija `setLocale`.
  */
-function irAPaso(paso: 'parameters' | 'resources' | 'calendars' | 'arrivals'): void {
-  pulsar(
-    {
-      parameters: 'Parámetros',
-      resources: 'Recursos',
-      calendars: 'Calendarios',
-      arrivals: 'Llegadas',
-    }[paso],
-  );
+function irAPaso(paso: 'arrivals' | 'times' | 'routes' | 'resources' | 'calendars' | 'run'): void {
+  // By `data-paso`: the button's text also carries the step's «! n» (Lote M).
+  const destino = document.querySelector<HTMLButtonElement>(`nav.pasos button[data-paso="${paso}"]`);
+  if (destino === null) throw new Error(`no step ${paso}`);
+  act(() => {
+    destino.click();
+  });
 }
 
 function pulsarNodo(destino: HTMLElement): void {
@@ -259,7 +257,7 @@ describe('uniones sobre un escenario que hereda', () => {
     );
 
     pulsar('Task_TomarPedido');
-    irAPaso('parameters');
+    irAPaso('times');
     const campo = 'campo-elements.Task_TomarPedido.processingTime';
     // El rótulo de la variante sale del catálogo desde #332, no de la ortografía del archivo.
     elegir(campo, opcion(campo, es.escenario.distribuciones['normal']!));
@@ -439,7 +437,8 @@ describe('selección del lienzo', () => {
       />,
     );
 
-    irAPaso('resources');
+    // Lote M: the task's fixed cost is edited in Times, next to its duration.
+    irAPaso('times');
     const campo = document.querySelector('input[id$=".fixedCost"]') as HTMLInputElement;
     expect(campo).not.toBe(null);
     tecleaEn(campo, '5');
@@ -491,6 +490,8 @@ describe('rutas de los problemas', () => {
 
   it('R4 se marca en el propio campo `probability`', () => {
     montarEn('Task_TomarPedido');
+    // `probability` es de Rutas (Lote M): ahí se dibuja, con su error, aunque sea una tarea.
+    irAPaso('routes');
     expect(
       document
         .getElementById('campo-elements.Task_TomarPedido.probability')
@@ -515,6 +516,7 @@ describe('campos numéricos', () => {
       />,
     );
 
+    irAPaso('run');
     teclear('campo-run.seed', 'abc');
     teclear('campo-run.warmup', '');
     pulsar('Guardar');

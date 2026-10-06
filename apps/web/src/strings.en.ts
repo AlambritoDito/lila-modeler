@@ -672,7 +672,7 @@ export const en = {
     vistaEsperaP95: 'Resource wait p95',
     vistaEsperaMedia: 'Resource wait (mean)',
     vistaSinCorrida: 'no run',
-    editarEnParametros: 'Edit in Parameters',
+    editarEnTiempos: 'Edit in Times',
     editarEnRecursos: 'Edit in Resources',
 
     sinSeleccion: 'Select an element of the canvas to see its properties.',
@@ -835,24 +835,32 @@ export const en = {
       `${archivo} · inherits from ${padre ?? '—'}`,
 
     /**
-     * #333/#396 — the four steps of the Simulate panel, named after what each one edits (the
+     * #333/#396, Lote M — the six steps of the Simulate panel, named after what each one edits (the
      * design's labels). `docs/COMING-FROM-BIZAGI.md` maps them to Bizagi's four levels.
      */
     pasos: 'Steps',
     paso: {
-      parameters: 'Parameters',
+      arrivals: 'Arrivals',
+      times: 'Times',
+      routes: 'Routes',
       resources: 'Resources',
       calendars: 'Calendars',
-      arrivals: 'Arrivals',
+      run: 'Run',
     } as Record<string, string>,
     pasoAyuda: {
-      parameters:
-        'How the model runs: the run window and replications, how the gateways branch and how long each activity takes.',
+      arrivals: 'How cases come in: how often each start event fires and how many cases it creates.',
+      times: 'How long each activity takes, and what it costs each time it runs.',
+      routes: 'Which share of the cases follows each path out of a gateway.',
       resources:
         'Who does the work: pools, how many units, when each pool works (its calendar and capacity per shift), and which task takes which pool.',
       calendars: 'When the work is possible: calendars and holidays, and which element follows which calendar.',
-      arrivals: 'How cases come in: how often each start event fires and how many cases it creates.',
+      run: 'How long the simulation runs, from when, and how many replications.',
     } as Record<string, string>,
+    /** Lote M: the «! n» of a step, read out with the step's name. */
+    pasoProblemas: (n: number): string => `${n} ${n === 1 ? 'problem' : 'problems'}`,
+    /** Lote M: a task the scenario gives no `processingTime` (the engine would run it in zero time). */
+    sinDuracion: (tarea: string): string => `${tarea}: no duration, so it would take no time.`,
+    listaRutas: 'Branches by gateway',
 
     /** Element lists of the steps: what is already parameterised and what is still missing. */
     listaTiempos: 'Times by element',

@@ -125,12 +125,12 @@ La barra superior tiene seis modos: **Modelar**, **Simular**, **Resultados**, **
 - La lista **Escenarios** a la izquierda de Simular muestra los escenarios cargados (el proyecto
   trae `as-is` y `to-be-3-cajeros` de ejemplo); elige uno para activarlo, o duplica el activo
   desde la lista.
-- El panel de escenario tiene cuatro pasos, en este orden: **Parámetros** (la ventana de corrida y
-  las réplicas, cómo ramifican las compuertas y el tiempo de cada tarea y temporizador),
+- El panel de escenario tiene seis pasos, en este orden: **Llegadas** (cada cuánto dispara cada
+  evento de inicio y cuántos casos crea; la lista **Llegadas por evento de inicio** las resume),
+  **Tiempos** (el tiempo de cada tarea y temporizador), **Rutas** (cómo ramifican las compuertas),
   **Recursos** (pools, unidades, el calendario y la capacidad por turno de un pool, y qué tarea
   toma cuál), **Calendarios** (calendarios y festivos, y qué calendario sigue cada elemento) y
-  **Llegadas** (cada cuánto dispara cada evento de inicio y cuántos casos crea; la lista **Llegadas
-  por evento de inicio** las resume). Cada control vive en un solo paso. El panel permite editar `run`, `calendars`, `resources` y las propiedades por
+  **Ejecución** (la ventana de corrida y las réplicas). Cada control vive en un solo paso. El panel permite editar `run`, `calendars`, `resources` y las propiedades por
   elemento del proceso. Los campos con forma de unión —hoy solo `resources.<id>.capacity`— tienen
   un selector explícito **Fija** (un número) / **Por turno** (una lista de tramos
   `{ calendar, capacity }`, con `calendar` como desplegable de los calendarios ya declarados).
@@ -157,7 +157,7 @@ La barra superior tiene seis modos: **Modelar**, **Simular**, **Resultados**, **
 - **Vista rápida · simulación**: selecciona un elemento en el lienzo y el panel Propiedades muestra
   bajo la cabecera sus datos de simulación: **Tiempo**, **Recurso** (solo tareas) y la espera por
   recurso (p95 si la muestra del log de la corrida está en memoria, la media si no; **sin
-  corrida** antes de la primera). **Editar en Parámetros** y **Editar en Recursos** saltan al paso
+  corrida** antes de la primera). **Editar en Tiempos** y **Editar en Recursos** saltan al paso
   correspondiente.
 - El panel de escenario se puede separar en su propia ventana con el interruptor de la barra
   superior (**Escenario acoplado ↗** / **En ventana aparte**); **Acoplar** en el sustituto, o

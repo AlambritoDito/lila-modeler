@@ -101,35 +101,42 @@ describe('unidad de presentación (R1, R2)', () => {
   });
 });
 
-/** Los reservados de § 4 salen en Parámetros para cualquier clase (se dibujan solo si están). */
+/** Los reservados de § 4 salen en Tiempos para cualquier clase (se dibujan solo si están). */
 const RESERVADOS = ['priority', 'preempt', 'batch', 'conditions'];
 
 function sinReservados(campos: readonly string[]): readonly string[] {
   return campos.filter((campo) => !RESERVADOS.includes(campo));
 }
 
-describe('fieldsForStep (#333/#396: Parámetros, Recursos, Calendarios, Llegadas)', () => {
-  it('una tarea enseña su tiempo en Parámetros y sus recursos en Recursos, nunca a la vez', () => {
-    expect(sinReservados(fieldsForStep('parameters', 'task'))).toEqual(['processingTime']);
-    expect(fieldsForStep('resources', 'task')).toEqual(['resources', 'selection', 'fixedCost']);
-    expect(fieldsForStep('parameters', 'task')).not.toContain('resources');
+describe('fieldsForStep (#333/#396, Lote M: Llegadas, Tiempos, Rutas, Recursos, Calendarios, Ejecución)', () => {
+  it('una tarea enseña su tiempo y su costo en Tiempos y sus recursos en Recursos, nunca a la vez', () => {
+    expect(sinReservados(fieldsForStep('times', 'task'))).toEqual(['processingTime', 'fixedCost']);
+    expect(fieldsForStep('resources', 'task')).toEqual(['resources', 'selection']);
+    expect(fieldsForStep('times', 'task')).not.toContain('resources');
     expect(fieldsForStep('resources', 'task')).not.toContain('processingTime');
     expect(fieldsForStep('calendars', 'task')).toEqual(['calendar']);
     expect(fieldsForStep('arrivals', 'task')).toEqual([]);
+    expect(sinReservados(fieldsForStep('routes', 'task'))).toEqual([]);
+    expect(fieldsForStep('run', 'task')).toEqual([]);
+  });
+
+  it('un temporizador tiene su tiempo en Tiempos', () => {
+    expect(sinReservados(fieldsForStep('times', 'timer'))).toEqual(['processingTime', 'fixedCost']);
   });
 
   it('las dos llegadas de un inicio van juntas al paso Llegadas', () => {
     expect(fieldsForStep('arrivals', 'start')).toEqual(['interTriggerTimer', 'triggerCount']);
-    expect(sinReservados(fieldsForStep('parameters', 'start'))).toEqual([]);
+    expect(sinReservados(fieldsForStep('times', 'start'))).toEqual(['fixedCost']);
   });
 
-  it('un flujo lleva su probabilidad a Parámetros, junto con las ramas de la compuerta', () => {
+  it('un flujo lleva su probabilidad y sus condiciones a Rutas', () => {
     // `conditions` va al mismo paso: también decide el reparto (ADR-028).
-    expect(sinReservados(fieldsForStep('parameters', 'flow'))).toEqual(['probability']);
-    expect(fieldsForStep('parameters', 'flow')).toContain('conditions');
-    for (const paso of ['resources', 'calendars', 'arrivals'] as const) {
+    expect(sinReservados(fieldsForStep('routes', 'flow'))).toEqual(['probability']);
+    expect(fieldsForStep('routes', 'flow')).toContain('conditions');
+    for (const paso of ['arrivals', 'resources', 'calendars', 'run'] as const) {
       expect(fieldsForStep(paso, 'flow')).toEqual([]);
     }
+    expect(sinReservados(fieldsForStep('times', 'flow'))).toEqual([]);
   });
 
   it('una compuerta no tiene campos propios en ningún paso', () => {
@@ -143,9 +150,10 @@ describe('fieldsForStep (#333/#396: Parámetros, Recursos, Calendarios, Llegadas
   it('los reservados de § 4 sobreviven al filtro, o no habría paso desde el que borrarlos', () => {
     // No los declara ninguna clase, así que sin la excepción se volverían invisibles: un
     // `priority` heredado se quedaría escrito para siempre, con su error y sin botón.
-    for (const reservado of RESERVADOS) {
-      expect(fieldsForStep('parameters', 'task')).toContain(reservado);
+    for (const reservado of ['priority', 'preempt', 'batch']) {
+      expect(fieldsForStep('times', 'task')).toContain(reservado);
     }
+    expect(fieldsForStep('routes', 'task')).toContain('conditions');
   });
 
   it('cada campo del esquema pertenece exactamente a un paso', () => {
