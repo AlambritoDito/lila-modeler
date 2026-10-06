@@ -129,6 +129,8 @@ vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado, onSeleccion }: { onL
     repintar: mocks.repintar, exportarSvg: mocks.exportarSvg,
     validacion: mocks.validacion, seleccionar: mocks.seleccionar, simulacionTokens: mocks.simulacionTokens, enfocar: mocks.enfocar,
     suscribir: (events: string[], callback: () => void) => {
+      // The lane layer of C2 (`carrilClic.ts`) listens to several events at once: not the shell's.
+      if (events.length > 1) return () => {};
       if (events.includes('selection.changed')) mocks.seleccionCambio = callback;
       else if (events.includes('element.dblclick')) mocks.dobleClic = callback as (evento: unknown) => unknown;
       else mocks.changed = callback;
