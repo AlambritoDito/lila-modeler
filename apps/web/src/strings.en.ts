@@ -870,7 +870,6 @@ export const en = {
     resumenLlegada: (cada: string, casos: number | null): string =>
       casos === null ? cada : `${cada} · ${casos} ${casos === 1 ? 'case' : 'cases'}`,
     /** #396: Calendars no longer repeats the pools; this says where a pool's calendar went. */
-    calendariosDePools: "A pool's calendar and its capacity per shift are edited on the pool, in Resources.",
     irARecursos: 'Go to Resources',
     /** #430: entries for ids the diagram no longer has (a configured shape was deleted). */
     huerfanas: 'Entries for elements that are no longer in the diagram',
@@ -902,7 +901,7 @@ export const en = {
     /** #579: the create control, on top of Calendars and Resources. */
     nuevoCalendario: 'New calendar',
     ejemploCalendario: 'night-shift',
-    crearCalendario: '+ Create calendar',
+    crearCalendario: '+ Blank',
     nuevoRecurso: 'New resource',
     ejemploRecurso: 'analyst',
     crearRecurso: '+ Create resource',
@@ -1120,11 +1119,21 @@ export const en = {
    * ------------------------------------------------------------------ */
   calendario: {
     rejilla: 'Weekly schedule: days by hours',
-    celda: (dia: (typeof DIAS_SEMANA)[number], hhmm: string): string => `${dia} ${hhmm}`,
+    /** A grid cell's accessible name: the translated day (`diasLargos`) and the hour. */
+    celda: (dia: string, hhmm: string): string => `${dia} ${hhmm}`,
     /** Range picker above the grid (#448). */
     nuevaFranja: 'New time range',
     presets: { laborables: 'Mon–Fri', todos: 'Every day', finDeSemana: 'Weekend' },
     dias: { MON: 'Mon', TUE: 'Tue', WED: 'Wed', THU: 'Thu', FRI: 'Fri', SAT: 'Sat', SUN: 'Sun' },
+    diasLargos: {
+      MON: 'Monday',
+      TUE: 'Tuesday',
+      WED: 'Wednesday',
+      THU: 'Thursday',
+      FRI: 'Friday',
+      SAT: 'Saturday',
+      SUN: 'Sunday',
+    } satisfies Record<(typeof DIAS_SEMANA)[number], string>,
     desde: 'From',
     hasta: 'To',
     formatoHora: 'HH:MM',
@@ -1168,6 +1177,47 @@ export const en = {
     festivoAnual: (mmdd: string): string => `${mmdd} (every year)`,
     quitarFestivo: (festivo: string): string => `Remove ${festivo}`,
     ayudaFestivos: 'Closed all day, whatever the ranges above say.',
+  },
+  /** Lote M (C3): the calendar manager of the Calendars step (`GestorCalendarios.tsx`). */
+  gcal: {
+    vacioTitulo: 'No calendars yet',
+    vacioTexto: 'Without a calendar, resources work 24 hours every day. Start from a template:',
+    desdePlantilla: 'Or from a template',
+    /** Template buttons; the same text is the new calendar's name. */
+    plantillas: { laborable: 'Mon–Fri 9–18', continuo: '24/7', extendido: 'Mon–Sat 6–22' },
+    /** Name of a blank calendar created without typing one. */
+    nombreEnBlanco: 'calendar',
+    enBlancoAviso: 'A blank calendar has no hours until you paint them in Week.',
+    lista: 'Calendars of the scenario',
+    horasSemana: (horas: string): string => `${horas} h/wk`,
+    horasPorSemana: (horas: string): string => `${horas} h per week`,
+    usadoPorN: (n: number): string => `Used by ${n}`,
+    sinUso: 'Not used',
+    conProblemas: 'Has problems',
+    nombre: 'Calendar name',
+    nombreRepetido: (nombre: string): string => `A calendar named «${nombre}» already exists`,
+    nombreVacio: 'The name cannot be empty',
+    eliminar: 'Delete calendar',
+    eliminarBloqueado: 'It cannot be deleted while something uses it (see «Used by»).',
+    pestanasRotulo: 'Calendar sections',
+    pestanas: { semana: 'Week', festivos: 'Holidays', repeticiones: 'Repetitions', uso: 'Used by' },
+    ayudaSemana: 'Drag to paint working hours; drag over a painted hour to clear it. Keyboard: arrows, Space, and Shift+arrow to paint.',
+    sinHoras: 'This calendar has no hours: whoever uses it will never work.',
+    copiarLunes: 'Copy Monday to Mon–Fri',
+    vaciar: 'Clear',
+    ayudaRepeticiones:
+      'Hours added on dates that repeat: a day of the month (or the last one), the nth weekday of the month, or a date every year.',
+    nadieLoUsa: 'Nothing uses this calendar yet.',
+    tiposUso: { recurso: 'Resource', turno: 'Shift', tarea: 'Task', llegada: 'Arrivals', elemento: 'Element' },
+    turnoCapacidad: (n: number): string => `${n} on the shift`,
+    irA: (nombre: string): string => `Go to ${nombre} in Resources`,
+    asignarA: 'Assign to a resource',
+    recurso: 'Resource',
+    ahoraUsa: (nombre: string, calendario: string): string => `${nombre} (now: ${calendario})`,
+    asignar: 'Assign',
+    asignado: (nombre: string): string => `Assigned to ${nombre}.`,
+    sinRecursos: 'There are no resources yet: create them in Resources.',
+    todosAsignados: 'Every resource already uses it or has per-shift capacity (those choose a calendar per shift, in Resources).',
   },
 
   /* ------------------------------------------------------------------ *

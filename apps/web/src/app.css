@@ -1680,6 +1680,243 @@ body {
   padding: calc(3px * var(--espacio, 1)) 0;
 }
 
+/* ---------- gestor de calendarios (Lote M, C3; pantalla 03) ---------- */
+
+/* Templates on top, a compact list, then one calendar's editor with four tabs. Same rules as the
+   rest of the panel: radius 0, 1 px rules, tokens only, mono for hours. Fits a 300 px panel. */
+.gcal {
+  display: flex;
+  flex-direction: column;
+  gap: calc(8px * var(--espacio, 1));
+}
+
+.gcal-vacio {
+  background: var(--bg-elevated);
+  border: 1px dashed var(--border-strong);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: calc(10px * var(--espacio, 1)) 12px;
+}
+
+.gcal-vacio span {
+  color: var(--fg-muted);
+  line-height: 1.45;
+}
+
+.gcal-crear {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gcal-rotulo {
+  color: var(--fg-muted);
+  font-size: 0.92em;
+}
+
+.gcal-plantillas,
+.gcal-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.gcal-plantillas .boton,
+.gcal-acciones .boton {
+  font-size: 0.92em;
+  padding: calc(3px * var(--espacio, 1)) 6px;
+}
+
+.gcal-plantilla {
+  border-color: var(--accent-primary);
+  font-weight: 600;
+}
+
+.gcal-plantilla.gcal-blanco {
+  border-style: dashed;
+  border-color: var(--border-strong);
+  color: var(--fg-muted);
+  font-weight: 400;
+}
+
+.gcal-lista,
+.gcal-usos {
+  border-top: 1px solid var(--border);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.gcal-fila,
+.gcal-uso-fila {
+  align-items: center;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--fg-primary);
+  display: flex;
+  font: inherit;
+  gap: 8px;
+  padding: calc(5px * var(--espacio, 1)) 8px;
+  text-align: left;
+  width: 100%;
+}
+
+button.gcal-fila,
+button.gcal-uso-fila {
+  cursor: pointer;
+}
+
+button.gcal-fila:hover,
+button.gcal-uso-fila:hover {
+  background: var(--bg-hover);
+}
+
+.gcal-fila[aria-current='true'] {
+  background: var(--bg-elevated);
+  box-shadow: inset 2px 0 0 var(--accent-primary);
+}
+
+.gcal-fila.con-error {
+  box-shadow: inset 2px 0 0 var(--status-error);
+}
+
+.gcal-fila:focus-visible,
+.gcal-uso-fila:focus-visible,
+.gcal-pestanas [role='tab']:focus-visible {
+  outline: 1px solid var(--accent-primary);
+  outline-offset: -1px;
+}
+
+.gcal-nombre,
+.gcal-quien {
+  flex: 1;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gcal-uso,
+.gcal-horas,
+.gcal-tipo,
+.gcal-detalle {
+  color: var(--fg-muted);
+  flex: none;
+  font-size: 0.92em;
+}
+
+.gcal-tipo {
+  min-width: 5.5em;
+}
+
+.gcal-marca {
+  color: var(--status-error);
+  font-weight: 700;
+  margin: 0 4px;
+}
+
+.gcal-editor {
+  border-top: 1px solid var(--border-strong);
+  display: flex;
+  flex-direction: column;
+  gap: calc(6px * var(--espacio, 1));
+  padding-top: calc(6px * var(--espacio, 1));
+}
+
+.gcal-cabecera {
+  align-items: center;
+  display: grid;
+  gap: 2px 8px;
+  grid-template-columns: 1fr auto;
+}
+
+.gcal-cabecera .error {
+  grid-column: 1 / -1;
+}
+
+.gcal-cabecera input {
+  font-weight: 600;
+  min-width: 0;
+}
+
+.gcal-pestanas {
+  border-bottom: 1px solid var(--border);
+  display: flex;
+}
+
+.gcal-pestanas [role='tab'] {
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  flex: 1 1 auto;
+  font: inherit;
+  padding: calc(5px * var(--espacio, 1)) 4px;
+  white-space: nowrap;
+}
+
+.gcal-pestanas [role='tab']:hover {
+  color: var(--fg-primary);
+}
+
+.gcal-pestanas [role='tab'][aria-selected='true'] {
+  border-bottom-color: var(--accent-primary);
+  color: var(--fg-primary);
+  font-weight: 600;
+}
+
+.gcal-cuenta {
+  background: var(--bg-elevated);
+  color: var(--fg-muted);
+  font-size: 0.85em;
+  margin-left: 4px;
+  padding: 0 4px;
+}
+
+.gcal-panel {
+  display: flex;
+  flex-direction: column;
+  gap: calc(6px * var(--espacio, 1));
+}
+
+.gcal-panel .ayuda {
+  margin: 0;
+}
+
+.gcal-sin-horas {
+  border-left: 2px solid var(--status-warning);
+  padding-left: 8px;
+}
+
+.gcal-asignar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gcal-asignar-fila {
+  display: flex;
+  gap: 4px;
+}
+
+.gcal-asignar-fila select {
+  flex: 1;
+  min-width: 0;
+}
+
+.gcal-hecho {
+  color: var(--status-success);
+  margin: 0;
+}
+
+.gcal-eliminar {
+  align-self: flex-start;
+}
+
 /* Mantener montado el modelador conserva undo/selección entre modos. */
 .zona-modelo { grid-area: lienzo; position: relative; min-width: 0; min-height: 0; }
 .zona-modelo > .lienzo { width: 100%; height: 100%; }

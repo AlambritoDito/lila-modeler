@@ -843,7 +843,6 @@ export const es: Strings = {
     listaLlegadas: 'Llegadas por evento de inicio',
     resumenLlegada: (cada: string, casos: number | null): string =>
       casos === null ? cada : `${cada} · ${casos} ${casos === 1 ? 'caso' : 'casos'}`,
-    calendariosDePools: 'El calendario de un pool y su capacidad por turno se editan en el pool, en Recursos.',
     irARecursos: 'Ir a Recursos',
     /** #430: entradas de ids que el diagrama ya no tiene (se borró una forma configurada). */
     huerfanas: 'Entradas de elementos que ya no están en el diagrama',
@@ -875,7 +874,7 @@ export const es: Strings = {
     /** #579: el control para crear, arriba de Calendarios y de Recursos. */
     nuevoCalendario: 'Nuevo calendario',
     ejemploCalendario: 'turno-noche',
-    crearCalendario: '+ Crear calendario',
+    crearCalendario: '+ En blanco',
     nuevoRecurso: 'Nuevo recurso',
     ejemploRecurso: 'analista',
     crearRecurso: '+ Crear recurso',
@@ -1093,11 +1092,21 @@ export const es: Strings = {
    * ------------------------------------------------------------------ */
   calendario: {
     rejilla: 'Horario semanal: días por horas',
-    celda: (dia: (typeof DIAS_SEMANA)[number], hhmm: string): string => `${dia} ${hhmm}`,
+    /** Nombre accesible de una celda: el día traducido (`diasLargos`) y la hora. */
+    celda: (dia: string, hhmm: string): string => `${dia} ${hhmm}`,
     /** Selector de franjas encima de la rejilla (#448). */
     nuevaFranja: 'Nueva franja horaria',
     presets: { laborables: 'Lun–Vie', todos: 'Todos', finDeSemana: 'Fin de semana' },
     dias: { MON: 'Lun', TUE: 'Mar', WED: 'Mié', THU: 'Jue', FRI: 'Vie', SAT: 'Sáb', SUN: 'Dom' },
+    diasLargos: {
+      MON: 'lunes',
+      TUE: 'martes',
+      WED: 'miércoles',
+      THU: 'jueves',
+      FRI: 'viernes',
+      SAT: 'sábado',
+      SUN: 'domingo',
+    } satisfies Record<(typeof DIAS_SEMANA)[number], string>,
     desde: 'Desde',
     hasta: 'Hasta',
     formatoHora: 'HH:MM',
@@ -1141,6 +1150,45 @@ export const es: Strings = {
     festivoAnual: (mmdd: string): string => `${mmdd} (cada año)`,
     quitarFestivo: (festivo: string): string => `Quitar ${festivo}`,
     ayudaFestivos: 'Cerrado todo el día, digan lo que digan las franjas de arriba.',
+  },
+  /** Lote M (C3): el gestor de calendarios del paso Calendarios (`GestorCalendarios.tsx`). */
+  gcal: {
+    vacioTitulo: 'Aún no hay calendarios',
+    vacioTexto: 'Sin calendario, los recursos trabajan las 24 h todos los días. Empieza con una plantilla:',
+    desdePlantilla: 'O desde plantilla',
+    plantillas: { laborable: 'L–V 9–18', continuo: '24/7', extendido: 'L–S 6–22' },
+    nombreEnBlanco: 'calendario',
+    enBlancoAviso: 'Un calendario en blanco no tiene horas hasta que las pintes en Semana.',
+    lista: 'Calendarios del escenario',
+    horasSemana: (horas: string): string => `${horas} h/sem`,
+    horasPorSemana: (horas: string): string => `${horas} h por semana`,
+    usadoPorN: (n: number): string => `Usado por ${n}`,
+    sinUso: 'Sin uso',
+    conProblemas: 'Tiene problemas',
+    nombre: 'Nombre del calendario',
+    nombreRepetido: (nombre: string): string => `Ya existe un calendario «${nombre}»`,
+    nombreVacio: 'El nombre no puede quedar vacío',
+    eliminar: 'Eliminar calendario',
+    eliminarBloqueado: 'No se puede eliminar mientras alguien lo use (mira «Usado por»).',
+    pestanasRotulo: 'Apartados del calendario',
+    pestanas: { semana: 'Semana', festivos: 'Festivos', repeticiones: 'Repeticiones', uso: 'Usado por' },
+    ayudaSemana: 'Arrastra para pintar las horas de trabajo; arrastra sobre una hora pintada para borrarla. Con teclado: flechas, Espacio y Mayús+flecha para pintar.',
+    sinHoras: 'Este calendario no tiene horas: quien lo use nunca trabajará.',
+    copiarLunes: 'Copiar lunes a L–V',
+    vaciar: 'Vaciar',
+    ayudaRepeticiones:
+      'Horas que se añaden en fechas que se repiten: un día del mes (o el último), el n-ésimo día de la semana del mes o una fecha cada año.',
+    nadieLoUsa: 'Nadie usa este calendario todavía.',
+    tiposUso: { recurso: 'Recurso', turno: 'Turno', tarea: 'Tarea', llegada: 'Llegadas', elemento: 'Elemento' },
+    turnoCapacidad: (n: number): string => `${n} en el turno`,
+    irA: (nombre: string): string => `Ir a ${nombre} en Recursos`,
+    asignarA: 'Asignar a un recurso',
+    recurso: 'Recurso',
+    ahoraUsa: (nombre: string, calendario: string): string => `${nombre} (ahora: ${calendario})`,
+    asignar: 'Asignar',
+    asignado: (nombre: string): string => `Asignado a ${nombre}.`,
+    sinRecursos: 'Aún no hay recursos: créalos en Recursos.',
+    todosAsignados: 'Todos los recursos ya lo usan o tienen capacidad por turnos (esos eligen calendario en cada turno, en Recursos).',
   },
 
   /* ------------------------------------------------------------------ *

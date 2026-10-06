@@ -1,11 +1,11 @@
 /**
- * Step «Calendars» of the Simulate panel (#333): the weekly grids. Until #396 the pool editor
- * showed up here as well, because a pool's `calendar` and per-shift `capacity` live inside it; now
- * every control is in exactly one step, so the pools stay in Resources and this step says where
- * they went.
+ * Step «Calendars» of the Simulate panel (#333). Since Lote M (C3) it is the calendar manager:
+ * a compact list with the templates on top and one calendar's editor at a time, whose «Used by»
+ * tab replaces the old «Go to Resources» hint (a calendar is assigned to a resource from here).
+ * The per-shift capacity of a pool is still edited on the pool, in Resources.
  */
-import { Campo } from './Campo.js';
-import { esquemaDe, type Contexto } from './escenarioModelo.js';
+import { GestorCalendarios } from './GestorCalendarios.js';
+import { type Contexto } from './escenarioModelo.js';
 import { useStrings } from './i18n';
 
 export function PasoCalendarios({
@@ -13,26 +13,14 @@ export function PasoCalendarios({
   onIrARecursos,
 }: {
   ctx: Contexto;
-  /** «Go to Resources»: where the pools' calendars and per-shift capacity are edited. */
+  /** «Used by» jumps to a resource's step, where its capacity and shifts are edited. */
   onIrARecursos: () => void;
 }): React.JSX.Element {
   const S = useStrings();
   return (
     <details open>
       <summary>{S.escenario.seccionCalendarios}</summary>
-      <Campo
-        esquema={esquemaDe('calendars')}
-        ruta={['calendars']}
-        etiqueta="calendars"
-        requerido={false}
-        ctx={ctx}
-      />
-      <p className="ayuda">
-        {S.escenario.calendariosDePools}{' '}
-        <button type="button" className="boton" onClick={() => { onIrARecursos(); }}>
-          {S.escenario.irARecursos}
-        </button>
-      </p>
+      <GestorCalendarios ctx={ctx} onIrARecursos={onIrARecursos} />
     </details>
   );
 }

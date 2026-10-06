@@ -245,8 +245,15 @@ describe('los seis pasos del panel de simulación', () => {
     // Each control lives in exactly one step: the pool editor is in Resources only.
     expect(hay('campo-resources.executive.capacity')).toBe(false);
     expect(document.querySelector('.carril-a-pool')).toBeNull();
-    expect(texto()).toContain(en.escenario.calendariosDePools);
-    pulsar(en.escenario.irARecursos);
+    // Lote M (C3): the «Used by» tab replaced the «Go to Resources» hint and jumps to the pool.
+    act(() => {
+      (document.getElementById('gcal-tab-uso') as HTMLButtonElement).click();
+    });
+    const salto = document.querySelector<HTMLButtonElement>('.gcal-usos button');
+    expect(salto).not.toBeNull();
+    act(() => {
+      salto!.click();
+    });
     expect(botonPaso('resources').getAttribute('aria-pressed')).toBe('true');
     expect(hay('campo-resources.executive.capacity')).toBe(true);
   });

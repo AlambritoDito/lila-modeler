@@ -126,7 +126,8 @@ it('en Calendarios el control para crear va arriba, con rótulo visible y ejempl
   const caja = porRotulo(es.escenario.nuevoCalendario);
   expect(caja.placeholder).toBe('turno-noche');
   expect(caja.getAttribute('aria-label')).toBeNull();
-  const primero = document.querySelector('fieldset[data-clave="oficina"]');
+  // Lote M (C3): the calendars are a compact list under the creation controls.
+  const primero = document.querySelector('.gcal-fila[data-clave="oficina"]');
   expect(primero).not.toBeNull();
   expect(antes(caja, primero!)).toBe(true);
   const boton = [...document.querySelectorAll('button')].find(
@@ -143,7 +144,7 @@ it('crear «turno-noche» lo añade, le da el foco y queda elegible en resources
   pulsar(es.escenario.crearCalendario);
 
   expect(Object.keys(actual['calendars'] as Json)).toEqual(['oficina', 'turno-noche']);
-  const nuevo = document.querySelector('fieldset[data-clave="turno-noche"]');
+  const nuevo = document.querySelector('.gcal-editor[data-clave="turno-noche"]');
   expect(nuevo).not.toBeNull();
   expect(nuevo!.contains(document.activeElement)).toBe(true);
   expect(porRotulo(es.escenario.nuevoCalendario).value).toBe('');
@@ -167,7 +168,7 @@ it('en Recursos el control para crear va arriba y el recurso nuevo recibe el foc
   expect(document.querySelector('fieldset[data-clave="operador"]')!.contains(document.activeElement)).toBe(true);
 });
 
-it('Enter en la caja crea igual que el botón', () => {
+it('Enter en la caja crea desde la primera plantilla, con horas (Lote M)', () => {
   montar();
   pulsar('Calendarios');
   const caja = porRotulo(es.escenario.nuevoCalendario);
@@ -176,6 +177,9 @@ it('Enter en la caja crea igual que el botón', () => {
     caja.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   });
   expect(Object.keys(actual['calendars'] as Json)).toEqual(['oficina', 'sabado']);
+  expect((actual['calendars'] as Json)['sabado']).toEqual({
+    intervals: [{ days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], from: '09:00', to: '18:00' }],
+  });
 });
 
 it('una clave repetida no se crea y se avisa', () => {
@@ -187,12 +191,12 @@ it('una clave repetida no se crea y se avisa', () => {
   expect(Object.keys(actual['calendars'] as Json)).toEqual(['oficina']);
 });
 
-it('en inglés: «New calendar» y «+ Create calendar»; la franja dice «Add range»', () => {
+it('en inglés: «New calendar» y «+ Blank»; la franja dice «Add range»', () => {
   setLocale('en');
   montar();
   pulsar('Calendars');
   expect(porRotulo(en.escenario.nuevoCalendario).placeholder).toBe('night-shift');
-  expect(en.escenario.crearCalendario).toBe('+ Create calendar');
+  expect(en.escenario.crearCalendario).toBe('+ Blank');
   expect(en.escenario.nuevoRecurso).toBe('New resource');
   expect(en.calendario.anadir).toBe('Add range');
   expect(es.calendario.anadir).toBe('Añadir franja');

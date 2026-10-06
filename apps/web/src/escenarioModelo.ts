@@ -318,6 +318,76 @@ export function porRuta(problemas: readonly Problema[]): Map<string, Problema[]>
 }
 
 /* ------------------------------------------------------------------ *
+ * Renombrar un calendario (Lote M, C3)
+ * ------------------------------------------------------------------ */
+
+/**
+ * The delta after renaming calendar `viejo` to `nuevo`, with every reference updated.
+ *
+ * The format has no calendar `name`: the key of `calendars` **is** the name (ANALISIS § B), so a
+ * rename moves the entry and rewrites the three places that point at it (§ 2.3–2.5): a pool's
+ * `calendar`, a shift of its per-shift `capacity` (the whole array, § 6 replaces arrays) and an
+ * element's `calendar`. The moved entry is the **resolved** calendar, so a calendar inherited
+ * through `extends` keeps every hour; the old key is then deleted with `null` when the parent
+ * declares it (§ 6) and dropped otherwise. The entry keeps its place in the delta's map, so the
+ * list does not reorder under the person typing.
+ *
+ * Returns `delta` untouched when the rename is not possible: same name, empty name, or a name
+ * that already exists.
+ */
+export function renombrarCalendario(
+  delta: Record<string, unknown>,
+  resuelto: Record<string, unknown>,
+  padre: Record<string, unknown> | null,
+  viejo: string,
+  nuevo: string,
+): Record<string, unknown> {
+  const calendarios = esObjeto(resuelto['calendars']) ? resuelto['calendars'] : {};
+  if (nuevo === '' || nuevo === viejo || nuevo in calendarios || !(viejo in calendarios)) return delta;
+  const valor = calendarios[viejo];
+  const propios = esObjeto(delta['calendars']) ? delta['calendars'] : {};
+  const movidos: Record<string, unknown> = {};
+  for (const [clave, entrada] of Object.entries(propios)) {
+    if (clave === viejo) movidos[nuevo] = valor;
+    else movidos[clave] = entrada;
+  }
+  if (!(viejo in propios)) movidos[nuevo] = valor;
+  if (padre !== null && leer(padre, ['calendars', viejo]) !== undefined) movidos[viejo] = null;
+  let salida: Record<string, unknown> = { ...delta, calendars: movidos };
+
+  const recursos = esObjeto(resuelto['resources']) ? resuelto['resources'] : {};
+  for (const [id, recurso] of Object.entries(recursos)) {
+    if (!esObjeto(recurso)) continue;
+    if (recurso['calendar'] === viejo) salida = escribir(salida, ['resources', id, 'calendar'], nuevo);
+    const capacidad = recurso['capacity'];
+    if (Array.isArray(capacidad) && capacidad.some((t: unknown) => esObjeto(t) && t['calendar'] === viejo)) {
+      const tramos = capacidad.map((t: unknown) => (esObjeto(t) && t['calendar'] === viejo ? { ...t, calendar: nuevo } : t));
+      salida = escribir(salida, ['resources', id, 'capacity'], tramos);
+    }
+  }
+  const elementos = esObjeto(resuelto['elements']) ? resuelto['elements'] : {};
+  for (const [id, elemento] of Object.entries(elementos)) {
+    if (esObjeto(elemento) && elemento['calendar'] === viejo) {
+      salida = escribir(salida, ['elements', id, 'calendar'], nuevo);
+    }
+  }
+  return salida;
+}
+
+/**
+ * `despues` as the top-level writes `Contexto.editarVarios` takes: one per root key that changed,
+ * so a whole rename is one write of the delta and one undo step.
+ */
+export function cambiosDeDelta(
+  antes: Record<string, unknown>,
+  despues: Record<string, unknown>,
+): { ruta: Ruta; valor: unknown }[] {
+  return Object.keys(despues)
+    .filter((clave) => despues[clave] !== antes[clave])
+    .map((clave) => ({ ruta: [clave], valor: despues[clave] }));
+}
+
+/* ------------------------------------------------------------------ *
  * Duplicar (§ 6: el what-if de la casa es un delta con `extends`)
  * ------------------------------------------------------------------ */
 
