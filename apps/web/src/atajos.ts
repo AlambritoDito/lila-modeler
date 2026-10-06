@@ -46,9 +46,6 @@ export const ATAJOS = [
   { id: 'modo:modelar', grupo: 'modos', tecla: 'Mod+Digit1', menu: true, soloDesktop: true },
   { id: 'modo:simular', grupo: 'modos', tecla: 'Mod+Digit2', menu: true, soloDesktop: true },
   { id: 'modo:resultados', grupo: 'modos', tecla: 'Mod+Digit3', menu: true, soloDesktop: true },
-  { id: 'modo:comparar', grupo: 'modos', tecla: 'Mod+Digit4', menu: true, soloDesktop: true },
-  { id: 'modo:animar', grupo: 'modos', tecla: 'Mod+Digit5', menu: true, soloDesktop: true },
-  { id: 'modo:rutas', grupo: 'modos', tecla: 'Mod+Digit6', menu: true, soloDesktop: true },
   { id: 'ejecutar', grupo: 'simulacion', tecla: 'Mod+Enter', menu: true },
   { id: 'cancelar', grupo: 'simulacion', tecla: 'Escape', ambito: 'corrida' },
   // Lote M: Alt+1…6 open the six steps of the Simulate panel, which handles them itself.
@@ -58,6 +55,9 @@ export const ATAJOS = [
   { id: 'paso:resources', grupo: 'simulacion', tecla: 'Alt+Digit4', lienzo: true, panel: true },
   { id: 'paso:calendars', grupo: 'simulacion', tecla: 'Alt+Digit5', lienzo: true, panel: true },
   { id: 'paso:run', grupo: 'simulacion', tecla: 'Alt+Digit6', lienzo: true, panel: true },
+  // Play/pause the tokens on the Results map (Lote M): only in Results, never while typing or on a
+  // focused button, where Space is the control's own key.
+  { id: 'reproducir', grupo: 'simulacion', tecla: 'Space' },
   { id: 'zoomMas', grupo: 'lienzo', tecla: 'Mod+Plus' },
   { id: 'zoomMenos', grupo: 'lienzo', tecla: 'Mod+Minus' },
   { id: 'ajustarVista', grupo: 'lienzo', tecla: 'Mod+0' },
@@ -122,13 +122,14 @@ export function coincide(atajo: Atajo, e: Pick<KeyboardEvent, 'key' | 'code' | '
   if (tecla === 'Plus') return ['+', '=', 'Add'].includes(e.key);
   if (tecla === 'Minus') return ['-', 'Subtract'].includes(e.key);
   if (shift !== e.shiftKey) return false;
+  if (tecla === 'Space') return e.key === ' ';
   if (tecla.startsWith('Digit')) return e.code === tecla;
   if (alt) return e.code === `Key${tecla}`;
   return tecla.length === 1 ? e.key.toLowerCase() === tecla.toLowerCase() : e.key === tecla;
 }
 
-const NOMBRE_MAC: Record<string, string> = { Enter: '↩', Escape: 'Esc', Plus: '+', Minus: '−', Backspace: '⌫', Delete: '⌦' };
-const NOMBRE: Record<string, string> = { Escape: 'Esc', Plus: '+', Minus: '-', Delete: 'Del' };
+const NOMBRE_MAC: Record<string, string> = { Enter: '↩', Escape: 'Esc', Plus: '+', Minus: '−', Backspace: '⌫', Delete: '⌦', Space: 'Space' };
+const NOMBRE: Record<string, string> = { Escape: 'Esc', Plus: '+', Minus: '-', Delete: 'Del', Space: 'Space' };
 
 /** `⇧⌘S` / `Ctrl+Shift+S`, `⌘↩` / `Ctrl+Enter`, `⇧F6` / `Shift+F6`, `⌥⇧L` / `Alt+Shift+L`. */
 export function etiqueta(atajo: Atajo, mac: boolean): string {

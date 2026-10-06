@@ -52,9 +52,6 @@ export const en = {
     modoModelar: 'Model',
     modoSimular: 'Simulate',
     modoResultados: 'Results',
-    modoComparar: 'Compare',
-    modoAnimar: 'Animate',
-    modoRutas: 'Validate paths',
     simulacion: 'Simulation',
     ejecutar: 'Run simulation',
     /** The Help menu: on macOS it also carries the system's menu search (⇧⌘/). */
