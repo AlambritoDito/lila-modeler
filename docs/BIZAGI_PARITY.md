@@ -304,7 +304,7 @@ costs, and the two costs move to −2.08% and +3.96%.
 ---
 
 See also: [`docs/COMING-FROM-BIZAGI.md`](COMING-FROM-BIZAGI.md) (the user-facing guide for people
-arriving from Bizagi Modeler: the four levels as four steps, screen-by-screen map, and the
+arriving from Bizagi Modeler: the four levels as Simulate steps, screen-by-screen map, and the
 differences above in plain language).
 
 See also: `docs/RESULTS_FORMAT.md` (definition of the output columns mentioned in "Per-element

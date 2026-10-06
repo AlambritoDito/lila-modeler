@@ -31,7 +31,7 @@ stable.
 ## Features
 
 - **Six modes in one window** — Model, Simulate, Results, Compare, Animate and Validate paths.
-- **Simulate in four steps** — Parameters, Resources, Calendars and Arrivals, which cover
+- **Simulate in six steps** — Arrivals, Times, Routes, Resources, Calendars and Run, which cover
   Bizagi's four levels (validation, time, resources, calendars) without a level switch.
 - **Distributions** — the 13 from BPSim 2.0 (including the empirical one) plus constant.
 - **Replications with a 95% confidence interval**, always; seeded runs are deterministic byte for
@@ -192,7 +192,7 @@ not a claim of parity: the full checklist, with every documented difference and 
 
 | Capability | Bizagi Modeler | Lila Modeler |
 |---|---|---|
-| Four levels: validation, time, resources, calendars | ✓ | ✓ as the four steps of Simulate (Parameters, Resources, Calendars, Arrivals); no resources ⇒ infinite capacity, no calendar ⇒ 24×7 |
+| Four levels: validation, time, resources, calendars | ✓ | ✓ as the steps of Simulate (Arrivals, Times, Routes, Resources, Calendars, Run); no resources ⇒ infinite capacity, no calendar ⇒ 24×7 |
 | Distributions | undocumented subset | the 13 from BPSim 2.0 (incl. empirical) + constant |
 | Replications and determinism | replications only in what-if; partial seeding | always, with 95% CI; byte-for-byte deterministic |
 | What-if comparison | ✓ | ✓ Compare mode and `lila compare`, with deltas and significance marker |

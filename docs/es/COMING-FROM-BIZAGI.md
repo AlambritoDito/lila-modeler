@@ -171,7 +171,7 @@ imprime en sus barras; la tabla sigue siendo la referencia.
 
 **1. Tu `.bpmn` de Bizagi trae el dibujo, no los números.** Bizagi Modeler no exporta los parámetros
 de simulación: verificado sobre cinco archivos reales, en el namespace `bizagi:` solo viajan los
-colores. Así que importar funciona, y luego los cuatro pasos se vuelven a capturar aquí una vez.
+colores. Así que importar funciona, y luego los pasos de Simular se vuelven a capturar aquí una vez.
 Cuenta unos minutos para eso y usa la acción de carril → pool para que Recursos casi no cueste.
 
 **2. Los caminos compartidos se duplican, porque la ramificación es probabilística.** En v1 no hay

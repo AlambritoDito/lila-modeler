@@ -1411,7 +1411,7 @@ body {
 }
 
 /* #333: la barra de los pasos del panel de simulación (seis desde el Lote M). Horizontal y compacta, y con
-   `flex-wrap` porque el panel derecho se puede estrechar hasta que los cuatro rótulos no caben:
+   `flex-wrap` porque el panel derecho se puede estrechar hasta que los seis rótulos no caben:
    entonces se parten en dos filas en vez de recortarse o desbordar. */
 .escenario .pasos {
   display: flex;

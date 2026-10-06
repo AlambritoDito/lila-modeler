@@ -170,7 +170,7 @@ the table stays the reference.
 
 **1. Your Bizagi `.bpmn` brings the drawing, not the numbers.** Bizagi Modeler does not export
 simulation parameters: verified on five real files, only colours travel in the `bizagi:` namespace.
-So importing works, and then the four steps are re-entered here once. Budget a few minutes for
+So importing works, and then the Simulate steps are re-entered here once. Budget a few minutes for
 it, and use the lane-to-pool action to make Resources nearly free.
 
 **2. Shared paths are duplicated, because branching is probabilistic.** There is no routing on case
