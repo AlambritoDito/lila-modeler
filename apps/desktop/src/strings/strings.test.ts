@@ -81,6 +81,8 @@ describe('LILA-213 · the two desktop catalogs are the same catalog in two langu
       // LILA-317: el `.lila` es nuevo, así que este texto no existía antes de ADR-027 — el
       // criterio «los textos españoles son los de siempre» cubre los que ya se enviaban.
       abrirProyectoArchivo: 'Abrir archivo de proyecto (.lila)…',
+      // #591: new as well.
+      importarBpmn: 'Importar BPMN…',
       abrirReciente: 'Abrir reciente',
       guardarProyecto: 'Guardar proyecto',
       guardarComo: 'Guardar como…',

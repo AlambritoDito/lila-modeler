@@ -87,6 +87,7 @@ describe.each(IDIOMAS)('menuTemplate (%s)', (locale) => {
       // El segundo abridor: el `.lila` de ADR-027, que fuera de macOS no cabe en el mismo diálogo
       // nativo que la carpeta de proyecto.
       S.abrirProyectoArchivo,
+      S.importarBpmn,
       S.abrirReciente,
       S.guardarProyecto,
       S.guardarComo,
@@ -98,6 +99,14 @@ describe.each(IDIOMAS)('menuTemplate (%s)', (locale) => {
       S.exportarHtml,
       S.imprimir,
     ]);
+  });
+
+  it('Import BPMN… sends "importarBpmn" (#591), with no accelerator', () => {
+    const send = vi.fn();
+    const item = flat(menuTemplate([], 'darwin', send, desktopStrings(locale))).find((i) => i.label === S.importarBpmn);
+    (item!.click as () => void)();
+    expect(send).toHaveBeenCalledWith('importarBpmn');
+    expect(item!.accelerator).toBeUndefined();
   });
 
   it('File exports the diagram as SVG, PNG and PDF and prints it with CmdOrCtrl+P (#451)', () => {

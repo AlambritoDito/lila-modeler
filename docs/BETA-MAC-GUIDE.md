@@ -316,7 +316,8 @@ This is real, working functionality: `DesktopStore` is wired up in `main.tsx` an
   opens (if the saved window no longer fits any connected screen, the default size is used).
 - **File → Open recent** lists those projects (newest first) and reopens
   them with no dialog; if the folder no longer exists, it drops off the list and the app says so in
-  the status bar. The native menu also carries **New project** (`⌘N`), **Open project…** (`⌘O`), **Save project**
+  the status bar. The native menu also carries **New project** (`⌘N`), **Open project…** (`⌘O`), **Import BPMN…** (a
+  `.bpmn` or `.xml` from another tool), **Save project**
   (`⌘S`), **Save as…** (`⇧⌘S`), and **Preferences…** (`⌘,`) in the app
   menu; **View** carries the command palette (`⌘K`) and the six modes (`⌘1`…`⌘6`), and
   **Simulation** runs the simulation (`⌘↩`). Every shortcut is listed in

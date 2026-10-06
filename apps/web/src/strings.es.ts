@@ -76,7 +76,7 @@ export const es: Strings = {
     abrir: 'Abrir',
     guardar: 'Guardar',
     guardarComo: 'Guardar como',
-    abrirBpmn: 'Abrir .bpmn',
+    importarBpmn: 'Importar BPMN…',
     exportarBpmn: 'Exportar .bpmn',
     exportarSvg: 'Exportar diagrama como SVG',
     exportarPng: 'Exportar diagrama como PNG',
@@ -94,6 +94,7 @@ export const es: Strings = {
       nuevoProyecto: 'Nuevo proyecto',
       abrirProyecto: 'Abrir proyecto…',
       abrirProyectoArchivo: 'Abrir archivo de proyecto (.lila)…',
+      importarBpmn: 'Importar BPMN…',
       abrirReciente: 'Abrir reciente',
       // QA de #432 (N1): igual, letra por letra, al vacío del menú nativo
       // (`menu.ninguno` en `apps/desktop/src/strings/es.ts`), no una paráfrasis más larga.

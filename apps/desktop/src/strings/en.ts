@@ -32,6 +32,8 @@ export const en = {
     abrirProyecto: 'Open project…',
     /** Second opener for the `.lila` container: the only one Windows and Linux can use (ADR-027). */
     abrirProyectoArchivo: 'Open project file (.lila)…',
+    /** A `.bpmn`/`.xml` from another tool (#591): opens as a diagram, not as a project. */
+    importarBpmn: 'Import BPMN…',
     abrirReciente: 'Open recent',
     guardarProyecto: 'Save project',
     guardarComo: 'Save as…',

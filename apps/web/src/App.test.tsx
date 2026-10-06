@@ -318,6 +318,150 @@ it('abrir un .bpmn inválido conserva el proyecto, la corrida y su overlay', asy
   expect(container.querySelector<HTMLInputElement>('.campo.interruptor input')!.checked).toBe(true);
 });
 
+// ---------- File → Import BPMN… (#591) ----------
+
+/** Clicks Import BPMN… and, when the demo project has unsaved changes, discards them. */
+async function importar(): Promise<void> {
+  await click(T.app.importarBpmn);
+  if (container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open === true) await click(T.app.descartar);
+}
+it('Import BPMN… opens the chosen file as the current diagram, with no folder dialog and no download (#591)', async () => {
+  const xml = seedModelXml();
+  const importBpmn = vi.fn().mockResolvedValue({ xml, name: 'De Signavio.xml' });
+  Object.assign(session, { importBpmn, forget: vi.fn() });
+  await importar();
+  expect(importBpmn).toHaveBeenCalledOnce();
+  expect(mocks.abrir).toHaveBeenCalledWith(xml);
+  expect(container.textContent).toContain('De Signavio');
+  expect(session.createProject).not.toHaveBeenCalled();
+  expect(session.saveProject).not.toHaveBeenCalled();
+  // Like a gallery example: nothing on disk behind it, so the first Save asks where.
+  expect(session.forget).toHaveBeenCalledOnce();
+});
+it('Import BPMN… of a file that is not BPMN shows the open error and leaves the canvas as it was (#591)', async () => {
+  Object.assign(session, { importBpmn: vi.fn().mockResolvedValue({ xml: '<html>no</html>', name: 'pagina.xml' }) });
+  await importar();
+  expect(mocks.abrir).not.toHaveBeenCalled();
+  expect(container.querySelector('[role="alert"].error')?.textContent).toMatch(new RegExp(`^${T.app.errorAbrirDiagrama('')}`));
+  expect(container.textContent).toContain(T.app.proyectoDemo);
+});
+it('a cancelled Import BPMN… changes nothing (#591)', async () => {
+  Object.assign(session, { importBpmn: vi.fn().mockResolvedValue(null) });
+  await importar();
+  expect(mocks.abrir).not.toHaveBeenCalled();
+  expect(container.querySelector('[role="alert"].error')).toBeNull();
+  expect(container.textContent).toContain(T.app.proyectoDemo);
+});
+it("the native menu's Import BPMN… opens a .bpmn where it is, through the double-click's door (#591)", async () => {
+  let menu: ((a: unknown) => void) | null = null;
+  vi.stubGlobal('lila', { onMenu: (cb: (a: unknown) => void) => { menu = cb; return () => {}; },
+    pendingOpenPath: async () => null, onOpenPath: () => () => {},
+    readSettings: async () => ({}), writeSettings: async () => {} });
+  const suelto = { version: 1, id: 'p9', name: 'De Camunda', loose: true, model: { id: 'Process_9', name: 'model.bpmn', xml: newModelXml(), revision: 0 }, scenarios: {}, scenarioRevisions: {}, runs: [] };
+  const openRecent = vi.fn().mockResolvedValue(suelto);
+  Object.assign(session, { importBpmn: vi.fn().mockResolvedValue({ dir: '/descargas', file: 'De Camunda.bpmn' }), openRecent, forget: vi.fn() });
+  await montar();
+  await act(async () => { menu!('importarBpmn'); });
+  if (container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open === true) await click(T.app.descartar);
+  expect(openRecent).toHaveBeenCalledWith('/descargas', 'De Camunda.bpmn');
+  expect(container.textContent).toContain('De Camunda');
+  // It is the file on disk now: Save writes back to it, so the adapter keeps it.
+  expect(session.forget).not.toHaveBeenCalled();
+});
+it('QA #593: a failed Import BPMN… of a broken .bpmn leaves the open project saveable in place (#591)', async () => {
+  let abrirRuta: (p: unknown) => void = () => {};
+  const writeProject = vi.fn().mockResolvedValue(undefined);
+  const roto = { version: 1, id: 'roto', name: 'roto', loose: true, model: { id: 'x', name: 'model.bpmn', xml: '<html>no</html>', revision: 0 }, scenarios: {}, scenarioRevisions: {}, runs: [] };
+  const puente = puenteRecuperacion(null, {
+    onOpenPath: (cb: (p: unknown) => void) => { abrirRuta = cb; return () => {}; },
+    openRecent: vi.fn(async (dir: string) => (dir === '/p/proj' ? proyecto('p1', 'Proyecto') : roto)),
+    importBpmn: vi.fn().mockResolvedValue({ dir: '/descargas', file: 'roto.bpmn' }),
+    writeProject, setDirty: vi.fn(), onCloseRequested: () => () => {},
+  });
+  await montar(new DesktopStore(puente as never));
+  await act(async () => { abrirRuta({ dir: '/p/proj' }); });
+  expect(container.textContent).toContain('Proyecto');
+  await act(async () => { puente.menu('importarBpmn'); });
+  if (container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open === true) await click(T.app.descartar);
+  expect(container.querySelector('[role="alert"].error')?.textContent).toMatch(new RegExp(`^${T.app.errorAbrirDiagrama('')}`));
+  expect(container.textContent).toContain('Proyecto');
+  // The canvas still shows «Proyecto», so ⌘S must write it back to /p/proj — not fail with
+  // E-PROYECTO-DISTINTO because the store already moved to the broken file.
+  await act(async () => { puente.menu('guardar'); });
+  expect(container.querySelector('[role="alert"].error')?.textContent ?? '').not.toContain('E-PROYECTO-DISTINTO');
+  expect(writeProject).toHaveBeenCalledWith('/p/proj', expect.objectContaining({ id: 'p1' }), expect.anything());
+});
+
+function puenteQa(openRecent: (dir: string, file?: string) => Promise<unknown>, extra: object = {}) {
+  let abrirRuta: (p: unknown) => void = () => {};
+  const writeProject = vi.fn().mockResolvedValue(undefined);
+  const chooseSaveFile = vi.fn().mockResolvedValue(null);
+  const watchProject = vi.fn(); const forgetProject = vi.fn();
+  const puente = puenteRecuperacion(null, {
+    onOpenPath: (cb: (p: unknown) => void) => { abrirRuta = cb; return () => {}; },
+    openRecent: vi.fn(openRecent), writeProject, chooseSaveFile, watchProject, forgetProject,
+    setDirty: vi.fn(), onCloseRequested: () => () => {}, ...extra,
+  });
+  return { puente, writeProject, chooseSaveFile, watchProject, forgetProject, abrir: async (p: unknown) => { await act(async () => { abrirRuta(p); }); } };
+}
+const ROTO = { version: 1, id: 'roto', name: 'roto', loose: true, model: { id: 'x', name: 'model.bpmn', xml: '<html>no</html>', revision: 0 }, scenarios: {}, scenarioRevisions: {}, runs: [] };
+it('QA2 #593: double-click of a broken .bpmn over a LOOSE diagram goes back to that loose file', async () => {
+  const suelto = { ...proyecto('s1', 'Suelto'), loose: true };
+  const q = puenteQa(async (dir) => (dir === '/d' ? suelto : ROTO));
+  await montar(new DesktopStore(q.puente as never));
+  await q.abrir({ dir: '/d', file: 'ventas.bpmn' });
+  expect(container.textContent).toContain('Suelto');
+  await q.abrir({ dir: '/x', file: 'roto.bpmn' });
+  expect(q.watchProject).toHaveBeenCalledWith('/d', 'ventas.bpmn');
+  await act(async () => { q.puente.menu('guardar'); });
+  expect(q.writeProject).toHaveBeenCalledWith('/d', expect.objectContaining({ id: 's1' }), expect.objectContaining({ modelFile: 'ventas.bpmn' }));
+});
+it('QA2 #593: with nothing open, a broken import forgets it and Save asks where', async () => {
+  const q = puenteQa(async () => ROTO, { importBpmn: vi.fn().mockResolvedValue({ dir: '/x', file: 'roto.bpmn' }) });
+  await montar(new DesktopStore(q.puente as never));
+  await act(async () => { q.puente.menu('importarBpmn'); });
+  if (container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open === true) await click(T.app.descartar);
+  expect(q.forgetProject).toHaveBeenCalled();
+  await act(async () => { q.puente.menu('guardar'); });
+  expect(container.querySelector('[role="alert"].error')?.textContent ?? '').not.toContain('E-PROYECTO-DISTINTO');
+  expect(q.writeProject).not.toHaveBeenCalled();
+});
+it('QA2 #593: activate returning false (modeler refuses) also undoes the read', async () => {
+  const q = puenteQa(async (dir) => (dir === '/p' ? proyecto('p1', 'Proyecto') : proyecto('p2', 'Otro')));
+  await montar(new DesktopStore(q.puente as never));
+  await q.abrir({ dir: '/p' });
+  mocks.abrir.mockResolvedValueOnce(false);
+  await q.abrir({ dir: '/o' });
+  expect(container.textContent).toContain('Proyecto');
+  expect(q.watchProject).toHaveBeenCalledWith('/p', undefined);
+  await act(async () => { q.puente.menu('guardar'); });
+  expect(q.writeProject).toHaveBeenCalledWith('/p', expect.objectContaining({ id: 'p1' }), expect.anything());
+});
+it('QA2 #593: a successful open commits: no undo, Save writes to the new folder', async () => {
+  const q = puenteQa(async (dir) => (dir === '/p' ? proyecto('p1', 'Proyecto') : proyecto('p2', 'Otro')));
+  await montar(new DesktopStore(q.puente as never));
+  await q.abrir({ dir: '/p' });
+  await q.abrir({ dir: '/o' });
+  expect(container.textContent).toContain('Otro');
+  expect(q.watchProject).not.toHaveBeenCalled();
+  expect(q.forgetProject).not.toHaveBeenCalled();
+  await act(async () => { q.puente.menu('guardar'); });
+  expect(q.writeProject).toHaveBeenCalledWith('/o', expect.objectContaining({ id: 'p2' }), expect.anything());
+});
+it('QA2 #593: Open project… (folder) of a broken model undoes too', async () => {
+  const q = puenteQa(async () => proyecto('p1', 'Proyecto'), {
+    chooseFolder: vi.fn().mockResolvedValue('/r'),
+    readProject: vi.fn().mockResolvedValue({ ...ROTO, loose: false }),
+  });
+  await montar(new DesktopStore(q.puente as never));
+  await q.abrir({ dir: '/p' });
+  await act(async () => { q.puente.menu('abrir'); });
+  expect(container.textContent).toContain('Proyecto');
+  expect(q.watchProject).toHaveBeenCalledWith('/p', undefined);
+  await act(async () => { q.puente.menu('guardar'); });
+  expect(q.writeProject).toHaveBeenCalledWith('/p', expect.objectContaining({ id: 'p1' }), expect.anything());
+});
+
 it('guardar cancelado mantiene cambios pendientes', async () => {
   await act(async () => mocks.changed());
   vi.mocked(session.saveProject).mockResolvedValueOnce(null);

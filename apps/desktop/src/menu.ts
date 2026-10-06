@@ -75,6 +75,7 @@ export function menuTemplate(
         { label: S.nuevoProyecto, accelerator: 'CmdOrCtrl+N', click: () => send('nuevo') },
         { label: S.abrirProyecto, accelerator: 'CmdOrCtrl+O', click: () => send('abrir') },
         { label: S.abrirProyectoArchivo, click: () => send('abrirArchivo') },
+        { label: S.importarBpmn, click: () => send('importarBpmn') },
         { label: S.abrirReciente, submenu: recientes },
         { type: 'separator' },
         { label: S.guardarProyecto, accelerator: 'CmdOrCtrl+S', click: () => send('guardar') },

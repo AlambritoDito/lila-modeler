@@ -20,7 +20,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, protocol, scree
 import type { IpcMainEvent, IpcMainInvokeEvent, WebFrameMain } from 'electron';
 import { appendFile, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { SaveOutcome, Ajustes, Exportacion, OpenPathRequest, Recent } from './bridge.js';
+import type { SaveOutcome, Ajustes, Exportacion, ImportedBpmn, OpenPathRequest, Recent } from './bridge.js';
 import { closeDialogOptions, decideClose, readSaveOutcome, saveOutcomeDialogOptions, type CloseChoice } from './closeGuard.js';
 import { requireAuthorizedPath } from './authorizedPaths.js';
 import { e2eOverrides, type E2EOverrides } from './e2e.js';
@@ -601,6 +601,41 @@ function registerIpcHandlers(win: BrowserWindow): void {
     return real;
   });
 
+  /**
+   * File → Import BPMN… (#591). A `.bpmn` takes the double-click's door (`acceptOpenPath`): its
+   * folder is authorized and the renderer opens it as a loose diagram, so ⌘S writes back to it. A
+   * `.xml` (Signavio, Camunda…) cannot: the project IO only accepts `.bpmn` names
+   * (`requireBpmnName`), so its text goes to the renderer, which opens it as an unsaved project.
+   */
+  guardedHandle(win, 'lila:importBpmn', async (): Promise<ImportedBpmn | null> => {
+    let chosen: string;
+    if (e2e.importFile !== undefined) {
+      // E2E seam (`LILA_E2E_IMPORT`, see `e2e.ts`): no native dialog.
+      if (e2e.importFile === null) {
+        await e2eLog('importBpmn', { result: null });
+        return null;
+      }
+      chosen = e2e.importFile;
+    } else {
+      const result = await dialog.showOpenDialog(win, {
+        properties: ['openFile'],
+        filters: [{ name: 'BPMN', extensions: ['bpmn', 'xml'] }],
+      });
+      if (result.canceled || result.filePaths.length === 0) return null;
+      chosen = result.filePaths[0]!;
+    }
+    await e2eLog('importBpmn', { result: chosen });
+    // Same cap as an export (QA of #593): a diagram of any real size is far below it, and the
+    // whole `.xml` would otherwise be read and sent over IPC.
+    if ((await stat(chosen)).size > MAX_EXPORTACION) {
+      throw new Error(`E-ARGUMENTO: "${path.basename(chosen)}" pasa de ${String(MAX_EXPORTACION / 1024 / 1024)} MB.`);
+    }
+    if (!isBpmnPath(chosen)) return { xml: await readFile(chosen, 'utf8'), name: path.basename(chosen) };
+    const dir = await realpath(path.dirname(chosen));
+    authorizedFolders.add(dir);
+    return { dir, file: path.basename(chosen) };
+  });
+
   guardedHandle(win, 'lila:readProject', async (_event, dirArg: unknown) => {
     const dir = await requireAuthorizedDir(dirArg);
     try {
@@ -655,6 +690,14 @@ function registerIpcHandlers(win: BrowserWindow): void {
 
   // A project with no file behind it (a gallery example) replaces the one being watched (#539).
   guardedOn(win, 'lila:forgetProject', () => unwatchProject(win));
+  // What `openRecent` just read did not open (QA of #593): back to the project still on screen.
+  guardedOn(win, 'lila:watchProject', (_event, dirArg: unknown, fileArg: unknown) => {
+    void (async () => {
+      const real = await requireAuthorizedDir(dirArg);
+      const file = isLilaPath(real) ? undefined : requireBpmnName(real, fileArg);
+      watchOpenProject(win, file === undefined ? real : path.join(real, file), dirArg as string);
+    })().catch(() => {});
+  });
 
   guardedOn(win, 'lila:setDirty', (_event, value: unknown) => {
     if (typeof value === 'boolean') setDirty(value);
