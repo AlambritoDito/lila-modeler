@@ -1,6 +1,7 @@
-/* The Simulate dock (#394): its own grid row under the canvas (`app.css`, area `dock`), as tall as
-   `--dock-alto`, which its divider sets inline on `.app`. Square corners and the panel tokens,
-   like the right panel it sits next to. */
+/* The results table under the Results map (Lote M; the Simulate dock of #394 before): its own grid
+   row under the canvas (`app.css`, area `dock`), as tall as `--dock-alto`, which its divider sets
+   inline on `.app`. Collapsed (`.plegada`, ⌘J) only its header row stays. Square corners and the
+   panel tokens, like the right panel it sits next to. */
 .dock-simular {
   background: var(--bg-surface);
   border-top: 1px solid var(--border);
@@ -112,14 +113,14 @@
   z-index: 1;
 }
 
-.app.sin-dock > .dock-simular {
-  display: none;
+.dock-simular.plegada {
+  height: auto;
 }
 
-/* Alone in its row, it would add 6 px under the canvas: the negative margin makes it take none. */
 .app.sin-dock > .divisor-dock {
-  margin-top: -6px;
+  pointer-events: none;
 }
+
 
 .divisor-dock:hover,
 .divisor-dock:focus-visible {
@@ -150,4 +151,25 @@
 .avisos-resto summary {
   color: var(--fg-muted);
   cursor: pointer;
+}
+
+.c5-tabla-titulo {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.c5-tabla-titulo .c5-nota {
+  color: var(--fg-muted);
+}
+
+.c5-plegar {
+  width: 24px;
+}
+
+.c5-tareas .c5-fila-activa > * {
+  background: var(--bg-hover, var(--bg-elevated));
+}
+
+.c5-tareas .enlace[aria-current='true'] {
+  font-weight: 600;
 }

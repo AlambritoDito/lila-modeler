@@ -210,8 +210,8 @@ describe('menuTemplate · parity with the shortcut map (#413)', () => {
     const sub = (label: string) => menus.find((m) => m.label === label)!.submenu as MenuItemConstructorOptions[];
     const enviado = (i: MenuItemConstructorOptions) => { (i.click as () => void)(); return send.mock.calls.at(-1)?.[0]; };
     const vista = sub(S.vista).filter((i) => i.click !== undefined);
-    expect(vista.map((i) => i.label)).toEqual([S.paleta, S.modoModelar, S.modoSimular, S.modoResultados, S.modoComparar, S.modoAnimar, S.modoRutas]);
-    expect(vista.map(enviado)).toEqual(['paleta', 'modo:modelar', 'modo:simular', 'modo:resultados', 'modo:comparar', 'modo:animar', 'modo:rutas'].map((atajo) => ({ atajo })));
+    expect(vista.map((i) => i.label)).toEqual([S.paleta, S.modoModelar, S.modoSimular, S.modoResultados]);
+    expect(vista.map(enviado)).toEqual(['paleta', 'modo:modelar', 'modo:simular', 'modo:resultados'].map((atajo) => ({ atajo })));
     expect(sub(S.vista).map((i) => i.role).filter(Boolean)).toEqual(['togglefullscreen']);
     const simulacion = sub(S.simulacion);
     expect(simulacion.map((i) => i.label)).toEqual([S.ejecutar]);

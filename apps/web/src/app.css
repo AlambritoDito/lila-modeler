@@ -32,17 +32,18 @@ body {
   display: grid;
   grid-template-areas:
     'barra     barra     barra'
+    'paleta    subbarra  panel'
     'paleta    lienzo    panel'
     'paleta    dock      panel'
     'paleta    diagramas panel'
     'estado    estado    estado';
   /* La paleta (LILA-207) fija su propio ancho —`--paleta-ancho`, o 48 en compacto— y la columna
-     se encoge a 0 cuando no se pinta (modos Resultados y Comparar). In Simulate the column is the
-     scenario rail (`--rail-ancho`). The right panel is `--panel-ancho`. The three are set inline
-     by their dividers (#406). The `dock` row is the Simulate dock (#394, `DockSimular.css`); in
-     every other mode nothing is drawn there and the row collapses. */
+     se encoge a 0 cuando no se pinta (Simular y Resultados). The right panel is `--panel-ancho`.
+     Both are set inline by their dividers (#406). The `subbarra` row is «Scenario ▾» and Results'
+     tools over the canvas, the `dock` row the results table under the Results map (Lote M,
+     `DockSimular.css`); where nothing is drawn there the rows collapse. */
   grid-template-columns: auto 1fr var(--panel-ancho, 320px);
-  grid-template-rows: auto 1fr auto auto auto;
+  grid-template-rows: auto auto 1fr auto auto auto;
   height: 100vh;
 }
 
@@ -52,7 +53,6 @@ body {
    left `auto` column collapses by itself once its only content is gone; the right one needs the
    explicit 0. The rows of the diagram tabs and the status bar are `auto`, so they collapse too. */
 .app.sin-izquierda > .paleta,
-.app.sin-izquierda > .rail-escenarios,
 .app.sin-panel > .panel,
 .app.sin-diagramas > .diagramas,
 .app.sin-estado > .estado {
@@ -876,46 +876,11 @@ body {
   padding: 0;
 }
 
-/* Panel de la reproducción del event log (#331): misma retícula que la pestaña «Simulación»,
-   más la tabla de pools. Los colores de los contadores y de los puntos que recorren los flujos
-   viven en `ReplayOverlay.ts`, que es quien los escribe sobre el lienzo. */
-.replay {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-}
-
-.replay h3 {
-  color: var(--fg-muted);
-  font-size: var(--font-size-base);
-  margin: 0;
-}
-
+/* The replay's time bar (#331, a bar over the Results map since Lote M) is styled in the C5 block
+   at the end (`.c5-tiempo`); the colours of the counters and the dots that walk the flows live in
+   `ReplayOverlay.ts`, which writes them onto the canvas. */
 .replay .vacio {
   padding: 0;
-}
-
-.replay .acciones {
-  display: flex;
-  gap: 8px;
-}
-
-.replay-recursos {
-  border-collapse: collapse;
-  color: var(--fg-primary);
-  width: 100%;
-}
-
-.replay-recursos th, .replay-recursos td {
-  border-bottom: 1px solid var(--border);
-  padding: 4px 6px;
-  text-align: left;
-}
-
-.replay-recursos th {
-  color: var(--fg-muted);
-  font-weight: normal;
 }
 
 .campo {
@@ -2772,132 +2737,9 @@ button.gcal-uso-fila:hover {
 .chips-validacion .punto { width: 7px; height: 7px; background: var(--diagram-marker-warning); }
 .chips-validacion .chip.error .punto { background: var(--diagram-marker-error); }
 
-/* ---------- scenario rail of Simulate (design 2a) ---------- */
-
-/* Replaces the shape palette in Simulate, in the same grid column. Measures from design 2a:
-   212 px rail, 10 px uppercase header, 20 px `+`, 12 px names, 10 px mono subtitles. */
-.rail-escenarios {
-  background: var(--bg-surface);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  grid-area: paleta;
-  min-height: 0;
-  /* 160–320 px from the left divider (#406); 212 px is design 2a's. */
-  width: var(--rail-ancho, 212px);
-}
-
-.rail-cabecera,
-.rail-rotulo {
-  color: var(--fg-muted);
-  font: 600 10px/1 var(--font-ui);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.rail-cabecera {
-  align-items: center;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  justify-content: space-between;
-  padding: calc(10px * var(--espacio, 1)) 12px;
-}
-
-.rail-nuevo {
-  background: none;
-  border: 1px solid var(--border-strong);
-  border-radius: 0;
-  color: var(--fg-primary);
-  cursor: pointer;
-  font: 400 14px/1 var(--font-ui);
-  height: 20px;
-  padding: 0;
-  width: 20px;
-}
-
-.rail-nuevo:hover { background: var(--bg-hover); }
-
-.rail-nuevo:focus-visible,
-.rail-fila:focus-visible {
-  outline: 1px solid var(--accent-primary);
-  outline-offset: -1px;
-}
-
-.rail-lista {
-  flex: 1;
-  overflow: auto;
-}
-
-.rail-fila {
-  background: none;
-  border: 0;
-  border-bottom: 1px solid var(--border);
-  border-left: 3px solid transparent;
-  color: var(--fg-primary);
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: calc(9px * var(--espacio, 1)) 12px calc(9px * var(--espacio, 1)) 9px;
-  text-align: left;
-  width: 100%;
-}
-
-.rail-fila:hover { background: var(--bg-hover); }
-
-.rail-fila[aria-current='true'] {
-  background: var(--bg-elevated);
-  border-left-color: var(--accent-primary);
-}
-
-.rail-nombre {
-  align-items: center;
-  display: flex;
-  font: 500 12px/1.2 var(--font-ui);
-  gap: 6px;
-}
-
-/* A narrow rail (#406) ellipsizes the name and the subtitle instead of spilling out. */
-.rail-nombre,
-.rail-texto,
-.rail-sub {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rail-nombre .insignia-base {
-  flex: none;
-}
-
-.rail-fila[aria-current='true'] .rail-nombre { font-weight: 600; }
-
-.rail-sub {
-  color: var(--fg-muted);
-  font: 400 10px/1.3 var(--font-mono);
-}
-
+/* The BASE badge: «Scenario ▾» and the panel header. */
 .insignia-base {
-  background: var(--accent-primary);
-  color: var(--fg-onAccent);
-  font: 700 9px/1 var(--font-mono);
-  letter-spacing: 0.08em;
-  padding: 2px 4px;
-}
-
-.rail-pie {
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: calc(10px * var(--espacio, 1)) 12px;
-}
-
-/* The canvas chips, in the flow of the rail instead of floating over the canvas. */
-.chips-validacion.en-rail {
-  align-self: flex-start;
-  position: static;
+  flex: none;
 }
 
 .chips-validacion .chip:disabled { cursor: default; }
@@ -3488,7 +3330,7 @@ button.gcal-uso-fila:hover {
 .menu-vista,
 .vista-grupo,
 .paleta,
-.rail-escenarios,
+.c5-subbarra,
 .modos,
 .pestanas,
 .diagramas,
@@ -4017,6 +3859,114 @@ button.gcal-uso-fila:hover {
   font: inherit;
   gap: 10px;
   padding: 10px;
+/* ---------- Lote M, C5: results on the map, compare, «Scenario ▾» ---------- */
+
+/* The row over the canvas in Simulate and Results (`grid-area: subbarra`): «Scenario ▾», and in
+   Results the run's meta, the two map layers and «Compare with…» (designs 01 and 05). */
+.c5-subbarra {
+  align-items: center;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  grid-area: subbarra;
+  min-height: 44px;
+  min-width: 0;
+  padding: 4px 12px;
+  position: relative;
+  /* Its dropdowns open over the canvas, the time bar and the minimap. */
+  z-index: 30;
+}
+
+.c5-hueco { flex: 1; }
+
+.c5-rotulo {
+  color: var(--fg-muted);
+  font: 700 9.5px/1 var(--font-ui);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.c5-nota { color: var(--fg-muted); font-size: 12px; }
+
+.c5-meta { color: var(--fg-muted); font-size: 11px; white-space: nowrap; }
+
+.c5-escenario,
+.c5-comparar-menu {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  position: relative;
+}
+
+.c5-escenario-boton {
+  align-items: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 0;
+  color: var(--fg-primary);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 8px;
+  height: 34px;
+  max-width: 360px;
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.c5-escenario-boton:hover,
+.c5-escenario-boton[aria-expanded='true'] { border-color: var(--accent-primary); }
+
+.c5-escenario-nombre {
+  align-items: center;
+  display: flex;
+  font-weight: 700;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.c5-flecha { color: var(--fg-muted); }
+
+.c5-chips { position: static; }
+
+/* The dropdown: above the canvas and the table, scrolled inside itself (never the page). */
+.c5-escenario-menu {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 8px 24px var(--shadow);
+  display: flex;
+  flex-direction: column;
+  left: 0;
+  max-height: min(70vh, 560px);
+  overflow: auto;
+  position: absolute;
+  top: calc(100% + 4px);
+  width: 340px;
+  z-index: 20;
+}
+
+.c5-comparar-lista { left: auto; right: 0; }
+
+.c5-escenario-lista { list-style: none; margin: 0; padding: 0; }
+
+.c5-escenario-fila {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  color: var(--fg-primary);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  font: inherit;
+  gap: 3px;
+  padding: 8px 12px 8px 9px;
   text-align: left;
   width: 100%;
 }
@@ -4244,3 +4194,295 @@ button.gcal-uso-fila:hover {
   color: var(--status-error);
   font-size: 0.92em;
 }
+.c5-escenario-fila:hover { background: var(--bg-hover); }
+
+.c5-escenario-fila[aria-current='true'] { border-left-color: var(--accent-primary); }
+
+.c5-escenario-fila:focus-visible,
+.c5-escenario-boton:focus-visible,
+.c5-escenario-campo:focus-visible {
+  outline: 1px solid var(--accent-primary);
+  outline-offset: -1px;
+}
+
+.c5-escenario-sub { color: var(--fg-muted); font: 400 10.5px/1.3 var(--font-mono); }
+
+.c5-escenario-campo {
+  background: var(--bg-base);
+  border: 1px solid var(--accent-primary);
+  border-radius: 0;
+  box-sizing: border-box;
+  color: var(--fg-primary);
+  font: inherit;
+  margin: 6px 8px;
+  padding: 6px 8px;
+  width: calc(100% - 16px);
+}
+
+.c5-escenario-acciones {
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px;
+}
+
+.c5-escenario-importar { padding: 4px 12px 10px; }
+
+.c5-capas { display: flex; }
+
+.c5-capas .boton + .boton { border-left: 0; }
+
+.c5-capas .boton[aria-pressed='true'],
+.c5-validar-rutas[aria-pressed='true'] {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: var(--fg-onAccent);
+}
+
+.c5-comparar-boton {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* «Results» has a run (design 05): the dot next to the mode's name. */
+.modo .c5-punto {
+  background: var(--status-success);
+  display: inline-block;
+  height: 6px;
+  margin-left: 6px;
+  vertical-align: middle;
+  width: 6px;
+}
+
+/* The card over the Results map: nothing simulated yet, or the run failed (design 05). */
+.c5-tarjeta-fondo {
+  display: grid;
+  inset: 0;
+  padding: 24px;
+  pointer-events: none;
+  place-items: center;
+  position: absolute;
+  z-index: 4;
+}
+
+.c5-tarjeta {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-top: 3px solid var(--accent-primary);
+  box-shadow: 0 8px 24px var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 420px;
+  padding: 20px 22px;
+  pointer-events: auto;
+}
+
+.c5-tarjeta.error { border-top-color: var(--status-error); }
+
+.c5-tarjeta p { color: var(--fg-muted); line-height: 1.5; margin: 0; }
+
+.c5-tarjeta-cabeza { align-items: center; display: flex; gap: 12px; }
+
+.c5-tarjeta-cabeza > div { display: flex; flex-direction: column; gap: 4px; }
+
+.c5-kicker {
+  color: var(--accent-primary);
+  font: 700 10px/1 var(--font-ui);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.c5-tarjeta.error .c5-kicker { color: var(--status-error); }
+
+.c5-tarjeta-titulo { font-size: 16px; line-height: 1.25; }
+
+.c5-tarjeta-acciones { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
+
+.c5-progreso { flex: 1 1 100%; }
+
+/* The time bar of the tokens, over the bottom of the Results map (left of the zoom buttons). */
+.c5-tiempo {
+  align-items: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  bottom: 12px;
+  box-shadow: 0 4px 12px var(--shadow);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  left: 12px;
+  padding: 6px 10px;
+  position: absolute;
+  right: 64px;
+  /* Over the minimap (bottom left): the bar is what Results is about; the minimap folds. */
+  z-index: 5;
+}
+
+.c5-tiempo .vacio { margin: 0; }
+
+.c5-play { min-width: 76px; }
+
+.c5-velocidad { align-items: center; display: flex; gap: 6px; }
+
+.c5-deslizador { accent-color: var(--accent-primary); flex: 1 1 140px; min-width: 100px; }
+
+.c5-reloj { color: var(--fg-primary); font-size: 11px; white-space: nowrap; }
+
+.c5-ocupacion { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.c5-pool {
+  border: 1px solid var(--border-strong);
+  font: 11px var(--font-mono);
+  padding: 1px 5px;
+}
+
+.c5-leyenda { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--fg-muted); }
+
+.c5-nivel::before {
+  content: '';
+  display: inline-block;
+  height: 9px;
+  margin-right: 4px;
+  vertical-align: -1px;
+  width: 9px;
+}
+
+.c5-nivel.low::before { background: var(--sim-bottleneck-low); }
+.c5-nivel.mid::before { background: var(--sim-bottleneck-mid); }
+.c5-nivel.high::before { background: var(--sim-bottleneck-high); }
+
+/* The Results summary in the right panel: six KPIs, the bottlenecks, the selected task. */
+.c5-resumen { display: flex; flex-direction: column; gap: 10px; overflow: auto; padding: 12px; }
+
+.c5-resumen h2 { font-size: 14px; margin: 0; }
+
+.c5-resumen h3 { font-size: 12px; margin: 0 0 6px; }
+
+.c5-kpis,
+.c5-tarea-datos {
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.c5-kpis > div,
+.c5-tarea-datos > div {
+  background: var(--bg-elevated);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.c5-kpis dt,
+.c5-tarea-datos dt,
+.c5-deltas dt {
+  color: var(--fg-muted);
+  font: 700 10px/1.2 var(--font-ui);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.c5-kpis dd,
+.c5-tarea-datos dd {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.c5-tarea-nombre { font-weight: 600; margin: 0 0 6px; }
+
+.c5-resumen-vacio { padding: 12px; }
+
+/* Compare inside Results (design 06): the whole width, the deltas, the two maps. */
+.c5-zona-comparar {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+.c5-comparar { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+
+.c5-comparar-nombre {
+  align-items: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  display: flex;
+  font-weight: 700;
+  height: 32px;
+  padding: 0 10px;
+}
+
+.c5-deltas {
+  background: var(--border);
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin: 0;
+}
+
+.c5-deltas > div {
+  background: var(--bg-base);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 8px 12px;
+}
+
+.c5-deltas dd { align-items: center; display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+
+.c5-delta-valor { font-size: 15px; font-variant-numeric: tabular-nums; font-weight: 700; }
+
+.c5-delta { font-size: 11px; font-weight: 700; padding: 2px 6px; white-space: nowrap; }
+
+.c5-delta.mejora { background: var(--status-success); color: var(--fg-onAccent); }
+.c5-delta.empeora { background: var(--status-error); color: var(--fg-onAccent); }
+.c5-delta.igual { border: 1px solid var(--border-strong); color: var(--fg-muted); }
+
+.c5-delta-ref { color: var(--fg-muted); font: 10.5px var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.c5-comparar-avisos {
+  color: var(--status-warning);
+  font-size: 12px;
+  margin: 0;
+  padding: 6px 12px 6px 28px;
+}
+
+.c5-mapas { background: var(--border); display: flex; flex: 1; gap: 1px; min-height: 260px; }
+
+.c5-mapa { flex: 1; margin: 0; min-width: 0; position: relative; }
+
+.c5-mapa-lienzo { background: var(--canvas-bg); inset: 0; position: absolute; }
+
+.c5-mapa-titulo {
+  align-items: center;
+  background: var(--bg-base);
+  border: 1px solid var(--border-strong);
+  display: flex;
+  gap: 8px;
+  left: 12px;
+  padding: 5px 10px;
+  position: absolute;
+  top: 10px;
+  z-index: 2;
+}
+
+.c5-mapa-titulo span { color: var(--fg-muted); font-size: 11.5px; }
+
+.c5-mapa-fallo { left: 12px; position: absolute; top: 52px; z-index: 2; }
+
+.c5-comparar-detalle { border-top: 1px solid var(--border); padding: 6px 12px; }
+
+.c5-comparar-detalle > summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+
+.c5-tiempo .aviso { font-size: 11px; }

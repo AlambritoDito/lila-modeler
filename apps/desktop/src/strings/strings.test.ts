@@ -102,9 +102,6 @@ describe('LILA-213 · the two desktop catalogs are the same catalog in two langu
       modoModelar: 'Modelar',
       modoSimular: 'Simular',
       modoResultados: 'Resultados',
-      modoComparar: 'Comparar',
-      modoAnimar: 'Animar',
-      modoRutas: 'Validar rutas',
       simulacion: 'Simulación',
       ejecutar: 'Ejecutar la simulación',
       // The Help menu is new.
