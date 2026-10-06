@@ -329,17 +329,17 @@ it('el AS-IS de la solicitud de servicio se teclea entero desde el panel, sin to
   seleccionar('StartEvent_Request');
   elegir('campo-elements.StartEvent_Request.calendar', 'tienda');
 
-  /* --- Las dos compuertas, en Rutas: su reparto es parte de cómo corre el modelo. --- */
+  /* --- Las dos compuertas, en Rutas, en porcentaje: el archivo sigue guardando fracciones. --- */
   irAPaso('routes');
   seleccionar('Gateway_Screening');
-  teclear('campo-elements.Flow_ScreeningBad.probability', '0.4');
-  teclear('campo-elements.Flow_ScreeningGood.probability', '0.6');
-  expect(document.body.textContent).toContain(es.escenario.compuertaSuma(1));
+  teclear('rutas-elements.Flow_ScreeningBad.probability', '40');
+  teclear('rutas-elements.Flow_ScreeningGood.probability', '60');
+  expect(document.body.textContent).toContain(es.rutas.suma100);
 
   seleccionar('Gateway_Eligibility');
-  teclear('campo-elements.Flow_EligibilityNotEligible.probability', '0.3');
-  teclear('campo-elements.Flow_EligibilityEligible.probability', '0.7');
-  expect(document.body.textContent).toContain(es.escenario.compuertaSuma(1));
+  teclear('rutas-elements.Flow_EligibilityNotEligible.probability', '30');
+  teclear('rutas-elements.Flow_EligibilityEligible.probability', '70');
+  expect(document.body.textContent).toContain(es.rutas.suma100);
 
   /* --- Lo tecleado es, semánticamente, el AS-IS del ejemplo. --- */
   const referencia = JSON.parse(

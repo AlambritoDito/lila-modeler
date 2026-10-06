@@ -293,19 +293,23 @@ describe('los seis pasos del panel de simulación', () => {
 
   it('las probabilidades de una compuerta son de Rutas', () => {
     montar(<Anfitrion inicial={asIs()} />);
-    seleccionar('Gateway_Screening');
-    expect(texto()).not.toContain(en.escenario.seccionCompuerta);
+    // Lote M, C4: with nothing selected Routes lists the gateways with their split.
     irAPaso('routes');
-    expect(texto()).toContain(en.escenario.seccionCompuerta);
-    // With the gateway selected the step shows only it; the list of gateways is the overview.
-    expect(texto()).not.toContain(en.escenario.listaRutas);
-    expect(hay('campo-elements.Flow_ScreeningGood.probability')).toBe(true);
+    expect(texto()).toContain(en.rutas.listaTitulo);
+    irAPaso('resources');
+    expect(texto()).not.toContain(en.rutas.flujosSalientes);
+    // Picking a splitting gateway on the canvas opens Routes with its percent fields only.
+    seleccionar('Gateway_Screening');
+    expect(texto()).toContain(en.rutas.flujosSalientes);
+    expect(document.querySelector('.rutas-lista')).toBeNull();
+    expect(hay('rutas-elements.Flow_ScreeningGood.probability')).toBe(true);
+    expect(hay('campo-elements.Flow_ScreeningGood.probability')).toBe(false);
 
     irAPaso('resources');
-    expect(texto()).not.toContain(en.escenario.seccionCompuerta);
+    expect(texto()).not.toContain(en.rutas.flujosSalientes);
     irAPaso('routes');
-    act(() => { boton(en.pasosSim.verTodo).click(); });
-    expect(texto()).toContain(en.escenario.listaRutas);
+    act(() => { boton(en.rutas.volver).click(); });
+    expect(document.querySelector('.rutas-lista')).not.toBeNull();
   });
 });
 

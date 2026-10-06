@@ -240,7 +240,9 @@ describe('los campos que se ofrecen son los del tipo de elemento', () => {
     montar(<Anfitrion inicial={base()} />);
     seleccionar('Flow_ScreeningGood');
     irAPaso('routes');
-    expect(hay('campo-elements.Flow_ScreeningGood.probability')).toBe(true);
+    // Lote M, C4: in Routes the share is the percent field of the gateway view, not a fraction field.
+    expect(hay('rutas-elements.Flow_ScreeningGood.probability')).toBe(true);
+    expect(hay('campo-elements.Flow_ScreeningGood.probability')).toBe(false);
     expect(hay('campo-elements.Flow_ScreeningGood.processingTime')).toBe(false);
     expect(hay('campo-elements.Flow_ScreeningGood.resources')).toBe(false);
   });
@@ -315,33 +317,32 @@ describe('vista de compuerta', () => {
     irAPaso('routes');
     // La compuerta no tiene campos propios: lo que se parametriza son sus ramas.
     expect(hay('campo-elements.Gateway_Screening.processingTime')).toBe(false);
-    expect(document.body.textContent).toContain(es.escenario.seccionCompuerta);
+    expect(document.body.textContent).toContain(es.rutas.flujosSalientes);
 
-    teclear('campo-elements.Flow_ScreeningBad.probability', '0.4');
-    teclear('campo-elements.Flow_ScreeningGood.probability', '0.6');
+    teclear('rutas-elements.Flow_ScreeningBad.probability', '40');
+    teclear('rutas-elements.Flow_ScreeningGood.probability', '60');
     expect(ultimo['elements']).toEqual({
       Flow_ScreeningBad: { probability: 0.4 },
       Flow_ScreeningGood: { probability: 0.6 },
     });
-    expect(document.body.textContent).toContain(es.escenario.compuertaSuma(1));
-    expect(document.body.textContent).not.toContain(es.escenario.compuertaSumaAviso);
+    expect(document.body.textContent).toContain(es.rutas.suma100);
+    expect(document.querySelector('.rutas-estado.mal')).toBeNull();
   });
 
   it('avisa cuando las ramas declaradas de una XOR no suman 1 (R10)', () => {
     montar(<Anfitrion inicial={base()} />);
     seleccionar('Gateway_Screening');
     irAPaso('routes');
-    teclear('campo-elements.Flow_ScreeningBad.probability', '0.4');
-    teclear('campo-elements.Flow_ScreeningGood.probability', '0.4');
-    expect(document.body.textContent).toContain(es.escenario.compuertaSuma(0.8));
-    expect(document.body.textContent).toContain(es.escenario.compuertaSumaAviso);
+    teclear('rutas-elements.Flow_ScreeningBad.probability', '40');
+    teclear('rutas-elements.Flow_ScreeningGood.probability', '40');
+    expect(document.body.textContent).toContain(es.rutas.sumaMal(80, 20));
   });
 
   it('sin ninguna probabilidad declarada no avisa: el reparto por igual es legítimo', () => {
     montar(<Anfitrion inicial={base()} />);
     seleccionar('Gateway_Eligibility');
     irAPaso('routes');
-    expect(document.body.textContent).not.toContain(es.escenario.compuertaSumaAviso);
+    expect(document.querySelector('.rutas-estado.mal')).toBeNull();
   });
 
   // R-XOR-2: una rama declarada y la otra sin número no es un escenario mal escrito; el motor le
@@ -352,9 +353,9 @@ describe('vista de compuerta', () => {
     montar(<Anfitrion inicial={escenario} />);
     seleccionar('Gateway_Screening');
     irAPaso('routes');
-    expect(document.body.textContent).toContain(es.escenario.compuertaSuma(1));
-    expect(document.body.textContent).toContain(es.escenario.compuertaImplicita(0.6));
-    expect(document.body.textContent).not.toContain(es.escenario.compuertaSumaAviso);
+    expect(document.body.textContent).toContain(es.rutas.suma100);
+    expect((document.getElementById('rutas-elements.Flow_ScreeningGood.probability') as HTMLInputElement).placeholder).toBe('60');
+    expect(document.querySelector('.rutas-estado.mal')).toBeNull();
     expect(avisosXorDelMotor(escenario)).toEqual([]);
   });
 
@@ -367,9 +368,9 @@ describe('vista de compuerta', () => {
     montar(<Anfitrion inicial={escenario} ir={conDefecto} />);
     seleccionar('Gateway_Screening');
     irAPaso('routes');
-    expect(document.body.textContent).toContain(es.escenario.compuertaPorDefecto);
-    expect(document.body.textContent).toContain(es.escenario.compuertaSuma(1));
-    expect(document.body.textContent).not.toContain(es.escenario.compuertaSumaAviso);
+    expect(document.body.textContent).toContain(es.rutas.porDefecto);
+    expect(document.body.textContent).toContain(es.rutas.suma100);
+    expect(document.querySelector('.rutas-estado.mal')).toBeNull();
   });
 
   it('avisa cuando las declaradas se pasan de 1, igual que el motor', () => {
@@ -379,8 +380,7 @@ describe('vista de compuerta', () => {
     montar(<Anfitrion inicial={escenario} />);
     seleccionar('Gateway_Screening');
     irAPaso('routes');
-    expect(document.body.textContent).toContain(es.escenario.compuertaSuma(1.1));
-    expect(document.body.textContent).toContain(es.escenario.compuertaSumaAviso);
+    expect(document.body.textContent).toContain(es.rutas.sumaMal(110, -10));
     expect(avisosXorDelMotor(escenario)).toEqual(['W-XOR-NORMALIZADA']);
   });
 
@@ -391,8 +391,8 @@ describe('vista de compuerta', () => {
     montar(<Anfitrion inicial={escenario} />);
     seleccionar('Gateway_Screening');
     irAPaso('routes');
-    expect(document.body.textContent).toContain(es.escenario.compuertaSuma(1));
-    expect(document.body.textContent).not.toContain(es.escenario.compuertaSumaAviso);
+    expect(document.body.textContent).toContain(es.rutas.suma100);
+    expect(document.querySelector('.rutas-estado.mal')).toBeNull();
     expect(avisosXorDelMotor(escenario)).toEqual([]);
   });
 });

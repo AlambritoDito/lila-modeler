@@ -15,6 +15,7 @@ import { esperaCorta } from './BottleneckOverlay';
 import { ESPERA_RECURSO, p95Fiable, percentilesPorElemento } from './percentilesPorElemento';
 import { resumenDistribucion, resumenRecursos } from './ScenarioPanel';
 import { esUnidadTiempo, type UnidadTiempo } from './scenarioFields';
+import { repartoDe, resumenReparto } from './repartoRutas';
 import type { Strings } from './strings.types';
 
 export interface VistaRapidaDatos {
@@ -34,6 +35,12 @@ export interface VistaRapidaDatos {
    * for the element.
    */
   espera: { texto: string; p95: boolean } | null;
+  /**
+   * Lote M, C4: on a splitting gateway (XOR/OR with two or more exits) the block is about its
+   * route split instead — «Yes 70 % · No 30 %» and whether a XOR adds up to 100 % — with a way into
+   * Routes. Absent on activities.
+   */
+  rutas?: { resumen: string; cuadra: boolean };
 }
 
 export interface EntradaVistaRapida {
@@ -71,6 +78,12 @@ export function datosVistaRapida({ id, ir, escenario, resultado, log, S }: Entra
   if (ir === null || escenario === null) return null;
   const idIr = idDelIr(ir, id);
   const tipo = idIr === null ? undefined : ir.nodes[idIr]?.type;
+  if (idIr !== null && (tipo === 'xor' || tipo === 'or')) {
+    const reparto = repartoDe(ir, idIr, escenario);
+    return reparto === null
+      ? null
+      : { tiempo: '', recurso: null, espera: null, rutas: { resumen: resumenReparto(reparto), cuadra: reparto.cuadra } };
+  }
   if (idIr === null || (tipo !== 'task' && tipo !== 'timer')) return null;
 
   const run = escenario['run'];

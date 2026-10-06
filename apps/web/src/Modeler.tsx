@@ -41,6 +41,8 @@ import { clearOverlay, sincronizarOverlay, type Corrida } from './BottleneckOver
 // `Modeler` desde aquí y el shell solo llama a `Modelador.validacion`.
 import { sincronizarMarcadores, type Validacion } from './ValidationMarkers';
 import { limpiarReplay, sincronizarReplay, type ReplayPintura } from './replay/ReplayOverlay';
+// Percentage fields on the outgoing flows of a gateway (Lote M, C4): same frontier again.
+import { olvidarEtiquetas, sincronizarEtiquetas, type EstadoEtiquetas } from './etiquetasPorcentaje';
 import {
   autorizarExportacion,
   finalizarExportacion,
@@ -210,6 +212,14 @@ export interface Modelador {
    */
   replay(pintura: ReplayPintura | null): void;
   /**
+   * Percentage fields on every outgoing flow of a diverging XOR/OR (Lote M, C4,
+   * `etiquetasPorcentaje.ts`): fields in the Routes step, text elsewhere in Simulate, `null` to
+   * remove them. Idempotent and updated in place, so the shell can call it on every render — a
+   * field being typed into keeps its focus. It survives opening another diagram: the last state is
+   * applied to the new instance until the shell sends a new one.
+   */
+  porcentajes?(estado: EstadoEtiquetas | null): void;
+  /**
    * Activa o desactiva la animación de tokens de `bpmn-js-token-simulation` (LILA-065). No tiene
    * relación con el motor DES: solo anima el recorrido de tokens sobre las figuras del diagrama
    * ya importado; el shell la enciende al entrar en «Validar rutas» y la apaga al salir.
@@ -324,6 +334,8 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
     let vivo = true;
 
     let activo: Modeler | null = null;
+    /** Last state of `porcentajes`, re-applied when `abrir` swaps the instance. */
+    let porcentajes: EstadoEtiquetas | null = null;
     let originalIds = new Map<string, string>();
     let perdidas: string[] = [];
     let refsRotas: string[] = [];
@@ -445,8 +457,10 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
         }
         clearOverlay(anterior);
         limpiarReplay(anterior);
+        olvidarEtiquetas(anterior);
         anterior.destroy();
       }
+      if (porcentajes !== null) sincronizarEtiquetas(candidato, porcentajes);
       staging.remove();
       // The new instance starts with nothing selected, but it imported before `vincular`, so no
       // subscriber heard of it. Anyone holding elements of the destroyed instance (the properties
@@ -536,6 +550,10 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
       },
       replay: (pintura) => {
         if (activo !== null) sincronizarReplay(activo, pintura);
+      },
+      porcentajes: (estado) => {
+        porcentajes = estado;
+        if (activo !== null) sincronizarEtiquetas(activo, estado);
       },
       simulacionTokens: (activa) => {
         if (activo !== null) activo.get<{ toggleMode(activa: boolean): void }>('toggleMode').toggleMode(activa);
