@@ -1,40 +1,51 @@
 /**
- * Step «Parameters» of the Simulate panel (#333): the run window, replications and seed, plus what
- * it contributes to the element section — the gateway view and the list of task/timer durations.
+ * Step «Routes» of the Simulate panel (Lote M, split out of the old Parameters step): the gateway
+ * view (#332) — each outgoing flow with its probability and the sum — and the list of gateways
+ * with their split. C4 redesigns this step; this module keeps the behaviour it had in Parameters.
  */
 import type { ProcessIR } from '@lila-modeler/engine';
 
-import { Problemas, Propiedades, EntradaNumero } from './Campo.js';
-import { esquemaDe, leer, rutaTexto, type Contexto, type Ruta } from './escenarioModelo.js';
-import { ListaElementos, resumenDistribucion, type PropsListaPaso } from './ListaElementos.js';
+import { Problemas, EntradaNumero } from './Campo.js';
+import { leer, rutaTexto, type Contexto, type Ruta } from './escenarioModelo.js';
+import { ListaElementos, type PropsListaPaso } from './ListaElementos.js';
 import { repartoXor, type ClaseElemento } from './scenarioFields.js';
 import { useStrings } from './i18n';
 
-/**
- * The step's own section. `run` is whole here because every one of its fields answers "how does
- * this model run and for how long".
- */
-export function PasoParametros({ ctx }: { ctx: Contexto }): React.JSX.Element {
-  const S = useStrings();
-  return (
-    <details open>
-      <summary>{S.escenario.seccionCorrida}</summary>
-      <Propiedades esquema={esquemaDe('run')} ruta={['run']} ctx={ctx} />
-      <Problemas ruta={['run']} ctx={ctx} />
-    </details>
-  );
+/** What a gateway splits into, as the engine weighs it (R-XOR-1…4 / R-OR-2). */
+function repartoDe(ir: ProcessIR, id: string, clase: ClaseElemento, resuelto: unknown): { pesos: number[]; total: number; avisa: boolean } {
+  const salientes = ir.nodes[id]?.outgoing ?? [];
+  const declaradas = salientes.map((f) => {
+    const p = leer(resuelto, ['elements', f, 'probability']);
+    return typeof p === 'number' ? p : undefined;
+  });
+  if (clase === 'xor') return repartoXor(declaradas);
+  return {
+    pesos: declaradas.map((p) => p ?? 1),
+    total: Math.round(declaradas.reduce<number>((acc, p) => acc + (p ?? 1), 0) * 1e6) / 1e6,
+    avisa: false,
+  };
 }
 
-/** The tasks and timers with the processing time already written on each. */
-export function ListaParametros({ ids, rotulo, resuelto, unidad, seleccion, onSeleccionar }: PropsListaPaso): React.JSX.Element | null {
+/** The exclusive and inclusive gateways with their «Total» (what has to add up to 1 on an XOR). */
+export function ListaRutas({
+  ids,
+  ir,
+  rotulo,
+  resuelto,
+  seleccion,
+  onSeleccionar,
+}: PropsListaPaso & { ir: ProcessIR | null }): React.JSX.Element | null {
   const S = useStrings();
   return (
     <ListaElementos
-      titulo={S.escenario.listaTiempos}
+      titulo={S.escenario.listaRutas}
       ids={ids}
       rotulo={rotulo}
-      resumen={(id) =>
-        resumenDistribucion(id, 'processingTime', leer(resuelto, ['elements', id, 'processingTime']), unidad, S)}
+      resumen={(id) => {
+        const clase = ir?.nodes[id]?.type as ClaseElemento | undefined;
+        if (ir === null || clase === undefined) return S.escenario.sinResumen;
+        return S.escenario.compuertaSuma(repartoDe(ir, id, clase, resuelto).total);
+      }}
       seleccion={seleccion}
       onSeleccionar={onSeleccionar}
     />

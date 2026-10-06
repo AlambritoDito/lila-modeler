@@ -316,7 +316,7 @@ interface Props {
    */
   simulacion?: {
     datos: (id: string) => VistaRapidaDatos | null;
-    onEditar: (paso: 'parameters' | 'resources') => void;
+    onEditar: (paso: 'times' | 'resources') => void;
   };
 }
 
@@ -502,7 +502,7 @@ function CabeceraElemento({ elemento, avanzado, simulacion }: {
  */
 function VistaRapida({ datos, onEditar }: {
   datos: VistaRapidaDatos;
-  onEditar: (paso: 'parameters' | 'resources') => void;
+  onEditar: (paso: 'times' | 'resources') => void;
 }): React.JSX.Element {
   const S = useStrings();
   const P = S.propiedades;
@@ -516,7 +516,7 @@ function VistaRapida({ datos, onEditar }: {
         valor={datos.espera === null ? P.vistaSinCorrida : datos.espera.texto}
       />
       <div className="vista-rapida-enlaces">
-        <button type="button" className="enlace" onClick={() => { onEditar('parameters'); }}>{P.editarEnParametros}</button>
+        <button type="button" className="enlace" onClick={() => { onEditar('times'); }}>{P.editarEnTiempos}</button>
         {datos.recurso !== null && (
           <button type="button" className="enlace" onClick={() => { onEditar('resources'); }}>{P.editarEnRecursos}</button>
         )}

@@ -14,16 +14,16 @@ cita como la referencia y la
 inspiración de la que este proyecto aprendió el flujo, y como origen de los ejemplos públicos
 contra los que se valida el motor.
 
-## Los cuatro niveles, como cuatro pasos
+## Los cuatro niveles, como seis pasos
 
 Bizagi enseña la simulación en cuatro niveles, cada uno con un tipo de parámetro más. La vista
-**Simulate** de Lila también tiene cuatro pasos, nombrados por lo que edita cada uno:
-**Parámetros**, **Recursos**, **Calendarios** y **Llegadas**. Cada nivel de Bizagi cae así:
+**Simulate** de Lila tiene seis pasos, nombrados por lo que edita cada uno: **Llegadas**,
+**Tiempos**, **Rutas**, **Recursos**, **Calendarios** y **Ejecución**. Cada nivel de Bizagi cae así:
 
 | Nivel de Bizagi | Paso de Lila | Qué rellenas |
 |---|---|---|
-| Process validation | Parámetros (ventana de corrida, porcentajes de las compuertas) y Llegadas (max arrival count) | Inicio, duración, réplicas y semilla de la corrida; porcentajes de las compuertas; max arrival count; validación del modelo |
-| Time analysis | Parámetros (tiempo de proceso) y Llegadas (intervalo entre llegadas) | Tiempo de proceso por tarea y temporizador; intervalo entre llegadas por evento de inicio; constante o distribución |
+| Process validation | Ejecución (ventana de corrida), Rutas (porcentajes de las compuertas) y Llegadas (max arrival count) | Inicio, duración, réplicas y semilla de la corrida; porcentajes de las compuertas; max arrival count; validación del modelo |
+| Time analysis | Tiempos (tiempo de proceso) y Llegadas (intervalo entre llegadas) | Tiempo de proceso por tarea y temporizador; intervalo entre llegadas por evento de inicio; constante o distribución |
 | Resource analysis | Recursos | Pools de recursos, disponibilidad, costos y qué tarea usa qué pool |
 | Calendar analysis | Calendarios (los calendarios y qué elemento sigue cuál) y Recursos (el calendario de un pool y su capacidad por turno, en el pool) | Calendarios con días predefinidos + franjas desde–hasta y una rejilla semanal, recurso × calendario, capacidad por turno |
 
@@ -33,17 +33,17 @@ Dos cosas funcionan distinto que en Bizagi, y las dos a tu favor:
   tiempo de proceso tarda cero, una tarea sin recurso tiene capacidad infinita y un pool sin
   calendario está disponible 24×7. Puedes llenar Recursos y dejar Calendarios vacío para siempre.
 - **Los pasos son un orden de lectura, no un asistente.** Todo vive en un mismo escenario: puedes
-  volver a Parámetros después de Calendarios sin rehacer nada, y la lista de validación del pie del
+  volver a Tiempos después de Calendarios sin rehacer nada, y la lista de validación del pie del
   panel está viva en todos los pasos.
 
-Los cuatro pasos son una barra en la cabecera del panel de Simulate. Abre en **Parámetros**, el paso
+Los seis pasos son una barra en la cabecera del panel de Simulate. Abre en **Tiempos**, el paso
 en el que estás sobrevive a seleccionar elementos en el lienzo y a correr la simulación, y dos cosas
 están en todos los pasos: la lista de validación y **Avanzado: JSON del escenario**, que es donde se
 editan el `name` del escenario, su `description` y todo lo que el formulario no dibuja.
 
-Parámetros, Recursos y Llegadas listan además los elementos de los que hablan —cada tarea y
-temporizador con su tiempo, cada tarea con el pool que toma, cada evento de inicio con cada cuánto y
-cuántos casos crea—, así que «qué falta» es un vistazo y no un recorrido por el diagrama; pulsar una
+Llegadas, Tiempos, Rutas y Recursos listan además los elementos de los que hablan —cada evento de
+inicio con cada cuánto y cuántos casos crea, cada tarea y temporizador con su tiempo, cada compuerta
+con su reparto, cada tarea con el pool que toma—, así que «qué falta» es un vistazo y no un recorrido por el diagrama; pulsar una
 fila selecciona ese elemento en el lienzo. Cada control vive en un solo paso: los pools de recursos
 (con su calendario y su capacidad por turno) se editan en Recursos, y Calendarios lo dice.
 
@@ -53,7 +53,7 @@ la última corrida (o *sin corrida*). Es la espera por recurso, la misma medida 
 lienzo, el dock de Simular y las columnas «esperando recurso» de Resultados. Es el **p95** de los casos medidos después del
 calentamiento en la primera réplica, cuando la muestra del log de esa corrida está completa; una
 corrida más larga (más de 10 000 filas de log en su primera réplica) enseña en su lugar la espera
-por recurso **media** de todas las réplicas, y lo dice. Sus enlaces **Editar en Parámetros** / **Editar en
+por recurso **media** de todas las réplicas, y lo dice. Sus enlaces **Editar en Tiempos** / **Editar en
 Recursos** abren ese paso en Simular.
 
 ## Pantalla por pantalla
@@ -66,10 +66,10 @@ en [`SCENARIO_FORMAT.md` § 8](SCENARIO_FORMAT.md#8-mapeo-campo--bpsim-20--qbp--
 | Bizagi | Lila |
 |---|---|
 | Scenario name, Description | `name` / `description`, en **Avanzado: JSON del escenario** (el nombre es la cabecera del panel) |
-| Start date | Parámetros, `run.start` (ISO 8601 **con offset**) |
-| Duration | Parámetros, `run.duration`; se puede dejar vacío y la corrida termina cuando drena el último caso |
-| Base time unit, Currency | Parámetros, `run.baseTimeUnit`, `run.currency` |
-| Replications (solo en what-if) | Parámetros, `run.replications` — aquí está en cualquier corrida, no solo al comparar |
+| Start date | Ejecución, `run.start` (ISO 8601 **con offset**) |
+| Duration | Ejecución, `run.duration`; se puede dejar vacío y la corrida termina cuando drena el último caso |
+| Base time unit, Currency | Ejecución, `run.baseTimeUnit`, `run.currency` |
+| Replications (solo en what-if) | Ejecución, `run.replications` — aquí está en cualquier corrida, no solo al comparar |
 | — | `run.seed` y `run.warmup`, que Bizagi no expone |
 
 ### Llegadas
@@ -171,7 +171,7 @@ imprime en sus barras; la tabla sigue siendo la referencia.
 
 **1. Tu `.bpmn` de Bizagi trae el dibujo, no los números.** Bizagi Modeler no exporta los parámetros
 de simulación: verificado sobre cinco archivos reales, en el namespace `bizagi:` solo viajan los
-colores. Así que importar funciona, y luego los cuatro pasos se vuelven a capturar aquí una vez.
+colores. Así que importar funciona, y luego los pasos de Simular se vuelven a capturar aquí una vez.
 Cuenta unos minutos para eso y usa la acción de carril → pool para que Recursos casi no cueste.
 
 **2. Los caminos compartidos se duplican, porque la ramificación es probabilística.** En v1 no hay
@@ -214,9 +214,9 @@ escritorio el ejemplo se abre como diagrama más un escenario pegado, porque un 
 necesita además un manifiesto que el repositorio no trae para este ejemplo:
 
 1. Archivo → **Importar BPMN…**, elige `examples/bizagi-levels/level-3/model.bpmn`.
-2. Ve a **Simular**, abre **Avanzado: JSON del escenario** al final de Parámetros, sustituye su texto
+2. Ve a **Simular**, abre **Avanzado: JSON del escenario** al final del panel, sustituye su texto
    por el contenido de `examples/bizagi-levels/level-3/scenario.json` y pulsa **Aplicar**.
-3. Pon Réplicas en 30 en Parámetros y pulsa **Ejecutar simulación**.
+3. Pon Réplicas en 30 en Ejecución y pulsa **Ejecutar simulación**.
 
 La misma corrida desde la CLI, desde la raíz del repositorio:
 

@@ -115,18 +115,16 @@ function pulsar(texto: string): void {
 }
 
 /**
- * #333: el panel abre en el primer paso (Parámetros), así que una sección de otro paso hay que pedirla antes. El
+ * #333: el panel abre en Tiempos (Lote M), así que una sección de otro paso hay que pedirla antes. El
  * rótulo va escrito a mano —es un test— y es el del catálogo español que fija `setLocale`.
  */
-function irAPaso(paso: 'parameters' | 'resources' | 'calendars' | 'arrivals'): void {
-  pulsar(
-    {
-      parameters: 'Parámetros',
-      resources: 'Recursos',
-      calendars: 'Calendarios',
-      arrivals: 'Llegadas',
-    }[paso],
-  );
+function irAPaso(paso: 'arrivals' | 'times' | 'routes' | 'resources' | 'calendars' | 'run'): void {
+  // By `data-paso`: the button's text also carries the step's «! n» (Lote M).
+  const destino = document.querySelector<HTMLButtonElement>(`nav.pasos button[data-paso="${paso}"]`);
+  if (destino === null) throw new Error(`no step ${paso}`);
+  act(() => {
+    destino.click();
+  });
 }
 
 /** El texto del `<option>` elegido de un `<select>`, por su id. */
@@ -220,9 +218,9 @@ describe('los campos que se ofrecen son los del tipo de elemento', () => {
   it('una tarea ofrece tiempo y recursos, y no las llegadas ni la probabilidad', () => {
     montar(<Anfitrion inicial={base()} />);
     seleccionar('Task_RegisterRequest');
-    // #333/#396: el tiempo de proceso vive en Parámetros; lo que este test fija es que en ese paso
-    // la tarea lo ofrece y no ofrece ni las llegadas ni la probabilidad, que no son suyas.
-    irAPaso('parameters');
+    // #333/#396, Lote M: el tiempo de proceso vive en Tiempos; lo que este test fija es que en ese
+    // paso la tarea lo ofrece y no ofrece ni las llegadas ni la probabilidad, que no son suyas.
+    irAPaso('times');
     expect(hay('campo-elements.Task_RegisterRequest.processingTime')).toBe(true);
     expect(hay('campo-elements.Task_RegisterRequest.interTriggerTimer')).toBe(false);
     expect(hay('campo-elements.Task_RegisterRequest.probability')).toBe(false);
@@ -241,6 +239,7 @@ describe('los campos que se ofrecen son los del tipo de elemento', () => {
   it('un flujo solo ofrece la probabilidad', () => {
     montar(<Anfitrion inicial={base()} />);
     seleccionar('Flow_ScreeningGood');
+    irAPaso('routes');
     expect(hay('campo-elements.Flow_ScreeningGood.probability')).toBe(true);
     expect(hay('campo-elements.Flow_ScreeningGood.processingTime')).toBe(false);
     expect(hay('campo-elements.Flow_ScreeningGood.resources')).toBe(false);
@@ -257,6 +256,7 @@ describe('los campos que se ofrecen son los del tipo de elemento', () => {
       />,
     );
     seleccionar('Flow_ScreeningGood');
+    irAPaso('routes');
     // Los dos campos de la entrada, con su ruta: si cayera en `CampoReservado` no existiría
     // ninguno de los dos y el único gesto posible sería borrar el campo entero.
     expect(hay('campo-elements.Flow_ScreeningGood.conditions[0].flowTaken')).toBe(true);
@@ -276,6 +276,7 @@ describe('los campos que se ofrecen son los del tipo de elemento', () => {
       />,
     );
     seleccionar('Task_RegisterRequest');
+    irAPaso('routes');
     // El editor de lista no aparece: en una tarea el motor sigue diciendo `E-RESERVADO`, así que
     // lo único que ofrece el panel es el widget con su botón de borrar.
     expect(hay('campo-elements.Task_RegisterRequest.conditions[0].flowTaken')).toBe(false);
@@ -286,7 +287,7 @@ describe('los campos que se ofrecen son los del tipo de elemento', () => {
   it('un fin solo ofrece su coste fijo', () => {
     montar(<Anfitrion inicial={base()} />);
     seleccionar('End_ServiceCompleted');
-    irAPaso('resources');
+    irAPaso('times');
     expect(hay('campo-elements.End_ServiceCompleted.fixedCost')).toBe(true);
     expect(hay('campo-elements.End_ServiceCompleted.processingTime')).toBe(false);
   });
@@ -296,6 +297,7 @@ describe('los campos que se ofrecen son los del tipo de elemento', () => {
     // forma de borrarlo desde el panel; el error del linter seguiría ahí para siempre.
     montar(<Anfitrion inicial={base({ elements: { Task_RegisterRequest: { probability: 0.5 } } })} />);
     seleccionar('Task_RegisterRequest');
+    irAPaso('routes');
     expect(hay('campo-elements.Task_RegisterRequest.probability')).toBe(true);
     // Y sigue saliendo el error del linter (`E-PROB-EN-NODO`) pegado al campo.
     expect(document.body.textContent).toContain('elements.Task_RegisterRequest.probability');
@@ -310,6 +312,7 @@ describe('vista de compuerta', () => {
   it('lista los salientes, escribe elements[flujo].probability y suma', () => {
     montar(<Anfitrion inicial={base()} />);
     seleccionar('Gateway_Screening');
+    irAPaso('routes');
     // La compuerta no tiene campos propios: lo que se parametriza son sus ramas.
     expect(hay('campo-elements.Gateway_Screening.processingTime')).toBe(false);
     expect(document.body.textContent).toContain(es.escenario.seccionCompuerta);
@@ -327,6 +330,7 @@ describe('vista de compuerta', () => {
   it('avisa cuando las ramas declaradas de una XOR no suman 1 (R10)', () => {
     montar(<Anfitrion inicial={base()} />);
     seleccionar('Gateway_Screening');
+    irAPaso('routes');
     teclear('campo-elements.Flow_ScreeningBad.probability', '0.4');
     teclear('campo-elements.Flow_ScreeningGood.probability', '0.4');
     expect(document.body.textContent).toContain(es.escenario.compuertaSuma(0.8));
@@ -336,6 +340,7 @@ describe('vista de compuerta', () => {
   it('sin ninguna probabilidad declarada no avisa: el reparto por igual es legítimo', () => {
     montar(<Anfitrion inicial={base()} />);
     seleccionar('Gateway_Eligibility');
+    irAPaso('routes');
     expect(document.body.textContent).not.toContain(es.escenario.compuertaSumaAviso);
   });
 
@@ -346,6 +351,7 @@ describe('vista de compuerta', () => {
     const escenario = base({ elements: { Flow_ScreeningBad: { probability: 0.4 } } });
     montar(<Anfitrion inicial={escenario} />);
     seleccionar('Gateway_Screening');
+    irAPaso('routes');
     expect(document.body.textContent).toContain(es.escenario.compuertaSuma(1));
     expect(document.body.textContent).toContain(es.escenario.compuertaImplicita(0.6));
     expect(document.body.textContent).not.toContain(es.escenario.compuertaSumaAviso);
@@ -360,6 +366,7 @@ describe('vista de compuerta', () => {
     const escenario = base({ elements: { Flow_ScreeningBad: { probability: 0.4 } } });
     montar(<Anfitrion inicial={escenario} ir={conDefecto} />);
     seleccionar('Gateway_Screening');
+    irAPaso('routes');
     expect(document.body.textContent).toContain(es.escenario.compuertaPorDefecto);
     expect(document.body.textContent).toContain(es.escenario.compuertaSuma(1));
     expect(document.body.textContent).not.toContain(es.escenario.compuertaSumaAviso);
@@ -371,6 +378,7 @@ describe('vista de compuerta', () => {
     });
     montar(<Anfitrion inicial={escenario} />);
     seleccionar('Gateway_Screening');
+    irAPaso('routes');
     expect(document.body.textContent).toContain(es.escenario.compuertaSuma(1.1));
     expect(document.body.textContent).toContain(es.escenario.compuertaSumaAviso);
     expect(avisosXorDelMotor(escenario)).toEqual(['W-XOR-NORMALIZADA']);
@@ -382,6 +390,7 @@ describe('vista de compuerta', () => {
     });
     montar(<Anfitrion inicial={escenario} />);
     seleccionar('Gateway_Screening');
+    irAPaso('routes');
     expect(document.body.textContent).toContain(es.escenario.compuertaSuma(1));
     expect(document.body.textContent).not.toContain(es.escenario.compuertaSumaAviso);
     expect(avisosXorDelMotor(escenario)).toEqual([]);
@@ -449,7 +458,7 @@ describe('los tiempos se teclean en baseTimeUnit y se guardan en segundos', () =
   it('con baseTimeUnit «min», teclear 5 guarda 300', () => {
     montar(<Anfitrion inicial={base()} />);
     seleccionar('Task_RegisterRequest');
-    irAPaso('parameters');
+    irAPaso('times');
     // `constant` es la primera variante del `discriminatedUnion`.
     elegir('campo-elements.Task_RegisterRequest.processingTime', '0');
     teclear('campo-elements.Task_RegisterRequest.processingTime.value', '5');
@@ -468,13 +477,13 @@ describe('los tiempos se teclean en baseTimeUnit y se guardan en segundos', () =
       />,
     );
     seleccionar('Task_RegisterRequest');
-    irAPaso('parameters');
+    irAPaso('times');
     const campo = document.getElementById(
       'campo-elements.Task_RegisterRequest.processingTime.value',
     ) as HTMLInputElement;
     expect(campo.value).toBe('5');
-    // `run.baseTimeUnit` se teclea en Parámetros, que es donde vive la corrida entera; el
-    // tiempo de la tarea está en el mismo paso, así que no hace falta moverse.
+    // `run.baseTimeUnit` se teclea en Ejecución, que es donde vive la corrida entera (Lote M).
+    irAPaso('run');
     elegir('campo-run.baseTimeUnit', 'h');
     expect((ultimo['elements'] as Json)['Task_RegisterRequest']).toEqual({
       processingTime: { type: 'constant', value: 300 },
@@ -483,6 +492,7 @@ describe('los tiempos se teclean en baseTimeUnit y se guardan en segundos', () =
 
   it('la duración de la corrida también, y la semilla no', () => {
     montar(<Anfitrion inicial={base()} />);
+    irAPaso('run');
     teclear('campo-run.duration', '480');
     teclear('campo-run.seed', '42');
     expect(ultimo['run']).toMatchObject({ duration: 28_800, seed: 42 });
@@ -496,6 +506,7 @@ describe('los tiempos se teclean en baseTimeUnit y se guardan en segundos', () =
 describe('run.start se compone de fecha y desfase (R8)', () => {
   it('la fecha y el desfase producen el instante ISO del formato', () => {
     montar(<Anfitrion inicial={{ version: 1, name: 'AS-IS', model: 'model.bpmn', run: {} }} />);
+    irAPaso('run');
     teclear('campo-run.start', '2026-09-07T08:00:00');
     elegir('campo-run.start-desfase', '-06:00');
     expect(ultimo['run']).toEqual({ start: '2026-09-07T08:00:00-06:00' });
@@ -505,6 +516,7 @@ describe('run.start se compone de fecha y desfase (R8)', () => {
     montar(<Anfitrion inicial={base()} />);
     // jsdom (como los navegadores sin `step` de segundos) normaliza el valor sin los segundos;
     // `componerInstante` los repone al escribir, que es lo que el esquema exige.
+    irAPaso('run');
     expect((document.getElementById('campo-run.start') as HTMLInputElement).value).toBe(
       '2026-09-07T08:00',
     );

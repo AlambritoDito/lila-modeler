@@ -105,18 +105,16 @@ function pulsar(texto: string): void {
 }
 
 /**
- * #333: el panel abre en el primer paso (Parámetros), así que una sección de otro paso hay que pedirla antes. El
+ * #333: el panel abre en Tiempos (Lote M), así que una sección de otro paso hay que pedirla antes. El
  * rótulo va escrito a mano —es un test— y es el del catálogo español que fija `setLocale`.
  */
-function irAPaso(paso: 'parameters' | 'resources' | 'calendars' | 'arrivals'): void {
-  pulsar(
-    {
-      parameters: 'Parámetros',
-      resources: 'Recursos',
-      calendars: 'Calendarios',
-      arrivals: 'Llegadas',
-    }[paso],
-  );
+function irAPaso(paso: 'arrivals' | 'times' | 'routes' | 'resources' | 'calendars' | 'run'): void {
+  // By `data-paso`: the button's text also carries the step's «! n» (Lote M).
+  const destino = document.querySelector<HTMLButtonElement>(`nav.pasos button[data-paso="${paso}"]`);
+  if (destino === null) throw new Error(`no step ${paso}`);
+  act(() => {
+    destino.click();
+  });
 }
 
 /** El `<details>` cuyo `<summary>` dice `titulo`: es lo que acota «Añadir» a una sección. */
@@ -242,9 +240,9 @@ it('el AS-IS de la solicitud de servicio se teclea entero desde el panel, sin to
     pulsar(`${SELECCIONAR}${id}`);
   };
 
-  /* --- Parámetros: la corrida entera, y la unidad primero: a partir de ahí los tiempos se
+  /* --- Ejecución: la corrida entera, y la unidad primero: a partir de ahí los tiempos se
          teclean en minutos. --- */
-  irAPaso('parameters');
+  irAPaso('run');
   elegir('campo-run.baseTimeUnit', 'min');
   teclear('campo-run.duration', '480');
   teclear('campo-run.warmup', '0');
@@ -285,8 +283,8 @@ it('el AS-IS de la solicitud de servicio se teclea entero desde el panel, sin to
   );
   teclear('campo-elements.StartEvent_Request.interTriggerTimer.mean', '6');
 
-  /* --- Parámetros otra vez: las trece tareas. --- */
-  irAPaso('parameters');
+  /* --- Tiempos: las trece tareas. --- */
+  irAPaso('times');
   for (const [id, minutos] of TAREAS) {
     seleccionar(id);
     elegirPorTexto(`campo-elements.${id}.processingTime`, es.escenario.distribuciones['constant']!);
@@ -306,8 +304,8 @@ it('el AS-IS de la solicitud de servicio se teclea entero desde el panel, sin to
   seleccionar('StartEvent_Request');
   elegir('campo-elements.StartEvent_Request.calendar', 'tienda');
 
-  /* --- Las dos compuertas, en Parámetros: su reparto es parte de cómo corre el modelo. --- */
-  irAPaso('parameters');
+  /* --- Las dos compuertas, en Rutas: su reparto es parte de cómo corre el modelo. --- */
+  irAPaso('routes');
   seleccionar('Gateway_Screening');
   teclear('campo-elements.Flow_ScreeningBad.probability', '0.4');
   teclear('campo-elements.Flow_ScreeningGood.probability', '0.6');

@@ -1,7 +1,7 @@
 /**
  * The element rows of the Simulate panel: the button that selects an element (#447) and the
  * per-step list of elements with what is already written on each (#333), plus the one-line
- * summaries those lists print. Shared by the Parameters, Resources and Arrivals steps.
+ * summaries those lists print. Shared by the Simulate steps.
  */
 import { esObjeto } from './escenarioModelo.js';
 import { aUnidad, esTiempoEnSegundos, type UnidadTiempo } from './scenarioFields.js';

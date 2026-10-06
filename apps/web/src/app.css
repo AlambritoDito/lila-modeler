@@ -1410,8 +1410,8 @@ body {
   margin-top: 6px;
 }
 
-/* #333: la barra de los cuatro pasos del panel de simulación. Horizontal y compacta, y con
-   `flex-wrap` porque el panel derecho se puede estrechar hasta que los cuatro rótulos no caben:
+/* #333: la barra de los pasos del panel de simulación (seis desde el Lote M). Horizontal y compacta, y con
+   `flex-wrap` porque el panel derecho se puede estrechar hasta que los seis rótulos no caben:
    entonces se parten en dos filas en vez de recortarse o desbordar. */
 .escenario .pasos {
   display: flex;
@@ -1434,6 +1434,12 @@ body {
   background: var(--bg-surface);
   border-color: var(--accent-tertiary);
   color: var(--fg-primary);
+}
+
+/* Lote M: the «! n» of a step held back by problems. */
+.escenario .paso-problemas {
+  color: var(--status-error);
+  font-weight: 600;
 }
 
 /* Lista de elementos del paso (tiempos, recursos): el resumen a la derecha, alineado. */

@@ -646,7 +646,7 @@ export const es: Strings = {
     vistaEsperaP95: 'Espera por recurso p95',
     vistaEsperaMedia: 'Espera por recurso (media)',
     vistaSinCorrida: 'sin corrida',
-    editarEnParametros: 'Editar en Parámetros',
+    editarEnTiempos: 'Editar en Tiempos',
     editarEnRecursos: 'Editar en Recursos',
 
     sinSeleccion: 'Selecciona un elemento del lienzo para ver sus propiedades.',
@@ -809,25 +809,33 @@ export const es: Strings = {
       `${archivo} · hereda de ${padre ?? '—'}`,
 
     /**
-     * #333/#396 — los cuatro pasos del panel de simulación, nombrados por lo que edita cada uno
+     * #333/#396, Lote M — los seis pasos del panel de simulación, nombrados por lo que edita cada uno
      * (los rótulos del diseño). `docs/es/COMING-FROM-BIZAGI.md` los relaciona con los cuatro
      * niveles de Bizagi.
      */
     pasos: 'Pasos',
     paso: {
-      parameters: 'Parámetros',
+      arrivals: 'Llegadas',
+      times: 'Tiempos',
+      routes: 'Rutas',
       resources: 'Recursos',
       calendars: 'Calendarios',
-      arrivals: 'Llegadas',
+      run: 'Ejecución',
     } as Record<string, string>,
     pasoAyuda: {
-      parameters:
-        'Cómo corre el modelo: la ventana de corrida y las réplicas, cómo ramifican las compuertas y cuánto tarda cada actividad.',
+      arrivals: 'Cómo entran los casos: cada cuánto dispara cada evento de inicio y cuántos casos crea.',
+      times: 'Cuánto tarda cada actividad y cuánto cuesta cada vez que se hace.',
+      routes: 'Qué parte de los casos sigue cada camino al salir de una compuerta.',
       resources:
         'Quién hace el trabajo: pools, cuántas unidades, cuándo trabaja cada pool (su calendario y su capacidad por turno) y qué tarea toma cuál.',
       calendars: 'Cuándo se puede trabajar: calendarios y festivos, y qué calendario sigue cada elemento.',
-      arrivals: 'Cómo entran los casos: cada cuánto dispara cada evento de inicio y cuántos casos crea.',
+      run: 'Cuánto dura la simulación, desde cuándo y cuántas réplicas.',
     } as Record<string, string>,
+    /** Lote M: el «! n» de un paso, leído junto al nombre del paso. */
+    pasoProblemas: (n: number): string => `${n} ${n === 1 ? 'problema' : 'problemas'}`,
+    /** Lote M: una tarea sin `processingTime` en el escenario (el motor la correría en tiempo cero). */
+    sinDuracion: (tarea: string): string => `${tarea}: sin duración, así que no tardaría nada.`,
+    listaRutas: 'Ramas por compuerta',
 
     /** Listas de elementos de los pasos: qué está parametrizado y qué falta. */
     listaTiempos: 'Tiempos por elemento',

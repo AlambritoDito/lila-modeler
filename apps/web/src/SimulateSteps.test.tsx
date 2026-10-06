@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
- * #333/#396 — the Simulate panel as four steps (Parameters, Resources, Calendars, Arrivals): one
- * step at a time.
+ * #333/#396, Lote M — the Simulate panel as six steps (Arrivals, Times, Routes, Resources,
+ * Calendars, Run): one step at a time.
  *
  * What this suite pins is the promise of `docs/COMING-FROM-BIZAGI.md`: each step shows its own
  * parameters and only those, the step you are on survives picking elements on the canvas, and
@@ -83,8 +83,17 @@ function pulsar(texto: string): void {
   });
 }
 
+/** A step's button, by `data-paso`: its text also carries the step's «! n» (Lote M). */
+function botonPaso(paso: PasoId): HTMLButtonElement {
+  const encontrado = document.querySelector<HTMLButtonElement>(`nav.pasos button[data-paso="${paso}"]`);
+  if (encontrado === null) throw new Error(`no step ${paso}`);
+  return encontrado;
+}
+
 function irAPaso(paso: PasoId): void {
-  pulsar(en.escenario.paso[paso]!);
+  act(() => {
+    botonPaso(paso).click();
+  });
 }
 
 function hay(id: string): boolean {
@@ -160,32 +169,55 @@ function asIs(): Json {
  * 1 — Un paso enseña lo suyo y esconde lo de los demás
  * ------------------------------------------------------------------ */
 
-describe('los cuatro pasos del panel de simulación', () => {
-  it('abre en Parámetros: la corrida y la validación, sin calendarios ni pools', () => {
+describe('los seis pasos del panel de simulación', () => {
+  it('abre en Tiempos: la lista de tiempos, sin corrida, calendarios ni pools', () => {
     montar(<Anfitrion inicial={asIs()} />);
 
-    expect(boton(en.escenario.paso['parameters']!).getAttribute('aria-pressed')).toBe('true');
-    expect(boton(en.escenario.paso['parameters']!).getAttribute('aria-current')).toBe('step');
-    expect(boton(en.escenario.paso['calendars']!).getAttribute('aria-pressed')).toBe('false');
+    expect(botonPaso('times').getAttribute('aria-pressed')).toBe('true');
+    expect(botonPaso('times').getAttribute('aria-current')).toBe('step');
+    expect(botonPaso('calendars').getAttribute('aria-pressed')).toBe('false');
+    expect(texto()).toContain(en.escenario.listaTiempos);
 
-    // La corrida entera es de Parámetros (R8 incluido), réplicas y semilla con ella.
-    expect(hay('campo-run.duration')).toBe(true);
-    expect(hay('campo-run.replications')).toBe(true);
-    expect(hay('campo-run.start')).toBe(true);
     // #360: this fully configured fixture has no actionable lint warnings.
     expect(texto()).not.toContain(en.escenario.seccionValidacion(0).split(' (')[0]!);
 
-    // Y nada de Recursos ni Calendarios: no plegado, fuera del DOM.
+    // Ni la corrida ni Recursos ni Calendarios: no plegados, fuera del DOM.
+    expect(hay('campo-run.duration')).toBe(false);
     expect(secciones()).not.toContain(en.escenario.seccionCalendarios);
     expect(secciones()).not.toContain(en.escenario.seccionRecursos);
     expect(hay('campo-resources.executive.capacity')).toBe(false);
     expect(hay('campo-calendars.tienda.intervals[0].from')).toBe(false);
   });
 
-  it('the step bar reads Parameters, Resources, Calendars, Arrivals, in that order (#396)', () => {
+  it('Ejecución trae la corrida entera (R8 incluido), réplicas y semilla con ella', () => {
+    montar(<Anfitrion inicial={asIs()} />);
+    irAPaso('run');
+    expect(hay('campo-run.duration')).toBe(true);
+    expect(hay('campo-run.replications')).toBe(true);
+    expect(hay('campo-run.start')).toBe(true);
+    expect(secciones()).toContain(en.escenario.seccionCorrida);
+    expect(texto()).not.toContain(en.escenario.listaTiempos);
+  });
+
+  it('the step bar reads Arrivals, Times, Routes, Resources, Calendars, Run, in that order (Lote M)', () => {
     montar(<Anfitrion inicial={asIs()} />);
     const rotulos = [...document.querySelectorAll('nav.pasos button')].map((b) => b.textContent);
-    expect(rotulos).toEqual(['Parameters', 'Resources', 'Calendars', 'Arrivals']);
+    expect(rotulos).toEqual(['Arrivals', 'Times', 'Routes', 'Resources', 'Calendars', 'Run']);
+  });
+
+  it('a step with problems carries «! n» and the step without them does not (Lote M)', () => {
+    // The AS-IS without the time of one task: Times is held back by one problem, and nothing else.
+    const escenario = asIs();
+    const elementos = { ...(escenario['elements'] as Json) };
+    const sinTiempo = { ...(elementos['Task_PrepareService'] as Json) };
+    delete sinTiempo['processingTime'];
+    elementos['Task_PrepareService'] = sinTiempo;
+    montar(<Anfitrion inicial={{ ...escenario, elements: elementos }} />);
+    expect(botonPaso('times').textContent).toBe('Times ! 1');
+    expect(botonPaso('times').querySelector('.paso-problemas')?.getAttribute('aria-label')).toBe(en.escenario.pasoProblemas(1));
+    for (const paso of PASO_IDS.filter((p) => p !== 'times')) {
+      expect(botonPaso(paso).querySelector('.paso-problemas'), paso).toBeNull();
+    }
   });
 
   it('Recursos trae los pools y la acción de carril, y ya no la corrida', () => {
@@ -198,7 +230,8 @@ describe('los cuatro pasos del panel de simulación', () => {
     expect(document.querySelector('.carril-a-pool')).not.toBeNull();
     expect(boton(en.escenario.carrilAsignar)).toBeInstanceOf(HTMLButtonElement);
 
-    expect(texto()).not.toContain(en.escenario.seccionCorrida);
+    // «Run» is also the label of the sixth step, so the section is looked for among the summaries.
+    expect(secciones()).not.toContain(en.escenario.seccionCorrida);
     expect(hay('campo-run.duration')).toBe(false);
   });
 
@@ -214,11 +247,11 @@ describe('los cuatro pasos del panel de simulación', () => {
     expect(document.querySelector('.carril-a-pool')).toBeNull();
     expect(texto()).toContain(en.escenario.calendariosDePools);
     pulsar(en.escenario.irARecursos);
-    expect(boton(en.escenario.paso['resources']!).getAttribute('aria-pressed')).toBe('true');
+    expect(botonPaso('resources').getAttribute('aria-pressed')).toBe('true');
     expect(hay('campo-resources.executive.capacity')).toBe(true);
   });
 
-  it('una tarea en Parámetros enseña su tiempo y no sus recursos', () => {
+  it('una tarea en Tiempos enseña su tiempo y no sus recursos', () => {
     montar(<Anfitrion inicial={asIs()} />);
     seleccionar('Task_RegisterRequest');
 
@@ -232,7 +265,7 @@ describe('los cuatro pasos del panel de simulación', () => {
     expect(hay('campo-elements.Task_RegisterRequest.processingTime')).toBe(false);
   });
 
-  it('un evento de inicio enseña sus dos llegadas en Llegadas y nada en Parámetros', () => {
+  it('un evento de inicio enseña sus dos llegadas en Llegadas y nada en Tiempos', () => {
     montar(<Anfitrion inicial={asIs()} />);
     seleccionar('StartEvent_Request');
     expect(hay('campo-elements.StartEvent_Request.interTriggerTimer')).toBe(false);
@@ -242,10 +275,13 @@ describe('los cuatro pasos del panel de simulación', () => {
     expect(texto()).toContain(en.escenario.listaLlegadas);
   });
 
-  it('las probabilidades de una compuerta son de Parámetros', () => {
+  it('las probabilidades de una compuerta son de Rutas', () => {
     montar(<Anfitrion inicial={asIs()} />);
     seleccionar('Gateway_Screening');
+    expect(texto()).not.toContain(en.escenario.seccionCompuerta);
+    irAPaso('routes');
     expect(texto()).toContain(en.escenario.seccionCompuerta);
+    expect(texto()).toContain(en.escenario.listaRutas);
     expect(hay('campo-elements.Flow_ScreeningGood.probability')).toBe(true);
 
     irAPaso('resources');
@@ -281,19 +317,19 @@ describe('a step asked for from outside (#396 «Edit in …»)', () => {
     );
   }
 
-  it('opens that step once, and twice in a row; a remount afterwards opens on Parameters again', () => {
+  it('opens that step once, and twice in a row; a remount afterwards opens on Times again', () => {
     montar(<Pedido montado />);
     pulsar('ask:resources');
-    expect(boton(en.escenario.paso['resources']!).getAttribute('aria-pressed')).toBe('true');
+    expect(botonPaso('resources').getAttribute('aria-pressed')).toBe('true');
     irAPaso('arrivals');
     pulsar('ask:resources');
-    expect(boton(en.escenario.paso['resources']!).getAttribute('aria-pressed')).toBe('true');
+    expect(botonPaso('resources').getAttribute('aria-pressed')).toBe('true');
 
     // Detaching or switching tabs remounts the panel: the ask was consumed, it does not come back.
     // Same root, so the host keeps its state: only the panel unmounts and mounts again.
     act(() => { raiz!.render(<Pedido montado={false} />); });
     act(() => { raiz!.render(<Pedido montado />); });
-    expect(boton(en.escenario.paso['parameters']!).getAttribute('aria-pressed')).toBe('true');
+    expect(botonPaso('times').getAttribute('aria-pressed')).toBe('true');
   });
 });
 
@@ -304,7 +340,7 @@ describe('el paso elegido sobrevive', () => {
 
     for (const id of ['Task_RegisterRequest', 'Task_PrepareService', 'StartEvent_Request']) {
       seleccionar(id);
-      expect(boton(en.escenario.paso['arrivals']!).getAttribute('aria-pressed')).toBe('true');
+      expect(botonPaso('arrivals').getAttribute('aria-pressed')).toBe('true');
     }
     // El campo que se ve sigue siendo el del paso, no el del elemento entero.
     expect(hay('campo-elements.StartEvent_Request.interTriggerTimer')).toBe(true);
@@ -323,7 +359,7 @@ describe('el paso elegido sobrevive', () => {
     }
   });
 
-  it('el JSON avanzado está en los cuatro pasos', () => {
+  it('el JSON avanzado está en los seis pasos', () => {
     montar(<Anfitrion inicial={asIs()} />);
     for (const paso of PASO_IDS) {
       irAPaso(paso);
@@ -337,7 +373,7 @@ describe('el paso elegido sobrevive', () => {
  * ------------------------------------------------------------------ */
 
 describe('la lista de elementos del paso', () => {
-  it('Parámetros resume el tiempo de cada actividad, y «—» la que no tiene', () => {
+  it('Tiempos resume el tiempo de cada actividad, y «—» la que no tiene', () => {
     // El AS-IS sin el tiempo de una tarea: es exactamente lo que la lista tiene que delatar.
     const escenario = asIs();
     const elementos = { ...(escenario['elements'] as Json) };
