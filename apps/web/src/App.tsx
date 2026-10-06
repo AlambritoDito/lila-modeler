@@ -58,6 +58,7 @@ import { ATAJOS, atajoPorId, coincide, etiqueta, MAC, tooltip, type AtajoId, typ
 import { aPng, descargar, imprimirSvg, nombreArchivo } from './exportarDiagrama';
 import { DENSIDAD_IDS, MODO_IDS, PESTANA_IDS, type Densidad, type ModoId, type PasoId, type PestanaId, type VerboPerdida } from './ids';
 import { datosVistaRapida } from './vistaRapida';
+import { apply as aplicarCarriles } from './carrilClic';
 // Único punto de la SPA que conoce la implementación concreta (LILA-058, ADR-023): el resto
 // del shell habla con `store` solo por el tipo `ProjectStore`. Cambiar de modalidad —
 // `DesktopStore` (LILA-071), `RemoteStore` (LILA-086)— es cambiar esta línea.
@@ -509,6 +510,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   /** Whether an align entry would move anything: only in Model, the one mode that edits the layout. */
   const puedeAlinear = (id: AtajoAlinear): boolean => modo === 'modelar' && alineable[id.startsWith('distribuir') ? 'distribuir' : 'alinear'];
   useEffect(() => { if (modelador !== null) finishStartup(); }, [modelador]);
+  // Lote M, C2: a click on a lane's name in the Resources step picks it (carrilClic.ts), and the
+  // panel lists the lanes in their visual order with their names.
+  useEffect(() => (modelador === null ? undefined : aplicarCarriles(modelador)), [modelador]);
   const [estado, setEstado] = useState<EstadoLienzo>({
     zoom: 1,
     elementos: 0,
