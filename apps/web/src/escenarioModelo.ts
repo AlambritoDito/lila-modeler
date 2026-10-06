@@ -4,6 +4,7 @@
  * and «Duplicate». Pure functions plus the `Contexto` every control receives; no React here.
  * `ScenarioPanel.tsx` re-exports all of it, so importers keep using that module.
  */
+import { formatDisplay } from './formatDisplay';
 import type { ProcessIR } from '@lila-modeler/engine';
 import {
   parseScenario,
@@ -273,6 +274,15 @@ export interface Problema {
 }
 
 /**
+ * Lote M: the engine's messages carry its raw floats (`W-XOR-NORMALIZADA … sums 0.9199999999999999`).
+ * The screen shows numbers with two decimals at most (`formatDisplay`), the engine is left as it is:
+ * only a number with more than two decimals is rewritten, so ids (`Task_1`), dates and times stay.
+ */
+export function numerosLegibles(mensaje: string): string {
+  return mensaje.replace(/(?<![\w.])-?\d+\.\d{3,}(?![\w.])/g, (n) => formatDisplay(Number(n)));
+}
+
+/**
  * Problemas del escenario **resuelto**, con los textos de la CLI y sin duplicarlos aquí.
  *
  * Si el esquema no pasa, `validateScenario` no puede correr (necesita un `Scenario` parseado):
@@ -295,14 +305,14 @@ export function problemasEscenario(
   if (!parsed.success) {
     return parsed.error.issues.map((issue) => ({
       ruta: rutaTexto(issue.path as Ruta),
-      mensaje: issue.message,
+      mensaje: numerosLegibles(issue.message),
       severidad: 'error' as const,
     }));
   }
   if (ir === null) return [];
   return validateScenario(parsed.data, ir, { locale, elsewhere }).map((problema) => ({
     ruta: problema.path,
-    mensaje: problema.message,
+    mensaje: numerosLegibles(problema.message),
     severidad: problema.severity,
     codigo: problema.code,
   }));
