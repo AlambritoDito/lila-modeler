@@ -4353,3 +4353,32 @@ it('reopening a project puts each base scenario before the ones that extend it, 
   await abrirEscenarios();
   expect([...container.querySelectorAll('.c5-escenario-fila .c5-escenario-nombre')].map((n) => n.firstChild!.textContent)).toEqual(['AS-IS', 'TO-BE']);
 });
+
+it('cancelling the run of a comparison side leaves a card with Retry, not «Simulating…» forever (QA of #603)', async () => {
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await click(T.app.ejecutar);
+  const colgada = deferred<typeof done>();
+  mocks.worker.mockReturnValueOnce(colgada.promise);
+  await compararCon('TO-BE 3 cashiers');
+  expect(container.querySelector('.c5-tarjeta')!.textContent).toContain(T.c5.comparar.simulando('TO-BE 3 cashiers'));
+  await act(async () => [...container.querySelectorAll<HTMLButtonElement>('.c5-tarjeta button')].find((b) => b.textContent === T.app.cancelar)!.click());
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 50); }); });
+  const tarjeta = container.querySelector('.c5-tarjeta')!;
+  expect(tarjeta.textContent).toContain(T.c5.comparar.cancelada('TO-BE 3 cashiers'));
+  const llamadas = mocks.gate.mock.calls.length;
+  await act(async () => [...tarjeta.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === T.c5.resultados.reintentar)!.click());
+  for (let i = 0; i < 3; i++) await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  expect(mocks.gate.mock.calls.length).toBe(llamadas + 1);
+  expect(container.querySelector('[data-mock="comparar"]')!.textContent).toBe('AS-IS vs TO-BE 3 cashiers');
+});
+
+it('a comparison side that finishes while the person is in another mode leaves them there (QA of #603)', async () => {
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await click(T.app.ejecutar);
+  const lenta = deferred<typeof done>();
+  mocks.worker.mockReturnValueOnce(lenta.promise);
+  await compararCon('TO-BE 3 cashiers');
+  await click(T.app.modos.modelar);
+  await act(async () => { lenta.resolve(done); await new Promise((listo) => { setTimeout(listo, 50); }); });
+  expect(modoActivo()).toBe(T.app.modos.modelar);
+});

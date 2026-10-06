@@ -742,6 +742,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    */
   const [comparacion, setComparacion] = useState<{ ref: string; otro: string } | null>(null);
   const [fallaComparar, setFallaComparar] = useState<{ id: string; mensaje: string } | null>(null);
+  /** The comparison side being simulated right now, if the run in flight is one. */
+  const ladoEnVuelo = useRef<string | null>(null);
+  /** A comparison side whose run was cancelled: it waits on its card for Retry (QA of #603). */
+  const [pausaComparar, setPausaComparar] = useState<string | null>(null);
   /** Sides already simulated for the comparison at a revision, so a run that fails is not retried in a loop. */
   const intentosComparar = useRef(new Set<string>());
   /** The scenario each duplicate came from (this session): its first run opens compared with it. */
@@ -1260,6 +1264,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
 
   /** Mata la corrida en vuelo, si la hay. Idempotente. */
   function cancelarCorrida(): void {
+    // QA of #603: a comparison side cancelled here waits on its card for Retry.
+    const lado = ladoEnVuelo.current;
+    if (lado !== null && enVuelo.current !== null) {
+      ladoEnVuelo.current = null;
+      for (const k of [...intentosComparar.current]) if (k.startsWith(`${lado}@`)) intentosComparar.current.delete(k);
+      setPausaComparar(lado);
+    }
     enVuelo.current?.abort();
     enVuelo.current = null;
     setSim({ tipo: 'inactivo' });
@@ -2034,7 +2045,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     const control = new AbortController();
     enVuelo.current = control;
     setSim({ progreso: null, tipo: 'simulando' });
-    if (paraComparar) setFallaComparar(null);
+    if (paraComparar) { setFallaComparar(null); setPausaComparar(null); }
+    ladoEnVuelo.current = paraComparar ? objetivo : null;
+    let ok = false;
     try {
       const modelRevision = revisionRef.current;
       const scenarioRevision = scenarioRevisions[objetivo] ?? 0;
@@ -2069,8 +2082,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // Lote M (design 01, «if it ends well it moves to Results by itself»): a finished run lands in
       // Results, on the map, with the heat map, the bottlenecks, the KPIs and the tokens ready.
       // This replaces #394's «stay in Simulate with the dock open».
-      setModo('resultados');
-      setReproduciendo(false);
+      // A comparison side lands where the person is: they may have left Results meanwhile.
+      ok = true;
+      if (!paraComparar) { setModo('resultados'); setReproduciendo(false); }
       // A duplicate's first run opens compared with the scenario it came from (#581, design 06):
       // Duplicate + the change + Simulate is the whole what-if.
       const origen = origenDuplicado.current.get(objetivo);
@@ -2087,12 +2101,18 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const mensaje = e instanceof Error ? e.message : String(e);
       // A comparison side that fails is the comparison's card («B has problems»), not the active
       // scenario's error: Run on the active one did not fail.
-      if (paraComparar) { setFallaComparar({ id: objetivo, mensaje }); setSim({ tipo: 'inactivo' }); return; }
+      if (paraComparar) { ok = true; setFallaComparar({ id: objetivo, mensaje }); setSim({ tipo: 'inactivo' }); return; }
       setSim({ mensaje, tipo: 'error' });
       // The table lists the failure in its Warnings tab.
       setPestanaDock('avisos');
     } finally {
-      if (enVuelo.current === control) enVuelo.current = null;
+      if (enVuelo.current === control) { enVuelo.current = null; ladoEnVuelo.current = null; }
+      // QA of #603: a comparison side whose run was cancelled (or went stale) must not leave
+      // «Simulating…» on screen forever: it waits on its card for Retry instead of re-running.
+      if (paraComparar && (control.signal.aborted || !ok)) {
+        for (const k of [...intentosComparar.current]) if (k.startsWith(`${objetivo}@`)) intentosComparar.current.delete(k);
+        setPausaComparar(objetivo);
+      }
     }
   }
 
@@ -2112,13 +2132,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const faltaComparar = comparacion === null ? null
     : [comparacion.ref, comparacion.otro].find((id) => id in escenarios && !latest.some((r) => r.scenarioName === id)) ?? null;
   useEffect(() => {
-    if (faltaComparar === null || modelador === null || reparseando || sim.tipo === 'simulando') return;
+    if (faltaComparar === null || faltaComparar === pausaComparar || modelador === null || reparseando || sim.tipo === 'simulando') return;
     const intento = `${faltaComparar}@${revision}:${scenarioRevisions[faltaComparar] ?? 0}`;
     if (intentosComparar.current.has(intento)) return;
     intentosComparar.current.add(intento);
     void simular(faltaComparar, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [faltaComparar, modelador, reparseando, sim.tipo, revision, scenarioRevisions]);
+  }, [faltaComparar, pausaComparar, modelador, reparseando, sim.tipo, revision, scenarioRevisions]);
 
   /**
    * «Compare with…» from Results (or ⌘K). Not comparing yet: the active scenario against `elegido`,
@@ -2127,6 +2147,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    */
   function compararCon(elegido: string): void {
     setFallaComparar(null);
+    setPausaComparar(null);
     intentosComparar.current.clear();
     if (comparacion !== null) {
       if (elegido !== comparacion.ref) setComparacion({ ref: comparacion.ref, otro: elegido });
@@ -2500,12 +2521,23 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     const a = runDe(comparacion.ref);
     const b = runDe(comparacion.otro);
     if (a === undefined || b === undefined || ir === null) {
-      const falta = a === undefined ? nombreRef : nombreOtro;
+      const faltaId = a === undefined ? comparacion.ref : comparacion.otro;
+      const falta = etiquetaEscenario(faltaId, escenarios);
+      // Cancelled (QA of #603): the card says so and offers Retry, instead of «Simulating…» forever.
+      if (pausaComparar === faltaId && sim.tipo !== 'simulando') {
+        return (
+          <Tarjeta tono="acento" kicker={S.c5.comparar.canceladaKicker} titulo={S.c5.comparar.cancelada(falta)} texto={S.c5.comparar.canceladaTexto}>
+            <button type="button" className="boton primario" onClick={() => setPausaComparar(null)}>{S.c5.resultados.reintentar}</button>
+            {cerrar}
+          </Tarjeta>
+        );
+      }
       return (
         <Tarjeta tono="acento" kicker={S.c5.comparar.simulandoKicker} titulo={S.c5.comparar.simulando(falta)} texto={S.c5.comparar.simulandoTexto}>
           {sim.tipo === 'simulando' && sim.progreso !== null && (
             <div className="progreso-pista c5-progreso"><div style={{ width: `${Math.round(sim.progreso.fraction * 100)}%` }} /></div>
           )}
+          {sim.tipo === 'simulando' && <button type="button" className="boton" onClick={cancelarCorrida}>{S.app.cancelar}</button>}
           {cerrar}
         </Tarjeta>
       );
