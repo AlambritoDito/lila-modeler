@@ -3,6 +3,28 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.21] - 2026-10-05
+
+Two more gaps from the same feedback round (epic #582): files from other tools and activity size.
+
+### Added
+
+- **Import BPMN… (#591)**: File (native menu and in-window menu) and the command palette open a
+  `.bpmn` or `.xml` exported by another tool (Bizagi, Camunda, Signavio…). On the desktop a `.bpmn`
+  opens like a double-click and Save writes back to it; an `.xml` opens as a new project and the
+  first Save asks where. On the web the entry replaces "Open .bpmn" and no longer downloads a
+  `.lila` or keeps the file in the browser. Files over 64 MB are refused.
+- **Resize activities (#563)**: tasks of every type and call activities have left/right handles and
+  a Width field in Properties (plain numbers from 50 to 2000). The height is kept, a drag undoes in
+  one step and the width is saved in the BPMN. In a vertical pool, widening a task until its centre
+  crosses into the next lane moves it there, as moving it does.
+
+### Fixed
+
+- **A file that fails to open leaves the open project as it was (#591)**: Open, Open recent, a
+  double-click and Import BPMN… used to switch to the broken file before parsing it, so Save then
+  failed with `E-PROYECTO-DISTINTO` and outside changes to the project were no longer noticed.
+
 ## [1.0.0-beta.20] - 2026-10-05
 
 Feedback from a process-management professor and a beta tester (epic #582, Lote L1): what already
