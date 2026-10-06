@@ -303,10 +303,11 @@ describe('the selected element shows only this step', () => {
   it('«Show all» clears the selection and brings the step\'s overview back', () => {
     montar(<Anfitrion inicial={asIs()} seleccionInicial="Task_RegisterRequest" />);
     act(() => { paso('resources').click(); });
-    expect(document.getElementById('campo-resources.executive.capacity')).toBeNull();
+    // The resources list (C2's master-detail) is the step's overview: hidden while a task is selected.
+    expect(document.querySelector('button.rec-fila[data-clave="executive"]')).toBeNull();
     act(() => { boton(en.pasosSim.verTodo).click(); });
     expect(seleccionActual).toBeNull();
-    expect(document.getElementById('campo-resources.executive.capacity')).not.toBeNull();
+    expect(document.querySelector('button.rec-fila[data-clave="executive"]')).not.toBeNull();
   });
 
   it('Arrivals with a single start event is its card: pattern, rate and limits', () => {
