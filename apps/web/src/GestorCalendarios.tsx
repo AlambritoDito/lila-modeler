@@ -19,11 +19,15 @@ import { CampoFestivos, CampoIntervalos } from './CamposCalendario.js';
 import { aCeldas, celda, pintar, tieneMinutos, type Intervalo } from './CalendarEditor.js';
 import {
   cambiosDeDelta,
+  declaraCalendario,
+  descendientesDe,
   esObjeto,
   esquemaDe,
   esquemaEntrada,
   leer,
+  nombraCalendario,
   renombrarCalendario,
+  renombrarEnDescendiente,
   type Contexto,
 } from './escenarioModelo.js';
 import { formatDisplay } from './formatDisplay.js';
@@ -51,6 +55,30 @@ const CON_HORAS = PLANTILLAS.filter((p): p is Exclude<Plantilla, 'enBlanco'> => 
 function intervalosDe(ctx: Contexto, clave: string): Intervalo[] {
   const valor = leer(ctx.resuelto, ['calendars', clave, 'intervals']);
   return (Array.isArray(valor) ? valor : []) as Intervalo[];
+}
+
+/** The scenarios that extend the one being edited (QA of #599): a rename has to follow into them. */
+function derivados(ctx: Contexto): string[] {
+  return ctx.archivo !== undefined && ctx.escenarios !== undefined ? descendientesDe(ctx.archivo, ctx.escenarios) : [];
+}
+
+/**
+ * After «Used by» switches to Resources, bring that pool into view and focus its first field.
+ * The Resources step is another component, so it is found by its `data-clave` (the registry's
+ * fieldset; a master-detail row should keep the attribute) two frames later, once it has mounted.
+ */
+function enfocarRecurso(id: string): void {
+  const buscar = (): void => {
+    const destino = [...document.querySelectorAll<HTMLElement>('.escenario [data-clave]')].find(
+      (el) => el.dataset.clave === id && !el.closest('.gcal'),
+    );
+    if (destino === undefined) return;
+    destino.scrollIntoView?.({ block: 'start' });
+    (destino.querySelector<HTMLElement>('input, select, button') ?? destino).focus({ preventScroll: true });
+  };
+  requestAnimationFrame(() => {
+    requestAnimationFrame(buscar);
+  });
 }
 
 /** `true` if the live lint has anything under `calendars.<clave>`. */
@@ -84,8 +112,9 @@ export function GestorCalendarios({
   useEffect(() => {
     if (recienCreado === null || clave !== recienCreado) return;
     setRecienCreado(null);
-    editor.current?.scrollIntoView?.({ block: 'nearest' });
-    editor.current?.querySelector<HTMLInputElement>('input')?.focus();
+    // No scrolling (QA of #599): the template buttons, the list and the editor header are already
+    // in view, and jumping the panel hid the step bar.
+    editor.current?.querySelector<HTMLInputElement>('input')?.focus({ preventScroll: true });
   });
 
   const limpio = nombreNuevo.trim();
@@ -207,6 +236,8 @@ export function GestorCalendarios({
           onPestana={setPestana}
           onRenombrado={(nuevo) => {
             setElegido(nuevo);
+            // The editor remounts under its new key: give the focus back to its name field.
+            setRecienCreado(nuevo);
           }}
           onIrARecursos={onIrARecursos}
         />
@@ -242,8 +273,21 @@ function EditorCalendario({
   const ruta = ['calendars', clave] as const;
 
   const nombre = borrador.trim();
+  const hijos = derivados(ctx);
+  const escenarios = ctx.escenarios ?? {};
+  /** A descendant that declares the new name itself would end up with two calendars merged in one. */
+  const hijoConNombre = hijos.find((h) => declaraCalendario(escenarios[h] ?? {}, nombre));
   const errorNombre =
-    nombre === '' ? S.gcal.nombreVacio : nombre !== clave && claves.includes(nombre) ? S.gcal.nombreRepetido(nombre) : null;
+    nombre === ''
+      ? S.gcal.nombreVacio
+      : nombre !== clave && claves.includes(nombre)
+        ? S.gcal.nombreRepetido(nombre)
+        : nombre !== clave && hijoConNombre !== undefined
+          ? S.gcal.nombreEnDerivado(nombre, hijoConNombre)
+          : null;
+  /** Descendants that name this calendar themselves: deleting it would break them. */
+  const usadoEnDerivados = hijos.filter((h) => nombraCalendario(escenarios[h] ?? {}, clave));
+  const bloqueado = usos.length > 0 || usadoEnDerivados.length > 0;
 
   function renombrar(): void {
     if (errorNombre !== null || nombre === clave) {
@@ -256,6 +300,14 @@ function EditorCalendario({
     const cambios = cambiosDeDelta(delta, despues);
     if (ctx.editarVarios !== undefined) ctx.editarVarios(cambios);
     else for (const { ruta: r, valor } of cambios) ctx.editar(r, valor);
+    // QA of #599: the scenarios that extend this one follow the rename in the same gesture, or a
+    // Duplicate's override stops applying (its KPIs change) and its own references break.
+    for (const hijo of hijos) {
+      const antes = escenarios[hijo];
+      if (antes === undefined) continue;
+      const despuesHijo = renombrarEnDescendiente(antes, clave, nombre);
+      if (despuesHijo !== antes) ctx.editarArchivo?.(hijo, despuesHijo);
+    }
     onRenombrado(nombre);
   }
 
@@ -341,7 +393,7 @@ function EditorCalendario({
           </>
         )}
         {pestana === 'uso' && (
-          <UsadoPor clave={clave} usos={usos} ctx={ctx} onIrARecursos={onIrARecursos} />
+          <UsadoPor clave={clave} usos={usos} derivados={usadoEnDerivados} ctx={ctx} onIrARecursos={onIrARecursos} />
         )}
       </div>
 
@@ -360,8 +412,8 @@ function EditorCalendario({
       <button
         type="button"
         className="boton gcal-eliminar"
-        disabled={usos.length > 0}
-        title={usos.length > 0 ? S.gcal.eliminarBloqueado : undefined}
+        disabled={bloqueado}
+        title={bloqueado ? S.gcal.eliminarBloqueado : undefined}
         onClick={() => {
           ctx.quitar(ruta);
         }}
@@ -442,11 +494,14 @@ export function copiarLunes(intervals: readonly Intervalo[]): Intervalo[] {
 function UsadoPor({
   clave,
   usos,
+  derivados: enDerivados,
   ctx,
   onIrARecursos,
 }: {
   clave: string;
   usos: readonly Uso[];
+  /** Scenarios that extend this one and name the calendar themselves. */
+  derivados: readonly string[];
   ctx: Contexto;
   onIrARecursos: () => void;
 }): React.JSX.Element {
@@ -480,7 +535,10 @@ function UsadoPor({
                     type="button"
                     className="gcal-uso-fila"
                     aria-label={S.gcal.irA(uso.nombre)}
-                    onClick={onIrARecursos}
+                    onClick={() => {
+                      onIrARecursos();
+                      enfocarRecurso(uso.id);
+                    }}
                   >
                     {texto}
                     <span aria-hidden="true">→</span>
@@ -493,6 +551,7 @@ function UsadoPor({
           })}
         </ul>
       )}
+      {enDerivados.length > 0 && <p className="ayuda gcal-derivados">{S.gcal.usadoEnDerivados(enDerivados.join(', '))}</p>}
       <div className="gcal-asignar">
         <label htmlFor={idSelect} className="etiqueta">
           {S.gcal.asignarA}

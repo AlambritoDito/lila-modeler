@@ -203,9 +203,12 @@ function escenarioBase(): Json {
   };
 }
 
-function Anfitrion({ inicial }: { inicial: Json }): React.JSX.Element {
-  const [escenarios, setEscenarios] = useState<Readonly<Record<string, Json>>>({ [ARCHIVO]: inicial });
+let todos: Readonly<Record<string, Json>> = {};
+
+function Anfitrion({ inicial, otros = {} }: { inicial: Json; otros?: Record<string, Json> }): React.JSX.Element {
+  const [escenarios, setEscenarios] = useState<Readonly<Record<string, Json>>>({ [ARCHIVO]: inicial, ...otros });
   actual = escenarios[ARCHIVO] ?? {};
+  todos = escenarios;
   return (
     <ScenarioPanel
       archivo={ARCHIVO}
@@ -222,12 +225,25 @@ function Anfitrion({ inicial }: { inicial: Json }): React.JSX.Element {
   );
 }
 
-function montar(inicial: Json = escenarioBase()): void {
+function montar(inicial: Json = escenarioBase(), otros: Record<string, Json> = {}): void {
   contenedor = document.createElement('div');
   document.body.appendChild(contenedor);
   raiz = createRoot(contenedor);
   act(() => {
-    raiz!.render(<Anfitrion inicial={inicial} />);
+    raiz!.render(<Anfitrion inicial={inicial} otros={otros} />);
+  });
+}
+
+function renombrarA(nuevo: string): void {
+  const nombre = document.querySelector<HTMLInputElement>('.gcal-cabecera input')!;
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  act(() => {
+    nombre.focus();
+    setter?.call(nombre, nuevo);
+    nombre.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  act(() => {
+    nombre.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   });
 }
 
@@ -425,7 +441,7 @@ it('grid keyboard: one tab stop, arrows move, Space toggles, Shift+arrow paints 
   expect(celdas().filter((c) => c.tabIndex === 0).map((c) => c.getAttribute('aria-label'))).toEqual(['Saturday 10:00']);
 });
 
-it('«Used by» jumps to Resources and lists shifts; pools with shifts are not offered', () => {
+it('«Used by» jumps to that resource in Resources and lists shifts; pools with shifts are not offered', async () => {
   const turnos = escenarioBase();
   (turnos['resources'] as Json)['supervisor'] = { name: 'Supervisor', type: 'role', capacity: [{ calendar: 'oficina', capacity: 2 }] };
   montar(turnos);
@@ -439,4 +455,64 @@ it('«Used by» jumps to Resources and lists shifts; pools with shifts are not o
   expect(document.body.textContent).toContain(es.gcal.todosAsignados);
   pulsar(document.querySelector<HTMLButtonElement>(`[aria-label="${es.gcal.irA('Analyst')}"]`)!);
   expect(boton(es.escenario.paso['resources']!).getAttribute('aria-pressed')).toBe('true');
+  // Minor of the QA: it lands on THAT pool, not just on the step.
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 80));
+  });
+  expect(document.querySelector('[data-clave="analyst"]')!.contains(document.activeElement)).toBe(true);
+});
+
+it('QA of #599: renaming in a parent rewrites the children that override or name it, in the same gesture', () => {
+  const override = { intervals: [{ days: ['SAT'], from: '07:00', to: '20:00' }] };
+  montar(escenarioBase(), {
+    'tobe.scenario.json': { version: 1, name: 'TO-BE', extends: ARCHIVO, calendars: { oficina: override } },
+    'otro.scenario.json': { version: 1, name: 'Otro', extends: ARCHIVO, resources: { nuevo: { capacity: 1, calendar: 'oficina' } } },
+    'suelto.scenario.json': { version: 1, name: 'Suelto', calendars: { oficina: override } },
+  });
+  pulsar(boton('Calendarios'));
+  renombrarA('tienda');
+  expect(Object.keys(calendarios())).toEqual(['tienda']);
+  expect(todos['tobe.scenario.json']!['calendars']).toEqual({ tienda: override });
+  expect(todos['otro.scenario.json']!['resources']).toEqual({ nuevo: { capacity: 1, calendar: 'tienda' } });
+  // A scenario that does not extend this one is left alone.
+  expect(todos['suelto.scenario.json']!['calendars']).toEqual({ oficina: override });
+  // Minor of the QA: the focus comes back to the name field of the renamed calendar.
+  expect(document.activeElement).toBe(document.querySelector('.gcal-cabecera input'));
+});
+
+it('QA of #599: a name a child already declares is refused, and a calendar only a child uses cannot be deleted', () => {
+  const sinUso = escenarioBase();
+  (sinUso['calendars'] as Json)['noche'] = { intervals: [{ days: ['SAT'], from: '22:00', to: '24:00' }] };
+  montar(sinUso, {
+    'tobe.scenario.json': {
+      version: 1,
+      name: 'TO-BE',
+      extends: ARCHIVO,
+      calendars: { tienda: { intervals: [{ days: ['SUN'], from: '10:00', to: '12:00' }] } },
+      resources: { nuevo: { capacity: 1, calendar: 'noche' } },
+    },
+  });
+  pulsar(boton('Calendarios'));
+  renombrarA('tienda');
+  expect(Object.keys(calendarios())).toEqual(['oficina', 'noche']);
+  pulsar(document.querySelector<HTMLButtonElement>('.gcal-fila[data-clave="noche"]')!);
+  expect(boton(es.gcal.eliminar).disabled).toBe(true);
+  pulsar(pestana('uso'));
+  expect(document.querySelector('.gcal-derivados')?.textContent).toBe(es.gcal.usadoEnDerivados('tobe.scenario.json'));
+});
+
+it('creating from a template does not scroll the panel', () => {
+  montar();
+  pulsar(boton('Calendarios'));
+  let desplazado = 0;
+  const original = Element.prototype.scrollIntoView;
+  Element.prototype.scrollIntoView = () => {
+    desplazado += 1;
+  };
+  try {
+    pulsar(boton(es.gcal.plantillas.continuo, document.querySelector('.gcal-plantillas')!));
+  } finally {
+    Element.prototype.scrollIntoView = original;
+  }
+  expect(desplazado).toBe(0);
 });

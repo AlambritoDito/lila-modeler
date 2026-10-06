@@ -7,6 +7,7 @@
 import type { ProcessIR } from '@lila-modeler/engine';
 import {
   parseScenario,
+  resolveScenarioPath,
   toJsonSchema,
   validateScenario,
   type ValidateScenarioOptions,
@@ -375,6 +376,77 @@ export function renombrarCalendario(
 }
 
 /**
+ * The scenarios that inherit from `archivo`, directly or through others (`extends` is resolved
+ * relative to the child, § 6), in the order of `escenarios`. Not `archivo` itself.
+ */
+export function descendientesDe(
+  archivo: string,
+  escenarios: Readonly<Record<string, Record<string, unknown>>>,
+): string[] {
+  const afectados = new Set([archivo]);
+  let crecio = true;
+  while (crecio) {
+    crecio = false;
+    for (const [nombre, delta] of Object.entries(escenarios)) {
+      const padre = delta['extends'];
+      if (afectados.has(nombre) || typeof padre !== 'string') continue;
+      if (afectados.has(resolveScenarioPath(nombre, padre))) {
+        afectados.add(nombre);
+        crecio = true;
+      }
+    }
+  }
+  return Object.keys(escenarios).filter((nombre) => nombre !== archivo && afectados.has(nombre));
+}
+
+/**
+ * A descendant's **own** delta after its ancestor renamed calendar `viejo` to `nuevo` (QA of
+ * #599): its override or deletion of `calendars.<viejo>` moves to `nuevo` (or a Duplicate's
+ * what-if hours would silently stop applying and its KPIs change), and its own references —
+ * pool `calendar`, shifts, element `calendar` — follow (or it would fail with
+ * E-REF-DESCONOCIDA). What it inherits is already fixed by the ancestor's own rewrite.
+ */
+export function renombrarEnDescendiente(
+  delta: Record<string, unknown>,
+  viejo: string,
+  nuevo: string,
+): Record<string, unknown> {
+  let salida = delta;
+  const propios = delta['calendars'];
+  if (esObjeto(propios) && viejo in propios) {
+    const movidos: Record<string, unknown> = {};
+    for (const [clave, entrada] of Object.entries(propios)) movidos[clave === viejo ? nuevo : clave] = entrada;
+    salida = { ...salida, calendars: movidos };
+  }
+  const recursos = delta['resources'];
+  for (const [id, recurso] of Object.entries(esObjeto(recursos) ? recursos : {})) {
+    if (!esObjeto(recurso)) continue;
+    if (recurso['calendar'] === viejo) salida = escribir(salida, ['resources', id, 'calendar'], nuevo);
+    const capacidad = recurso['capacity'];
+    if (Array.isArray(capacidad) && capacidad.some((t: unknown) => esObjeto(t) && t['calendar'] === viejo)) {
+      const tramos = capacidad.map((t: unknown) => (esObjeto(t) && t['calendar'] === viejo ? { ...t, calendar: nuevo } : t));
+      salida = escribir(salida, ['resources', id, 'capacity'], tramos);
+    }
+  }
+  const elementos = delta['elements'];
+  for (const [id, elemento] of Object.entries(esObjeto(elementos) ? elementos : {})) {
+    if (esObjeto(elemento) && elemento['calendar'] === viejo) salida = escribir(salida, ['elements', id, 'calendar'], nuevo);
+  }
+  return salida;
+}
+
+/** `true` if a delta names calendar `clave` itself: an entry (override or `null`) or a reference. */
+export function nombraCalendario(delta: Record<string, unknown>, clave: string): boolean {
+  return renombrarEnDescendiente(delta, clave, `${clave}\u0000`) !== delta;
+}
+
+/** `true` if a delta declares a calendar `clave` of its own (not deleted with `null`). */
+export function declaraCalendario(delta: Record<string, unknown>, clave: string): boolean {
+  const propios = delta['calendars'];
+  return esObjeto(propios) && propios[clave] !== undefined && propios[clave] !== null;
+}
+
+/**
  * `despues` as the top-level writes `Contexto.editarVarios` takes: one per root key that changed,
  * so a whole rename is one write of the delta and one undo step.
  */
@@ -448,4 +520,13 @@ export interface Contexto {
    * el array completo como valor, que es lo que § 6 dice de los arrays.
    */
   editarVarios?(cambios: readonly { ruta: Ruta; valor: unknown }[]): void;
+  /**
+   * Lote M (C3): the file being edited and every scenario of the process (file → raw delta), so
+   * an edit that changes a key other files point at (renaming a calendar) can follow it into the
+   * scenarios that `extends` this one. Optional: test probes that never rename do not pass them.
+   */
+  archivo?: string;
+  escenarios?: Readonly<Record<string, Record<string, unknown>>>;
+  /** Writes another scenario's whole delta (a descendant of this one), in the same gesture. */
+  editarArchivo?(archivo: string, escenario: Record<string, unknown>): void;
 }
