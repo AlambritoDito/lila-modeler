@@ -247,6 +247,13 @@ function renombrarA(nuevo: string): void {
   });
 }
 
+/** A step tab of the Simulate panel, by `data-paso`: its text also carries number and ✓ / «! n» (C1). */
+function botonPaso(paso: string): HTMLButtonElement {
+  const encontrado = document.querySelector<HTMLButtonElement>(`.pasos button[data-paso="${paso}"]`);
+  if (encontrado === null) throw new Error(`no step ${paso}`);
+  return encontrado;
+}
+
 function boton(texto: string, dentro: ParentNode = document): HTMLButtonElement {
   const encontrado = [...dentro.querySelectorAll('button')].find((b) => b.textContent?.trim() === texto);
   if (encontrado === undefined) throw new Error(`no hay botón «${texto}»`);
@@ -275,7 +282,7 @@ function erroresDe(ruta: string): string[] {
 
 it('acceptance: a 2nd calendar from a template, assigned from «Used by» in 4 clicks, without E-CAL-VACIO', () => {
   montar();
-  pulsar(boton('Calendarios'));
+  pulsar(botonPaso('calendars'));
   let clics = 0;
   const clic = (el: HTMLElement): void => {
     clics += 1;
@@ -313,7 +320,7 @@ it('acceptance: a 2nd calendar from a template, assigned from «Used by» in 4 c
 
 it('«Blank» is born empty and says so; the row is marked and the lint is E-CAL-VACIO', () => {
   montar();
-  pulsar(boton('Calendarios'));
+  pulsar(botonPaso('calendars'));
   pulsar(boton(es.escenario.crearCalendario));
   expect(calendarios()[es.gcal.nombreEnBlanco]).toEqual({ intervals: [] });
   expect(document.querySelector('[role="alert"].gcal-sin-horas')?.textContent).toBe(es.gcal.sinHoras);
@@ -329,7 +336,7 @@ it('empty state: no calendars, the 24 h note and the templates', () => {
   delete sin['calendars'];
   (sin['resources'] as Json)['analyst'] = { name: 'Analyst', type: 'role', capacity: 1 };
   montar(sin);
-  pulsar(boton('Calendarios'));
+  pulsar(botonPaso('calendars'));
   expect(document.querySelector('.gcal-vacio')?.textContent).toContain(es.gcal.vacioTexto);
   expect(document.querySelector('.gcal-editor')).toBeNull();
   pulsar(boton(es.gcal.plantillas.laborable));
@@ -341,7 +348,7 @@ it('one editor at a time: a row opens its calendar', () => {
   const dos = escenarioBase();
   (dos['calendars'] as Json)['noche'] = { intervals: [{ days: ['SAT'], from: '22:00', to: '24:00' }] };
   montar(dos);
-  pulsar(boton('Calendarios'));
+  pulsar(botonPaso('calendars'));
   expect(document.querySelectorAll('.gcal-editor')).toHaveLength(1);
   expect(document.querySelector('.gcal-editor')?.getAttribute('data-clave')).toBe('oficina');
   pulsar(document.querySelector<HTMLButtonElement>('.gcal-fila[data-clave="noche"]')!);
@@ -352,7 +359,7 @@ it('one editor at a time: a row opens its calendar', () => {
 
 it('renaming rewrites the references and keeps the editor on the calendar', () => {
   montar();
-  pulsar(boton('Calendarios'));
+  pulsar(botonPaso('calendars'));
   const nombre = document.querySelector<HTMLInputElement>('.gcal-cabecera input')!;
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
   act(() => {
@@ -370,7 +377,7 @@ it('renaming rewrites the references and keeps the editor on the calendar', () =
 
 it('a calendar in use cannot be deleted; an unused one can', () => {
   montar();
-  pulsar(boton('Calendarios'));
+  pulsar(botonPaso('calendars'));
   expect(boton(es.gcal.eliminar).disabled).toBe(true);
   pulsar(boton(es.gcal.plantillas.continuo, document.querySelector('.gcal-plantillas')!));
   expect(boton(es.gcal.eliminar).disabled).toBe(false);
@@ -380,8 +387,8 @@ it('a calendar in use cannot be deleted; an unused one can', () => {
 
 it('the tabs are a tablist with arrow keys, and Holidays and Repetitions write the calendar', () => {
   montar();
-  pulsar(boton('Calendarios'));
-  expect(document.querySelector('[role="tablist"]')?.querySelectorAll('[role="tab"]')).toHaveLength(4);
+  pulsar(botonPaso('calendars'));
+  expect(document.querySelector('.gcal-pestanas[role="tablist"]')?.querySelectorAll('[role="tab"]')).toHaveLength(4);
   expect(pestana('semana').getAttribute('aria-selected')).toBe('true');
   act(() => {
     pestana('semana').focus();
@@ -389,7 +396,7 @@ it('the tabs are a tablist with arrow keys, and Holidays and Repetitions write t
   });
   expect(pestana('festivos').getAttribute('aria-selected')).toBe('true');
   expect(document.activeElement).toBe(pestana('festivos'));
-  expect(document.querySelector('[role="tabpanel"]')?.getAttribute('aria-labelledby')).toBe('gcal-tab-festivos');
+  expect(document.querySelector('[role="tabpanel"]:not(#sim-cuerpo)')?.getAttribute('aria-labelledby')).toBe('gcal-tab-festivos');
   expect(document.querySelector('.festivos')).not.toBeNull();
 
   pulsar(pestana('repeticiones'));
@@ -415,7 +422,7 @@ it('the tabs are a tablist with arrow keys, and Holidays and Repetitions write t
 it('grid keyboard: one tab stop, arrows move, Space toggles, Shift+arrow paints one entry', () => {
   setLocale('en');
   montar();
-  pulsar(boton('Calendars'));
+  pulsar(botonPaso('calendars'));
   const celdas = (): HTMLButtonElement[] => [...document.querySelectorAll<HTMLButtonElement>('.calendario .hora')];
   expect(celdas().filter((c) => c.tabIndex === 0)).toHaveLength(1);
   // Translated accessible names: «Monday 08:00», never the format's «MON 08:00».
@@ -445,7 +452,7 @@ it('«Used by» jumps to that resource in Resources and lists shifts; pools with
   const turnos = escenarioBase();
   (turnos['resources'] as Json)['supervisor'] = { name: 'Supervisor', type: 'role', capacity: [{ calendar: 'oficina', capacity: 2 }] };
   montar(turnos);
-  pulsar(boton('Calendarios'));
+  pulsar(botonPaso('calendars'));
   pulsar(pestana('uso'));
   const filas = [...document.querySelectorAll('.gcal-usos li')].map((li) => li.textContent);
   expect(filas).toEqual([
@@ -454,7 +461,7 @@ it('«Used by» jumps to that resource in Resources and lists shifts; pools with
   ]);
   expect(document.body.textContent).toContain(es.gcal.todosAsignados);
   pulsar(document.querySelector<HTMLButtonElement>(`[aria-label="${es.gcal.irA('Analyst')}"]`)!);
-  expect(boton(es.escenario.paso['resources']!).getAttribute('aria-pressed')).toBe('true');
+  expect(botonPaso('resources').getAttribute('aria-selected')).toBe('true');
   // Minor of the QA: it lands on THAT pool, not just on the step.
   await act(async () => {
     await new Promise((r) => setTimeout(r, 80));
@@ -469,7 +476,7 @@ it('QA of #599: renaming in a parent rewrites the children that override or name
     'otro.scenario.json': { version: 1, name: 'Otro', extends: ARCHIVO, resources: { nuevo: { capacity: 1, calendar: 'oficina' } } },
     'suelto.scenario.json': { version: 1, name: 'Suelto', calendars: { oficina: override } },
   });
-  pulsar(boton('Calendarios'));
+  pulsar(botonPaso('calendars'));
   renombrarA('tienda');
   expect(Object.keys(calendarios())).toEqual(['tienda']);
   expect(todos['tobe.scenario.json']!['calendars']).toEqual({ tienda: override });
@@ -492,7 +499,7 @@ it('QA of #599: a name a child already declares is refused, and a calendar only 
       resources: { nuevo: { capacity: 1, calendar: 'noche' } },
     },
   });
-  pulsar(boton('Calendarios'));
+  pulsar(botonPaso('calendars'));
   renombrarA('tienda');
   expect(Object.keys(calendarios())).toEqual(['oficina', 'noche']);
   pulsar(document.querySelector<HTMLButtonElement>('.gcal-fila[data-clave="noche"]')!);
@@ -503,7 +510,7 @@ it('QA of #599: a name a child already declares is refused, and a calendar only 
 
 it('creating from a template does not scroll the panel', () => {
   montar();
-  pulsar(boton('Calendarios'));
+  pulsar(botonPaso('calendars'));
   let desplazado = 0;
   const original = Element.prototype.scrollIntoView;
   Element.prototype.scrollIntoView = () => {
