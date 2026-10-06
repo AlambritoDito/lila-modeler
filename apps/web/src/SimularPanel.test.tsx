@@ -192,6 +192,15 @@ describe('«▶ Simulate» of the panel', () => {
     expect(seleccionActual).toBe('Task_PrepareService');
   });
 
+  it('acknowledges the shell\'s request once, so a remount does not act on it again', () => {
+    const onSimular = vi.fn();
+    const atendido = vi.fn();
+    montar(<ScenarioPanel archivo={ARCHIVO} escenarios={{ [ARCHIVO]: asIs() }} onCambio={() => {}} onGuardar={() => {}} onDuplicar={() => {}}
+      ir={ir} seleccion={null} onSeleccionar={() => {}} onSimular={onSimular} irAlProblema={7} onProblemaAtendido={atendido} />);
+    expect(onSimular).toHaveBeenCalledTimes(1);
+    expect(atendido).toHaveBeenCalledTimes(1);
+  });
+
   it('the banner lists the step\'s problems with a «Go» that selects the element', () => {
     montar(<Anfitrion inicial={sinTiempo()} />);
     expect(abierto()).toBe('times');
@@ -213,6 +222,18 @@ describe('step keys', () => {
     // Not with ⌘/Ctrl: those are the modes.
     tecla({ key: '6', code: 'Digit6', altKey: true, metaKey: true });
     expect(abierto()).toBe('arrivals');
+  });
+
+  it('Alt+digit inside a field types its character (⌥2 = «@» on a Spanish Mac) and leaves the step alone', () => {
+    montar(<Anfitrion inicial={asIs()} />);
+    const externo = document.querySelector<HTMLInputElement>('input[aria-label="campo-externo"]')!;
+    const e = tecla({ key: '@', code: 'Digit2', altKey: true }, externo);
+    expect(e.defaultPrevented).toBe(false);
+    expect(abierto()).toBe('times');
+    // A field of the panel itself: the scenario JSON.
+    const json = document.querySelector<HTMLTextAreaElement>('textarea.json-escenario')!;
+    expect(tecla({ key: '#', code: 'Digit3', altKey: true }, json).defaultPrevented).toBe(false);
+    expect(abierto()).toBe('times');
   });
 
   it('←/→ walk the tabs cyclically and Home/End jump to the ends', () => {
@@ -258,6 +279,14 @@ describe('step keys', () => {
 });
 
 describe('the selected element shows only this step', () => {
+  it('without a selection the overview has no «Selected element» heading around it', () => {
+    montar(<Anfitrion inicial={asIs()} />);
+    const titulos = [...document.querySelectorAll('.escenario summary')].map((x) => x.textContent);
+    expect(titulos).not.toContain(en.escenario.seccionElemento);
+    act(() => { boton('sel:task').click(); });
+    expect([...document.querySelectorAll('.escenario summary')].map((x) => x.textContent)).toContain(en.escenario.seccionElemento);
+  });
+
   it('an end event in Routes says it has nothing there; a task in Routes offers the way to Times', () => {
     montar(<Anfitrion inicial={asIs()} />);
     act(() => { paso('routes').click(); });

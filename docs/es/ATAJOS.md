@@ -52,7 +52,7 @@ paleta de comandos (`⌘K`).
 | Panel de Simular: quitar la selección (sin corrida en curso) | `Esc` | `Esc` |
 
 En el panel de Simular, `←`/`→` recorren las pestañas de los pasos cuando una de ellas tiene el
-foco, y `Alt+1…6` funcionan también en la ventana desacoplada. «▶ Simular» del panel te lleva al
+foco (`Inicio`/`Fin` saltan a la primera y a la última), y `Alt+1…6` funcionan también en la ventana desacoplada; ni ellos ni `Esc` actúan mientras escribes en un campo. «▶ Simular» del panel te lleva al
 primer error en vez de correr mientras el escenario tenga alguno; los avisos («! n» en un paso) no lo detienen.
 
 ## Lienzo

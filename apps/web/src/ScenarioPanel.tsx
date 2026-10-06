@@ -368,6 +368,8 @@ export interface ScenarioPanelProps {
    * the panel acts once per value.
    */
   irAlProblema?: number | null;
+  /** Called once the panel has acted on `irAlProblema`, so the shell clears it (like `onPasoAtendido`). */
+  onProblemaAtendido?: () => void;
 }
 
 /** Default of `problemasExtra`, one array for every render so the memo below keeps its cache. */
@@ -393,6 +395,7 @@ export function ScenarioPanel({
   onSimular,
   onConteoProblemas,
   irAlProblema = null,
+  onProblemaAtendido,
 }: ScenarioPanelProps): React.JSX.Element {
   const S = useStrings();
   /**
@@ -664,12 +667,17 @@ export function ScenarioPanel({
     conteoRef.current?.(bloqueantes.length);
   }, [bloqueantes.length]);
 
-  // The shell's request to go to the first problem (its own «▶ Simulate», ⌘↩): once per value.
+  // The shell's request to go to the first problem (its own «▶ Simulate», ⌘↩): once per value, and
+  // acknowledged with `onProblemaAtendido` so the shell clears it. Without the acknowledgement a
+  // remount (docking or detaching the panel) would see the same value again and simulate twice.
   const simularRef = useRef(simular);
   simularRef.current = simular;
+  const atendidoRef = useRef(onProblemaAtendido);
+  atendidoRef.current = onProblemaAtendido;
   useEffect(() => {
     if (irAlProblema === null) return;
     simularRef.current();
+    atendidoRef.current?.();
   }, [irAlProblema]);
 
   /**
@@ -677,7 +685,7 @@ export function ScenarioPanel({
    * panel listens on the app's, the detached one on its window's, so both work wherever the panel
    * is. `App.tsx` never dispatches Alt+1…6 (they are `panel` entries of `atajos.ts`) and handles Esc
    * first while a run is in flight (it cancels the run and marks the event handled), so the two
-   * never fight over a key. Esc inside a field, a label being edited or an open dialog is theirs.
+   * never fight over a key. Neither key acts inside a field, a label being edited or an open dialog.
    */
   const teclasRef = useRef({ irAPaso, seleccion: idSeleccionado, onSeleccionar });
   teclasRef.current = { irAPaso, seleccion: idSeleccionado, onSeleccionar };
@@ -686,6 +694,11 @@ export function ScenarioPanel({
     if (doc === undefined) return;
     const alPulsar = (e: KeyboardEvent): void => {
       if (e.defaultPrevented || e.isComposing) return;
+      // A field, a label being edited or a dialog keeps its keys: on macOS ⌥2/⌥3 type «@»/«#»
+      // on a Spanish layout, and Esc there belongs to the field (QA of #600).
+      const objetivo = e.target as Element | null;
+      if (objetivo?.closest?.('input, textarea, select, [contenteditable="true"], [contenteditable=""], dialog, .djs-direct-editing-parent') != null) return;
+      if (doc.querySelector('dialog[open]') !== null) return;
       const digito = /^Digit([1-6])$/.exec(e.code);
       if (digito !== null && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
         e.preventDefault();
@@ -695,9 +708,6 @@ export function ScenarioPanel({
       }
       if (e.key !== 'Escape' || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
       if (teclasRef.current.seleccion === null) return;
-      const objetivo = e.target as Element | null;
-      if (objetivo?.closest?.('input, textarea, select, [contenteditable="true"], dialog, .djs-direct-editing-parent') != null) return;
-      if (doc.querySelector('dialog[open]') !== null) return;
       teclasRef.current.onSeleccionar(null);
     };
     doc.addEventListener('keydown', alPulsar);
@@ -924,45 +934,49 @@ export function ScenarioPanel({
           </section>
         )}
 
-        <details open className="sim-elemento">
-          <summary>{S.escenario.seccionElemento}</summary>
-          {idSeleccionado !== null && paso !== 'run' && (
-            <>
-              <p className="vacio">
-                {nombreSeleccion}
-                {rotulo(idSeleccionado).id !== undefined && (
-                  <span className="id mono">{S.escenario.nombreEntreParentesis(idSeleccionado)}</span>
-                )}
-              </p>
-              <div className="sim-seleccion">
-                <span className="sim-seleccion-tipo">{S.pasosSim.soloEstePaso(tipoSeleccion)}</span>
-                <button
-                  type="button"
-                  className="boton"
-                  title={S.pasosSim.verTodoTitulo}
-                  onClick={() => { onSeleccionar(null); }}
-                >
-                  {S.pasosSim.verTodo}
-                </button>
-              </div>
-            </>
-          )}
-          {idSeleccionado === null ? vistaGeneral() : vistaSeleccion(idSeleccionado)}
-          {/* Every entry the scenario already has, whatever the step: a flow or an element that is
-              hard to click on the canvas is still one click away (#447 rows). */}
-          {idSeleccionado === null && Object.keys(elementos).length > 0 && (
-            <details className="sim-entradas">
-              <summary>{S.pasosSim.entradas(Object.keys(elementos).length)}</summary>
-              <ul className="ids">
-                {Object.keys(elementos).map((id) => (
-                  <li key={id}>
-                    <BotonElemento id={id} rotulo={rotulo(id)} onSeleccionar={onSeleccionar} />
-                  </li>
-                ))}
-              </ul>
-            </details>
-          )}
-        </details>
+        {idSeleccionado !== null && paso !== 'run' ? (
+          <details open className="sim-elemento">
+            <summary>{S.escenario.seccionElemento}</summary>
+            <p className="vacio">
+              {nombreSeleccion}
+              {rotulo(idSeleccionado).id !== undefined && (
+                <span className="id mono">{S.escenario.nombreEntreParentesis(idSeleccionado)}</span>
+              )}
+            </p>
+            <div className="sim-seleccion">
+              <span className="sim-seleccion-tipo">{S.pasosSim.soloEstePaso(tipoSeleccion)}</span>
+              <button
+                type="button"
+                className="boton"
+                title={S.pasosSim.verTodoTitulo}
+                onClick={() => { onSeleccionar(null); }}
+              >
+                {S.pasosSim.verTodo}
+              </button>
+            </div>
+            {vistaSeleccion(idSeleccionado)}
+          </details>
+        ) : (
+          // Nothing selected (or Run, which has no element fields): the step's overview, without
+          // the «Selected element» heading around it.
+          <div className="sim-elemento sim-general">
+            {idSeleccionado === null ? vistaGeneral() : vistaSeleccion(idSeleccionado)}
+            {/* Every entry the scenario already has, whatever the step: a flow or an element that
+                is hard to click on the canvas is still one click away (#447 rows). */}
+            {idSeleccionado === null && Object.keys(elementos).length > 0 && (
+              <details className="sim-entradas">
+                <summary>{S.pasosSim.entradas(Object.keys(elementos).length)}</summary>
+                <ul className="ids">
+                  {Object.keys(elementos).map((id) => (
+                    <li key={id}>
+                      <BotonElemento id={id} rotulo={rotulo(id)} onSeleccionar={onSeleccionar} />
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        )}
 
         <nav className="sim-navegacion" aria-label={S.escenario.pasos}>
           {anterior !== undefined && (

@@ -3612,7 +3612,7 @@ button.gcal-uso-fila:hover {
 
 .sim-panel .sim-insignia {
   background: var(--status-error);
-  color: #fff;
+  color: var(--fg-onAccent);
   font-size: 10px;
   font-weight: 700;
   padding: 1px 5px;
@@ -3817,6 +3817,10 @@ button.gcal-uso-fila:hover {
 .sim-panel .sim-banner li > span {
   flex: 1;
   line-height: 1.4;
+  /* An engine message with a long path (`elements.Task_….processingTime`) must wrap, or it pushes
+     «Go» out of a 300 px panel (QA of #600). */
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .sim-panel .sim-banner .boton {

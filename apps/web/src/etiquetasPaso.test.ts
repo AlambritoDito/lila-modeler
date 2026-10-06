@@ -1,8 +1,11 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 
 import type { ProcessIR } from '@lila-modeler/engine';
 
-import { calendarioEfectivo, mediaDistribucion, modeloEtiquetas } from './etiquetasPaso';
+import type Modeler from 'bpmn-js/lib/Modeler';
+
+import { aplicarEtiquetasPaso, calendarioEfectivo, mediaDistribucion, modeloEtiquetas } from './etiquetasPaso';
 import { setLocale } from './i18n';
 
 setLocale('en');
@@ -85,5 +88,42 @@ describe('modeloEtiquetas', () => {
     expect(modeloEtiquetas({ paso: 'arrivals', resuelto, ir, unidad: 'min' })['Start']?.texto).toBe('every 12 min');
     expect(modeloEtiquetas({ paso: 'routes', resuelto, ir, unidad: 'min' })).toEqual({});
     expect(modeloEtiquetas({ paso: 'run', resuelto, ir, unidad: 'min' })).toEqual({});
+  });
+});
+
+describe('aplicarEtiquetasPaso', () => {
+  /** Just the two services it uses: overlays (kept in a list) and the element registry. */
+  function falso(): { modeler: Modeler; pintadas: () => { id: string; texto: string }[] } {
+    let lista: { id: string; type: string; html: HTMLElement }[] = [];
+    const overlays = {
+      add: (id: string, type: string, o: { html: HTMLElement }) => { lista.push({ id, type, html: o.html }); },
+      remove: (f: { type: string }) => { lista = lista.filter((x) => x.type !== f.type); },
+    };
+    const formas: Record<string, { width: number; height: number }> = { Start: { width: 36, height: 36 }, T1: { width: 100, height: 80 }, T2: { width: 100, height: 80 }, W: { width: 36, height: 36 } };
+    const registro = { get: (id: string) => formas[id] };
+    const modeler = { get: (n: string) => (n === 'overlays' ? overlays : registro) } as unknown as Modeler;
+    return { modeler, pintadas: () => lista.map((x) => ({ id: x.id, texto: x.html.textContent ?? '' })) };
+  }
+
+  it('paints the step\'s labels, repaints without duplicating, and null clears them', () => {
+    const { modeler, pintadas } = falso();
+    aplicarEtiquetasPaso(modeler, { paso: 'times', resuelto, ir, unidad: 'min' });
+    expect(pintadas()).toEqual([
+      { id: 'T1', texto: '≈ 1.25 h (75 min)' },
+      { id: 'T2', texto: 'No duration' },
+      { id: 'W', texto: '≈ 1 min' },
+    ]);
+    aplicarEtiquetasPaso(modeler, { paso: 'times', resuelto, ir, unidad: 'min' });
+    expect(pintadas()).toHaveLength(3);
+    aplicarEtiquetasPaso(modeler, { paso: 'arrivals', resuelto, ir, unidad: 'min' });
+    expect(pintadas()).toEqual([{ id: 'Start', texto: 'every 12 min' }]);
+    aplicarEtiquetasPaso(modeler, null);
+    expect(pintadas()).toEqual([]);
+  });
+
+  it('maps a sanitised IR id to the canvas id and skips what the canvas does not have', () => {
+    const { modeler, pintadas } = falso();
+    aplicarEtiquetasPaso(modeler, { paso: 'times', resuelto, ir, unidad: 'min', originalIds: { T1: 'Ghost', T2: 'T1' } });
+    expect(pintadas().map((x) => x.id)).toEqual(['T1', 'W']);
   });
 });
