@@ -115,3 +115,12 @@ describe('the scenario order after reopening (#581)', () => {
     ]);
   });
 });
+
+describe('engine messages on screen (Lote M)', () => {
+  it('floats with more than two decimals read with two; ids, dates and short numbers stay', async () => {
+    const { numerosLegibles } = await import('./escenarioModelo');
+    expect(numerosLegibles('W-XOR-NORMALIZADA: Gateway_1 sums 0.9199999999999999, normalised')).toBe('W-XOR-NORMALIZADA: Gateway_1 sums 0.92, normalised');
+    expect(numerosLegibles('Task_1.5 at 2026-09-07T08:00 took 0.25 and 12.5')).toBe('Task_1.5 at 2026-09-07T08:00 took 0.25 and 12.5');
+    expect(numerosLegibles('-1.23456 here')).toBe('-1.23 here');
+  });
+});

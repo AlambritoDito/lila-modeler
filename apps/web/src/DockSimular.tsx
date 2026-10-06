@@ -18,6 +18,7 @@ import type { LogDeCorrida } from './GraficasResultados';
 import { exactDuration, formatDisplay, formatDisplayDurationWithUnit } from './formatDisplay';
 import { getLocale, useStrings } from './i18n';
 import { agruparAvisos, AvisoAgrupado, type GrupoAvisos } from './avisos';
+import { numerosLegibles } from './escenarioModelo';
 import './DockSimular.css';
 
 export const PESTANAS_DOCK = ['tareas', 'detalle', 'log', 'avisos'] as const;
@@ -31,6 +32,8 @@ export const FILAS_LOG = 500;
  * lint repeats some of them without their code), grouped by code (QA of #394).
  */
 export function avisosDelDock(warnings: readonly string[], lint: readonly AvisoDock[]): GrupoAvisos[] {
+  // The engine's raw floats read with two decimals, like the lint (`numerosLegibles`).
+  warnings = warnings.map(numerosLegibles);
   return agruparAvisos([
     ...warnings.map((mensaje): AvisoDock => ({ mensaje, severidad: 'warning' })),
     ...lint.filter((a) => !warnings.some((w) => w.includes(a.mensaje))),
