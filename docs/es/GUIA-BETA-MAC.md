@@ -313,7 +313,8 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
   defecto).
 - **Archivo → Abrir reciente** lista esos proyectos (más nuevo primero) y los reabre sin
   diálogo; si la carpeta ya no existe, desaparece de la lista y la app lo dice en la barra de
-  estado. El menú nativo trae además Nuevo (`⌘N`), Abrir (`⌘O`), Guardar (`⌘S`), Guardar como
+  estado. El menú nativo trae además Nuevo (`⌘N`), Abrir (`⌘O`), **Importar BPMN…** (un
+  `.bpmn` o `.xml` de otra herramienta), Guardar (`⌘S`), Guardar como
   (`⇧⌘S`) y **Preferencias… (`⌘,`)** en el menú de la app; **Vista** trae la paleta de comandos
   (`⌘K`) y los seis modos (`⌘1`…`⌘6`), y **Simulación** ejecuta la simulación (`⌘↩`). Todos los
   atajos están en [Atajos de teclado](ATAJOS.md).
@@ -331,7 +332,7 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
 
 ## Limitaciones de esta beta
 
-*(a fecha 1.0.0-beta.20, tag `v1.0.0-beta.20`; las notas de verificación de macOS de abajo se
+*(a fecha 1.0.0-beta.21, tag `v1.0.0-beta.21`; las notas de verificación de macOS de abajo se
 registraron para la Beta 1. Revisar si alguna de estas ya se resolvió antes de creer esta lista a
 ciegas en una fecha posterior)*
 
@@ -374,10 +375,10 @@ npm run dist:mac -w @lila-modeler/desktop   # tsc + copia dist/web + electron-bu
 
 El último comando encadena: `tsc --build` de `apps/desktop`, copia de `apps/web/dist` a
 `apps/desktop/dist/web`, y `electron-builder --mac --arm64`. El resultado queda en
-`apps/desktop/release/` (la versión en `apps/desktop/package.json`: `1.0.0-beta.20` para la Beta 20):
+`apps/desktop/release/` (la versión en `apps/desktop/package.json`: `1.0.0-beta.21` para la Beta 21):
 
-- `apps/desktop/release/Lila-Modeler-1.0.0-beta.20-mac-arm64.dmg` — el instalador.
-- `apps/desktop/release/Lila-Modeler-1.0.0-beta.20-mac-arm64.dmg.blockmap`.
+- `apps/desktop/release/Lila-Modeler-1.0.0-beta.21-mac-arm64.dmg` — el instalador.
+- `apps/desktop/release/Lila-Modeler-1.0.0-beta.21-mac-arm64.dmg.blockmap`.
 - `apps/desktop/release/mac-arm64/Lila Modeler.app` — la app sin empaquetar en DMG, útil para
   probar rápido.
 - `apps/desktop/release/ORIGEN.txt` — `sha`, `fecha` (ISO) y `arch` (`uname -m`) del build,

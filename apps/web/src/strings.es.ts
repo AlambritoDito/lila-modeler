@@ -76,7 +76,7 @@ export const es: Strings = {
     abrir: 'Abrir',
     guardar: 'Guardar',
     guardarComo: 'Guardar como',
-    abrirBpmn: 'Abrir .bpmn',
+    importarBpmn: 'Importar BPMN…',
     exportarBpmn: 'Exportar .bpmn',
     exportarSvg: 'Exportar diagrama como SVG',
     exportarPng: 'Exportar diagrama como PNG',
@@ -94,6 +94,7 @@ export const es: Strings = {
       nuevoProyecto: 'Nuevo proyecto',
       abrirProyecto: 'Abrir proyecto…',
       abrirProyectoArchivo: 'Abrir archivo de proyecto (.lila)…',
+      importarBpmn: 'Importar BPMN…',
       abrirReciente: 'Abrir reciente',
       // QA de #432 (N1): igual, letra por letra, al vacío del menú nativo
       // (`menu.ninguno` en `apps/desktop/src/strings/es.ts`), no una paráfrasis más larga.
@@ -674,6 +675,14 @@ export const es: Strings = {
     id: 'Id',
     copiar: 'Copiar',
     copiado: 'Copiado',
+    /** Ancho de la actividad (#563): el campo de Propiedades y por qué se rechaza un valor. */
+    ancho: 'Ancho',
+    anchoProblemas: {
+      vacio: 'Escribe un ancho.',
+      numero: 'El ancho debe ser un número, por ejemplo 120.',
+      minimo: (minimo: number): string => `El ancho debe ser al menos ${minimo}.`,
+      maximo: (maximo: number): string => `El ancho debe ser como mucho ${maximo}.`,
+    },
     /** Colores por elemento (#452): la fila del panel, la entrada del context pad y los ocho colores. */
     color: 'Color',
     cambiarColor: 'Cambiar color',

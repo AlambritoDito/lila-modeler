@@ -109,7 +109,7 @@ function leerSesion(): SesionGuardada | null {
  *
  * Cerrar el diálogo nativo **no** dispara `change`: dispara `cancel`. Sin escucharlo, la
  * promesa no se resolvía nunca y el `<input>` se quedaba en el `<body>` para siempre — un
- * huérfano por cada vez que alguien pulsa «Abrir .bpmn» y se arrepiente.
+ * huérfano por cada vez que alguien pulsa «Importar BPMN…» y se arrepiente.
  */
 function elegirArchivo(accept = '.bpmn,.xml'): Promise<File | null> {
   return new Promise((resolve) => {
@@ -201,6 +201,12 @@ export class BrowserStore implements ProjectSessionStore {
   /** Restore the last explicitly saved project, including scenarios, revisions and runs. */
   restoreSession(): ProjectDocument | null {
     return this.project ? structuredClone(this.project) : null;
+  }
+
+  /** #591: the file's text and name; nothing is kept or downloaded until the user saves. */
+  async importBpmn(): Promise<{ xml: string; name: string } | null> {
+    const archivo = await elegirArchivo();
+    return archivo === null ? null : { xml: await archivo.text(), name: archivo.name };
   }
 
   async createProject(document: ProjectDocument): Promise<ProjectDocument> {

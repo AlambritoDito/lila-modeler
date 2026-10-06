@@ -12,6 +12,8 @@
  * - `LILA_E2E_SAVE_FILE=<ruta absoluta a un .lila>`: lo mismo para `chooseSaveFile()` (el diálogo
  *   nativo de «Guardar como» hacia un `.lila` nuevo, ADR-027): devuelve esa ruta, autorizando su
  *   carpeta contenedora igual que el diálogo real, o `null` con el valor literal `"cancel"`.
+ * - `LILA_E2E_IMPORT=<ruta absoluta a un .bpmn/.xml>` (#591): lo mismo para `importBpmn()` (File →
+ *   Import BPMN…); `cancel` simula cancelar.
  * - `LILA_E2E_CLOSE=save|discard|cancel`: el diálogo nativo Guardar/Descartar/Cancelar del cierre
  *   se resuelve con esa opción sin mostrarse. Cualquier otro valor es inválido y se ignora (se
  *   sigue mostrando el diálogo real, como si la variable no existiera).
@@ -40,6 +42,8 @@ export interface E2EOverrides {
   readonly folder?: string | null;
   /** Lo mismo que `folder`, para `chooseSaveFile()` (`LILA_E2E_SAVE_FILE`). */
   readonly saveFile?: string | null;
+  /** Lo mismo que `folder`, para `importBpmn()` (`LILA_E2E_IMPORT`, #591). */
+  readonly importFile?: string | null;
   readonly close?: E2ECloseChoice;
   readonly recovery?: RecoveryChoice;
   readonly logPath?: string;
@@ -53,7 +57,7 @@ function isCloseChoice(value: string): value is E2ECloseChoice {
 
 /** Parsea las variables de entorno del seam E2E. Cualquier valor ausente o con forma inválida se ignora. */
 export function e2eOverrides(env: Readonly<Record<string, string | undefined>>): E2EOverrides {
-  const result: { folder?: string | null; saveFile?: string | null; close?: E2ECloseChoice; recovery?: RecoveryChoice; logPath?: string } = {};
+  const result: { folder?: string | null; saveFile?: string | null; importFile?: string | null; close?: E2ECloseChoice; recovery?: RecoveryChoice; logPath?: string } = {};
 
   const folder = env.LILA_E2E_FOLDER;
   if (typeof folder === 'string' && folder.length > 0) {
@@ -63,6 +67,11 @@ export function e2eOverrides(env: Readonly<Record<string, string | undefined>>):
   const saveFile = env.LILA_E2E_SAVE_FILE;
   if (typeof saveFile === 'string' && saveFile.length > 0) {
     result.saveFile = saveFile === 'cancel' ? null : saveFile;
+  }
+
+  const importFile = env.LILA_E2E_IMPORT;
+  if (typeof importFile === 'string' && importFile.length > 0) {
+    result.importFile = importFile === 'cancel' ? null : importFile;
   }
 
   const close = env.LILA_E2E_CLOSE;

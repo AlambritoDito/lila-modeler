@@ -124,6 +124,13 @@ export interface LilaBridge {
    */
   pendingOpenPath(): Promise<OpenPathRequest | null>;
   /**
+   * File → Import BPMN… (#591): the native open dialog filtered to `.bpmn` and `.xml`. A `.bpmn`
+   * comes back like a double-click (`dir` authorized, `file` its name: a loose diagram, LILA-072);
+   * a `.xml` comes back as its text, because the project IO only knows `.bpmn` names
+   * (`requireBpmnName`) and saving would have nowhere to write it. `null` is a cancel.
+   */
+  importBpmn?(): Promise<ImportedBpmn | null>;
+  /**
    * Se dispara cuando llega una nueva ruta `.bpmn` a abrir con la ventana ya lista (segunda
    * instancia, o `open-file` con la app ya corriendo). Devuelve una función para cancelar la
    * suscripción.
@@ -138,6 +145,11 @@ export interface LilaBridge {
   onExternalChange?(cb: (dir: string) => void): () => void;
   /** The renderer left the project on disk for one with no file (a gallery example): main stops watching it. */
   forgetProject?(): void;
+  /**
+   * A read that did not open on the canvas (QA of #593): main watches `dir` again (and, for a
+   * loose diagram, its `file`), the project still on screen, instead of what `openRecent` just read.
+   */
+  watchProject?(dir: string, file?: string): void;
 
   /**
    * Acciones del menú nativo (Archivo, Preferencias…): main las manda por `lila:menu` y el shell
@@ -275,6 +287,7 @@ export type MenuAction =
   | 'nuevo'
   | 'abrir'
   | 'abrirArchivo'
+  | 'importarBpmn'
   | 'guardar'
   | 'guardarComo'
   | 'guardarComoCarpeta'
@@ -314,6 +327,11 @@ export interface OpenPathRequest {
   readonly dir: string;
   readonly file?: string;
 }
+
+/** What `importBpmn` brings back: a `.bpmn` to open where it is, or the text of a `.xml`. */
+export type ImportedBpmn =
+  | { readonly dir: string; readonly file: string }
+  | { readonly xml: string; readonly name: string };
 
 declare global {
   interface Window {

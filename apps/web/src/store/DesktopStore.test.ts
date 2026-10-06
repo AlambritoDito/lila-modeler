@@ -4,7 +4,7 @@ import type { SaveOutcome } from '../../../desktop/src/bridge.js';
  * `DesktopStore` con un `LilaBridge` falso (sin Electron): cubre cancelación, error, "guardar
  * como" cancelado y la ida y vuelta de escenarios/corridas que pide OP-08.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Ajustes, LilaBridge, LilaProjectDocument, OpenPathRequest, Recent, WriteProjectOptions } from '../../../desktop/src/bridge.js';
 import { DesktopStore } from './DesktopStore';
 import { en as S } from '../strings.en';
@@ -857,5 +857,54 @@ describe('DesktopStore and changes made outside Lila (#539)', () => {
   it('a bridge without the watcher subscribes to nothing', () => {
     const store = new DesktopStore(new FakeBridge());
     expect(() => store.onExternalChange(() => {})()).not.toThrow();
+  });
+});
+
+describe('DesktopStore.importBpmn (#591)', () => {
+  it("hands back what main's dialog chose, and a cancel as null", async () => {
+    const bridge = new FakeBridge();
+    const elegido = { dir: '/descargas', file: 'De Camunda.bpmn' };
+    Object.assign(bridge, { importBpmn: vi.fn().mockResolvedValueOnce(elegido).mockResolvedValueOnce(null) });
+    const store = new DesktopStore(bridge);
+    await expect(store.importBpmn()).resolves.toEqual(elegido);
+    await expect(store.importBpmn()).resolves.toBeNull();
+  });
+
+  it('a bridge without the dialog (an older main) imports nothing', async () => {
+    await expect(new DesktopStore(new FakeBridge()).importBpmn()).resolves.toBeNull();
+  });
+});
+
+describe('DesktopStore.undoOpen (QA of #593)', () => {
+  it('a read that did not open goes back to the project on screen: Save writes there and main watches it again', async () => {
+    const bridge = new FakeBridge();
+    const watchProject = vi.fn();
+    Object.assign(bridge, { watchProject });
+    const proyecto = documentoBase();
+    bridge.openRecentImpl = async (dir) => (dir === '/p/proj'
+      ? { ...proyecto, problems: [] }
+      : { ...documentoBase({ id: 'roto' }), problems: [], loose: true });
+    const store = new DesktopStore(bridge);
+    await store.openRecent('/p/proj');
+    await store.openRecent('/descargas', 'roto.bpmn');
+    store.undoOpen();
+    expect(watchProject).toHaveBeenCalledWith('/p/proj', undefined);
+    await store.saveProject(proyecto);
+    expect(bridge.writes.at(-1)?.dir).toBe('/p/proj');
+    expect(bridge.writes.at(-1)?.options?.modelFile).toBeUndefined();
+    // Only once: a second undo has nothing left to undo.
+    store.undoOpen();
+    expect(watchProject).toHaveBeenCalledOnce();
+  });
+
+  it('with nothing open before, main stops watching the file that did not open', async () => {
+    const bridge = new FakeBridge();
+    let olvidos = 0;
+    bridge.forgetProject = () => { olvidos += 1; };
+    bridge.openRecentImpl = async () => ({ ...documentoBase(), problems: [], loose: true });
+    const store = new DesktopStore(bridge);
+    await store.openRecent('/descargas', 'roto.bpmn');
+    store.undoOpen();
+    expect(olvidos).toBe(1);
   });
 });

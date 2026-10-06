@@ -60,6 +60,7 @@ import { moduloTraduccion } from './bpmnTranslate';
 import { moduloColores, type LilaColores } from './colores';
 import { moduloLote, type LilaLote } from './lote';
 import { moduloCarriles, type LilaCarriles } from './carriles';
+import { moduloAncho, type LilaAncho } from './ancho';
 import { centrar, type CanvasCentrable } from './centrar';
 import { svgDelLienzo, type LienzoExportable } from './exportarDiagrama';
 
@@ -135,6 +136,8 @@ export interface Servicios {
   lote?: (hacer: () => void) => void;
   /** The lane tool's «pick a pool» mode (#580, `carriles.ts`). */
   carriles?: Pick<LilaCarriles, 'elegirPool' | 'cancelar' | 'eligiendo'>;
+  /** Sets an activity's width as one undoable command (#563, `ancho.ts`). */
+  ancho?: Pick<LilaAncho, 'fijar'>;
 }
 
 interface Punto { x: number; y: number }
@@ -303,7 +306,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
       // tokens del tema en vez de en blanco y negro (#264).
       // `moduloTraduccion` replaces bpmn-js's `translate` (#456); the minimap's patch below stays,
       // because the minimap writes its title once per toggle and a language change is not one.
-      additionalModules: [moduloMinimapa, tokenSimulationModule, moduloColoresDelTema, moduloSinTeclaT, moduloTraduccion, moduloColores, moduloLote, moduloCarriles],
+      additionalModules: [moduloMinimapa, tokenSimulationModule, moduloColoresDelTema, moduloSinTeclaT, moduloTraduccion, moduloColores, moduloLote, moduloCarriles, moduloAncho],
       // Abierto de entrada, como en el artboard; el plugin guarda el estado en su clase `open`
       // y su cabecera es el propio botón de plegar, restilizado en `app.css`.
       minimap: { open: true },
@@ -513,6 +516,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
           colores: activo.get<LilaColores>('lilaColores'),
           lote: activo.get<LilaLote>('lilaLote').ejecutar,
           carriles: activo.get<LilaCarriles>('lilaCarriles'),
+          ancho: activo.get<LilaAncho>('lilaAncho'),
         };
       },
       suscribir: (eventos, escuchar, prioridad = 1000) => {

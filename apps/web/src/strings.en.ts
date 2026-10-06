@@ -91,7 +91,8 @@ export const en = {
     abrir: 'Open',
     guardar: 'Save',
     guardarComo: 'Save as',
-    abrirBpmn: 'Open .bpmn',
+    /** A `.bpmn`/`.xml` from another tool (#591), opened as the current diagram. */
+    importarBpmn: 'Import BPMN…',
     exportarBpmn: 'Export .bpmn',
     /** Diagram export (#451): downloads on the web; PDF is the browser's print dialog. */
     exportarSvg: 'Export diagram as SVG',
@@ -115,6 +116,7 @@ export const en = {
       nuevoProyecto: 'New project',
       abrirProyecto: 'Open project…',
       abrirProyectoArchivo: 'Open project file (.lila)…',
+      importarBpmn: 'Import BPMN…',
       abrirReciente: 'Open recent',
       // QA of #432 (N1): word for word with the native menu's own empty state
       // (`apps/desktop/src/strings/en.ts`'s `menu.ninguno`), not a longer paraphrase.
@@ -699,6 +701,14 @@ export const en = {
     id: 'Id',
     copiar: 'Copy',
     copiado: 'Copied',
+    /** Activity width (#563): the Properties field and why a value is refused. */
+    ancho: 'Width',
+    anchoProblemas: {
+      vacio: 'Enter a width.',
+      numero: 'The width must be a number, for example 120.',
+      minimo: (minimo: number): string => `The width must be at least ${minimo}.`,
+      maximo: (maximo: number): string => `The width must be at most ${maximo}.`,
+    },
     /** Colours per element (#452): the panel row, the context pad entry and the eight colours. */
     color: 'Color',
     cambiarColor: 'Change color',

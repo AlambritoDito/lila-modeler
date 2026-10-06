@@ -37,6 +37,27 @@ describe('BrowserStore', () => {
     document.body.innerHTML = '';
   });
 
+  describe('importBpmn (#591)', () => {
+    it('reads the chosen .bpmn/.xml without keeping or downloading anything', async () => {
+      const store = new BrowserStore();
+      const promesa = store.importBpmn();
+      const input = document.body.querySelector<HTMLInputElement>('input[type="file"]');
+      expect(input?.accept).toBe('.bpmn,.xml');
+      elegirArchivo(new File(['<xml-signavio/>'], 'signavio.xml', { type: 'application/xml' }));
+
+      await expect(promesa).resolves.toEqual({ xml: '<xml-signavio/>', name: 'signavio.xml' });
+      expect(document.body.querySelector('input[type="file"]')).toBeNull();
+      expect(await store.listProcesses()).toEqual([]);
+    });
+
+    it('a cancelled dialog is null', async () => {
+      const store = new BrowserStore();
+      const promesa = store.importBpmn();
+      document.body.querySelector('input[type="file"]')?.dispatchEvent(new Event('cancel'));
+      await expect(promesa).resolves.toBeNull();
+    }, 1000);
+  });
+
   describe('getProcess', () => {
     it('devuelve el proceso ya cargado sin tocar el DOM', async () => {
       const semilla: ProcessData = { xml: '<xml-pedido/>', name: 'model.bpmn' };
@@ -69,7 +90,7 @@ describe('BrowserStore', () => {
 
     // Lo que dispara de verdad cerrar el diálogo nativo: `cancel`, no `change`. Antes no se
     // escuchaba, así que la promesa se quedaba pendiente para siempre y el `<input>` vivía en
-    // el `<body>` hasta recargar la página: seis «Abrir .bpmn» cancelados, seis huérfanos.
+    // el `<body>` hasta recargar la página: seis «Importar BPMN…» cancelados, seis huérfanos.
     it('resuelve con null y limpia el DOM si el diálogo se cierra sin elegir nada', async () => {
       const store = new BrowserStore();
       const promesa = store.getProcess('nuevo');
