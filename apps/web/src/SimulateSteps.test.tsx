@@ -85,7 +85,7 @@ function pulsar(texto: string): void {
 
 /** A step's button, by `data-paso`: its text also carries the step's «! n» (Lote M). */
 function botonPaso(paso: PasoId): HTMLButtonElement {
-  const encontrado = document.querySelector<HTMLButtonElement>(`nav.pasos button[data-paso="${paso}"]`);
+  const encontrado = document.querySelector<HTMLButtonElement>(`.pasos button[data-paso="${paso}"]`);
   if (encontrado === null) throw new Error(`no step ${paso}`);
   return encontrado;
 }
@@ -173,9 +173,12 @@ describe('los seis pasos del panel de simulación', () => {
   it('abre en Tiempos: la lista de tiempos, sin corrida, calendarios ni pools', () => {
     montar(<Anfitrion inicial={asIs()} />);
 
-    expect(botonPaso('times').getAttribute('aria-pressed')).toBe('true');
-    expect(botonPaso('times').getAttribute('aria-current')).toBe('step');
-    expect(botonPaso('calendars').getAttribute('aria-pressed')).toBe('false');
+    expect(botonPaso('times').getAttribute('aria-selected')).toBe('true');
+    expect(botonPaso('times').getAttribute('role')).toBe('tab');
+    // Roving tabindex: only the open step is reached with Tab.
+    expect(botonPaso('times').tabIndex).toBe(0);
+    expect(botonPaso('run').tabIndex).toBe(-1);
+    expect(botonPaso('calendars').getAttribute('aria-selected')).toBe('false');
     expect(texto()).toContain(en.escenario.listaTiempos);
 
     // #360: this fully configured fixture has no actionable lint warnings.
@@ -201,8 +204,10 @@ describe('los seis pasos del panel de simulación', () => {
 
   it('the step bar reads Arrivals, Times, Routes, Resources, Calendars, Run, in that order (Lote M)', () => {
     montar(<Anfitrion inicial={asIs()} />);
-    const rotulos = [...document.querySelectorAll('nav.pasos button')].map((b) => b.textContent);
+    const rotulos = [...document.querySelectorAll('.pasos button .paso-nombre')].map((b) => b.textContent);
     expect(rotulos).toEqual(['Arrivals', 'Times', 'Routes', 'Resources', 'Calendars', 'Run']);
+    const numeros = [...document.querySelectorAll('.pasos button .paso-num')].map((b) => b.textContent);
+    expect(numeros).toEqual(['1', '2', '3', '4', '5', '6']);
   });
 
   it('a step with problems carries «! n» and the step without them does not (Lote M)', () => {
@@ -213,7 +218,9 @@ describe('los seis pasos del panel de simulación', () => {
     delete sinTiempo['processingTime'];
     elementos['Task_PrepareService'] = sinTiempo;
     montar(<Anfitrion inicial={{ ...escenario, elements: elementos }} />);
-    expect(botonPaso('times').textContent).toBe('Times ! 1');
+    expect(botonPaso('times').querySelector('.paso-problemas')?.textContent).toBe('! 1');
+    expect(botonPaso('times').querySelector('.paso-ok')).toBeNull();
+    expect(botonPaso('arrivals').querySelector('.paso-ok')?.textContent).toBe('✓');
     expect(botonPaso('times').querySelector('.paso-problemas')?.getAttribute('aria-label')).toBe(en.escenario.pasoProblemas(1));
     for (const paso of PASO_IDS.filter((p) => p !== 'times')) {
       expect(botonPaso(paso).querySelector('.paso-problemas'), paso).toBeNull();
@@ -254,7 +261,7 @@ describe('los seis pasos del panel de simulación', () => {
     act(() => {
       salto!.click();
     });
-    expect(botonPaso('resources').getAttribute('aria-pressed')).toBe('true');
+    expect(botonPaso('resources').getAttribute('aria-selected')).toBe('true');
     expect(document.querySelector('button.rec-fila[data-clave="executive"]')).not.toBeNull();
   });
 
@@ -279,7 +286,9 @@ describe('los seis pasos del panel de simulación', () => {
 
     irAPaso('arrivals');
     expect(hay('campo-elements.StartEvent_Request.interTriggerTimer')).toBe(true);
-    expect(texto()).toContain(en.escenario.listaLlegadas);
+    // The selected start event's card (Lote M), not the list of start events.
+    expect(texto()).toContain(en.pasosSim.patron);
+    expect(texto()).not.toContain(en.escenario.listaLlegadas);
   });
 
   it('las probabilidades de una compuerta son de Rutas', () => {
@@ -288,11 +297,15 @@ describe('los seis pasos del panel de simulación', () => {
     expect(texto()).not.toContain(en.escenario.seccionCompuerta);
     irAPaso('routes');
     expect(texto()).toContain(en.escenario.seccionCompuerta);
-    expect(texto()).toContain(en.escenario.listaRutas);
+    // With the gateway selected the step shows only it; the list of gateways is the overview.
+    expect(texto()).not.toContain(en.escenario.listaRutas);
     expect(hay('campo-elements.Flow_ScreeningGood.probability')).toBe(true);
 
     irAPaso('resources');
     expect(texto()).not.toContain(en.escenario.seccionCompuerta);
+    irAPaso('routes');
+    act(() => { boton(en.pasosSim.verTodo).click(); });
+    expect(texto()).toContain(en.escenario.listaRutas);
   });
 });
 
@@ -327,16 +340,16 @@ describe('a step asked for from outside (#396 «Edit in …»)', () => {
   it('opens that step once, and twice in a row; a remount afterwards opens on Times again', () => {
     montar(<Pedido montado />);
     pulsar('ask:resources');
-    expect(botonPaso('resources').getAttribute('aria-pressed')).toBe('true');
+    expect(botonPaso('resources').getAttribute('aria-selected')).toBe('true');
     irAPaso('arrivals');
     pulsar('ask:resources');
-    expect(botonPaso('resources').getAttribute('aria-pressed')).toBe('true');
+    expect(botonPaso('resources').getAttribute('aria-selected')).toBe('true');
 
     // Detaching or switching tabs remounts the panel: the ask was consumed, it does not come back.
     // Same root, so the host keeps its state: only the panel unmounts and mounts again.
     act(() => { raiz!.render(<Pedido montado={false} />); });
     act(() => { raiz!.render(<Pedido montado />); });
-    expect(botonPaso('times').getAttribute('aria-pressed')).toBe('true');
+    expect(botonPaso('times').getAttribute('aria-selected')).toBe('true');
   });
 });
 
@@ -347,7 +360,7 @@ describe('el paso elegido sobrevive', () => {
 
     for (const id of ['Task_RegisterRequest', 'Task_PrepareService', 'StartEvent_Request']) {
       seleccionar(id);
-      expect(botonPaso('arrivals').getAttribute('aria-pressed')).toBe('true');
+      expect(botonPaso('arrivals').getAttribute('aria-selected')).toBe('true');
     }
     // El campo que se ve sigue siendo el del paso, no el del elemento entero.
     expect(hay('campo-elements.StartEvent_Request.interTriggerTimer')).toBe(true);
@@ -380,7 +393,7 @@ describe('el paso elegido sobrevive', () => {
  * ------------------------------------------------------------------ */
 
 describe('la lista de elementos del paso', () => {
-  it('Tiempos resume el tiempo de cada actividad, y «—» la que no tiene', () => {
+  it('Tiempos resume la duración media de cada actividad, y «Sin duración» la que no tiene', () => {
     // El AS-IS sin el tiempo de una tarea: es exactamente lo que la lista tiene que delatar.
     const escenario = asIs();
     const elementos = { ...(escenario['elements'] as Json) };
@@ -392,9 +405,10 @@ describe('la lista de elementos del paso', () => {
     // Rows are found by their `data-id` (#447): the visible text is the element's name.
     const fila = (id: string): string =>
       document.querySelector(`.lista-paso li:has(button[data-id="${id}"])`)?.textContent ?? '';
-    expect(fila('Task_PrepareService')).toContain(en.escenario.sinResumen);
-    // La que sí lo tiene lo enseña con el nombre de su distribución.
-    expect(fila('Task_RegisterRequest')).toContain(en.escenario.distribuciones['constant']);
+    expect(fila('Task_PrepareService')).toContain(en.pasosSim.sinDuracion);
+    expect(document.querySelector('.lista-paso li:has(button[data-id="Task_PrepareService"]) .resumen.falta')).not.toBeNull();
+    // La que sí lo tiene enseña su duración media.
+    expect(fila('Task_RegisterRequest')).toContain('≈ ');
   });
 
   it('una fila de la lista selecciona el elemento en el lienzo', () => {

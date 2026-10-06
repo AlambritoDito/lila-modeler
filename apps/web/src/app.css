@@ -3562,3 +3562,383 @@ button.gcal-uso-fila:hover {
 .atributos-dialogo .atributos-impactos { margin: 8px 0 16px; padding-left: 20px; overflow-wrap: anywhere; }
 .atributos-dialogo .atributos-impactos fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 4px; }
 .atributos .campo [aria-invalid='true'] { border-color: var(--status-error); }
+
+/* ===================================================================== *
+ * Lote M, C1: the guided Simulate panel (`ScenarioPanel.tsx`). Every rule is prefixed `.sim-` or
+ * scoped to `.sim-panel`, so the other workstreams' blocks never meet it.
+ * ===================================================================== */
+
+/* The header stays at the top of whatever scrolls the panel (the docked `.panel` or the window's
+   body): scenario, «▶ Simulate» and the six steps are one click away at any scroll and width. */
+.sim-panel .sim-cabecera {
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: -12px -12px 0;
+  padding: 10px 12px 8px;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.sim-panel .sim-cabecera .escenario-cabecera {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+}
+
+.sim-panel .sim-escenario {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sim-panel .sim-conteo {
+  font-size: 0.85em;
+}
+
+.sim-panel .sim-simular {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.sim-panel .sim-insignia {
+  background: var(--status-error);
+  color: var(--fg-onAccent);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+}
+
+/* Six numbered tabs: three per row in the 300–520 px panel, so a name never gets clipped. */
+.sim-panel .pasos {
+  display: grid;
+  gap: 3px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+
+.sim-panel .paso {
+  align-items: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--fg-primary);
+  display: flex;
+  font-size: 12px;
+  gap: 4px;
+  min-width: 0;
+  padding: calc(3px * var(--espacio, 1)) 4px;
+  white-space: nowrap;
+}
+
+.sim-panel .paso:hover {
+  background: var(--bg-hover);
+}
+
+.sim-panel .paso:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.sim-panel .paso.activo {
+  background: var(--bg-surface);
+  border-color: var(--accent-primary);
+  font-weight: 700;
+}
+
+.sim-panel .paso.con-problemas:not(.activo) {
+  border-color: var(--status-error);
+}
+
+.sim-panel .paso-num {
+  border: 1px solid var(--border-strong);
+  color: var(--fg-muted);
+  display: grid;
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  height: 16px;
+  place-items: center;
+  width: 16px;
+}
+
+.sim-panel .paso.activo .paso-num {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: var(--fg-onAccent);
+}
+
+.sim-panel .paso-nombre {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+}
+
+.sim-panel .paso-ok {
+  color: var(--status-success);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sim-panel .paso-problemas {
+  color: var(--status-error);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* The design's compact header, one row with the open step expanded: always in the detached
+   window, and in the docked panel while it is too narrow for three named tabs per row (below
+   460 px the names get clipped). The other steps keep their name for screen readers and in the
+   tooltip, with the key. */
+.sim-panel .sim-cabecera {
+  container-type: inline-size;
+}
+
+.sim-panel.compacto .pasos {
+  display: flex;
+}
+
+.sim-panel.compacto .paso {
+  flex: 1 1 0;
+  justify-content: center;
+}
+
+.sim-panel.compacto .paso.activo {
+  flex: 3 1 0;
+}
+
+@container (max-width: 459px) {
+  .sim-panel .pasos {
+    display: flex;
+  }
+
+  .sim-panel .paso {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+
+  .sim-panel .paso.activo {
+    flex: 3 1 0;
+  }
+
+  .sim-panel .paso:not(.activo) .paso-nombre {
+    clip: rect(0 0 0 0);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+  }
+
+  .sim-panel .paso:not(.activo) .paso-ok {
+    display: none;
+  }
+}
+
+.sim-panel .sim-pista {
+  color: var(--fg-muted);
+  font-size: 10.5px;
+  margin: 0;
+}
+
+.sim-panel .sr-only {
+  clip: rect(0 0 0 0);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.sim-panel .sim-paso-cabeza {
+  margin: 10px 0 6px;
+}
+
+.sim-panel .sim-paso-n {
+  color: var(--fg-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.sim-panel .sim-paso-titulo {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 2px 0;
+}
+
+.sim-panel .sim-aviso {
+  color: var(--status-error);
+  font-weight: 600;
+}
+
+.sim-panel .sim-banner {
+  background: color-mix(in srgb, var(--status-error) 10%, transparent);
+  border: 1px solid var(--status-error);
+  margin: 6px 0;
+  padding: 8px 10px;
+}
+
+.sim-panel .sim-banner-titulo {
+  color: var(--status-error);
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.sim-panel .sim-banner ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sim-panel .sim-banner li {
+  align-items: flex-start;
+  display: flex;
+  gap: 8px;
+}
+
+.sim-panel .sim-banner li > span {
+  flex: 1;
+  line-height: 1.4;
+  /* An engine message with a long path (`elements.Task_….processingTime`) must wrap, or it pushes
+     «Go» out of a 300 px panel (QA of #600). */
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sim-panel .sim-banner .boton {
+  border-color: var(--status-error);
+  color: var(--status-error);
+  flex: none;
+  font-weight: 700;
+}
+
+.sim-panel .sim-seleccion {
+  align-items: center;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+}
+
+.sim-panel .sim-seleccion-tipo {
+  color: var(--fg-muted);
+  font-size: 11.5px;
+}
+
+.sim-panel .sim-nota {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  padding: 10px;
+}
+
+.sim-panel .sim-nota p {
+  line-height: 1.5;
+  margin: 0 0 8px;
+}
+
+.sim-panel .sim-ficha-titulo,
+.sim-panel .sim-seccion-titulo {
+  color: var(--fg-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  margin: 8px 0 4px;
+  text-transform: uppercase;
+}
+
+.sim-panel .sim-seccion {
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+  padding-top: 4px;
+}
+
+.sim-panel .sim-dato {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 6px 0;
+  padding: 6px 8px;
+}
+
+.sim-panel .sim-dato-fila {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.sim-panel .sim-dato-fila .mono {
+  font-weight: 700;
+}
+
+.sim-panel .sim-falta,
+.sim-panel .lista-paso .resumen.falta {
+  color: var(--status-error);
+  font-weight: 600;
+}
+
+.sim-panel .sim-navegacion {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  margin: 10px 0;
+  padding-top: 8px;
+}
+
+.sim-panel .sim-hueco {
+  flex: 1;
+}
+
+.sim-panel .sim-siguiente {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  font-weight: 700;
+}
+
+.sim-panel .sim-entradas > summary {
+  color: var(--fg-muted);
+  font-size: 0.9em;
+}
+
+/* Canvas labels of the step (`etiquetasPaso.ts`): under each element, the step's parameter. */
+.lila-etiqueta-paso {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--fg-primary);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  max-width: 160px;
+  overflow: hidden;
+  padding: 1px 5px;
+  pointer-events: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lila-etiqueta-paso.falta {
+  border-color: var(--status-error);
+  color: var(--status-error);
+  font-weight: 700;
+}

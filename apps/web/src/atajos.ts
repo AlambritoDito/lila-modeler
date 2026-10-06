@@ -13,7 +13,10 @@
  * - `soloDesktop`: the browser keeps that key for itself (⌘N, ⌘, and ⌘1…⌘6 open windows and
  *   settings or switch tabs), so the web app does not announce it in its tooltips; the `modos`
  *   group is not even dispatched there, so Ctrl+1…6 keep switching the browser's tabs.
- * - `lienzo`: bpmn-js handles it on the focused canvas; it is listed here only to be documented.
+ * - `lienzo`: `App.tsx` never dispatches it — bpmn-js handles it on the focused canvas, or (with
+ *   `panel` as well) the Simulate panel does; it is listed here only to be documented.
+ * - `panel`: the scenario panel's own key (Lote M: Alt+1…6 opens step n). The panel listens on its
+ *   own document, so the same key works docked and in the detached window.
  * - `hija`: the detached scenario window forwards it to the main one.
  * - `ambito: 'corrida'`: only while a simulation is running.
  */
@@ -27,6 +30,7 @@ export interface Atajo {
   readonly menu?: true;
   readonly soloDesktop?: true;
   readonly lienzo?: true;
+  readonly panel?: true;
   readonly hija?: true;
   readonly ambito?: 'corrida';
 }
@@ -47,6 +51,13 @@ export const ATAJOS = [
   { id: 'modo:rutas', grupo: 'modos', tecla: 'Mod+Digit6', menu: true, soloDesktop: true },
   { id: 'ejecutar', grupo: 'simulacion', tecla: 'Mod+Enter', menu: true },
   { id: 'cancelar', grupo: 'simulacion', tecla: 'Escape', ambito: 'corrida' },
+  // Lote M: Alt+1…6 open the six steps of the Simulate panel, which handles them itself.
+  { id: 'paso:arrivals', grupo: 'simulacion', tecla: 'Alt+Digit1', lienzo: true, panel: true },
+  { id: 'paso:times', grupo: 'simulacion', tecla: 'Alt+Digit2', lienzo: true, panel: true },
+  { id: 'paso:routes', grupo: 'simulacion', tecla: 'Alt+Digit3', lienzo: true, panel: true },
+  { id: 'paso:resources', grupo: 'simulacion', tecla: 'Alt+Digit4', lienzo: true, panel: true },
+  { id: 'paso:calendars', grupo: 'simulacion', tecla: 'Alt+Digit5', lienzo: true, panel: true },
+  { id: 'paso:run', grupo: 'simulacion', tecla: 'Alt+Digit6', lienzo: true, panel: true },
   { id: 'zoomMas', grupo: 'lienzo', tecla: 'Mod+Plus' },
   { id: 'zoomMenos', grupo: 'lienzo', tecla: 'Mod+Minus' },
   { id: 'ajustarVista', grupo: 'lienzo', tecla: 'Mod+0' },

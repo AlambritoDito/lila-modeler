@@ -491,3 +491,9 @@ it('the gallery never keeps a 130px floor that can overlap the footer at a short
   const galeria = bloqueDeLinea('.bienvenida-ejemplos');
   expect(Number.parseInt(/min-height:\s*(\d+)px/.exec(galeria)?.[1] ?? '999', 10)).toBeLessThan(60);
 });
+
+it('Lote M: a long problem never pushes «Go» out of the Simulate banner (QA of #600)', () => {
+  const texto = bloque('.sim-panel .sim-banner li > span');
+  expect(texto).toContain('min-width: 0');
+  expect(texto).toContain('overflow-wrap: anywhere');
+});

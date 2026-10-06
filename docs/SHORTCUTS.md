@@ -46,6 +46,12 @@ the web app leaves them alone — click a mode tab or use the command palette (`
 | --- | --- | --- |
 | Run simulation | `⌘↩` | `Ctrl+Enter` |
 | Cancel the run (only while it runs) | `Esc` | `Esc` |
+| Simulate panel: open step 1–6 (Arrivals, Times, Routes, Resources, Calendars, Run) | `⌥1` `⌥2` `⌥3` `⌥4` `⌥5` `⌥6` | `Alt+1` `Alt+2` `Alt+3` `Alt+4` `Alt+5` `Alt+6` |
+| Simulate panel: clear the selection (when no run is in flight) | `Esc` | `Esc` |
+
+In the Simulate panel, `←`/`→` move between the step tabs when one of them has the focus (`Home`/`End` jump to the first and last), and
+`Alt+1…6` work in the detached window too; neither they nor `Esc` act while you type in a field. «▶ Simulate» in the panel takes you to the first
+error instead of running while the scenario has one; warnings («! n» on a step) do not stop it.
 
 ## Canvas
 

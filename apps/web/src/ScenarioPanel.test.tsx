@@ -161,7 +161,7 @@ function marcar(id: string): void {
  */
 function irAPaso(paso: 'arrivals' | 'times' | 'routes' | 'resources' | 'calendars' | 'run'): void {
   // By `data-paso`: the button's text also carries the step's «! n» (Lote M).
-  const destino = document.querySelector<HTMLButtonElement>(`nav.pasos button[data-paso="${paso}"]`);
+  const destino = document.querySelector<HTMLButtonElement>(`.pasos button[data-paso="${paso}"]`);
   if (destino === null) throw new Error(`no step ${paso}`);
   act(() => {
     destino.click();
