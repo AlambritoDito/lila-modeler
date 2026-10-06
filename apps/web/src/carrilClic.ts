@@ -118,6 +118,8 @@ function suscribirse(oyente: () => void): () => void {
 
 /** Replaces the published lanes; `null` means «no modeler wired», and the panel uses the IR. */
 export function publicarCarriles(lista: readonly CarrilVisual[] | null): void {
+  // Same lanes as before (a selection, a command elsewhere): nothing to tell anyone.
+  if (JSON.stringify(lista) === JSON.stringify(carriles)) return;
   carriles = lista;
   if (elegido !== null && !(lista ?? []).some((c) => c.id === elegido)) elegido = null;
   avisar();
@@ -190,7 +192,14 @@ export function apply(lienzo: LienzoCarriles): () => void {
   let marcadas: FormaCarril[] = [];
 
   function desmarcar(): void {
-    for (const forma of marcadas) lienzo.servicios.canvas.removeMarker?.(forma, MARCA_ASIGNABLE);
+    for (const forma of marcadas) {
+      // A shape of an instance the shell already destroyed has no graphics left to unmark.
+      try {
+        lienzo.servicios.canvas.removeMarker?.(forma, MARCA_ASIGNABLE);
+      } catch {
+        /* gone with its instance */
+      }
+    }
     marcadas = [];
   }
 
@@ -211,9 +220,12 @@ export function apply(lienzo: LienzoCarriles): () => void {
   const dejarStore = suscribirse(() => {
     if (pasoRecursosVisible() === visible) return;
     visible = pasoRecursosVisible();
-    marcar();
+    publicar();
   });
-  const dejarCambios = lienzo.suscribir(['import.done', 'commandStack.changed'], () => {
+  // `selection.changed` too: the shell swaps in a new bpmn-js instance on every open, and that
+  // instance imported before anyone listened; the empty selection it fires next is the first
+  // event the subscriptions hear from it.
+  const dejarCambios = lienzo.suscribir(['import.done', 'commandStack.changed', 'selection.changed'], () => {
     publicar();
   });
   const dejarClic = lienzo.suscribir(

@@ -147,7 +147,7 @@ const pedido = (): Json => leerJson('examples/pedido/as-is.scenario.json');
 describe('acceptance (baseline step 1: 5 clicks + 2 fields + 1636 px)', () => {
   it('a new resource with two units: step + «New resource» + name + «+» = 3 clicks and 1 field', () => {
     montar(pedido());
-    clic(botonTexto('Recursos'));
+    clic(document.querySelector('nav.pasos button[data-paso="resources"]'));
     clic(botonTexto(es.recursos.nuevo));
 
     // The sheet opened in place and the name has the focus: typing it needs no click.
@@ -166,7 +166,7 @@ describe('acceptance (baseline step 1: 5 clicks + 2 fields + 1636 px)', () => {
 
   it('the capacity label is translated in both languages, never the raw «capacity»', () => {
     montar(pedido());
-    clic(botonTexto('Recursos'));
+    clic(document.querySelector('nav.pasos button[data-paso="resources"]'));
     clic(fila('horno'));
     expect(document.querySelector('.rec-modo legend')?.textContent).toBe('Capacidad');
     expect(document.querySelector('.rec-ficha')?.textContent).not.toMatch(/capacity/);
@@ -175,7 +175,7 @@ describe('acceptance (baseline step 1: 5 clicks + 2 fields + 1636 px)', () => {
 
     setLocale('en');
     montar(pedido());
-    clic(botonTexto('Resources'));
+    clic(document.querySelector('nav.pasos button[data-paso="resources"]'));
     clic(fila('horno'));
     expect(document.querySelector('.rec-modo legend')?.textContent).toBe(en.recursos.capacidad);
     expect(document.querySelector('.rec-ficha')?.textContent).not.toMatch(/capacity/);
@@ -185,7 +185,7 @@ describe('acceptance (baseline step 1: 5 clicks + 2 fields + 1636 px)', () => {
 describe('the list', () => {
   it('shows name, calendar, capacity and cost per hour, in the scenario currency', () => {
     montar(pedido());
-    clic(botonTexto('Recursos'));
+    clic(document.querySelector('nav.pasos button[data-paso="resources"]'));
     expect(fila('cajero').textContent).toBe(`Cashieroficina×2220.00 ${es.recursos.colCosto('MXN')}`);
     expect(fila('horno').textContent).toBe(`Oven${es.recursos.siempre}×10.00 ${es.recursos.colCosto('MXN')}`);
     expect(document.querySelector('.rec-lista')?.textContent).toContain(es.recursos.colCosto('MXN'));
@@ -196,7 +196,7 @@ describe('the list', () => {
     delete sin['resources'];
     sin['elements'] = {};
     montar(sin);
-    clic(botonTexto('Recursos'));
+    clic(document.querySelector('nav.pasos button[data-paso="resources"]'));
     expect(document.querySelector('.rec-vacio')?.textContent).toContain(es.recursos.vacioTitulo);
     clic(botonTexto(es.recursos.nuevo));
     expect(Object.keys(recursos())).toEqual(['recurso-1']);
@@ -204,7 +204,7 @@ describe('the list', () => {
 
   it('keyboard: ↑/↓/Home/End move along the rows, Escape in the sheet comes back to its row', () => {
     montar(pedido());
-    clic(botonTexto('Recursos'));
+    clic(document.querySelector('nav.pasos button[data-paso="resources"]'));
     const lista = document.querySelector('.rec-lista ul')!;
     expect(fila('cajero').tabIndex).toBe(0);
     expect(fila('cocinero').tabIndex).toBe(-1);
@@ -232,7 +232,7 @@ describe('the list', () => {
     const malo = pedido();
     (malo['resources'] as Record<string, Json>)['horno']!['capacity'] = 0;
     montar(malo);
-    clic(botonTexto('Recursos'));
+    clic(document.querySelector('nav.pasos button[data-paso="resources"]'));
     expect(fila('horno').classList.contains('error')).toBe(true);
     expect(fila('cajero').classList.contains('error')).toBe(false);
 
@@ -248,7 +248,7 @@ describe('the list', () => {
 describe('the sheet', () => {
   it('tabs are a tablist moved with ←/→', () => {
     montar(pedido());
-    clic(botonTexto('Recursos'));
+    clic(document.querySelector('nav.pasos button[data-paso="resources"]'));
     clic(fila('cajero'));
     const tabs = [...document.querySelectorAll('[role="tab"]')];
     expect(tabs.map((t) => t.textContent)).toEqual(['Capacidad', 'Costos', 'Calendario y uso']);
@@ -263,7 +263,7 @@ describe('the sheet', () => {
 
   it('costs: per hour and fixed per use, labelled with the currency', () => {
     montar(pedido());
-    clic(botonTexto('Recursos'));
+    clic(document.querySelector('nav.pasos button[data-paso="resources"]'));
     clic(fila('horno'));
     clic(document.getElementById('rec-tab-cost'));
     expect(document.querySelector('label[for="campo-resources.horno.costPerHour"]')?.textContent).toBe(es.recursos.porHora('MXN'));
@@ -275,7 +275,7 @@ describe('the sheet', () => {
 
   it('calendar and use: calendar, type and the tasks that use it, with quantity', () => {
     montar(pedido());
-    clic(botonTexto('Recursos'));
+    clic(document.querySelector('nav.pasos button[data-paso="resources"]'));
     clic(fila('cocinero'));
     clic(document.getElementById('rec-tab-uso'));
     expect((document.getElementById('campo-resources.cocinero.calendar') as HTMLSelectElement).value).toBe('oficina');
@@ -286,7 +286,7 @@ describe('the sheet', () => {
 
   it('fixed → by shifts moves the calendar into the first shift (R16) and back, each as one write', () => {
     montar(pedido());
-    clic(botonTexto('Recursos'));
+    clic(document.querySelector('nav.pasos button[data-paso="resources"]'));
     clic(fila('cajero'));
     clic(document.getElementById('campo-resources.cajero.capacity-turno'));
     expect(recursos()['cajero']!['capacity']).toEqual([{ calendar: 'oficina', capacity: 2 }]);
@@ -303,7 +303,7 @@ describe('the sheet', () => {
 
   it('− never goes below 0, and 0 is shown as the engine’s error, not silently fixed', () => {
     montar(pedido());
-    clic(botonTexto('Recursos'));
+    clic(document.querySelector('nav.pasos button[data-paso="resources"]'));
     clic(fila('horno'));
     const menos = document.querySelector(`[aria-label="${es.recursos.restar}"]`);
     clic(menos);
@@ -314,7 +314,7 @@ describe('the sheet', () => {
 
   it('with «Advanced», the id is renamed together with every task that used it', () => {
     montar(pedido(), irPedido, true);
-    clic(botonTexto('Recursos'));
+    clic(document.querySelector('nav.pasos button[data-paso="resources"]'));
     clic(fila('cajero'));
     const caja = document.getElementById('campo-resources.cajero.__clave') as HTMLInputElement;
     teclear(caja, 'caja');
@@ -329,14 +329,14 @@ describe('the sheet', () => {
 
   it('without «Advanced» there is no id field', () => {
     montar(pedido());
-    clic(botonTexto('Recursos'));
+    clic(document.querySelector('nav.pasos button[data-paso="resources"]'));
     clic(fila('cajero'));
     expect(document.getElementById('campo-resources.cajero.__clave')).toBeNull();
   });
 
   it('«Delete resource» removes it and goes back to the list', () => {
     montar(pedido());
-    clic(botonTexto('Recursos'));
+    clic(document.querySelector('nav.pasos button[data-paso="resources"]'));
     clic(fila('horno'));
     clic(botonTexto(es.recursos.eliminar));
     expect(Object.keys(recursos())).toEqual(['cajero', 'cocinero']);
@@ -404,7 +404,7 @@ describe('lanes', () => {
     montar(solicitud(), irSolicitud);
     const { lienzo, clicEn } = lienzoSolicitud(irSolicitud);
     const quitar = apply(lienzo);
-    clic(botonTexto('Recursos'));
+    clic(document.querySelector('nav.pasos button[data-paso="resources"]'));
     clics = 0;
 
     clicEn('Lane_1');
@@ -427,7 +427,7 @@ describe('lanes', () => {
   it('the lane selectors follow the canvas order, and an unnamed lane is numbered, not its id', () => {
     montar(solicitud(), irSolicitud);
     const quitar = apply(lienzoSolicitud(irSolicitud).lienzo);
-    clic(botonTexto('Recursos'));
+    clic(document.querySelector('nav.pasos button[data-paso="resources"]'));
     const opciones = [...(document.getElementById('carril-a-pool-carril') as HTMLSelectElement).options];
     expect(opciones.map((o) => o.text)).toEqual(['Service Coordinator', 'Technical Reviewer', es.recursos.carrilSinNombre(1)]);
     expect(document.body.textContent).not.toContain('Lane_2');
@@ -436,7 +436,7 @@ describe('lanes', () => {
 
   it('from the sheet: row, tab «Calendar and use», the lane and «Assign» = 5 clicks from the list', () => {
     montar(solicitud(), irSolicitud);
-    clic(botonTexto('Recursos'));
+    clic(document.querySelector('nav.pasos button[data-paso="resources"]'));
     clics = 0;
     clic(fila('operator'));
     clic(document.getElementById('rec-tab-uso'));
