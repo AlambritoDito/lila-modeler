@@ -1383,7 +1383,7 @@ export const en = {
   },
 
   /* ------------------------------------------------------------------ *
-   * Simulate dock under the canvas (#394, `DockSimular.tsx`)
+   * Results table under the Results map (the Simulate dock before, #394; `DockSimular.tsx`)
    * ------------------------------------------------------------------ */
   dock: {
     /** Announced (role=status) when a run lands in Results. */

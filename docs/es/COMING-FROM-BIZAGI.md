@@ -50,7 +50,7 @@ fila selecciona ese elemento en el lienzo. Cada control vive en un solo paso: lo
 Con una actividad seleccionada en **Modelar**, el panel de propiedades enseña un bloque **Vista
 rápida · simulación**: su distribución de tiempo y su recurso en el escenario activo, y su espera en
 la última corrida (o *sin corrida*). Es la espera por recurso, la misma medida que las etiquetas del
-lienzo, el dock de Simular y las columnas «esperando recurso» de Resultados. Es el **p95** de los casos medidos después del
+lienzo, la tabla de Resultados y sus columnas «esperando recurso». Es el **p95** de los casos medidos después del
 calentamiento en la primera réplica, cuando la muestra del log de esa corrida está completa; una
 corrida más larga (más de 10 000 filas de log en su primera réplica) enseña en su lugar la espera
 por recurso **media** de todas las réplicas, y lo dice. Sus enlaces **Editar en Tiempos** / **Editar en

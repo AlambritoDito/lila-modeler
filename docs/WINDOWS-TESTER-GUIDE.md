@@ -50,13 +50,13 @@ Preferencias…** (`Ctrl+,`), go to **General** and set **Idioma** to **English*
 6. **Open an example.** Under **Examples**, click **Restaurant order**. A diagram opens with two
    scenarios ready to run.
 7. **Run a simulation.** Click **Simulate** in the top bar, then **Run simulation**. You stay in
-   Simulate and the dock under the canvas shows the quick results. Click **Open in Results** to
-   see the full tables, then export them: click **Export XLSX**, choose where to
+   The app moves to **Results**: the diagram shows the waits and the bottlenecks, and the results
+   table below it lists every task. Export them: click **XLSX** in that table's header, choose where to
    save, and open the file in Excel. Check that it opens and has several sheets with numbers.
 8. **Export the process document.** Choose **File ▸ Export process document (Word)…**, save the
    file, and open it in Word. Check that it has a cover, the diagram and one section per element.
-9. **Import scenario parameters from Excel.** Go back to **Simulate**. In the scenario panel on the
-   right, click **Download template** and save the `.xlsx`. Open it in Excel, change one number (in the
+9. **Import scenario parameters from Excel.** Go back to **Simulate**. Open **Scenario ▾** over the
+   canvas, click **Download template** and save the `.xlsx`. Open it in Excel, change one number (in the
    **Elements** sheet, the **Take order** row, the **min** column: make it smaller), save, and close Excel. Back in Lila Modeler click **Import
    Excel/CSV…** and pick that file. A report lists the changes to make: check that your change is
    in it, then click **Apply**. You can click **Undo import** afterwards. More on this in

@@ -1336,7 +1336,7 @@ export const es: Strings = {
   },
 
   /* ------------------------------------------------------------------ *
-   * Dock de Simular bajo el lienzo (#394, `DockSimular.tsx`)
+   * Tabla de resultados bajo el mapa de Resultados (antes el dock de Simular, #394; `DockSimular.tsx`)
    * ------------------------------------------------------------------ */
   dock: {
     corridaTerminada: (casos: string): string => `Corrida terminada: ${casos} casos completados.`,
