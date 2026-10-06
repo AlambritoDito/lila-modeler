@@ -159,10 +159,12 @@ describe('canvas percentage fields', () => {
     const base = { repartos: [reparto(78, 22)], seleccion: null, onCambiar: vi.fn(), onEnfocar };
     sincronizarEtiquetas(modeler, { ...base, editable: false });
     document.querySelector<HTMLElement>('.lila-pct[data-flujo="fSi"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(onEnfocar).toHaveBeenCalledWith('G', 'fSi');
+    expect(onEnfocar).toHaveBeenCalledWith('G', null);
     // The host opened Routes: the boxes become fields and the clicked one has the focus.
     sincronizarEtiquetas(modeler, { ...base, seleccion: 'G', editable: true });
     expect(document.activeElement).toBe(input('fSi'));
+    // …and the focused field reports its flow, for the one-click fix.
+    expect(onEnfocar).toHaveBeenLastCalledWith('G', 'fSi');
   });
 
   it('a box avoids the shapes and labels around the start of its flow', () => {

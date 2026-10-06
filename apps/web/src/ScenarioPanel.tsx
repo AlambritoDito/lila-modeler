@@ -66,7 +66,7 @@ import { PasoCalendarios } from './PasoCalendarios.js';
 import { FichaLlegada, ListaLlegadas } from './PasoLlegadas.js';
 import { PasoEjecucion } from './PasoEjecucion.js';
 import { PasoRutas } from './PasoRutas.js';
-import { compuertaDeSeleccion } from './repartoRutas.js';
+import { compuertaDeSeleccion, esCompuertaRepartible } from './repartoRutas.js';
 import { ListaTiempos, ResumenTiempo } from './PasoTiempos.js';
 import { agruparPorPaso, elementoDeProblema, tareasSinDuracion } from './pasoDeProblema.js';
 import { PasoRecursos, ListaRecursos } from './PasoRecursos.js';
@@ -581,13 +581,13 @@ export function ScenarioPanel({
   }, [paso]);
 
   /**
-   * Lote M, C4: picking a gateway that splits cases on the canvas — or one of its outgoing flows,
-   * which is what a canvas share box selects — opens Routes, where the split is edited. Before, the
-   * panel stayed on whatever step it was on with nothing editable. Only on a new selection, so
-   * changing step afterwards with the gateway still selected sticks.
+   * Lote M, C4: picking a gateway that splits cases on the canvas opens Routes, where the split is
+   * edited (before, the panel stayed on whatever step it was on with nothing editable). A flow keeps
+   * C1's tip with the way to Routes. Only on a new selection, so changing step afterwards with the
+   * gateway still selected sticks.
    */
   useEffect(() => {
-    if (compuertaDeSeleccion(ir, idSeleccionado) !== null) setPaso('routes');
+    if (esCompuertaRepartible(ir, idSeleccionado)) setPaso('routes');
     // eslint-disable-next-line react-hooks/exhaustive-deps -- a new selection, not a new IR
   }, [idSeleccionado]);
 
@@ -781,7 +781,7 @@ export function ScenarioPanel({
   const indicePaso = PASO_IDS.indexOf(paso);
   const anterior = PASO_IDS[indicePaso - 1];
   const siguiente = PASO_IDS[indicePaso + 1];
-  const delPaso = porPaso.porPaso[paso];
+  const delPasoTodos = porPaso.porPaso[paso];
   const tareas = new Set(idsPorTipo(['task']));
   const atajoSimular = etiqueta(atajoPorId('ejecutar'), MAC);
   const pista = `${etiqueta(atajoPorId('paso:arrivals'), MAC).replace(/1$/, '1…6')} · ${atajoSimular}`;
@@ -814,6 +814,13 @@ export function ScenarioPanel({
         : clase === 'flow'
           ? compuertaDeSeleccion(ir, idSeleccionado)
           : null;
+  /**
+   * The open gateway's «the split is normalised» warning is already its status box in `PasoRutas`
+   * (with the one-click fix); repeating it in the banner pushed that fix below the fold.
+   */
+  const delPaso = compuertaRutas === null
+    ? delPasoTodos
+    : delPasoTodos.filter((p) => !(p.codigo === 'W-XOR-NORMALIZADA' && p.ruta === `elements.${compuertaDeSeleccion(ir, compuertaRutas) ?? compuertaRutas}`));
 
   const inicios = idsPorTipo(['start']);
 

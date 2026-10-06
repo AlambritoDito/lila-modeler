@@ -358,6 +358,7 @@ describe('problems the steps do not own, and flows in Times (QA of C1a)', () => 
     expect(texto()).toContain(en.pasosSim.consejos['flow']);
     act(() => { boton(en.pasosSim.irA(en.escenario.paso['routes']!)).click(); });
     expect(abierto()).toBe('routes');
-    expect(document.getElementById('campo-elements.Flow_ScreeningGood.probability')).not.toBeNull();
+    // Lote M, C4: in Routes a flow's share is the % field of its gateway's view.
+    expect(document.getElementById('rutas-elements.Flow_ScreeningGood.probability')).not.toBeNull();
   });
 });

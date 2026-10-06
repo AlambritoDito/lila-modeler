@@ -50,11 +50,12 @@ export interface EstadoEtiquetas {
   /** A typed share, in percent; `null` = the field was emptied (remove `probability`). */
   onCambiar(flujo: string, porcentaje: number | null): void;
   /**
-   * A box got the focus (or a text box was clicked): the host selects that **flow** in the panel —
-   * Routes opens on its gateway, and the panel knows which flow was just edited, so the one-click
-   * fix never proposes to undo it.
+   * Selection the host should make: `onEnfocar(compuerta, flujo)` when a field got the focus — select
+   * that **flow**, so the panel knows which one was just edited and the one-click fix never undoes
+   * it — and `onEnfocar(compuerta, null)` when a text box was clicked outside Routes — select the
+   * **gateway**, which opens Routes; the clicked field then takes the focus and reports its flow.
    */
-  onEnfocar?(compuerta: string, flujo: string): void;
+  onEnfocar?(compuerta: string, flujo: string | null): void;
 }
 
 interface Caja {
@@ -265,7 +266,7 @@ function crearCaja(modeler: Modeler, flujo: FlujoReparto, compuerta: string, edi
       const estado = estados.get(modeler);
       if (estado === undefined) return;
       if (!caja.flujo.porDefecto) estado.enfocarAlEditar = caja.flujo.id;
-      estado.ultimo?.onEnfocar?.(caja.compuerta, caja.flujo.id);
+      estado.ultimo?.onEnfocar?.(caja.compuerta, null);
     });
   }
   return caja;
