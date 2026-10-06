@@ -183,6 +183,7 @@ function Anfitrion({
   irActual,
   seleccionInicial = null,
   espejo,
+  avanzado = false,
 }: {
   inicial: Readonly<Record<string, Json>>;
   archivoInicial: string;
@@ -191,6 +192,7 @@ function Anfitrion({
   seleccionInicial?: string | null;
   /** #397: exposes the scenario map and a way back to the original, like the rail does. */
   espejo?: { escenarios: Readonly<Record<string, Json>>; volver: () => void };
+  avanzado?: boolean;
 }): React.JSX.Element {
   const [escenarios, setEscenarios] = useState<Readonly<Record<string, Json>>>(inicial);
   const [archivo, setArchivo] = useState(archivoInicial);
@@ -216,6 +218,7 @@ function Anfitrion({
       ir={irActual}
       seleccion={seleccion}
       onSeleccionar={setSeleccion}
+      avanzado={avanzado}
     />
   );
 }
@@ -392,14 +395,19 @@ describe('registros', () => {
         archivoInicial="as-is.scenario.json"
         guardados={guardados}
         irActual={ir}
+        avanzado
       />,
     );
 
-    // #333: en Recursos la única sección con `.anadir` es la de «Recursos».
+    // Lote M (C2): the id is given in the sheet of a new resource («Avanzado»); a taken one is refused.
     irAPaso('resources');
-    const anadir = document.querySelectorAll('.anadir')[0] as HTMLElement;
-    tecleaEn(anadir.querySelector('input') as HTMLInputElement, 'cajero');
-    pulsarNodo(anadir.querySelector('button') as HTMLButtonElement);
+    pulsar(es.recursos.nuevo);
+    const caja = document.querySelector('.rec-ficha input[id$=".__clave"]') as HTMLInputElement;
+    tecleaEn(caja, 'cajero');
+    act(() => {
+      caja.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    expect(document.querySelector('.rec-ficha [role="alert"]')?.textContent).toBe(es.recursos.claveMotivo['repetida']);
     pulsar('Guardar');
 
     // Un id repetido es un error del usuario, no una orden de tirar el recurso: `valorVacio`

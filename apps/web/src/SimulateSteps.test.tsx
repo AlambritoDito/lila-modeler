@@ -224,8 +224,8 @@ describe('los seis pasos del panel de simulación', () => {
     montar(<Anfitrion inicial={asIs()} />);
     irAPaso('resources');
 
-    expect(secciones()).toContain(en.escenario.seccionRecursos);
-    expect(hay('campo-resources.executive.capacity')).toBe(true);
+    // Lote M (C2): the pools are a master list; their fields open in a sheet.
+    expect(document.querySelector('button.rec-fila[data-clave="executive"]')).not.toBeNull();
     // La acción «asignar carril a pool» (#334) va con los pools.
     expect(document.querySelector('.carril-a-pool')).not.toBeNull();
     expect(boton(en.escenario.carrilAsignar)).toBeInstanceOf(HTMLButtonElement);
@@ -255,7 +255,7 @@ describe('los seis pasos del panel de simulación', () => {
       salto!.click();
     });
     expect(botonPaso('resources').getAttribute('aria-pressed')).toBe('true');
-    expect(hay('campo-resources.executive.capacity')).toBe(true);
+    expect(document.querySelector('button.rec-fila[data-clave="executive"]')).not.toBeNull();
   });
 
   it('una tarea en Tiempos enseña su tiempo y no sus recursos', () => {

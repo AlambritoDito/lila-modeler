@@ -83,3 +83,37 @@ export function laneAssignmentDelta(
   }
   return { fragment: { elements }, alreadyAssigned };
 }
+
+/** A lane as the Resources step offers it: a key, its name (or `null`) and its **task** ids. */
+export interface CarrilPanel {
+  /** The lane's BPMN id when the canvas published it (`carrilClic.ts`), its IR label otherwise. */
+  clave: string;
+  nombre: string | null;
+  tareas: string[];
+}
+
+/**
+ * The lanes for the panel. With the canvas' lanes (`visuales`), in the order they are drawn, with
+ * their real names, and their `flowNodeRef` ids translated to IR ids (`source.originalIds`, for
+ * the non-NCName ids Bizagi writes). Without them, the IR's own grouping (`tasksByLane`), as
+ * before. Either way only tasks count and a lane with none is left out.
+ */
+export function carrilesDelPanel(
+  ir: ProcessIR | null,
+  visuales: readonly { id: string; nombre: string | null; nodos: readonly string[] }[] | null,
+): CarrilPanel[] {
+  if (ir === null) return [];
+  if (visuales === null) {
+    return [...tasksByLane(ir)].map(([etiqueta, tareas]) => ({ clave: etiqueta, nombre: etiqueta, tareas }));
+  }
+  const aIr = new Map(Object.entries(ir.source.originalIds).map(([enIr, original]) => [original, enIr]));
+  return visuales
+    .map((carril) => ({
+      clave: carril.id,
+      nombre: carril.nombre,
+      tareas: carril.nodos
+        .map((id) => (ir.nodes[id] !== undefined ? id : (aIr.get(id) ?? id)))
+        .filter((id) => ir.nodes[id]?.type === 'task'),
+    }))
+    .filter((carril) => carril.tareas.length > 0);
+}
