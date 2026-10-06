@@ -2076,6 +2076,16 @@ it('in Simulate «Scenario ▾» sits over the canvas with no left column; a row
   expect(container.querySelector('.c5-escenario-boton')).toBeNull();
 });
 
+it('the visible Duplicate next to «Scenario ▾» is one click and opens the copy\'s name to edit (step 7)', async () => {
+  const boton = container.querySelector<HTMLButtonElement>('.c5-subbarra .c5-duplicar')!;
+  expect(boton.textContent).toContain(T.c5.escenario.duplicar);
+  await act(async () => boton.click());
+  const campo = container.querySelector<HTMLInputElement>('.c5-escenario-campo')!;
+  expect(campo.value).toBe('AS-IS (copy)');
+  expect(document.activeElement).toBe(campo);
+  expect(container.querySelector('.c5-escenario-boton')!.textContent).toContain('AS-IS (copy)');
+});
+
 it('Duplicate twice numbers the copies, and the copy can be renamed right away (#397, #581)', async () => {
   const duplicar = async (): Promise<void> => {
     await abrirEscenarios();
