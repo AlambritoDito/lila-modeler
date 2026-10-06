@@ -67,7 +67,9 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   // QA of #539: the canvas's `onSeleccion`, to play bpmn-js reporting a selection.
   onSeleccion: (_id: string | null) => {},
   // Lote M: the last props of the time bar over the Results map.
-  replay: null as null | { reproduciendo?: boolean } }));
+  replay: null as null | { reproduciendo?: boolean },
+  // Lote M, C1: the props the shell wires into the Simulate panel.
+  panel: {} as { onConteoProblemas?: (n: number) => void; onSimular?: () => void; irAlProblema?: number | null } }));
 /**
  * The canvas elements the command palette lists (#410), with no box, so the shape palette's
  * drop-target search (which wants a width and a height) still ignores them. Three named shapes,
@@ -116,7 +118,9 @@ vi.mock('./replay/Replay', () => ({ Replay: (props: { reproduciendo?: boolean })
 vi.mock('./ScenarioPanel', async (importOriginal) => ({ problemasEscenario: () => mocks.problemas,
   // The rail «+» (#397) goes through the real naming, which is pure.
   duplicarEscenario: (await importOriginal<typeof import('./ScenarioPanel')>()).duplicarEscenario,
-  ScenarioPanel: ({ onCambio, escenarios }: { onCambio: (file: string, raw: object) => void; escenarios: typeof mocks.escenarios }) => {
+  VistaJson: (await importOriginal<typeof import('./ScenarioPanel')>()).VistaJson,
+  ScenarioPanel: ({ onCambio, escenarios, ...resto }: { onCambio: (file: string, raw: object) => void; escenarios: typeof mocks.escenarios; onConteoProblemas?: (n: number) => void; onSimular?: () => void; irAlProblema?: number | null }) => {
+    mocks.panel = resto;
     mocks.scenarioChange = (raw = {}) => onCambio('as-is.scenario.json', raw);
     mocks.escenarios = escenarios;
     // A marker, so the detached-window tests (design 2c) can tell which document it landed in.
@@ -4352,4 +4356,23 @@ it('reopening a project puts each base scenario before the ones that extend it, 
   expect(container.querySelector('.c5-escenario-boton')!.textContent).toContain('AS-IS');
   await abrirEscenarios();
   expect([...container.querySelectorAll('.c5-escenario-fila .c5-escenario-nombre')].map((n) => n.firstChild!.textContent)).toEqual(['AS-IS', 'TO-BE']);
+});
+
+it('«▶ Simulate» and ⌘↩ go to the first problem in the panel while the panel counts errors, and run otherwise (Lote M, C1)', async () => {
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await act(async () => mocks.panel.onConteoProblemas!(2));
+  expect(container.querySelector('.ejecutar .c5-insignia')!.textContent).toBe('2');
+  await click(T.app.modos.modelar);
+  await act(async () => container.querySelector<HTMLButtonElement>('.ejecutar')!.click());
+  expect(mocks.gate).not.toHaveBeenCalled();
+  expect(modoActivo()).toBe(T.app.modos.simular);
+  expect(mocks.panel.irAlProblema).toBe(1);
+  await pulsar(document.body, mod('Enter'));
+  expect(mocks.panel.irAlProblema).toBe(2);
+  expect(mocks.gate).not.toHaveBeenCalled();
+  // The panel's own «▶ Simulate» runs through the shell; with no problems the bar runs too.
+  await act(async () => mocks.panel.onConteoProblemas!(0));
+  expect(container.querySelector('.ejecutar .c5-insignia')).toBeNull();
+  await act(async () => { mocks.panel.onSimular!(); });
+  expect(mocks.gate).toHaveBeenCalledOnce();
 });

@@ -4191,3 +4191,17 @@ button.gcal-uso-fila:hover {
 
 /* In Results the time bar takes the bottom of the canvas: the minimap moves above it. */
 .app.modo-resultados .lienzo .djs-minimap { bottom: 92px; }
+.lila-etiqueta-paso.falta {
+  border-color: var(--status-error);
+  color: var(--status-error);
+  font-weight: 700;
+}
+
+/* The number of problems on «▶ Simulate» (design 01). */
+.ejecutar .c5-insignia {
+  background: var(--status-error);
+  color: var(--fg-onAccent);
+  font: 700 10.5px/1 var(--font-ui);
+  margin-left: 6px;
+  padding: 2px 6px;
+}

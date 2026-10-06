@@ -230,8 +230,9 @@ describe('step keys', () => {
     const e = tecla({ key: '@', code: 'Digit2', altKey: true }, externo);
     expect(e.defaultPrevented).toBe(false);
     expect(abierto()).toBe('times');
-    // A field of the panel itself: the scenario JSON.
-    const json = document.querySelector<HTMLTextAreaElement>('textarea.json-escenario')!;
+    // A field of the panel itself (the scenario JSON that used to be here moved to «Scenario ▾»).
+    const json = document.createElement('textarea');
+    document.querySelector('.escenario')!.append(json);
     expect(tecla({ key: '#', code: 'Digit3', altKey: true }, json).defaultPrevented).toBe(false);
     expect(abierto()).toBe('times');
   });

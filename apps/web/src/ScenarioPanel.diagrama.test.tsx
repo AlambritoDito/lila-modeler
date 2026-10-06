@@ -23,7 +23,7 @@ import type { ProcessIR } from '@lila-modeler/engine';
 import { parseBpmn } from '@lila-modeler/engine/bpmn';
 import { parseScenario, validateScenario } from '@lila-modeler/engine/schema';
 
-import { ScenarioPanel } from './ScenarioPanel.js';
+import { VistaJson, ScenarioPanel } from './ScenarioPanel.js';
 import { setLocale } from './i18n';
 import { es } from './strings.es';
 
@@ -170,6 +170,8 @@ function Anfitrion({ inicial, ir: irUsado = ir }: { inicial: Json; ir?: ProcessI
           {id}
         </button>
       ))}
+      {/* Lote M: the JSON view lives in «Scenario ▾»; the harness draws it next to the panel. */}
+      <VistaJson delta={escenarios[ARCHIVO] ?? {}} onAplicar={(e) => { setEscenarios((previos) => ({ ...previos, [ARCHIVO]: e })); }} />
       <ScenarioPanel
         archivo={ARCHIVO}
         escenarios={escenarios}

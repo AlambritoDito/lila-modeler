@@ -12,6 +12,7 @@ import { afterEach, expect, test } from 'vitest';
 import type { ProcessIR } from '@lila-modeler/engine';
 
 import { ScenarioPanel } from './ScenarioPanel.js';
+import { ImportarExcel } from './ImportarExcel.js';
 import { setLocale } from './i18n';
 import { es } from './strings.es';
 
@@ -66,7 +67,11 @@ function Arnes(): React.JSX.Element {
   const [escenarios, setEscenarios] = useState<Record<string, Json>>({ 'base.scenario.json': ORIGINAL });
   actual = escenarios['base.scenario.json']!;
   editarFuera = (escenario) => setEscenarios((previos) => ({ ...previos, 'base.scenario.json': escenario }));
+  // Lote M: the import lives in «Scenario ▾»; the harness draws it next to the panel.
   return (
+    <>
+    <ImportarExcel archivo="base.scenario.json" resuelto={escenarios['base.scenario.json']!} delta={escenarios['base.scenario.json']!} padre={null} ir={ir}
+      onCambio={(archivo, escenario) => setEscenarios((previos) => ({ ...previos, [archivo]: escenario }))} />
     <ScenarioPanel
       archivo="base.scenario.json"
       escenarios={escenarios}
@@ -77,6 +82,7 @@ function Arnes(): React.JSX.Element {
       seleccion={null}
       onSeleccionar={() => {}}
     />
+    </>
   );
 }
 

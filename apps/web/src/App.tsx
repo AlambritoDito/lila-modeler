@@ -700,6 +700,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [ventanaEscenario, setVentanaEscenario] = useState<Window | null>(null);
   /** #396: the step the quick view's «Edit in …» asked the scenario panel to open, until it does. */
   const [pasoPedido, setPasoPedido] = useState<PasoId | null>(null);
+  /**
+   * Lote M, C1: the problems that hold a run back (the panel counts them, E-* only: warnings run),
+   * for the badge of «▶ Simulate»; and a request to the panel to take the person to the first one
+   * (a new number is a new request, `null` none).
+   */
+  const [conteoProblemas, setConteoProblemas] = useState(0);
+  const [irAlProblema, setIrAlProblema] = useState<number | null>(null);
   /** Last known geometry of that window; read with the preferences, written when it moves away. */
   const geomEscenario = useRef<Geometria | undefined>(undefined);
   const toggleEscenario = useRef<HTMLButtonElement>(null);
@@ -2317,6 +2324,19 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   }
 
   // --- Shortcuts (#413): one handler per entry of `atajos.ts` that the app owns ---
+  /**
+   * «▶ Simulate» of the top bar and ⌘↩ (Lote M, C1): with problems that hold the run back it takes
+   * the person to the first one in the Simulate panel instead of running; otherwise it runs.
+   */
+  function simularDesdeBarra(): void {
+    if (conteoProblemas > 0) {
+      elegirModo('simular');
+      setIrAlProblema((n) => (n ?? 0) + 1);
+      return;
+    }
+    void simular();
+  }
+
   function elegirModo(m: ModoId): void {
     setModo(m);
     if (m === 'simular') setPestana('simulacion');
@@ -2346,7 +2366,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     paleta: () => abrirPaletaRef.current(desdeHija.current),
     ...Object.fromEntries(MODO_IDS.map((m) => [`modo:${m}`, () => elegirModo(m)])) as Record<`modo:${ModoId}`, () => void>,
     // The Run button is replaced by Cancel while a run is in flight; the key follows the button.
-    ejecutar: () => { if (enVuelo.current === null && modelador !== null) void simular(); },
+    ejecutar: () => { if (enVuelo.current === null && modelador !== null) simularDesdeBarra(); },
     cancelar: cancelarCorrida,
     // Space (Lote M): the tokens on the Results map; nothing elsewhere (`despachar` lets it through).
     reproducir: () => { if (modo === 'resultados' && !comparando && verTokens && replay !== null) setReproduciendo((r) => !r); },
@@ -2553,6 +2573,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       avanzado={avanzado}
       pasoPedido={pasoPedido}
       onPasoAtendido={() => { setPasoPedido(null); }}
+      onSimular={() => { void simular(); }}
+      onConteoProblemas={setConteoProblemas}
+      irAlProblema={irAlProblema}
       onSeleccionar={(id) => { setSeleccion(id); if (id !== null) modelador?.seleccionar?.(id); else modelador?.servicios.selection.select([]); }}
     />
   );
@@ -2768,9 +2791,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             <button type="button" className="boton cancelar" title={`${S.app.cancelar}${atajo('cancelar')}`} onClick={cancelarCorrida}>{S.app.cancelar}</button>
           </>
         ) : (
-          <button type="button" className="boton primario ejecutar" title={`${S.app.ejecutar}${atajo('ejecutar')}`} disabled={modelador === null} onClick={() => void simular()}>
+          <button type="button" className="boton primario ejecutar" title={`${S.app.ejecutar}${atajo('ejecutar')}`} disabled={modelador === null} onClick={simularDesdeBarra}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4l14 8-14 8z" /></svg>
             {S.app.ejecutar}
+            {/* Design 01: the number of problems that hold the run back, on the button itself. */}
+            {conteoProblemas > 0 && <span className="c5-insignia" title={S.c5.problemasPendientes(conteoProblemas)}>{conteoProblemas}</span>}
           </button>
         )}
         <button type="button" className="boton icono" title={`${S.app.ajustes}${atajo('ajustes')}`} aria-label={S.app.ajustes} onClick={() => ejecutar('ajustes')}>⚙</button>
