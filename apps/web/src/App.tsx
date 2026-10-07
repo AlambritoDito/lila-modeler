@@ -77,7 +77,14 @@ import './theme/montana.css';
 import { confirmarEdicionEnCurso, useBorradorPendiente } from './edicionEnCurso';
 
 /** `file` (LILA-072): el `.bpmn` pulsado, cuando no es el `model.bpmn` de la carpeta. */
-type ProjectAction = 'new' | 'open' | 'openFile' | 'bpmn' | { readonly recent: string; readonly file?: string } | { readonly ejemplo: EjemploId };
+type ProjectAction = 'new' | 'open' | 'openFile' | 'bpmn' | { readonly recent: string; readonly file?: string } | { readonly ejemplo: EjemploId }
+  // #572: a `.lila` the installed PWA was launched with (`window.launchQueue`).
+  | { readonly lanzado: FileSystemFileHandle };
+
+/** `window.launchQueue` (Chromium, installed PWA with `file_handlers`); not in TypeScript's DOM lib. */
+interface LaunchQueue {
+  setConsumer(consumer: (params: { readonly files: readonly FileSystemHandle[] }) => void): void;
+}
 
 /**
  * Nombre del cuello de botella principal para el panel derecho (#226): antes se enseñaba el id
@@ -530,6 +537,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const cerrarMenuFuera = useRef<{ menu: HTMLDetailsElement; cerrar: (e: PointerEvent) => void } | null>(null);
   /** `.bpmn` que llegó antes de que el lienzo estuviera listo; lo abre `abrirRuta` (LILA-072). */
   const rutaPendiente = useRef<OpenPathRequest | null>(null);
+  /** #572: the same for a `.lila` the installed PWA was launched with; `abrirLanzado` opens it. */
+  const lanzadoPendiente = useRef<FileSystemFileHandle | null>(null);
   const replaceDialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     if (pendingAction !== null && !replaceDialog.current?.open) replaceDialog.current?.showModal();
@@ -1063,6 +1072,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       if (kind === 'open' || kind === 'openFile') {
         const doc = await adapter.openProject(kind === 'openFile' ? { fileOnly: true } : undefined);
         if (doc) await activarLeido(doc, beforeToken); return;
+      }
+      if (typeof kind === 'object' && 'lanzado' in kind) {
+        const doc = await adapter.openHandle?.(kind.lanzado) ?? null;
+        if (doc) await activarLeido(doc, beforeToken);
+        return;
       }
       if (typeof kind === 'object' && 'ejemplo' in kind) {
         // #458, QA of #505 (S2c, N3): forget the adapter's previously active folder/document so
@@ -1879,6 +1893,36 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   }
   const abrirRutaRef = useRef(abrirRuta);
   abrirRutaRef.current = abrirRuta;
+
+  /**
+   * #572 (ADR-031): a `.lila` double-clicked in the system opens the installed PWA, which hands it
+   * over through `window.launchQueue` (the manifest's `file_handlers`). It goes through the same
+   * door as Open — `projectAction`, unsaved-changes prompt included. Before the canvas exists it
+   * waits like `rutaPendiente`; while the dialog of unsaved changes is up it says so, like a
+   * double-click on the desktop; while another open or save holds the lock (the session restored
+   * at startup, typically) it waits for it instead, since that is no choice the user made.
+   */
+  function abrirLanzado(handle: FileSystemFileHandle): void {
+    if (modelador === null) { lanzadoPendiente.current = handle; return; }
+    if (pendingAction !== null) { setIoError(S.app.errorAbrirOcupado(handle.name)); return; }
+    if (ioLock.current || respuestaPerdida.current !== null) { setTimeout(() => abrirLanzadoRef.current(handle), 300); return; }
+    void projectAction({ lanzado: handle });
+  }
+  const abrirLanzadoRef = useRef(abrirLanzado);
+  abrirLanzadoRef.current = abrirLanzado;
+  useEffect(() => {
+    // Chromium calls the consumer for every launch, also a plain one with no files.
+    (window as { launchQueue?: LaunchQueue }).launchQueue?.setConsumer(({ files }) => {
+      const handle = files.find((f): f is FileSystemFileHandle => f.kind === 'file');
+      if (handle !== undefined) abrirLanzadoRef.current(handle);
+    });
+  }, []);
+  useEffect(() => {
+    const handle = lanzadoPendiente.current;
+    if (modelador === null || handle === null) return;
+    lanzadoPendiente.current = null;
+    abrirLanzadoRef.current(handle);
+  }, [modelador]);
 
   /** The autosave copy the user chose to restore (#459), waiting for the canvas like `rutaPendiente`. */
   const copiaPendiente = useRef<Uint8Array | null>(null);

@@ -317,7 +317,7 @@ describe('BrowserStore', () => {
         model: { id: 'P', name: 'model.bpmn', xml: '<definitions/>', revision: 0 },
         scenarios: { 'draft.scenario.json': { name: 'Original draft' } }, scenarioRevisions: {}, runs: [] };
       const saved = await store.saveProject(doc);
-      Object.assign(saved.scenarios['draft.scenario.json']!, { name: 'Unsaved returned edit' });
+      Object.assign(saved!.scenarios['draft.scenario.json']!, { name: 'Unsaved returned edit' });
       Object.assign(store.restoreSession()!.scenarios['draft.scenario.json']!, { name: 'Unsaved restored edit' });
       await store.putProcess('P', '<definitions/>');
       expect(new BrowserStore().restoreSession()).toEqual(doc);
@@ -403,6 +403,198 @@ describe('BrowserStore', () => {
       await expect(store.listScenarios('pedido')).resolves.toEqual(['as-is']);
       // Dos escrituras fallidas, un solo aviso: el problema se ve en la consola sin inundarla.
       expect(aviso).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // #572 / #573 (ADR-031): the File System Access API in Chrome and Edge. jsdom has none of it,
+  // which is exactly the Safari/Firefox case; the pickers and handles here are test doubles.
+  describe('File System Access API (#572, #573)', () => {
+    const DOC = {
+      version: 1 as const, id: 'p1', name: 'Pedido',
+      model: { id: 'Process_1', name: 'model.bpmn', xml: '<definitions/>', revision: 4 },
+      scenarios: { 'as-is.scenario.json': { version: 1, name: 'AS-IS' } },
+      scenarioRevisions: { 'as-is.scenario.json': 2 }, runs: [],
+    };
+    const abort = (): DOMException => new DOMException('The user aborted a request.', 'AbortError');
+
+    /** A `FileSystemFileHandle` double: what was written ends up in `escrito`. */
+    function handle(name: string, contenido: BlobPart, permiso: PermissionState = 'granted', respuesta: PermissionState = 'granted') {
+      const h = {
+        name,
+        escrito: [] as Uint8Array[],
+        getFile: vi.fn(async () => new File([contenido], name)),
+        queryPermission: vi.fn(async () => permiso),
+        requestPermission: vi.fn(async () => respuesta),
+        abort: vi.fn(async () => undefined),
+        falla: false,
+        createWritable: vi.fn(async () => {
+          let pendiente: Uint8Array | null = null;
+          return {
+            write: async (datos: BlobPart) => {
+              if (h.falla) throw new Error('disk full');
+              pendiente = datos as Uint8Array;
+            },
+            close: async () => { if (pendiente) h.escrito.push(pendiente); },
+            abort: h.abort,
+          };
+        }),
+      };
+      return h;
+    }
+
+    let clic: ReturnType<typeof vi.spyOn>;
+    beforeEach(() => {
+      vi.stubGlobal('URL', { ...URL, createObjectURL: vi.fn(() => 'blob:mock'), revokeObjectURL: vi.fn() });
+      clic = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    });
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    });
+
+    it('without the API (Safari, Firefox) Save still downloads a new .lila and Open is the file input', async () => {
+      expect('showSaveFilePicker' in globalThis).toBe(false);
+      expect('showOpenFilePicker' in globalThis).toBe(false);
+      const store = new BrowserStore();
+      await expect(store.saveProject(DOC)).resolves.toEqual(DOC);
+      expect(clic).toHaveBeenCalledTimes(1);
+      const promesa = store.openProject();
+      elegirArchivo(new File([encodeLila(DOC)], 'Pedido.lila'));
+      await expect(promesa).resolves.toEqual(DOC);
+      // The second save downloads again: there is no file to write back to.
+      await store.saveProject(DOC);
+      expect(clic).toHaveBeenCalledTimes(2);
+    });
+
+    it('Open keeps the handle and Save rewrites the same file, with no download and no dialog', async () => {
+      const archivo = handle('Pedido.lila', encodeLila(DOC));
+      const abrir = vi.fn(async () => [archivo]);
+      const guardarComo = vi.fn();
+      vi.stubGlobal('showOpenFilePicker', abrir);
+      vi.stubGlobal('showSaveFilePicker', guardarComo);
+      const store = new BrowserStore();
+
+      await expect(store.openProject()).resolves.toEqual(DOC);
+      expect(document.body.querySelector('input[type="file"]')).toBeNull();
+      const cambiado = { ...DOC, model: { ...DOC.model, revision: 5 } };
+      await expect(store.saveProject(cambiado)).resolves.toEqual(cambiado);
+      await store.saveProject(cambiado);
+
+      expect(archivo.escrito).toHaveLength(2);
+      expect(decodeLila(archivo.escrito[0]!)).toEqual(cambiado);
+      expect(guardarComo).not.toHaveBeenCalled();
+      expect(clic).not.toHaveBeenCalled();
+      expect(new BrowserStore().restoreSession()).toEqual(cambiado);
+    });
+
+    it('a closed open picker is a cancel', async () => {
+      vi.stubGlobal('showOpenFilePicker', vi.fn(async () => { throw abort(); }));
+      await expect(new BrowserStore().openProject()).resolves.toBeNull();
+    });
+
+    it('the first save asks where; closing the save dialog is a cancel that changes nothing', async () => {
+      const destino = handle('Pedido.lila', '');
+      const guardarComo = vi.fn().mockRejectedValueOnce(abort()).mockResolvedValueOnce(destino);
+      vi.stubGlobal('showSaveFilePicker', guardarComo);
+      const store = new BrowserStore();
+
+      await expect(store.saveProject(DOC)).resolves.toBeNull();
+      expect(store.restoreSession()).toBeNull();
+      expect(clic).not.toHaveBeenCalled();
+
+      await expect(store.saveProject(DOC)).resolves.toEqual(DOC);
+      expect(guardarComo).toHaveBeenLastCalledWith(expect.objectContaining({ suggestedName: 'Pedido.lila' }));
+      expect(decodeLila(destino.escrito[0]!)).toEqual(DOC);
+      // From now on Save goes back to the file the dialog chose.
+      await store.saveProject(DOC);
+      expect(guardarComo).toHaveBeenCalledTimes(2);
+      expect(destino.escrito).toHaveLength(2);
+    });
+
+    it('another project, «Save as» and forget() never reuse the remembered file', async () => {
+      const original = handle('Pedido.lila', encodeLila(DOC));
+      const otro = handle('Otro.lila', '');
+      const guardarComo = vi.fn(async () => otro);
+      vi.stubGlobal('showOpenFilePicker', vi.fn(async () => [original]));
+      vi.stubGlobal('showSaveFilePicker', guardarComo);
+      const store = new BrowserStore();
+      await store.openProject();
+
+      await store.saveProject({ ...DOC, id: 'nuevo', name: 'Nuevo' });
+      expect(guardarComo).toHaveBeenCalledTimes(1);
+      await store.openProject();
+      await store.saveProject(DOC, { saveAs: true });
+      expect(guardarComo).toHaveBeenCalledTimes(2);
+      await store.openProject();
+      store.forget();
+      await store.saveProject(DOC);
+      expect(guardarComo).toHaveBeenCalledTimes(3);
+      expect(original.escrito).toHaveLength(0);
+    });
+
+    it('a launched file (openHandle) asks for write permission on the first save', async () => {
+      const lanzado = handle('Pedido.lila', encodeLila(DOC), 'prompt', 'granted');
+      vi.stubGlobal('showSaveFilePicker', vi.fn());
+      const store = new BrowserStore();
+      await expect(store.openHandle(lanzado)).resolves.toEqual(DOC);
+      await store.saveProject(DOC);
+      expect(lanzado.requestPermission).toHaveBeenCalledWith({ mode: 'readwrite' });
+      expect(lanzado.escrito).toHaveLength(1);
+    });
+
+    it('write permission refused: Save asks where instead', async () => {
+      const lanzado = handle('Pedido.lila', encodeLila(DOC), 'prompt', 'denied');
+      const copia = handle('Pedido copia.lila', '');
+      vi.stubGlobal('showSaveFilePicker', vi.fn(async () => copia));
+      const store = new BrowserStore();
+      await store.openHandle(lanzado);
+      await store.saveProject(DOC);
+      expect(lanzado.escrito).toHaveLength(0);
+      expect(copia.escrito).toHaveLength(1);
+    });
+
+    it('a .lila.json opened through a handle is read but not overwritten by the .lila save', async () => {
+      const viejo = handle('Pedido.lila.json', JSON.stringify(DOC));
+      const nuevo = handle('Pedido.lila', '');
+      vi.stubGlobal('showSaveFilePicker', vi.fn(async () => nuevo));
+      const store = new BrowserStore();
+      await expect(store.openHandle(viejo)).resolves.toEqual(DOC);
+      await store.saveProject(DOC);
+      expect(viejo.createWritable).not.toHaveBeenCalled();
+      expect(nuevo.escrito).toHaveLength(1);
+    });
+
+    it('a picker the browser refuses (no user activation) falls back to the download', async () => {
+      vi.stubGlobal('showSaveFilePicker', vi.fn(async () => { throw new DOMException('Must be handling a user gesture', 'SecurityError'); }));
+      const store = new BrowserStore();
+      await expect(store.saveProject(DOC)).resolves.toEqual(DOC);
+      expect(clic).toHaveBeenCalledTimes(1);
+    });
+
+    it('a failed write aborts the swap file, rejects, and keeps the last save', async () => {
+      const archivo = handle('Pedido.lila', encodeLila(DOC));
+      vi.stubGlobal('showOpenFilePicker', vi.fn(async () => [archivo]));
+      vi.stubGlobal('showSaveFilePicker', vi.fn());
+      const store = new BrowserStore();
+      await store.openProject();
+      await store.saveProject(DOC);
+      archivo.falla = true;
+      await expect(store.saveProject({ ...DOC, name: 'Roto' })).rejects.toThrow('disk full');
+      expect(archivo.abort).toHaveBeenCalled();
+      expect(store.restoreSession()).toEqual(DOC);
+    });
+
+    it('undoOpen goes back to the file saved before the open that did not take', async () => {
+      const primero = handle('Pedido.lila', encodeLila(DOC));
+      const segundo = handle('Otro.lila', encodeLila({ ...DOC, id: 'p2', name: 'Otro' }));
+      vi.stubGlobal('showSaveFilePicker', vi.fn());
+      const store = new BrowserStore();
+      await store.openHandle(primero);
+      await store.openHandle(segundo);
+      store.undoOpen();
+      await store.saveProject(DOC);
+      expect(primero.escrito).toHaveLength(1);
+      expect(segundo.escrito).toHaveLength(0);
     });
   });
 });

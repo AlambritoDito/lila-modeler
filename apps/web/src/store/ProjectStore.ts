@@ -91,8 +91,8 @@ export interface ProjectSessionStore extends ProjectStore {
    * Olvida la carpeta/documento activos sin tocar disco (#458, QA de #505, hallazgo S2c). Se
    * llama antes de activar un proyecto sin ruta (un ejemplo de la galería): sin esto, `DesktopStore`
    * seguía comparando el siguiente guardado contra el documento anterior y `E-PROYECTO-DISTINTO`
-   * saltaba aunque el usuario nunca hubiera tocado ese proyecto viejo. Solo `DesktopStore`;
-   * `BrowserStore` no guarda identidad entre guardados.
+   * saltaba aunque el usuario nunca hubiera tocado ese proyecto viejo. `BrowserStore` (#573) also
+   * forgets the `.lila` its Save writes back to.
    */
   forget?(): void;
   /**
@@ -114,6 +114,11 @@ export interface ProjectSessionStore extends ProjectStore {
    * (`{ dir, file }`, the double-click's loose diagram). `null` is a cancel.
    */
   importBpmn?(): Promise<ImportedBpmn | null>;
-  /** The project just read did not open: back to the previous one (QA of #593). Only `DesktopStore`. */
+  /** The project just read did not open: back to the previous one (QA of #593). */
   undoOpen?(): void;
+  /**
+   * #572: opens a file the installed PWA was launched with (`window.launchQueue`, the manifest's
+   * `file_handlers`), through the same door as Open. Only `BrowserStore`.
+   */
+  openHandle?(handle: FileSystemFileHandle): Promise<ProjectDocument | null>;
 }
