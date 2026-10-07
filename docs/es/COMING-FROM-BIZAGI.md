@@ -162,7 +162,7 @@ imprime en sus barras; la tabla sigue siendo la referencia.
 
 | Bizagi | Lila |
 |---|---|
-| What-if analysis *(el nombre en Bizagi puede variar según la versión)* | modo **Compare**, o `lila compare`: escenarios lado a lado, diferencias marcadas e intervalos de confianza al 95 % cuando hay ≥ 2 réplicas, y gráficas de barras del tiempo de ciclo medio, el costo por caso y la utilización con el delta de cada escenario contra la base |
+| What-if analysis *(el nombre en Bizagi puede variar según la versión)* | **Comparar con…** en Resultados, o `lila compare`: escenarios lado a lado, diferencias marcadas e intervalos de confianza al 95 % cuando hay ≥ 2 réplicas, y gráficas de barras del tiempo de ciclo medio, el costo por caso y la utilización con el delta de cada escenario contra la base |
 | Exportar resultados a Excel *(el nombre en Bizagi puede variar según la versión)* | un CSV por tabla y un `.xlsx` único (`--csv`, `--xlsx`, o los botones de exportar en Results) |
 | Publicar en Word / Web | Archivo → Exportar documento del proceso (Word o HTML): portada, diagrama, descripción del proceso, una sección por elemento en orden de flujo agrupada por carril, y después las tablas del escenario y de resultados, con las gráficas de la corrida. Sin plantillas ni campo de tabla de contenido; el panel de navegación de Word lista los títulos |
 | Ver moverse los tokens | **Tokens** sobre el mapa de Resultados (`Espacio` o ▶) reproducen la réplica 1 de la corrida guardada sobre el diagrama, con contadores por elemento que salen del registro de eventos del propio motor, no de un caminante de juguete. **Validar rutas**, una herramienta de Modelar, es la animación didáctica de bpmn-js y no lee ningún escenario |
