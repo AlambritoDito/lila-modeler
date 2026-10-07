@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { readProjectFolder } from '@lila-modeler/engine/project-fs';
 import { expect, it } from 'vitest';
 import { entradasHuerfanas, prepareSimulation, sinHuerfanas, sinRepetir } from './simulationGate';
 import { setLocale } from './i18n';
@@ -163,4 +164,17 @@ it('the process simulated is the one all the project scenarios target, whichever
   await expect(prepareSimulation(xml, 'cliente.scenario.json', escenarios, 'model.bpmn', { locale: 'en' })).rejects.toThrow(
     'E-ELEMENTO-DESCONOCIDO: the id StartEvent_ClienteInicio belongs to the process "Customer" (Process_Cliente), but the simulated process is "Restaurant" (Process_Restaurante).',
   );
+});
+
+// #556: examples/pedido has no lila-project.json. Opened as a folder, the reconstructed manifest
+// named the model after the folder («pedido»), and Run refused the folder's own scenarios with
+// «the scenario points at model.bpmn, but the active model is pedido». The same read the desktop
+// app does, then the same gate Run goes through, with the model name the app gets from it.
+it('examples/pedido opened as a folder simulates its scenarios: their model is the folder\'s model.bpmn (#556)', async () => {
+  const { document, loose } = await readProjectFolder('examples/pedido');
+  expect(loose).toBe(false);
+  for (const file of ['as-is.scenario.json', 'to-be-3-cajeros.scenario.json']) {
+    const prepared = await prepareSimulation(document.model.xml, file, document.scenarios, document.model.name);
+    expect(prepared.scenario.model).toBe('model.bpmn');
+  }
 });
