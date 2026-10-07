@@ -1,9 +1,10 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   addRecent,
+  createSessionStateWriter,
   defaultSessionState,
   fitsAnyDisplay,
   parseAjustes,
@@ -329,5 +330,54 @@ describe('ajustes de apariencia (LILA-113)', () => {
     const conAjustes = withAjustes(base, { tema: 'papel' });
     expect(conAjustes.window).toEqual(base.window);
     expect(conAjustes.recents).toEqual(base.recents);
+  });
+});
+
+describe('estado.json temporaries (#565)', () => {
+  it('readSessionState sweeps the estado.json.tmp-* a killed session left, and only those', async () => {
+    const state = withWindowBounds(defaultSessionState(), { x: 1, y: 2, width: 800, height: 600 });
+    await writeSessionState(statePath, state);
+    await writeFile(join(dir, 'estado.json.tmp-1234-abc'), '', 'utf8');
+    await writeFile(join(dir, 'estado.json.tmp-5678-def'), '{"half', 'utf8');
+    await writeFile(join(dir, 'recovery.lila.tmp-x'), '', 'utf8');
+    await writeFile(join(dir, 'otro.json'), '{}', 'utf8');
+
+    await expect(readSessionState(statePath)).resolves.toEqual(state);
+    expect((await readdir(dir)).sort()).toEqual(['estado.json', 'otro.json', 'recovery.lila.tmp-x']);
+  });
+
+  it('the sweep also runs when estado.json itself is missing, and a missing folder does not throw', async () => {
+    await writeFile(join(dir, 'estado.json.tmp-1-a'), '', 'utf8');
+    await expect(readSessionState(statePath)).resolves.toEqual(defaultSessionState());
+    expect(await readdir(dir)).toEqual([]);
+    await expect(readSessionState(join(dir, 'no', 'estado.json'))).resolves.toEqual(defaultSessionState());
+  });
+
+  it('the writer serialises writes: the last state queued is the one on disk, and idle() waits for it', async () => {
+    const writer = createSessionStateWriter(statePath);
+    const bounds = (x: number) => withWindowBounds(defaultSessionState(), { x, y: 0, width: 800, height: 600 });
+    void writer.write(bounds(1));
+    void writer.write(bounds(2));
+    void writer.write(bounds(3)); // The bounds at close: nothing awaits this call itself.
+    await writer.idle();
+    expect((await readSessionState(statePath)).window?.x).toBe(3);
+    expect(await readdir(dir)).toEqual(['estado.json']);
+  });
+
+  it('a failed write rejects its own call but neither blocks the queue nor idle()', async () => {
+    const order: number[] = [];
+    let n = 0;
+    const writer = createSessionStateWriter(statePath, async () => {
+      const mine = ++n;
+      await new Promise((r) => setTimeout(r, mine === 1 ? 20 : 0));
+      if (mine === 1) throw new Error('disk full');
+      order.push(mine);
+    });
+    const first = writer.write(defaultSessionState());
+    const second = writer.write(defaultSessionState());
+    await expect(first).rejects.toThrow('disk full');
+    await expect(second).resolves.toBeUndefined();
+    await expect(writer.idle()).resolves.toBeUndefined();
+    expect(order).toEqual([2]);
   });
 });
