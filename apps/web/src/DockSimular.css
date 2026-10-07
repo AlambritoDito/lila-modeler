@@ -28,33 +28,6 @@
   gap: 2px;
 }
 
-/* The KPIs take a row of their own above the tabs (`order`), so they read on one line. */
-.dock-kpis {
-  display: flex;
-  flex: 1 1 100%;
-  flex-wrap: wrap;
-  order: -1;
-  padding-top: calc(6px * var(--espacio, 1));
-  font-family: var(--font-mono);
-  font-size: 11px;
-  gap: 4px 16px;
-  margin: 0;
-}
-
-.dock-kpis div {
-  display: flex;
-  gap: 6px;
-}
-
-.dock-kpis dt {
-  color: var(--fg-muted);
-}
-
-.dock-kpis dd {
-  color: var(--fg-primary);
-  margin: 0;
-}
-
 .dock-acciones {
   display: flex;
   gap: 6px;
@@ -83,12 +56,6 @@
   color: var(--fg-muted);
   font-size: 12px;
   margin: 8px 0;
-}
-
-.dock-vacio {
-  align-items: center;
-  display: flex;
-  gap: 12px;
 }
 
 .dock-avisos {
@@ -121,7 +88,6 @@
   pointer-events: none;
 }
 
-
 .divisor-dock:hover,
 .divisor-dock:focus-visible {
   background: var(--accent-primary);
@@ -137,15 +103,6 @@
   position: absolute;
   white-space: nowrap;
   width: 1px;
-}
-
-.dock-vacio .boton {
-  white-space: nowrap;
-}
-
-.dock-cuello .enlace {
-  font-family: var(--font-mono);
-  font-size: 11px;
 }
 
 .avisos-resto summary {
