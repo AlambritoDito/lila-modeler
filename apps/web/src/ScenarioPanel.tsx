@@ -38,6 +38,7 @@
  *    El JSON crudo sigue estando, plegado al final: es la vista avanzada, no la principal.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import type { ProcessIR } from '@lila-modeler/engine';
 import { resolveExtends, resolveScenarioPath, type ScenarioReader, type ValidateScenarioOptions } from '@lila-modeler/engine/schema';
@@ -133,25 +134,35 @@ export function bloquea(problema: Problema): boolean {
  * between steps and open them, Alt+1…6 open one from anywhere (handled by the panel). In the
  * detached window (`compacta`) only the current step shows its name and the others a bare «!»
  * when they have problems, the design's compact header.
+ *
+ * Lote M, C6: in Simulate the same bar is drawn in the main window's full-width sub-bar (design
+ * 1a/1b), with every step named. `controla` is false when the step's body is in another document
+ * (the panel detached), so the tabs do not point at an id that is not there.
  */
 function BarraPasos({
   paso,
   onPaso,
   conteos,
   compacta,
+  controla = true,
+  className = 'pasos',
+  etiquetaBarra,
 }: {
   paso: PasoId;
   onPaso: (paso: PasoId, foco?: boolean) => void;
   conteos: Readonly<Record<PasoId, number>>;
   compacta: boolean;
+  controla?: boolean;
+  className?: string;
+  etiquetaBarra?: string;
 }): React.JSX.Element {
   const S = useStrings();
   const indice = PASO_IDS.indexOf(paso);
   return (
     <div
       role="tablist"
-      className="pasos"
-      aria-label={S.escenario.pasos}
+      className={className}
+      aria-label={etiquetaBarra ?? S.escenario.pasos}
       onKeyDown={(e) => {
         let destino: number | null = null;
         if (e.key === 'ArrowRight') destino = (indice + 1) % PASO_IDS.length;
@@ -160,7 +171,11 @@ function BarraPasos({
         else if (e.key === 'End') destino = PASO_IDS.length - 1;
         if (destino === null) return;
         e.preventDefault();
-        onPaso(PASO_IDS[destino]!, true);
+        const lista = e.currentTarget;
+        const p = PASO_IDS[destino]!;
+        onPaso(p);
+        // The focus follows the step inside the bar that was used (sub-bar or panel header).
+        queueMicrotask(() => lista.querySelector<HTMLElement>(`[data-paso="${p}"]`)?.focus());
       }}
     >
       {PASO_IDS.map((p, i) => {
@@ -175,7 +190,7 @@ function BarraPasos({
             role="tab"
             className={['paso', activo ? 'activo' : '', n > 0 ? 'con-problemas' : ''].filter(Boolean).join(' ')}
             aria-selected={activo}
-            aria-controls="sim-cuerpo"
+            aria-controls={controla ? 'sim-cuerpo' : undefined}
             tabIndex={activo ? 0 : -1}
             data-paso={p}
             title={S.pasosSim.tabTitulo(S.pasosSim.titulos[p] ?? '', tecla)}
@@ -375,6 +390,15 @@ export interface ScenarioPanelProps {
    * for the canvas percentage fields, which are fields only in Routes (`Modelador.porcentajes`).
    */
   onPasoVisible?: (paso: PasoId) => void;
+  /**
+   * Lote M, C6: the slot of the main window's full-width sub-bar (Simulate, design 1a/1b), or
+   * `null`. With it the panel draws its six named steps and the «Alt+1…6» hint there, through a
+   * portal, so the step stays one state of this panel; docked, its own header goes and the panel
+   * is only the step's content. Detached, the window keeps the compact header as well.
+   */
+  barraPasos?: HTMLElement | null;
+  /** Lote M, C6: the person picked a step (a tab, the arrows, Alt+n, previous/next). */
+  onElegirPaso?: () => void;
 }
 
 /** Default of `problemasExtra`, one array for every render so the memo below keeps its cache. */
@@ -401,6 +425,8 @@ export function ScenarioPanel({
   irAlProblema = null,
   onProblemaAtendido,
   onPasoVisible,
+  barraPasos = null,
+  onElegirPaso,
 }: ScenarioPanelProps): React.JSX.Element {
   const S = useStrings();
   /**
@@ -653,9 +679,12 @@ export function ScenarioPanel({
    */
   function irAPaso(p: PasoId, foco = false): void {
     setPaso(p);
+    onElegirPaso?.();
     if (foco) {
-      // After the render that gives the new tab its `tabIndex=0`.
-      queueMicrotask(() => raizRef.current?.querySelector<HTMLElement>(`[data-paso="${p}"]`)?.focus());
+      // After the render that gives the new tab its `tabIndex=0`. The tab is in the panel's header
+      // or, in Simulate, in the sub-bar of the same document: look it up by id, not in the panel.
+      const doc = raizRef.current?.ownerDocument;
+      queueMicrotask(() => doc?.getElementById(`sim-paso-${p}`)?.focus());
     }
   }
 
@@ -729,6 +758,8 @@ export function ScenarioPanel({
       }
       if (e.key !== 'Escape' || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
       if (teclasRef.current.seleccion === null) return;
+      // Kept mounted behind the Properties tab in Simulate (C6): Esc is not this panel's there.
+      if (raizRef.current?.closest('[hidden]') != null) return;
       teclasRef.current.onSeleccionar(null);
     };
     doc.addEventListener('keydown', alPulsar);
@@ -748,11 +779,12 @@ export function ScenarioPanel({
       return;
     }
     const cuerpo = cuerpoRef.current;
-    const cabecera = cabeceraRef.current;
-    if (cuerpo === null || cabecera === null) return;
+    if (cuerpo === null) return;
     const contenedor = desplazable(cuerpo);
     if (contenedor === null) return;
-    const hueco = cuerpo.getBoundingClientRect().top - cabecera.getBoundingClientRect().bottom;
+    // Without a header (the steps are in the sub-bar, C6) the top of the step goes to the top.
+    const tope = cabeceraRef.current?.getBoundingClientRect().bottom ?? contenedor.getBoundingClientRect().top;
+    const hueco = cuerpo.getBoundingClientRect().top - tope;
     if (hueco < 0) contenedor.scrollTop += hueco;
   }, [paso, idSeleccionado]);
 
@@ -881,11 +913,21 @@ export function ScenarioPanel({
     );
   }
 
+  /** C6: docked in Simulate the steps live in the sub-bar and the panel is only the step. */
+  const sinCabecera = barraPasos !== null && !enVentana;
   return (
-    <div ref={raizRef} className={enVentana ? 'escenario sim-panel compacto' : 'escenario sim-panel'}>
+    <div ref={raizRef} className={enVentana ? 'escenario sim-panel compacto' : sinCabecera ? 'escenario sim-panel c6-sin-cabecera' : 'escenario sim-panel'}>
+      {barraPasos !== null && createPortal(
+        <>
+          <BarraPasos paso={paso} onPaso={irAPaso} conteos={conteos} compacta={false} controla={!enVentana}
+            className="pasos c6-pasos" etiquetaBarra={S.c6.pasosBarra} />
+          <span className="c6-pista mono">{pista}</span>
+        </>,
+        barraPasos,
+      )}
       {/* Lote M: the header stays put while the step scrolls under it (`position: sticky`), at
           any panel width: the scenario, «▶ Simulate» and the six steps are always one click away. */}
-      <div ref={cabeceraRef} className="sim-cabecera">
+      {!sinCabecera && <div ref={cabeceraRef} className="sim-cabecera">
         <div className="escenario-cabecera">
           <strong className="sim-escenario" title={nombreEscenario}>
             {enVentana ? nombreEscenario : S.escenario.titulo(nombreEscenario)}
@@ -914,7 +956,7 @@ export function ScenarioPanel({
         </div>
         <BarraPasos paso={paso} onPaso={irAPaso} conteos={conteos} compacta={enVentana} />
         {!enVentana && <p className="sim-pista mono">{pista}</p>}
-      </div>
+      </div>}
 
       <div ref={cuerpoRef} id="sim-cuerpo" role="tabpanel" aria-labelledby={`sim-paso-${paso}`} className="sim-cuerpo">
         <p className="escenario-archivo">{S.escenario.archivoHereda(archivo, heredaDe)}</p>

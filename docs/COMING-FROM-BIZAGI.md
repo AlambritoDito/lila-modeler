@@ -36,7 +36,8 @@ Two things work differently from Bizagi, and both in your favour:
   back to Times after Calendars without redoing anything, and the validation list at the
   bottom of the panel is live in every step.
 
-The six steps are a bar at the top of the Simulate panel. It opens on **Times**, the step
+The six steps are a bar across the window, right under the top bar, next to **Scenario ▾** (in the
+detached panel window, a compact bar at its top). It opens on **Times**, the step
 you are on survives picking elements on the canvas and running the simulation, and two things are
 there in every step: the validation list and **Advanced: scenario JSON**, which is where the
 scenario `name`, its `description` and anything the form does not draw are edited.

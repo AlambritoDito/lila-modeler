@@ -4516,3 +4516,204 @@ button.gcal-uso-fila:hover {
   margin-left: 6px;
   padding: 2px 6px;
 }
+
+/* ===================================================================== *
+ * Lote M, C6: the Simulate sub-bar of design 1a/1b — the full width under the top bar, with
+ * «Scenario ▾», the six named steps and the keys' hint — and the Results summary's extras.
+ * ===================================================================== */
+
+/* Simulate and Results draw their bar across the whole window, over the canvas and the right
+   panel (the left column is empty in both modes). Comparing keeps its own bar inside its view. */
+.app.modo-simular,
+.app.modo-resultados {
+  grid-template-areas:
+    'barra     barra     barra'
+    'subbarra  subbarra  subbarra'
+    'paleta    lienzo    panel'
+    'paleta    dock      panel'
+    'paleta    diagramas panel'
+    'estado    estado    estado';
+}
+
+.app.modo-simular .c5-subbarra {
+  background: var(--bg-elevated);
+  flex-wrap: nowrap;
+  gap: 12px;
+  height: 50px;
+  min-height: 50px;
+  padding: 0 12px;
+  container-type: inline-size;
+}
+
+.app.modo-simular .c5-subbarra .c5-escenario { flex: none; }
+
+.c6-separador {
+  align-self: center;
+  background: var(--border-strong);
+  flex: none;
+  height: 26px;
+  width: 1px;
+}
+
+/* The slot takes what is left; the steps shrink into it, they never push the page sideways. */
+.c6-ranura-pasos {
+  align-items: center;
+  display: flex;
+  flex: 1 1 0;
+  gap: 12px;
+  min-width: 0;
+}
+
+.c6-pasos {
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* The design's separator between two steps. */
+.c6-pasos .paso + .paso::before {
+  background: var(--border-strong);
+  content: '';
+  flex: none;
+  height: 1px;
+  margin-left: -15px;
+  margin-right: 1px;
+  width: 10px;
+}
+
+.c6-pasos .paso {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0;
+  color: var(--fg-primary);
+  cursor: pointer;
+  display: flex;
+  flex: 0 1 auto;
+  font: inherit;
+  gap: 8px;
+  height: 34px;
+  min-width: 0;
+  padding: 0 12px 0 6px;
+  white-space: nowrap;
+}
+
+.c6-pasos .paso + .paso { margin-left: 14px; }
+
+.c6-pasos .paso:hover { background: var(--bg-hover); }
+
+.c6-pasos .paso:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.c6-pasos .paso.activo {
+  background: var(--bg-surface);
+  border-color: var(--accent-primary);
+  font-weight: 700;
+}
+
+.c6-pasos .paso.con-problemas:not(.activo) { border-color: var(--status-error); }
+
+.c6-pasos .paso-num {
+  border: 1px solid var(--border-strong);
+  color: var(--fg-muted);
+  display: grid;
+  flex: none;
+  font: 700 11px/1 var(--font-mono);
+  height: 20px;
+  place-items: center;
+  width: 20px;
+}
+
+.c6-pasos .paso.activo .paso-num {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: var(--fg-onAccent);
+}
+
+/* Narrow windows: the names give way with an ellipsis (never below a few letters), not the page. */
+.c6-pasos .paso-nombre {
+  min-width: 3ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.c6-pasos .paso-ok,
+.c6-pasos .paso-problemas {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.c6-pasos .paso-ok { color: var(--status-success); }
+
+.c6-pasos .paso-problemas { color: var(--status-error); }
+
+.c6-pista {
+  color: var(--fg-muted);
+  flex: none;
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+/* First the hint goes, then the gaps tighten; the six names stay, shortened if they must. */
+@container (max-width: 1400px) {
+  .c6-pista { display: none; }
+}
+
+@container (max-width: 1335px) {
+  .c6-pasos .paso { gap: 5px; padding: 0 6px 0 4px; }
+  .c6-pasos .paso + .paso { margin-left: 4px; }
+  .c6-pasos .paso + .paso::before { display: none; }
+  .app.modo-simular .c5-subbarra .c5-escenario .c5-rotulo { display: none; }
+}
+
+/* Narrower still (≈ 1024 px windows and below): Duplicate keeps its icon and title, the ✓ marks go
+   (the «! n» stay) and the open step keeps its whole name; the others share what is left. */
+@container (max-width: 1000px) {
+  .app.modo-simular .c5-subbarra .c5-duplicar { font-size: 0; padding-inline: 8px; }
+  .app.modo-simular .c5-subbarra .c5-duplicar > span { font-size: 14px; }
+  .c6-pasos .paso-ok { display: none; }
+  .c6-pasos .paso.activo { flex-shrink: 0; }
+}
+
+/* Docked in Simulate the panel is only the step: its title starts at the top. */
+.sim-panel.c6-sin-cabecera .sim-paso-cabeza { margin-top: 0; }
+
+/* The Results summary's two extra figures, under the six KPIs (QA of #604). */
+.c6-kpis-extra {
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.c6-kpis-extra > div {
+  background: var(--bg-elevated);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 6px 10px;
+}
+
+.c6-kpis-extra dt {
+  color: var(--fg-muted);
+  font: 700 10px/1.2 var(--font-ui);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.c6-kpis-extra dd {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The file and its `extends` are in «Scenario ▾»; docked in Simulate the step comes first. */
+.sim-panel.c6-sin-cabecera > .sim-cuerpo > .escenario-archivo { display: none; }

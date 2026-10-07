@@ -2107,4 +2107,13 @@ export const en = {
     problemasPendientes: (n: number): string => (n === 1 ? '1 problem holds the run back' : `${n} problems hold the run back`),
     compararConEscenario: (nombre: string): string => `Compare with ${nombre}`,
   },
+  /** Lote M, C6: the Simulate sub-bar's steps and the Results summary's two extra figures. */
+  c6: {
+    pasosBarra: 'Simulation steps',
+    throughput: 'Throughput',
+    throughputValor: (porHora: string): string => `${porHora} / h`,
+    throughputTitulo: 'Completed cases per simulated hour, mean over the replications',
+    costoTotal: 'Total cost',
+    costoTotalTitulo: 'What the whole run cost: resources and fixed costs of every case, finished or not',
+  },
 } as const;
