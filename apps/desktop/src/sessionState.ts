@@ -221,8 +221,8 @@ export async function writeSessionState(path: string, state: SessionState): Prom
 
 /**
  * Serialised writes to one `estado.json` (#565): each write starts after the previous one settled,
- * so an older state can never land after a newer one, and `idle()` resolves once every write
- * queued so far has finished (or failed). `main.ts` holds the quit on `idle()`, because the last
+ * so an older state can never land after a newer one, and `idle()` resolves once the queue is
+ * empty: every write has finished or failed, including those queued while it waited. `main.ts` holds the quit on `idle()`, because the last
  * write — the window bounds at close — would otherwise die with the process and leave an empty
  * temporary behind.
  */
@@ -242,7 +242,14 @@ export function createSessionStateWriter(
       tail = done.catch(() => {});
       return done;
     },
-    idle: () => tail,
+    // Until the queue stops growing: a write queued while an earlier one runs is waited for too.
+    async idle() {
+      let seen: Promise<void>;
+      do {
+        seen = tail;
+        await seen;
+      } while (seen !== tail);
+    },
   };
 }
 

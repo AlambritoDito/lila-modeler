@@ -487,7 +487,7 @@ async function saveBounds(win: BrowserWindow): Promise<void> {
 /** Debounce simple: varios `move`/`resize` seguidos solo escriben disco una vez, 400 ms después del último. */
 function scheduleSaveBounds(win: BrowserWindow): void {
   if (boundsSaveTimer !== null) clearTimeout(boundsSaveTimer);
-  boundsSaveTimer = setTimeout(() => void saveBounds(win), 400);
+  boundsSaveTimer = setTimeout(() => void saveBounds(win).catch(() => {}), 400);
 }
 
 // -- Reload when the open project changes on disk (#539, `projectWatcher.ts`) -----------------
@@ -1143,7 +1143,7 @@ function createWindow(show: boolean, bounds: WindowBounds | null): BrowserWindow
   win.on('resize', () => scheduleSaveBounds(win));
   win.on('close', () => {
     if (boundsSaveTimer !== null) clearTimeout(boundsSaveTimer);
-    void saveBounds(win);
+    void saveBounds(win).catch(() => {}); // Losing the bounds is acceptable; crashing on quit is not.
   });
   // Reload starts a new renderer subscription lifecycle; only pendingOpenPath marks ready.
   win.webContents.on('did-start-loading', () => {
@@ -1297,7 +1297,10 @@ app.on('window-all-closed', () => {
 app.on('will-quit', (event) => {
   if (sessionFlushed) return;
   event.preventDefault();
-  void sessionWriter.idle().then(() => {
+  // Bounded: a write that never settles (a stalled network profile) must not keep a windowless
+  // process alive; whatever temporary it leaves is swept at the next launch.
+  const limit = new Promise<void>((resolve) => setTimeout(resolve, 3000));
+  void Promise.race([sessionWriter.idle(), limit]).then(() => {
     sessionFlushed = true;
     app.quit();
   });

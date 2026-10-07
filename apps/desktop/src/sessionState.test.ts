@@ -353,6 +353,35 @@ describe('estado.json temporaries (#565)', () => {
     await expect(readSessionState(join(dir, 'no', 'estado.json'))).resolves.toEqual(defaultSessionState());
   });
 
+  it('the writer runs one write at a time, in order, even when the first is the slowest', async () => {
+    const log: string[] = [];
+    const writer = createSessionStateWriter(statePath, async (_path, state) => {
+      const x = state.window?.x ?? 0;
+      log.push(`start ${x}`);
+      await new Promise((r) => setTimeout(r, x === 1 ? 30 : 0));
+      log.push(`end ${x}`);
+    });
+    const bounds = (x: number) => withWindowBounds(defaultSessionState(), { x, y: 0, width: 800, height: 600 });
+    void writer.write(bounds(1));
+    void writer.write(bounds(2));
+    await writer.idle();
+    expect(log).toEqual(['start 1', 'end 1', 'start 2', 'end 2']);
+  });
+
+  it('idle() also waits for a write queued while it was already waiting', async () => {
+    const done: number[] = [];
+    const writer = createSessionStateWriter(statePath, async (_path, state) => {
+      await new Promise((r) => setTimeout(r, 10));
+      done.push(state.window?.x ?? 0);
+    });
+    const bounds = (x: number) => withWindowBounds(defaultSessionState(), { x, y: 0, width: 800, height: 600 });
+    void writer.write(bounds(1));
+    const idle = writer.idle();
+    setTimeout(() => void writer.write(bounds(2)), 5); // e.g. a late Settings write during quit.
+    await idle;
+    expect(done).toEqual([1, 2]);
+  });
+
   it('the writer serialises writes: the last state queued is the one on disk, and idle() waits for it', async () => {
     const writer = createSessionStateWriter(statePath);
     const bounds = (x: number) => withWindowBounds(defaultSessionState(), { x, y: 0, width: 800, height: 600 });
