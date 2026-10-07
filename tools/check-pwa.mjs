@@ -134,6 +134,12 @@ async function main() {
       b.click(); return true;
     })()`);
     const canvas = `!!document.querySelector('.lienzo svg')`;
+    /** Reloads and waits for the new document: the old one's canvas must not pass for the new one's. */
+    const reload = async () => {
+      await evaluate('window.__lilaAntesDeRecargar = true');
+      await cdp.send('Page.reload');
+      await waitFor('window.__lilaAntesDeRecargar !== true', 'the reloaded document');
+    };
 
     // The buttons are found by their English labels: pin the UI language, whatever the system's is.
     await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: `try { localStorage.setItem('lila.idioma', 'en'); } catch {}` });
@@ -165,11 +171,11 @@ async function main() {
 
     // 3. The service worker takes over after a reload, with this version's cache.
     await waitFor(`navigator.serviceWorker.ready.then((r) => !!r.active)`, 'an active service worker');
-    await cdp.send('Page.reload');
+    await reload();
     await waitFor(canvas, 'the canvas after reload');
     const sw = await evaluate(`(async () => ({ controller: navigator.serviceWorker.controller?.scriptURL ?? null, caches: await caches.keys() }))()`);
     check('the service worker controls the page', sw.controller === `${BASE}sw.js`, sw.controller);
-    check('its cache is named after the app version', sw.caches.includes(`lila-modeler-${VERSION}`), sw.caches);
+    check('its cache is named after the app version and build', sw.caches.some((k) => /^lila-modeler-/.test(k) && k.startsWith(`lila-modeler-${VERSION}-`)), sw.caches);
     report.serviceWorker = sw;
 
     // 4. Save in place through the File System Access API, with a real handle in the OPFS.
@@ -207,7 +213,7 @@ async function main() {
     await server.stop();
     const offline = await fetch(BASE).then(() => 'online', () => 'offline');
     check('the static server is down', offline === 'offline', offline);
-    await cdp.send('Page.reload');
+    await reload();
     await waitFor(canvas, 'the canvas offline', 30_000);
     check('the editor opens offline', true);
   } finally {
