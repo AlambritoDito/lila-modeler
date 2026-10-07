@@ -90,7 +90,15 @@ Every beta is a GitHub prerelease. [Beta 16](https://github.com/AlambritoDito/li
   **Open**. On older macOS, Control-click the app ▸ **Open** ▸ **Open** works directly. Do not
   disable Gatekeeper to work around this. [`docs/BETA-MAC-GUIDE.md`](docs/BETA-MAC-GUIDE.md) walks
   through the whole flow, including checksum verification.
-- **Windows (x64)** — `Lila-Modeler-1.0.0-beta.16-win-x64.exe`, the NSIS installer built by CI. It is
+- **Windows** — the main channel is the **web app installed from Chrome or Edge**
+  ([ADR-031](docs/DECISIONS.md)): open <https://alambritodito.github.io/lila-modeler/app/>, then
+  **Install Lila Modeler** (the install icon at the right of the address bar in Chrome; **⋯ ▸ Apps ▸
+  Install this site as an app** in Edge). It gets its own window and Start menu entry, opens `.lila`
+  files on double click, saves back to the same file and works offline once it has been opened. No
+  installer, no administrator rights, no SmartScreen warning. It has not been tested on a real
+  Windows machine yet: [`docs/WINDOWS-PWA-TESTER-GUIDE.md`](docs/WINDOWS-PWA-TESTER-GUIDE.md) walks a
+  non-developer through it and ends with a report template.
+- **Windows installer (x64, secondary)** — `Lila-Modeler-1.0.0-beta.16-win-x64.exe`, the NSIS installer built by CI. It is
   **not signed** and **has not been tested on a real Windows machine yet**: nobody has run it on a
   clean install, so expect rough edges. Windows SmartScreen will show “Windows protected your PC”;
   **More info ▸ Run anyway** lets you continue. SignPath Foundation declined to sign the installer
@@ -98,7 +106,9 @@ Every beta is a GitHub prerelease. [Beta 16](https://github.com/AlambritoDito/li
   tester? [`docs/WINDOWS-TESTER-GUIDE.md`](docs/WINDOWS-TESTER-GUIDE.md) is written for people who are
   not developers and ends with a report template.
 - **Linux** — an AppImage is built by CI, untested, and not attached to the release.
-- **Web** — runs in the browser; Chrome is the one tested. Safari acceptance is pending (#379).
+- **Web** — runs in the browser; Chrome is the one tested. Safari acceptance is pending (#379). In
+  Chrome and Edge it can be installed as an app (see Windows above, the same works on macOS and
+  Linux); in other browsers Open uses the file picker and Save downloads the `.lila`.
 
 The desktop app registers itself as the editor for `.bpmn` and `.lila` files and, since beta.10,
 tells you when a newer version is out (it does not update itself).
@@ -199,7 +209,7 @@ not a claim of parity: the full checklist, with every documented difference and 
 | Results export | Excel | CSV and XLSX |
 | Percentiles, queue lengths, throughput, cost per case, bottleneck ranking, off-hours wait | ✗ | ✓ |
 | Live-counter animation | ✓ | ✓ Animate replays the event log |
-| Platforms | Windows only | web app (Chrome tested), macOS (tested); Windows installer unsigned and untested; Linux AppImage untested |
+| Platforms | Windows only | web app (Chrome tested), macOS (tested); Windows through the web app installed from Chrome or Edge (untested on Windows), installer unsigned and untested; Linux AppImage untested |
 | Importing a Bizagi `.bpmn` | — | diagram only: Bizagi does not export its simulation parameters |
 | Document publishing (Word/PDF/web) | ✓ | ✓ process document in Word (.docx) or one printable HTML page; no templates or shared repository |
 | Event-based gateway (timer and message branches) | ✓ | ✓ the first branch to elapse takes the token |
@@ -241,11 +251,12 @@ English is the base language; Spanish versions live under `docs/es/`.
   "for agents" section.
 - [`MCP.md`](docs/MCP.md) — the MCP server and its sixteen tools.
 - [`THEMES.md`](docs/THEMES.md) — the theme format.
-- [`DECISIONS.md`](docs/DECISIONS.md) — architecture decision records (ADR-001 … ADR-030).
+- [`DECISIONS.md`](docs/DECISIONS.md) — architecture decision records (ADR-001 … ADR-031).
 - [`BIZAGI_PARITY.md`](docs/BIZAGI_PARITY.md) — reference behaviour checklist and documented
   differences.
 - [`COMING-FROM-BIZAGI.md`](docs/COMING-FROM-BIZAGI.md) — screen-by-screen guide for Bizagi users.
 - [`BETA-MAC-GUIDE.md`](docs/BETA-MAC-GUIDE.md) — the desktop beta.
+- [`WINDOWS-PWA-TESTER-GUIDE.md`](docs/WINDOWS-PWA-TESTER-GUIDE.md) — installing the web app on Windows from Chrome or Edge, opening and saving `.lila` files, and reporting what happens.
 - [`WINDOWS-TESTER-GUIDE.md`](docs/WINDOWS-TESTER-GUIDE.md) — trying the untested, unsigned Windows installer and reporting what happens.
 - [`EXAMPLES_POLICY.md`](docs/EXAMPLES_POLICY.md), [`ORACLES.md`](docs/ORACLES.md),
   [`PAGES.md`](docs/PAGES.md) — examples policy, test oracles, Pages deployment.
