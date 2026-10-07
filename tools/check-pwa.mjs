@@ -135,6 +135,8 @@ async function main() {
     })()`);
     const canvas = `!!document.querySelector('.lienzo svg')`;
 
+    // The buttons are found by their English labels: pin the UI language, whatever the system's is.
+    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: `try { localStorage.setItem('lila.idioma', 'en'); } catch {}` });
     await cdp.send('Page.navigate', { url: BASE });
     await waitFor(canvas, 'the canvas');
 
