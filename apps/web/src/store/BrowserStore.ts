@@ -17,6 +17,7 @@
 import type { RunResult } from '@lila-modeler/engine';
 import type { Scenario } from '@lila-modeler/engine/schema';
 import { encodeLila } from '@lila-modeler/engine/project';
+import { strings } from '../i18n';
 import { readLila, readProject } from '../project';
 import type { ProcessData, ProcessSummary, ProjectSessionStore, ProjectDocument } from './ProjectStore';
 
@@ -156,17 +157,27 @@ interface ConSelectores {
   showSaveFilePicker?(options: { suggestedName: string; types: TipoSelector[] }): Promise<ManejadorArchivo>;
 }
 const selectores = (): ConSelectores => globalThis as ConSelectores;
-const TIPO_LILA: TipoSelector = { description: 'Lila Modeler project', accept: { [LILA_MIME]: [LILA_EXT] } };
+/** In the UI language at the moment the dialog opens. */
+const tipoLila = (): TipoSelector => ({ description: strings().almacen.tipoLila, accept: { [LILA_MIME]: [LILA_EXT] } });
 /** Earlier saves from the demo are `.lila.json` (see `openProject`). */
-const TIPO_LILA_JSON: TipoSelector = { description: 'Lila Modeler project (JSON)', accept: { 'application/json': ['.json'] } };
+const tipoLilaJson = (): TipoSelector => ({ description: strings().almacen.tipoLilaJson, accept: { 'application/json': ['.json'] } });
 
 /** The user closed the picker: a cancel, not an error. */
 const esCancelacion = (error: unknown): boolean => error instanceof DOMException && error.name === 'AbortError';
 /**
  * The picker exists but refuses to open here — no user activation left (`SecurityError`), a
- * cross-origin frame or a policy (`NotAllowedError`). The download still works, so it is used.
+ * cross-origin frame or a policy (`NotAllowedError`).
  */
 const esRechazo = (error: unknown): boolean => error instanceof DOMException && (error.name === 'SecurityError' || error.name === 'NotAllowedError');
+/** No user activation left: no picker and no `<input type=file>` will open until the next click. */
+const sinActivacion = (error: unknown): boolean => error instanceof DOMException && error.name === 'SecurityError';
+/** The remembered file is gone (moved, deleted) or no longer writable: ask where instead. */
+const archivoPerdido = (error: unknown): boolean => error instanceof DOMException && (error.name === 'NotFoundError' || error.name === 'NotAllowedError');
+
+/** The file's modification time, or `null` when it cannot be read (gone, no permission). */
+async function modificado(handle: ManejadorArchivo): Promise<number | null> {
+  try { return (await handle.getFile()).lastModified; } catch { return null; }
+}
 
 /** Write access to `handle`, asking for it if needed (a launched file starts read-only). */
 async function puedeEscribir(handle: ManejadorArchivo): Promise<boolean> {
@@ -196,6 +207,16 @@ function descargar(datos: BlobPart, nombre: string, tipo: string): void {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Where Save writes back (#573). `modificado` is the file's `lastModified` when this window last
+ * read or wrote it (`null`: unknown, not checked): if it changed since — another window of the
+ * app, or another program, saved it — Save refuses instead of overwriting that work.
+ */
+interface Destino { readonly handle: ManejadorArchivo; readonly projectId: string; readonly modificado: number | null }
+
+/** What `escribir` did: `rechazado` is a picker the browser refused (no user activation, policy). */
+type Escritura = 'escrito' | 'cancelado' | 'sin-api' | 'rechazado';
+
 export class BrowserStore implements ProjectSessionStore {
   private project: ProjectDocument | undefined;
   private readonly procesos: Map<string, ProcessData>;
@@ -209,7 +230,7 @@ export class BrowserStore implements ProjectSessionStore {
    * Access API; kept in memory only, so after a reload the first Save asks where again. A Save of
    * a different project (New, a gallery example, an import) never reuses it.
    */
-  private destino: { readonly handle: ManejadorArchivo; readonly projectId: string } | null = null;
+  private destino: Destino | null = null;
   /** The destination before the last open, for `undoOpen`. */
   private destinoPrevio: BrowserStore['destino'] = null;
 
@@ -274,8 +295,13 @@ export class BrowserStore implements ProjectSessionStore {
     return archivo === null ? null : { xml: await archivo.text(), name: archivo.name };
   }
 
+  /**
+   * New: with the File System Access API it asks where to save the new project. When the browser
+   * refuses the dialog (no user activation left, e.g. after «Save and continue» used it) the
+   * project opens unsaved instead of downloading a blank file; its first Save asks where.
+   */
   async createProject(document: ProjectDocument): Promise<ProjectDocument | null> {
-    return this.saveProject(document);
+    return this.guardarProyecto(document, false, true);
   }
 
   /**
@@ -288,13 +314,18 @@ export class BrowserStore implements ProjectSessionStore {
   async openProject(): Promise<ProjectDocument | null> {
     const { showOpenFilePicker } = selectores();
     if (showOpenFilePicker !== undefined) {
+      let elegidos: ManejadorArchivo[] | null = null;
       try {
-        const [handle] = await showOpenFilePicker.call(globalThis, { types: [TIPO_LILA, TIPO_LILA_JSON] });
-        return handle === undefined ? null : await this.openHandle(handle);
+        elegidos = await showOpenFilePicker.call(globalThis, { types: [tipoLila(), tipoLilaJson()] });
       } catch (error) {
         if (esCancelacion(error)) return null;
+        // No user activation left (the save dialog of «Save and continue» just used it): the
+        // file input needs one too and would never answer, holding the I/O lock for good. The
+        // user clicks Open again.
+        if (sinActivacion(error)) return null;
         if (!esRechazo(error)) throw error;
       }
+      if (elegidos !== null) return elegidos[0] === undefined ? null : this.openHandle(elegidos[0]);
     }
     const file = await elegirArchivo('.lila,.lila.json,.json');
     if (file === null) return null;
@@ -309,10 +340,11 @@ export class BrowserStore implements ProjectSessionStore {
    * (#573); a `.lila.json` is not — Save turns it into a `.lila`, which is a new file.
    */
   async openHandle(handle: ManejadorArchivo): Promise<ProjectDocument> {
-    const doc = await leerProyecto(await handle.getFile());
+    const file = await handle.getFile();
+    const doc = await leerProyecto(file);
     this.destinoPrevio = this.destino;
     this.destino = handle.name.toLowerCase().endsWith(LILA_EXT) && handle.createWritable !== undefined
-      ? { handle, projectId: doc.id } : null;
+      ? { handle, projectId: doc.id, modificado: file.lastModified } : null;
     return doc;
   }
 
@@ -330,14 +362,18 @@ export class BrowserStore implements ProjectSessionStore {
    * With the File System Access API (#573) Save writes the `.lila` it opened or last saved, and
    * the first Save of a project — or «Save as» — asks where with the system's save dialog; closing
    * it is a cancel (`null`). Without the API, or when the browser refuses the picker, it downloads
-   * a new copy, as it always has.
+   * a new copy, as it always has: what the user asked to save is never left unsaved.
    */
   async saveProject(document: ProjectDocument, options?: { saveAs?: boolean }): Promise<ProjectDocument | null> {
+    return this.guardarProyecto(document, options?.saveAs === true, false);
+  }
+
+  private async guardarProyecto(document: ProjectDocument, saveAs: boolean, nuevo: boolean): Promise<ProjectDocument | null> {
     const snapshot = structuredClone(readProject(document));
     const datos = encodeLila(snapshot);
-    const escrito = await this.escribir(snapshot, datos, options?.saveAs === true);
+    const escrito = await this.escribir(snapshot, datos, saveAs);
     if (escrito === 'cancelado') return null;
-    if (escrito === 'sin-api') descargar(datos, `${snapshot.name}${LILA_EXT}`, LILA_MIME);
+    if (escrito === 'sin-api' || (escrito === 'rechazado' && !nuevo)) descargar(datos, `${snapshot.name}${LILA_EXT}`, LILA_MIME);
     // Commit only after the download was initiated successfully. Keep the returned document
     // separate so callers cannot mutate the last explicit save through a shared reference.
     this.project = structuredClone(snapshot);
@@ -349,22 +385,41 @@ export class BrowserStore implements ProjectSessionStore {
   }
 
   /** Writes `datos` to the remembered `.lila` or to a new one the user picks (#573). */
-  private async escribir(snapshot: ProjectDocument, datos: Uint8Array<ArrayBuffer>, saveAs: boolean): Promise<'escrito' | 'cancelado' | 'sin-api'> {
+  private async escribir(snapshot: ProjectDocument, datos: Uint8Array<ArrayBuffer>, saveAs: boolean): Promise<Escritura> {
     const { showSaveFilePicker } = selectores();
     if (showSaveFilePicker === undefined) return 'sin-api';
-    let handle = !saveAs && this.destino?.projectId === snapshot.id ? this.destino.handle : null;
-    if (handle !== null && !await puedeEscribir(handle)) handle = null;
-    if (handle === null) {
+    const previo = !saveAs && this.destino?.projectId === snapshot.id ? this.destino : null;
+    let handle: ManejadorArchivo | null = null;
+    let escritura: EscrituraArchivo | null = null;
+    if (previo !== null) {
+      const ahora = await modificado(previo.handle);
+      // Saved elsewhere since this window read it: refuse rather than overwrite that work.
+      if (ahora !== null && previo.modificado !== null && ahora !== previo.modificado) {
+        throw new Error(strings().almacen.errorCambioExternoWeb(previo.handle.name));
+      }
+      // Gone (moved, deleted) or not writable any more: ask where, as on a first save.
+      if (ahora !== null && await puedeEscribir(previo.handle)) {
+        try {
+          escritura = await previo.handle.createWritable!();
+          handle = previo.handle;
+        } catch (error) {
+          if (!archivoPerdido(error)) throw error;
+        }
+      }
+    }
+    if (handle === null || escritura === null) {
+      let elegido: ManejadorArchivo;
       try {
-        handle = await showSaveFilePicker.call(globalThis, { suggestedName: `${snapshot.name}${LILA_EXT}`, types: [TIPO_LILA] });
+        elegido = await showSaveFilePicker.call(globalThis, { suggestedName: `${snapshot.name}${LILA_EXT}`, types: [tipoLila()] });
       } catch (error) {
         if (esCancelacion(error)) return 'cancelado';
-        if (esRechazo(error)) return 'sin-api';
+        if (esRechazo(error)) return 'rechazado';
         throw error;
       }
-      if (handle.createWritable === undefined) return 'sin-api';
+      if (elegido.createWritable === undefined) return 'sin-api';
+      handle = elegido;
+      escritura = await elegido.createWritable();
     }
-    const escritura = await handle.createWritable!();
     try {
       await escritura.write(datos);
       await escritura.close();
@@ -373,7 +428,7 @@ export class BrowserStore implements ProjectSessionStore {
       await escritura.abort?.().catch(() => undefined);
       throw error;
     }
-    this.destino = { handle, projectId: snapshot.id };
+    this.destino = { handle, projectId: snapshot.id, modificado: await modificado(handle) };
     return 'escrito';
   }
 

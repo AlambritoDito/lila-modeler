@@ -422,7 +422,9 @@ describe('BrowserStore', () => {
       const h = {
         name,
         escrito: [] as Uint8Array[],
-        getFile: vi.fn(async () => new File([contenido], name)),
+        /** The file's `lastModified`: moves on with every write, like a disk. */
+        mtime: 1_000,
+        getFile: vi.fn(async () => new File([contenido], name, { lastModified: h.mtime })),
         queryPermission: vi.fn(async () => permiso),
         requestPermission: vi.fn(async () => respuesta),
         abort: vi.fn(async () => undefined),
@@ -434,7 +436,7 @@ describe('BrowserStore', () => {
               if (h.falla) throw new Error('disk full');
               pendiente = datos as Uint8Array;
             },
-            close: async () => { if (pendiente) h.escrito.push(pendiente); },
+            close: async () => { if (pendiente) { h.escrito.push(pendiente); h.mtime += 1_000; } },
             abort: h.abort,
           };
         }),
@@ -569,6 +571,75 @@ describe('BrowserStore', () => {
       const store = new BrowserStore();
       await expect(store.saveProject(DOC)).resolves.toEqual(DOC);
       expect(clic).toHaveBeenCalledTimes(1);
+    });
+
+    it('an open picker refused for lack of user activation is a cancel, not a file input that never answers', async () => {
+      vi.stubGlobal('showOpenFilePicker', vi.fn(async () => { throw new DOMException('Must be handling a user gesture', 'SecurityError'); }));
+      await expect(new BrowserStore().openProject()).resolves.toBeNull();
+      expect(document.body.querySelector('input[type="file"]')).toBeNull();
+    });
+
+    it('New with the save dialog refused (no user activation) opens unsaved instead of downloading', async () => {
+      const destino = handle('Pedido.lila', '');
+      const guardarComo = vi.fn()
+        .mockRejectedValueOnce(new DOMException('Must be handling a user gesture', 'SecurityError'))
+        .mockResolvedValueOnce(destino);
+      vi.stubGlobal('showSaveFilePicker', guardarComo);
+      const store = new BrowserStore();
+      await expect(store.createProject(DOC)).resolves.toEqual(DOC);
+      expect(clic).not.toHaveBeenCalled();
+      // Its first Save asks where.
+      await store.saveProject(DOC);
+      expect(guardarComo).toHaveBeenCalledTimes(2);
+      expect(destino.escrito).toHaveLength(1);
+    });
+
+    it('a file saved elsewhere since it was opened (another window) is not overwritten', async () => {
+      const archivo = handle('Pedido.lila', encodeLila(DOC));
+      const otro = handle('Copia.lila', '');
+      vi.stubGlobal('showOpenFilePicker', vi.fn(async () => [archivo]));
+      const guardarComo = vi.fn(async () => otro);
+      vi.stubGlobal('showSaveFilePicker', guardarComo);
+      const store = new BrowserStore();
+      await store.openProject();
+      await store.saveProject(DOC);
+      expect(archivo.escrito).toHaveLength(1);
+      archivo.mtime += 5_000; // Another window saved it.
+      await expect(store.saveProject({ ...DOC, name: 'Mío' })).rejects.toThrow(/changed outside this window/);
+      expect(archivo.escrito).toHaveLength(1);
+      expect(guardarComo).not.toHaveBeenCalled();
+      expect(store.restoreSession()).toEqual(DOC);
+      // «Save as» still keeps this window's version in another file.
+      await store.saveProject({ ...DOC, name: 'Mío' }, { saveAs: true });
+      expect(otro.escrito).toHaveLength(1);
+    });
+
+    it.each(['NotFoundError', 'NotAllowedError'])('a remembered file that cannot be written (%s) asks where instead', async (nombre) => {
+      const archivo = handle('Pedido.lila', encodeLila(DOC));
+      const otro = handle('Pedido.lila', '');
+      vi.stubGlobal('showOpenFilePicker', vi.fn(async () => [archivo]));
+      const guardarComo = vi.fn(async () => otro);
+      vi.stubGlobal('showSaveFilePicker', guardarComo);
+      const store = new BrowserStore();
+      await store.openProject();
+      archivo.createWritable.mockRejectedValueOnce(new DOMException('moved', nombre));
+      await expect(store.saveProject(DOC)).resolves.toEqual(DOC);
+      expect(guardarComo).toHaveBeenCalledTimes(1);
+      expect(otro.escrito).toHaveLength(1);
+    });
+
+    it('a remembered file that is gone (getFile fails) asks where instead', async () => {
+      const archivo = handle('Pedido.lila', encodeLila(DOC));
+      const otro = handle('Pedido.lila', '');
+      vi.stubGlobal('showOpenFilePicker', vi.fn(async () => [archivo]));
+      const guardarComo = vi.fn(async () => otro);
+      vi.stubGlobal('showSaveFilePicker', guardarComo);
+      const store = new BrowserStore();
+      await store.openProject();
+      archivo.getFile.mockRejectedValueOnce(new DOMException('gone', 'NotFoundError'));
+      await store.saveProject(DOC);
+      expect(archivo.createWritable).not.toHaveBeenCalled();
+      expect(otro.escrito).toHaveLength(1);
     });
 
     it('a failed write aborts the swap file, rejects, and keeps the last save', async () => {
