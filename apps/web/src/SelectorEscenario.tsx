@@ -77,6 +77,8 @@ export function SelectorEscenario(props: SelectorEscenarioProps): React.JSX.Elem
   /** The scenario whose name is being edited (right after Duplicate, or from «Rename»). */
   const [editando, setEditando] = useState<string | null>(null);
   const [borrador, setBorrador] = useState('');
+  const editandoRef = useRef<string | null>(null);
+  editandoRef.current = editando;
   const raiz = useRef<HTMLDivElement>(null);
   const boton = useRef<HTMLButtonElement>(null);
   const campo = useRef<HTMLInputElement>(null);
@@ -106,7 +108,9 @@ export function SelectorEscenario(props: SelectorEscenarioProps): React.JSX.Elem
     setEditando(id);
   }
   function confirmarNombre(): void {
-    const id = editando;
+    // Enter and the blur that follows it both land here: only the first one writes.
+    const id = editandoRef.current;
+    editandoRef.current = null;
     setEditando(null);
     if (id === null) return;
     const nombre = borrador.trim();
@@ -139,7 +143,7 @@ export function SelectorEscenario(props: SelectorEscenarioProps): React.JSX.Elem
       if (e.key !== 'Escape' || !abierto) return;
       e.preventDefault();
       e.stopPropagation();
-      if (editando !== null) { setEditando(null); return; }
+      if (editando !== null) { editandoRef.current = null; setEditando(null); return; }
       cerrar();
     }}>
       <button ref={boton} type="button" className="c5-escenario-boton" aria-haspopup="true" aria-expanded={abierto}
