@@ -1,6 +1,9 @@
-import { readFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { readProjectFolder } from '@lila-modeler/engine/project-fs';
 import { expect, it } from 'vitest';
+import { modeloEsperado } from './project';
 import { entradasHuerfanas, prepareSimulation, sinHuerfanas, sinRepetir } from './simulationGate';
 import { setLocale } from './i18n';
 
@@ -177,4 +180,20 @@ it('examples/pedido opened as a folder simulates its scenarios: their model is t
     const prepared = await prepareSimulation(document.model.xml, file, document.scenarios, document.model.name);
     expect(prepared.scenario.model).toBe('model.bpmn');
   }
+});
+
+// The other half of #556: a manifest saved before the fix keeps the folder's name as the model's.
+// The run is still checked against the project's model.bpmn; a loose diagram, against its file.
+it('a manifest saved before #556 with the folder name as the model still simulates (#556)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'lila-556-'));
+  try {
+    cpSync('examples/pedido', dir, { recursive: true });
+    writeFileSync(join(dir, 'lila-project.json'), JSON.stringify({ version: 1, id: 'p', name: 'pedido', model: { id: 'm', name: 'pedido', revision: 0 }, scenarioRevisions: {} }));
+    const { document, loose } = await readProjectFolder(dir);
+    expect(document.model.name).toBe('pedido');
+    await expect(prepareSimulation(document.model.xml, 'as-is.scenario.json', document.scenarios, modeloEsperado(loose, document.model.name))).resolves.toBeDefined();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  expect(modeloEsperado(true, 'ventas.bpmn')).toBe('ventas.bpmn');
 });
