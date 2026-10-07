@@ -77,6 +77,7 @@ export function PanelResumen({ ir, result, scenario, seleccion, onSeleccionar }:
   const S = useStrings();
   const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
   const kpis = kpisDe(result, scenario);
+  const moneda = scenario.run.currency === undefined ? '' : ` ${scenario.run.currency}`;
   const tarea = seleccion !== null && ir.nodes[seleccion]?.type === 'task' ? seleccion : null;
   const m = tarea === null ? undefined : result.elements[tarea];
   const cuello = tarea === null ? undefined : result.bottlenecks.find((b) => b.elementId === tarea);
@@ -90,6 +91,17 @@ export function PanelResumen({ ir, result, scenario, seleccion, onSeleccionar }:
             <dd>{k.texto}</dd>
           </div>
         ))}
+      </dl>
+      {/* Lote M, C6: the two figures the old dock showed without a click, under the design's six. */}
+      <dl className="c6-kpis-extra">
+        <div title={`${S.c6.throughputTitulo} · ${formatNumber(result.process.throughputPerHour)}`}>
+          <dt>{S.c6.throughput}</dt>
+          <dd>{S.c6.throughputValor(formatDisplay(result.process.throughputPerHour))}</dd>
+        </div>
+        <div title={`${S.c6.costoTotalTitulo} · ${formatNumber(result.process.totalCost)}${moneda}`}>
+          <dt>{S.c6.costoTotal}</dt>
+          <dd>{`${formatDisplay(result.process.totalCost)}${moneda}`}</dd>
+        </div>
       </dl>
       <BottleneckCard bottlenecks={result.bottlenecks} ir={ir} unit={unit} onElegir={onSeleccionar} />
       <p className="c5-nota">{S.c5.resultados.cuellosNota}</p>
