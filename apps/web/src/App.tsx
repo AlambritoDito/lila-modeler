@@ -1295,6 +1295,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    */
   function elegirEscenario(id: string): void {
     setEscenarioId(id);
+    soltarSeleccion();
     cancelarCorrida();
     const run = latest.find((r) => r.scenarioName === id);
     setCorrida(run && ir ? { result: run.result, scenario: run.inputs.scenario as unknown as ResolvedScenario, originalIds: ir.source.originalIds } : null);
@@ -1330,8 +1331,19 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // Cualquier padre extends editado invalida también sus descendientes.
     setScenarioRevisions((previous) => nextScenarioRevisions(archivo, escenarios, previous));
     setEscenarioId(archivo);
+    soltarSeleccion();
     cancelarCorrida();
     setCorrida(null);
+  }
+
+  /**
+   * Lote M: another scenario starts with nothing selected. A selection left from the previous one
+   * (the «Approved» flow of Routes) would filter the next step to that element only, so the copy's
+   * Resources would open on «selected element» instead of the resource list.
+   */
+  function soltarSeleccion(): void {
+    setSeleccion(null);
+    modelador?.servicios.selection.select([]);
   }
 
   /**

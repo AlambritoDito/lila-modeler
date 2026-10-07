@@ -71,9 +71,11 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   // Lote M: the last props of the time bar over the Results map.
   replay: null as null | { reproduciendo?: boolean },
   // Lote M, C1: the props the shell wires into the Simulate panel.
-  panel: {} as { onConteoProblemas?: (n: number) => void; onSimular?: () => void; irAlProblema?: number | null; onProblemaAtendido?: () => void; onPasoVisible?: (paso: string) => void },
+  panel: {} as { seleccion?: string | null; onConteoProblemas?: (n: number) => void; onSimular?: () => void; irAlProblema?: number | null; onProblemaAtendido?: () => void; onPasoVisible?: (paso: string) => void },
   // Lote M, C4 and C1: the Simulate layers of the canvas the shell feeds.
-  porcentajes: vi.fn(), etiquetasPaso: vi.fn() }));
+  porcentajes: vi.fn(), etiquetasPaso: vi.fn(),
+  // Lote M, C5b: bpmn-js's `selection.select`, called with `[]` when the shell drops the selection.
+  soltar: vi.fn() }));
 /**
  * The canvas elements the command palette lists (#410), with no box, so the shape palette's
  * drop-target search (which wants a width and a height) still ignores them. Three named shapes,
@@ -154,7 +156,7 @@ vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado, onSeleccion }: { onL
       canvas: { viewbox: () => ({ x: 100, y: 50, width: 800, height: 400 }), getRootElement: () => 'raiz', scrollToElement: vi.fn() },
       create: { start: mocks.arrastrar },
       directEditing: { activate: mocks.editarNombre, isActive: () => mocks.edicionActiva(), complete: () => mocks.completarEdicion() },
-      selection: { get: () => mocks.seleccionados },
+      selection: { get: () => mocks.seleccionados, select: mocks.soltar },
       // Sin elementos con caja, la figura cuelga de la raíz visible, que es lo que aquí permiten
       // las reglas; el reparto entre pools y carriles es de bpmn-js y se prueba en el navegador.
       elementRegistry: { filter: (prueba: (el: object) => boolean) => ELEMENTOS.filter(prueba) },
@@ -4495,4 +4497,18 @@ it('the step labels follow the panel\'s step under each element and are cleared 
   expect(ultima()!.paso).toBe('resources');
   await click(T.app.modos.resultados);
   expect(ultima()).toBeNull();
+});
+
+it('duplicating drops the selection, so the copy\'s next step is not filtered to the old element, and its first ▶ Simulate opens compared (Lote M, C5b)', async () => {
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await act(async () => mocks.onSeleccion('Flow_Si'));
+  expect(mocks.panel.seleccion).toBe('Flow_Si');
+  await act(async () => mocks.panel.onConteoProblemas!(0));
+  await act(async () => container.querySelector<HTMLButtonElement>('.c5-subbarra .c5-duplicar')!.click());
+  expect(mocks.panel.seleccion).toBeNull();
+  expect(mocks.soltar).toHaveBeenLastCalledWith([]);
+  await act(async () => container.querySelector<HTMLButtonElement>('.ejecutar')!.click());
+  for (let i = 0; i < 4; i++) await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  expect(mocks.gate.mock.calls.map((c) => c[1])).toEqual(['as-is (copy).scenario.json', 'as-is.scenario.json']);
+  expect(container.querySelector('[data-mock="comparar"]')!.textContent).toBe('AS-IS vs AS-IS (copy)');
 });
