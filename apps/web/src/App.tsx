@@ -3047,7 +3047,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           right; one wrapping row, so a narrow canvas drops the group below the chips instead of
           stacking one on the other. */}
       <div className="lienzo-arriba">
-        {(validacion.errores > 0 || validacion.avisos > 0) && (
+        {/* In Simulate and Results «Scenario ▾» carries the same chips (QA of #603: not twice). */}
+        {modo === 'modelar' && (validacion.errores > 0 || validacion.avisos > 0) && (
           <div className="chips-validacion">
             {validacion.errores > 0 && (
               <button type="button" className="chip error" title={S.app.irAlPrimerProblema} disabled={validacion.primero === null}

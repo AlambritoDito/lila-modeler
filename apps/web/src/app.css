@@ -4492,4 +4492,18 @@ button.gcal-uso-fila:hover {
 .c5-tiempo .aviso { font-size: 11px; }
 
 /* In Results the time bar takes the bottom of the canvas: the minimap moves above it. */
-.app.modo-resultados .lienzo .djs-minimap { bottom: 92px; }
+.app.modo-resultados .lienzo .djs-minimap { bottom: 56px; }
+
+/* QA of #603: one row at 1280 px — the pools and the legend only where there is room. */
+.c5-tiempo { flex-wrap: nowrap; overflow: hidden; padding: 4px 8px; }
+.c5-tiempo > * { flex-shrink: 0; }
+.c5-tiempo .c5-deslizador { flex: 1 1 80px; min-width: 60px; }
+.c5-tiempo .c5-reloj { overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; }
+.c5-tiempo .c5-velocidad .c5-rotulo { display: none; }
+@media (max-width: 1599px) {
+  .c5-tiempo .c5-ocupacion,
+  .c5-tiempo .c5-leyenda { display: none; }
+}
+@media (max-width: 1399px) {
+  .c5-tiempo > .aviso { display: none; }
+}

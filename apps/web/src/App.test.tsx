@@ -27,6 +27,8 @@ import { version } from '../package.json';
 import { atajoPorId, etiqueta, type AtajoId } from './atajos';
 
 const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.fn(), zoom: vi.fn(), ajustar: vi.fn(), changed: () => {}, scenarioChange: (_raw?: object) => {},
+  // The panel header's Duplicate (C1): what App wires as the panel's `onDuplicar`.
+  duplicarPanel: (_archivo: string, _escenario: Record<string, unknown>) => {},
   // #420: the scenario map the panel last received, to see what the seeding wrote.
   escenarios: {} as Record<string, { elements?: Record<string, unknown>; extends?: string }>,
   // #226: abrir y el overlay son mocks propios para poder fallar una apertura y mirar con qué
@@ -116,8 +118,9 @@ vi.mock('./replay/Replay', () => ({ Replay: (props: { reproduciendo?: boolean })
 vi.mock('./ScenarioPanel', async (importOriginal) => ({ problemasEscenario: () => mocks.problemas,
   // The rail «+» (#397) goes through the real naming, which is pure.
   duplicarEscenario: (await importOriginal<typeof import('./ScenarioPanel')>()).duplicarEscenario,
-  ScenarioPanel: ({ onCambio, escenarios }: { onCambio: (file: string, raw: object) => void; escenarios: typeof mocks.escenarios }) => {
+  ScenarioPanel: ({ onCambio, onDuplicar, escenarios }: { onCambio: (file: string, raw: object) => void; onDuplicar: typeof mocks.duplicarPanel; escenarios: typeof mocks.escenarios }) => {
     mocks.scenarioChange = (raw = {}) => onCambio('as-is.scenario.json', raw);
+    mocks.duplicarPanel = onDuplicar;
     mocks.escenarios = escenarios;
     // A marker, so the detached-window tests (design 2c) can tell which document it landed in.
     return <div data-mock="escenario" />;
@@ -1782,9 +1785,12 @@ it('los chips cuentan errores y avisos y llevan al primer elemento con problemas
     ];
     mocks.scenarioChange();
   });
-  // The canvas chips; the rail of Simulate repeats them in its footer (design 2a).
-  const chips = [...container.querySelectorAll('.zona-modelo .chips-validacion .chip')].map((c) => c.textContent);
-  expect(chips).toEqual([T.app.errores(1), T.app.avisos(1)]);
+  // In Simulate the chips sit next to «Scenario ▾», once (QA of #603); in Model, over the canvas.
+  const chips = (donde: string) => [...container.querySelectorAll(`${donde} .chips-validacion .chip`)].map((c) => c.textContent);
+  expect(chips('.c5-subbarra')).toEqual([T.app.errores(1), T.app.avisos(1)]);
+  expect(chips('.zona-modelo')).toEqual([]);
+  await click(T.app.modos.modelar);
+  expect(chips('.zona-modelo')).toEqual([T.app.errores(1), T.app.avisos(1)]);
   // El disco se pinta por el modelador, no por React: el shell no importa bpmn-js.
   const validacion = mocks.validacion.mock.calls.at(-1)![0] as { marcadores: Map<string, unknown> };
   expect([...validacion.marcadores.keys()]).toEqual(['Task_1']);
@@ -3852,7 +3858,8 @@ const CON_MENSAJE = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:endEvent id="End_A"><bpmn:incoming>F2</bpmn:incoming></bpmn:endEvent>
 <bpmn:sequenceFlow id="F1" sourceRef="Start_A" targetRef="Msg_1"/><bpmn:sequenceFlow id="F2" sourceRef="Msg_1" targetRef="End_A"/>
 </bpmn:process></bpmn:definitions>`;
-const chipsDelLienzo = () => [...container.querySelectorAll('.zona-modelo .chips-validacion .chip')].map((c) => c.textContent);
+// Model: over the canvas; Simulate and Results: next to «Scenario ▾» (QA of #603).
+const chipsDelLienzo = () => [...container.querySelectorAll('.zona-modelo .chips-validacion .chip, .c5-subbarra .chips-validacion .chip')].map((c) => c.textContent);
 
 it('an unsupported construct is a warning in Model, an error in Simulate, and only Run fails (#455)', async () => {
   await click(T.app.modos.modelar);
@@ -4381,4 +4388,13 @@ it('a comparison side that finishes while the person is in another mode leaves t
   await click(T.app.modos.modelar);
   await act(async () => { lenta.resolve(done); await new Promise((listo) => { setTimeout(listo, 50); }); });
   expect(modoActivo()).toBe(T.app.modos.modelar);
+});
+
+it('the Duplicate of the panel header (C1) also records the copy\'s origin: its first run opens compared (QA of #603)', async () => {
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await act(async () => mocks.duplicarPanel('as-is (copy).scenario.json', { version: 1, name: 'AS-IS (copy)', extends: 'as-is.scenario.json' }));
+  await click(T.app.ejecutar);
+  for (let i = 0; i < 4; i++) await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  expect(mocks.gate.mock.calls.map((c) => c[1])).toEqual(['as-is (copy).scenario.json', 'as-is.scenario.json']);
+  expect(container.querySelector('[data-mock="comparar"]')!.textContent).toBe('AS-IS vs AS-IS (copy)');
 });
