@@ -31,8 +31,10 @@ try {
         const rim = Math.round(width * .03), band = ctx.getImageData(rim, rim, width - 2 * rim, 1).data;
         const rgb = [0, 1, 2].map((c) => { let sum = 0; for (let i = c; i < band.length; i += 4) sum += band[i]; return Math.round(sum / (band.length / 4)); });
         ctx.fillStyle = `rgb(${rgb.join(', ')})`; ctx.fillRect(0, 0, width, height);
-        const side = width * .8, inset = img.width * .02;
-        ctx.drawImage(img, inset, inset, img.width - 2 * inset, img.height - inset, (width - side) / 2, height - side, side, side);
+        // A square crop of the master (the rim left out on every side), so the illustration is
+        // only scaled, never stretched.
+        const side = width * .8, inset = img.width * .02, crop = Math.min(img.width, img.height) - 2 * inset;
+        ctx.drawImage(img, inset, inset, crop, crop, (width - side) / 2, height - side, side, side);
       } else if (rounded) {
         // Native desktop tile: 5% outer transparent margin, 20% corner radius.
         const margin = width * .05, side = width - margin * 2;
