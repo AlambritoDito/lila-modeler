@@ -17,8 +17,8 @@ import type { ProcessIR, RunResult } from '@lila-modeler/engine';
 import { parseBpmn } from '@lila-modeler/engine/bpmn';
 import type { ResolvedScenario } from '@lila-modeler/engine/schema';
 
-import { PASO_IDS } from './ids';
-import { PanelResumen } from './PanelResumen';
+import { PASO_IDS, type PasoId } from './ids';
+import { PanelResumen, partirDuracion } from './PanelResumen';
 import { ScenarioPanel } from './ScenarioPanel.js';
 import { setLocale } from './i18n';
 import { en } from './strings.en';
@@ -76,7 +76,7 @@ function sinTiempo(): Json {
   return { ...escenario, elements: elementos };
 }
 
-function Anfitrion({ inicial, enVentana = false, conRanura = true, onElegirPaso }: { inicial: Json; enVentana?: boolean; conRanura?: boolean; onElegirPaso?: () => void }): React.JSX.Element {
+function Anfitrion({ inicial, enVentana = false, conRanura = true, onElegirPaso, pasoInicial = null }: { inicial: Json; enVentana?: boolean; conRanura?: boolean; onElegirPaso?: () => void; pasoInicial?: PasoId | null }): React.JSX.Element {
   const [escenarios, setEscenarios] = useState<Readonly<Record<string, Json>>>({ [ARCHIVO]: inicial });
   const [seleccion, setSeleccion] = useState<string | null>(null);
   return (
@@ -91,6 +91,7 @@ function Anfitrion({ inicial, enVentana = false, conRanura = true, onElegirPaso 
       onSeleccionar={setSeleccion}
       enVentana={enVentana}
       barraPasos={conRanura ? ranura : null}
+      pasoInicial={pasoInicial}
       {...(onElegirPaso === undefined ? {} : { onElegirPaso })}
     />
   );
@@ -204,7 +205,33 @@ describe('the steps in the Simulate sub-bar', () => {
   });
 });
 
+describe('the step survives a remount', () => {
+  it('opens on `pasoInicial` (the shell\'s last step) instead of Times', () => {
+    conRanura();
+    montar(<Anfitrion inicial={asIs()} pasoInicial="calendars" />);
+    expect(abiertoEn(ranura!)).toBe('calendars');
+    expect(titulo()).toBe(en.pasosSim.titulos.calendars);
+  });
+
+  it('the sub-bar tabs drop aria-controls while the panel is hidden behind another tab', () => {
+    conRanura();
+    contenedor = document.createElement('div');
+    document.body.appendChild(contenedor);
+    raiz = createRoot(contenedor);
+    act(() => {
+      raiz!.render(<ScenarioPanel archivo={ARCHIVO} escenarios={{ [ARCHIVO]: asIs() }} onCambio={() => {}} onGuardar={() => {}} onDuplicar={() => {}}
+        ir={ir} seleccion={null} onSeleccionar={() => {}} barraPasos={ranura} cuerpoOculto />);
+    });
+    expect(enRanura().every((t) => !t.hasAttribute('aria-controls'))).toBe(true);
+  });
+});
+
 describe('the Results summary', () => {
+  it('splits a duration into the hours and the exact minutes, for the one-line narrow summary', () => {
+    expect(partirDuracion('187.09 h (11225.46 min)')).toEqual(['187.09 h', '(11225.46 min)']);
+    expect(partirDuracion('8 min')).toEqual(['8 min', '']);
+  });
+
   it('shows throughput and total cost without a click, under the design\'s six KPIs', () => {
     const resultado = {
       process: {

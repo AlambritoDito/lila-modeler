@@ -2075,5 +2075,14 @@ export const es: Strings = {
     throughputTitulo: 'Casos completados por hora simulada, media de las réplicas',
     costoTotal: 'Costo total',
     costoTotalTitulo: 'Lo que costó toda la corrida: recursos y costos fijos de cada caso, terminado o no',
+    pasoLienzo: (n: number): string => `Paso ${n}`,
+    pistasLienzo: {
+      arrivals: 'Elige el evento de inicio',
+      times: 'Elige una tarea para darle duración',
+      routes: 'Edita los % en las etiquetas de los flujos',
+      resources: 'Elige una tarea o el nombre de un carril',
+      calendars: 'Elige una tarea para ver su horario',
+      run: 'Los parámetros de ejecución afectan a todo el escenario',
+    },
   },
 };

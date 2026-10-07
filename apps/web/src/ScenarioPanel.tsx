@@ -399,6 +399,13 @@ export interface ScenarioPanelProps {
   barraPasos?: HTMLElement | null;
   /** Lote M, C6: the person picked a step (a tab, the arrows, Alt+n, previous/next). */
   onElegirPaso?: () => void;
+  /**
+   * Lote M, C6: the step to open on mount — the one the shell last saw (`onPasoVisible`), so
+   * docking, detaching or coming back from Results does not send the person back to Times.
+   */
+  pasoInicial?: PasoId | null;
+  /** Lote M, C6: the panel is mounted but hidden (Properties in front): the tabs control nothing. */
+  cuerpoOculto?: boolean;
 }
 
 /** Default of `problemasExtra`, one array for every render so the memo below keeps its cache. */
@@ -427,6 +434,8 @@ export function ScenarioPanel({
   onPasoVisible,
   barraPasos = null,
   onElegirPaso,
+  pasoInicial = null,
+  cuerpoOculto = false,
 }: ScenarioPanelProps): React.JSX.Element {
   const S = useStrings();
   /**
@@ -434,7 +443,7 @@ export function ScenarioPanel({
    * this panel and of nothing else, and because keeping it here is what makes it survive picking
    * an element on the canvas and a whole run finishing: both of them only re-render the panel.
    */
-  const [paso, setPaso] = useState<PasoId>('times');
+  const [paso, setPaso] = useState<PasoId>(pasoInicial ?? 'times');
   useEffect(() => {
     if (pasoPedido === null) return;
     setPaso(pasoPedido);
@@ -919,7 +928,7 @@ export function ScenarioPanel({
     <div ref={raizRef} className={enVentana ? 'escenario sim-panel compacto' : sinCabecera ? 'escenario sim-panel c6-sin-cabecera' : 'escenario sim-panel'}>
       {barraPasos !== null && createPortal(
         <>
-          <BarraPasos paso={paso} onPaso={irAPaso} conteos={conteos} compacta={false} controla={!enVentana}
+          <BarraPasos paso={paso} onPaso={irAPaso} conteos={conteos} compacta={false} controla={!enVentana && !cuerpoOculto}
             className="pasos c6-pasos" etiquetaBarra={S.c6.pasosBarra} />
           <span className="c6-pista mono">{pista}</span>
         </>,

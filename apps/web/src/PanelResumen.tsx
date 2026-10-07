@@ -64,6 +64,15 @@ export function tituloKpi(k: Kpi, result: RunResult): string {
   return partes.join(' · ');
 }
 
+/**
+ * Lote M, C6: «187.09 h (11225.46 min)» → [«187.09 h», «(11225.46 min)»]. The narrow panel shows the
+ * first part only, on one line (the whole value is in the `title`); a wide one shows both.
+ */
+export function partirDuracion(texto: string): [string, string] {
+  const i = texto.indexOf(' (');
+  return i < 0 ? [texto, ''] : [texto.slice(0, i), texto.slice(i + 1)];
+}
+
 export interface PanelResumenProps {
   ir: ProcessIR;
   result: RunResult;
@@ -88,7 +97,7 @@ export function PanelResumen({ ir, result, scenario, seleccion, onSeleccionar }:
         {kpis.map((k) => (
           <div key={k.id} title={tituloKpi(k, result)}>
             <dt>{S.c5.resultados.kpis[k.id]}</dt>
-            <dd>{k.texto}</dd>
+            <dd>{partirDuracion(k.texto)[0]}{partirDuracion(k.texto)[1] !== '' && <span className="c6-kpi-paren">{` ${partirDuracion(k.texto)[1]}`}</span>}</dd>
           </div>
         ))}
       </dl>

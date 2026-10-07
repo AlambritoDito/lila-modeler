@@ -2115,5 +2115,14 @@ export const en = {
     throughputTitulo: 'Completed cases per simulated hour, mean over the replications',
     costoTotal: 'Total cost',
     costoTotalTitulo: 'What the whole run cost: resources and fixed costs of every case, finished or not',
+    pasoLienzo: (n: number): string => `Step ${n}`,
+    pistasLienzo: {
+      arrivals: 'Pick the start event',
+      times: 'Pick a task to give it a duration',
+      routes: 'Edit the % on the flow labels',
+      resources: 'Pick a task or the name of a lane',
+      calendars: 'Pick a task to see its schedule',
+      run: 'The run settings apply to the whole scenario',
+    },
   },
 } as const;

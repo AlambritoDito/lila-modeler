@@ -53,7 +53,7 @@ walk that checks the routes, not the simulation) is a Model tool: the button ove
 | Play or pause the tokens (Results only) | `Space` | `Space` |
 
 In Simulate, `←`/`→` move between the step tabs of the bar under the top bar when one of them has the focus (`Home`/`End` jump to the first and last), and
-`Alt+1…6` work in the detached window too, and from Model or Results — or from the main window while the panel is detached — they switch to Simulate on that step; neither they nor `Esc` act while you type in a field. «▶ Simulate» (the panel's, the top bar's and `⌘↩`) takes you to the first
+`Alt+1…6` work in the detached window too, and from Model or Results — or from the main window while the panel is detached — they switch to Simulate on that step; neither they nor `Esc` act while you type in a field. «▶ Simulate» (the top bar's, the one of the detached panel window, the last step's and `⌘↩`) takes you to the first
 error instead of running while the scenario has one — the top bar's button shows how many; warnings («! n» on a step) do not stop it.
 
 `Space` does nothing while you type in a field or when a button has the focus (there it presses

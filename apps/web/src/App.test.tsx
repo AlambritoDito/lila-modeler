@@ -71,7 +71,7 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   // Lote M: the last props of the time bar over the Results map.
   replay: null as null | { reproduciendo?: boolean },
   // Lote M, C1: the props the shell wires into the Simulate panel.
-  panel: {} as { seleccion?: string | null; onConteoProblemas?: (n: number) => void; onSimular?: () => void; irAlProblema?: number | null; onProblemaAtendido?: () => void; onPasoVisible?: (paso: string) => void; barraPasos?: HTMLElement | null; onElegirPaso?: () => void; pasoPedido?: string | null; enVentana?: boolean },
+  panel: {} as { seleccion?: string | null; onConteoProblemas?: (n: number) => void; onSimular?: () => void; irAlProblema?: number | null; onProblemaAtendido?: () => void; onPasoVisible?: (paso: string) => void; barraPasos?: HTMLElement | null; onElegirPaso?: () => void; pasoPedido?: string | null; enVentana?: boolean; pasoInicial?: string | null; cuerpoOculto?: boolean },
   // Lote M, C4 and C1: the Simulate layers of the canvas the shell feeds.
   porcentajes: vi.fn(), etiquetasPaso: vi.fn(),
   // Lote M, C5b: bpmn-js's `selection.select`, called with `[]` when the shell drops the selection.
@@ -4514,6 +4514,58 @@ it('Alt+n in the main window opens Simulate on step n while the panel is detache
     abrir.mockRestore();
     marco.remove();
   }
+});
+
+it('the panel remounts on the step it was on: detaching, docking and coming back from Results (Lote M, C6; QA of #605)', async () => {
+  const marco = document.createElement('iframe');
+  document.body.append(marco);
+  const hijo = marco.contentWindow!;
+  vi.spyOn(hijo, 'close').mockImplementation(() => {});
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(hijo);
+  try {
+    await click(T.app.modos.simular);
+    await act(async () => mocks.panel.onPasoVisible!('resources'));
+    await act(async () => porEtiqueta(T.app.escenarioAcoplado).click());
+    expect(mocks.panel.enVentana).toBe(true);
+    expect(mocks.panel.pasoInicial).toBe('resources');
+    await act(async () => mocks.panel.onPasoVisible!('calendars'));
+    const acoplar = [...hijo.document.querySelectorAll('button')].find((b) => b.textContent === T.app.acoplar)!;
+    await act(async () => { acoplar.dispatchEvent(new (hijo as unknown as typeof globalThis).MouseEvent('click', { bubbles: true })); });
+    expect(mocks.panel.enVentana).toBe(false);
+    expect(mocks.panel.pasoInicial).toBe('calendars');
+    await click(T.app.modos.resultados);
+    await click(T.app.modos.simular);
+    expect(mocks.panel.pasoInicial).toBe('calendars');
+  } finally {
+    abrir.mockRestore();
+    marco.remove();
+  }
+});
+
+it('Simulate shows the step\'s hint over the canvas; Model and Results do not (Lote M, C6, design 1a)', async () => {
+  await click(T.app.modos.simular);
+  await act(async () => mocks.panel.onPasoVisible!('routes'));
+  const chip = container.querySelector('.zona-modelo .c6-chip-lienzo');
+  expect(chip?.textContent).toBe(`${T.c6.pasoLienzo(3)}${T.c6.pistasLienzo.routes}`);
+  await click(T.app.modos.modelar);
+  expect(container.querySelector('.c6-chip-lienzo')).toBeNull();
+});
+
+it('with Properties in front the sub-bar tabs control nothing; Alt+n from the main window focuses the step tab (Lote M, C6)', async () => {
+  await click(T.app.modos.simular);
+  expect(mocks.panel.cuerpoOculto).toBe(false);
+  await click(T.app.pestanas.propiedades);
+  expect(mocks.panel.cuerpoOculto).toBe(true);
+  // The shell's Alt+n (here from Model) focuses the tab the panel draws in the slot once it is the open one.
+  await click(T.app.modos.modelar);
+  expect(await pulsar(document.body, { key: '4', code: 'Digit4', altKey: true })).toBe(true);
+  const tab = document.createElement('button');
+  tab.id = 'sim-paso-resources';
+  tab.setAttribute('aria-selected', 'true');
+  mocks.panel.barraPasos!.append(tab);
+  await act(async () => { await new Promise((r) => setTimeout(r, 80)); });
+  expect(document.activeElement).toBe(tab);
+  tab.remove();
 });
 
 /** Start → XOR «Approved?» → Yes / No → end: one gateway that splits cases. */

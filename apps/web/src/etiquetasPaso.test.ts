@@ -132,7 +132,7 @@ describe('aplicarEtiquetasPaso', () => {
     aplicarEtiquetasPaso(modeler, { paso: 'times', resuelto, ir, unidad: 'min' });
     const de = (id: string) => lista().find((x) => x.id === id)!;
     expect(de('T1').position).toEqual({ left: 0, top: 84 });
-    expect(de('W').position).toEqual({ left: 18, top: -20 });
+    expect(de('W').position).toEqual({ left: 48, top: -20 });
     expect(de('W').html.classList.contains('arriba')).toBe(true);
     expect(de('T1').html.classList.contains('arriba')).toBe(false);
   });

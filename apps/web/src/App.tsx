@@ -49,6 +49,7 @@ import type { Ranuras } from './settings/Apariencia';
 // `writeSettings`); this is the dialog body component of the same name (`settings/Ajustes.tsx`).
 import { Ajustes as AjustesDialogo } from './settings/Ajustes';
 import { About, Karaoke } from './About';
+import { flujosSalientes, marcarSalientes } from './flujosSalientes';
 import { abrirVentanaFlotante, geometriaDe, geometriaValida, VentanaFlotante, type Geometria } from './VentanaFlotante';
 import { Bienvenida } from './Bienvenida';
 import { proyectoDeEjemplo, type EjemploId } from './ejemplos';
@@ -56,7 +57,7 @@ import type { Recent } from '../../desktop/src/bridge.js';
 import { LOCALES, PREFERENCIAS, setLocale, strings, useLocale, useStrings, type Locale, type Preferencia } from './i18n';
 import { ATAJOS, atajoPorId, coincide, etiqueta, MAC, tooltip, type AtajoId, type AtajoPropio } from './atajos';
 import { aPng, descargar, imprimirSvg, nombreArchivo } from './exportarDiagrama';
-import { DENSIDAD_IDS, MODO_IDS, PESTANA_IDS, type Densidad, type ModoId, type PasoId, type PestanaId, type VerboPerdida } from './ids';
+import { DENSIDAD_IDS, MODO_IDS, PASO_IDS, PESTANA_IDS, type Densidad, type ModoId, type PasoId, type PestanaId, type VerboPerdida } from './ids';
 import { datosVistaRapida } from './vistaRapida';
 import { construirEtiquetas } from './etiquetasPorcentaje';
 import { escribirPorcentaje } from './repartoRutas';
@@ -1457,6 +1458,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // `cambiarEscenario` is recreated every render and reads nothing stale that the deps miss.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelador, modo, ir, escenarios, escenarioId, seleccion, pasoVisible, locale]);
+  // Lote M, C6: in Routes, the selected gateway's outgoing flows in the accent colour (design 1b).
+  useEffect(() => {
+    const canvas = modelador?.servicios.canvas;
+    if (canvas === undefined) return;
+    marcarSalientes(canvas, modo === 'simular' && pasoVisible === 'routes' ? flujosSalientes(ir, seleccion) : []);
+  }, [modelador, modo, pasoVisible, ir, seleccion]);
   // «Validate paths» is a Model tool: leaving Model switches it off.
   useEffect(() => { if (modo !== 'modelar') setRutasActivas(false); }, [modo]);
 
@@ -2509,7 +2516,18 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       e.preventDefault();
       e.stopPropagation();
       elegirModo('simular');
-      setPasoPedido(paso.id.slice('paso:'.length) as PasoId);
+      const pedido = paso.id.slice('paso:'.length) as PasoId;
+      setPasoPedido(pedido);
+      // C6 (QA of #605): the focus lands on that step's tab in the sub-bar, like Alt+n docked — once
+      // the bar is drawn and the step selected (the slot mounts a render or two after the mode).
+      let intentos = 0;
+      const luego = (f: () => void): void => { if (typeof requestAnimationFrame === 'function') requestAnimationFrame(f); else setTimeout(f, 16); };
+      const enfocar = (): void => {
+        const tab = document.getElementById(`sim-paso-${pedido}`);
+        if (tab?.getAttribute('aria-selected') === 'true') { tab.focus(); return; }
+        if ((intentos += 1) < 20) luego(enfocar);
+      };
+      luego(enfocar);
       return;
     }
     const a = ATAJOS.find((x) => !('lienzo' in x) && (!soloHija || 'hija' in x) && coincide(x, e, MAC));
@@ -2697,6 +2715,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       onProblemaAtendido={() => { setIrAlProblema(null); }}
       onPasoVisible={setPasoVisible}
       barraPasos={modo === 'simular' ? ranuraPasos : null}
+      pasoInicial={pasoVisible}
+      cuerpoOculto={ventanaEscenario === null && pestana !== 'simulacion'}
       onElegirPaso={() => { if (modo === 'simular') setPestana('simulacion'); }}
       onSeleccionar={(id) => { setSeleccion(id); if (id !== null) modelador?.seleccionar?.(id); else modelador?.servicios.selection.select([]); }}
     />
@@ -3111,6 +3131,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       {/* La esquina inferior derecha del lienzo queda libre para la marca de agua
           «Powered by bpmn.io», que es obligatoria por la licencia de bpmn.io. */}
       <div className="zona-modelo" inert={ioBusy} style={{ visibility: comparando ? 'hidden' : 'visible' }}>
+      {/* Lote M, C6: the step's short hint over the canvas (design 1a, «PASO 2 · Elige una tarea…»). */}
+      {modo === 'simular' && pasoVisible !== null && (
+        <p className="c6-chip-lienzo"><span className="mono">{S.c6.pasoLienzo(PASO_IDS.indexOf(pasoVisible) + 1)}</span>{S.c6.pistasLienzo[pasoVisible]}</p>
+      )}
       {tema === undefined ? (
         <div className="lienzo" />
       ) : (

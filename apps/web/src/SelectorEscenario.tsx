@@ -165,13 +165,13 @@ export function SelectorEscenario(props: SelectorEscenarioProps): React.JSX.Elem
       {(validacion.errores > 0 || validacion.avisos > 0) && (
         <span className="chips-validacion c5-chips" role="group" aria-label={S.c5.escenario.problemas}>
           {validacion.errores > 0 && (
-            <button type="button" className="chip error" title={S.app.irAlPrimerProblema} disabled={validacion.primero === null} onClick={ir}>
-              <span className="punto" />{S.app.errores(validacion.errores)}
+            <button type="button" className="chip error" data-n={validacion.errores} title={S.app.irAlPrimerProblema} disabled={validacion.primero === null} onClick={ir}>
+              <span className="punto" /><span className="c6-chip-largo">{S.app.errores(validacion.errores)}</span>
             </button>
           )}
           {validacion.avisos > 0 && (
-            <button type="button" className="chip" title={S.app.irAlPrimerProblema} disabled={validacion.primero === null} onClick={ir}>
-              <span className="punto" />{S.app.avisos(validacion.avisos)}
+            <button type="button" className="chip" data-n={validacion.avisos} title={S.app.irAlPrimerProblema} disabled={validacion.primero === null} onClick={ir}>
+              <span className="punto" /><span className="c6-chip-largo">{S.app.avisos(validacion.avisos)}</span>
             </button>
           )}
         </span>
