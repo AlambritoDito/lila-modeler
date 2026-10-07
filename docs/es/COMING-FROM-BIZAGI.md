@@ -36,7 +36,8 @@ Dos cosas funcionan distinto que en Bizagi, y las dos a tu favor:
   volver a Tiempos después de Calendarios sin rehacer nada, y la lista de validación del pie del
   panel está viva en todos los pasos.
 
-Los seis pasos son una barra en la cabecera del panel de Simulate. Abre en **Tiempos**, el paso
+Los seis pasos son una barra a todo el ancho de la ventana, justo debajo de la barra superior, junto a
+**Escenario ▾** (en la ventana desacoplada del panel, una barra compacta arriba). Abre en **Tiempos**, el paso
 en el que estás sobrevive a seleccionar elementos en el lienzo y a correr la simulación, y dos cosas
 están en todos los pasos: la lista de validación y **Avanzado: JSON del escenario**, que es donde se
 editan el `name` del escenario, su `description` y todo lo que el formulario no dibuja.

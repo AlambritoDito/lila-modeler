@@ -49,6 +49,7 @@ import type { Ranuras } from './settings/Apariencia';
 // `writeSettings`); this is the dialog body component of the same name (`settings/Ajustes.tsx`).
 import { Ajustes as AjustesDialogo } from './settings/Ajustes';
 import { About, Karaoke } from './About';
+import { flujosSalientes, marcarSalientes } from './flujosSalientes';
 import { abrirVentanaFlotante, geometriaDe, geometriaValida, VentanaFlotante, type Geometria } from './VentanaFlotante';
 import { Bienvenida } from './Bienvenida';
 import { proyectoDeEjemplo, type EjemploId } from './ejemplos';
@@ -56,7 +57,7 @@ import type { Recent } from '../../desktop/src/bridge.js';
 import { LOCALES, PREFERENCIAS, setLocale, strings, useLocale, useStrings, type Locale, type Preferencia } from './i18n';
 import { ATAJOS, atajoPorId, coincide, etiqueta, MAC, tooltip, type AtajoId, type AtajoPropio } from './atajos';
 import { aPng, descargar, imprimirSvg, nombreArchivo } from './exportarDiagrama';
-import { DENSIDAD_IDS, MODO_IDS, PESTANA_IDS, type Densidad, type ModoId, type PasoId, type PestanaId, type VerboPerdida } from './ids';
+import { DENSIDAD_IDS, MODO_IDS, PASO_IDS, PESTANA_IDS, type Densidad, type ModoId, type PasoId, type PestanaId, type VerboPerdida } from './ids';
 import { datosVistaRapida } from './vistaRapida';
 import { construirEtiquetas } from './etiquetasPorcentaje';
 import { escribirPorcentaje } from './repartoRutas';
@@ -712,6 +713,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [irAlProblema, setIrAlProblema] = useState<number | null>(null);
   /** Lote M, C4: the Simulate panel's step on screen (`ScenarioPanel.onPasoVisible`). */
   const [pasoVisible, setPasoVisible] = useState<PasoId | null>(null);
+  /**
+   * Lote M, C6: the slot of the Simulate sub-bar where the panel draws its six named steps (a DOM
+   * node, not a copy of the step: the step stays the panel's own state, see `barraPasos`).
+   */
+  const [ranuraPasos, setRanuraPasos] = useState<HTMLDivElement | null>(null);
   /** Last known geometry of that window; read with the preferences, written when it moves away. */
   const geomEscenario = useRef<Geometria | undefined>(undefined);
   const toggleEscenario = useRef<HTMLButtonElement>(null);
@@ -1452,6 +1458,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // `cambiarEscenario` is recreated every render and reads nothing stale that the deps miss.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelador, modo, ir, escenarios, escenarioId, seleccion, pasoVisible, locale]);
+  // Lote M, C6: in Routes, the selected gateway's outgoing flows in the accent colour (design 1b).
+  useEffect(() => {
+    const canvas = modelador?.servicios.canvas;
+    if (canvas === undefined) return;
+    marcarSalientes(canvas, modo === 'simular' && pasoVisible === 'routes' ? flujosSalientes(ir, seleccion) : []);
+  }, [modelador, modo, pasoVisible, ir, seleccion]);
   // «Validate paths» is a Model tool: leaving Model switches it off.
   useEffect(() => { if (modo !== 'modelar') setRutasActivas(false); }, [modo]);
 
@@ -2411,7 +2423,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * errors, plus the unsupported elements that Model shows as warnings and every other mode, and
    * Run, treats as errors (#455).
    */
-  const panelMontado = ventanaEscenario !== null || (modo !== 'resultados' && pestana === 'simulacion');
+  const panelMontado = ventanaEscenario !== null || modo === 'simular' || (modo !== 'resultados' && pestana === 'simulacion');
   const conteoProblemas = panelMontado
     ? conteoPanel
     : validacion.problemas.filter((p) => p.severidad === 'error').length + (modo === 'modelar' ? problemasModelo.length : 0);
@@ -2494,15 +2506,28 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // `e.key`, not `e.code`: the library reads the typed character, so on Dvorak the physical T
     // types «y» and «t» sits on KeyK (QA of #504, second pass).
     if ((e.key === 't' || e.key === 'T') && (e.altKey || e.ctrlKey || e.metaKey)) e.stopPropagation();
-    // Lote M: Alt+1…6 open a Simulate step from any mode. The panel handles them itself while it is
-    // on screen (Simulate, its tab, or detached); elsewhere the shell switches to Simulate and asks.
-    const pasoEnPantalla = ventanaEscenario !== null || (modo === 'simular' && pestana === 'simulacion');
+    // Lote M: Alt+1…6 open a Simulate step from any mode. The panel handles them itself on its own
+    // document: docked in Simulate (where it is always mounted, C6) and in the detached window.
+    // Elsewhere — Model, Results, or the main window while the panel is detached (QA of #604) —
+    // the shell switches to Simulate and asks the panel for the step, wherever it is.
+    const pasoEnPantalla = soloHija || (ventanaEscenario === null && modo === 'simular');
     const paso = pasoEnPantalla ? undefined : ATAJOS.find((x) => 'panel' in x && coincide(x, e, MAC));
     if (paso !== undefined && !bloqueado() && !(e.target as Element | null)?.closest?.(CAMPO)) {
       e.preventDefault();
       e.stopPropagation();
       elegirModo('simular');
-      setPasoPedido(paso.id.slice('paso:'.length) as PasoId);
+      const pedido = paso.id.slice('paso:'.length) as PasoId;
+      setPasoPedido(pedido);
+      // C6 (QA of #605): the focus lands on that step's tab in the sub-bar, like Alt+n docked — once
+      // the bar is drawn and the step selected (the slot mounts a render or two after the mode).
+      let intentos = 0;
+      const luego = (f: () => void): void => { if (typeof requestAnimationFrame === 'function') requestAnimationFrame(f); else setTimeout(f, 16); };
+      const enfocar = (): void => {
+        const tab = document.getElementById(`sim-paso-${pedido}`);
+        if (tab?.getAttribute('aria-selected') === 'true') { tab.focus(); return; }
+        if ((intentos += 1) < 20) luego(enfocar);
+      };
+      luego(enfocar);
       return;
     }
     const a = ATAJOS.find((x) => !('lienzo' in x) && (!soloHija || 'hija' in x) && coincide(x, e, MAC));
@@ -2689,6 +2714,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       irAlProblema={irAlProblema}
       onProblemaAtendido={() => { setIrAlProblema(null); }}
       onPasoVisible={setPasoVisible}
+      barraPasos={modo === 'simular' ? ranuraPasos : null}
+      pasoInicial={pasoVisible}
+      cuerpoOculto={ventanaEscenario === null && pestana !== 'simulacion'}
+      onElegirPaso={() => { if (modo === 'simular') setPestana('simulacion'); }}
       onSeleccionar={(id) => { setSeleccion(id); if (id !== null) modelador?.seleccionar?.(id); else modelador?.servicios.selection.select([]); }}
     />
   );
@@ -3074,6 +3103,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             onProblema={(id) => { modelador?.seleccionar?.(id); }}
             enVentana={ventanaEscenario !== null ? escenarioId : null}
           />
+          {/* Lote M, C6: the six named steps and the keys' hint, drawn here by the panel (design 1a). */}
+          {modo === 'simular' && <>
+            <span className="c6-separador" aria-hidden="true" />
+            <div ref={setRanuraPasos} className="c6-ranura-pasos" />
+          </>}
           {modo === 'resultados' && <>
             {corridaActual !== undefined && (
               <span className="c5-meta mono">{S.c5.resultados.meta(
@@ -3097,6 +3131,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       {/* La esquina inferior derecha del lienzo queda libre para la marca de agua
           «Powered by bpmn.io», que es obligatoria por la licencia de bpmn.io. */}
       <div className="zona-modelo" inert={ioBusy} style={{ visibility: comparando ? 'hidden' : 'visible' }}>
+      {/* Lote M, C6: the step's short hint over the canvas (design 1a, «PASO 2 · Elige una tarea…»). */}
+      {modo === 'simular' && pasoVisible !== null && (
+        <p className="c6-chip-lienzo"><span className="mono">{S.c6.pasoLienzo(PASO_IDS.indexOf(pasoVisible) + 1)}</span>{S.c6.pistasLienzo[pasoVisible]}</p>
+      )}
       {tema === undefined ? (
         <div className="lienzo" />
       ) : (
@@ -3275,8 +3313,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             </button>
           ))}
         </nav>
-        {pestana === 'simulacion' ? (
-          <div className="simulacion">
+        {/* In Simulate the scenario panel stays mounted behind Properties and Documentation (C6):
+            it draws the sub-bar's steps, so they must not vanish with the tab. */}
+        {(pestana === 'simulacion' || modo === 'simular') && (
+          <div className="simulacion" hidden={pestana !== 'simulacion'}>
             {/* Correr, el progreso y cancelar viven en la barra superior (#237): la acción
                 primaria de la app es una sola y está siempre a la vista. */}
             {sim.tipo === 'error' && (
@@ -3297,7 +3337,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               </div>
             )}
           </div>
-        ) : (
+        )}
+        {pestana !== 'simulacion' && (
           <PanelPropiedades
             key={`${projectId}:${procesos[activo]?.slug ?? ''}`}
             modelador={modelador}

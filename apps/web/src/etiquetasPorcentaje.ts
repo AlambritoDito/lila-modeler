@@ -94,10 +94,13 @@ const estados = new WeakMap<Modeler, EstadoModeler>();
 type Punto = { x: number; y: number };
 interface Conexion {
   waypoints?: Punto[];
+  /** bpmn-js's external label of the flow, when it has one. */
+  label?: unknown;
 }
 interface Caja2D { x: number; y: number; width: number; height: number }
 interface Forma extends Partial<Caja2D> {
   waypoints?: Punto[];
+  labelTarget?: unknown;
   type?: string;
   parent?: unknown;
   hidden?: boolean;
@@ -130,24 +133,28 @@ export function posicionDe(
   if (wps === undefined || wps.length < 2) return null;
   const minX = Math.min(...wps.map((p) => p.x));
   const minY = Math.min(...wps.map((p) => p.y));
-  const [a, b] = [wps[0]!, wps[1]!];
-  const largo = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-  const ux = (b.x - a.x) / largo;
-  const uy = (b.y - a.y) / largo;
   const escala = Math.max(zoom, 1e-3) < 1 ? 1 / zoom : 1;
   const W = ANCHO_PX * escala;
   const H = ALTO_PX * escala;
-  const horizontal = Math.abs(ux) >= Math.abs(uy);
   const candidatos: Caja2D[] = [];
-  for (const d of [6, largo / 2, Math.max(6, largo - 6 - (horizontal ? W : H))]) {
-    const px = a.x + ux * Math.min(d, largo);
-    const py = a.y + uy * Math.min(d, largo);
-    if (horizontal) {
-      const x = ux >= 0 ? px : px - W;
-      candidatos.push({ x, y: py + 5, width: W, height: H }, { x, y: py - 5 - H, width: W, height: H });
-    } else {
-      const y = uy >= 0 ? py : py - H;
-      candidatos.push({ x: px + 5, y, width: W, height: H }, { x: px - 5 - W, y, width: W, height: H });
+  // The first segment first (the box reads as the gateway's exit); the second as a fallback, for a
+  // flow that leaves the gateway and turns right away (C6, QA of #605: «Rejected 22 %» sat on the
+  // flow's own label beside a short first segment).
+  for (const [a, b] of [[wps[0]!, wps[1]!], ...(wps.length > 2 ? [[wps[1]!, wps[2]!]] : [])] as [Punto, Punto][]) {
+    const largo = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const ux = (b.x - a.x) / largo;
+    const uy = (b.y - a.y) / largo;
+    const horizontal = Math.abs(ux) >= Math.abs(uy);
+    for (const d of [6, largo / 2, Math.max(6, largo - 6 - (horizontal ? W : H))]) {
+      const px = a.x + ux * Math.min(d, largo);
+      const py = a.y + uy * Math.min(d, largo);
+      if (horizontal) {
+        const x = ux >= 0 ? px : px - W;
+        candidatos.push({ x, y: py + 5, width: W, height: H }, { x, y: py - 5 - H, width: W, height: H });
+      } else {
+        const y = uy >= 0 ? py : py - H;
+        candidatos.push({ x: px + 5, y, width: W, height: H }, { x: px - 5 - W, y, width: W, height: H });
+      }
     }
   }
   let mejor = candidatos[0]!;
@@ -164,11 +171,13 @@ export function posicionDe(
  * the containers the flow runs inside (pools, lanes, expanded sub-processes: they contain its start),
  * the gateway inflated by its marker, and the boxes already placed.
  */
-function obstaculosDe(registro: ElementRegistry, inicio: Punto, puestos: readonly Caja2D[]): Caja2D[] {
+function obstaculosDe(registro: ElementRegistry, inicio: Punto, puestos: readonly Caja2D[], conCaja: ReadonlySet<unknown> = new Set()): Caja2D[] {
   const todos = (registro as unknown as { getAll?: () => Forma[] }).getAll?.() ?? [];
   const salida: Caja2D[] = [...puestos];
   for (const e of todos) {
     if (e.waypoints !== undefined || e.hidden === true || e.parent === undefined) continue;
+    // The labels of flows that get a box are hidden (`ocultarEtiquetas`): no obstacle.
+    if (e.type === 'label' && conCaja.has(e.labelTarget)) continue;
     if (e.x === undefined || e.y === undefined || e.width === undefined || e.height === undefined) continue;
     const caja = { x: e.x, y: e.y, width: e.width, height: e.height };
     const contiene = inicio.x > caja.x + 1 && inicio.x < caja.x + caja.width - 1 && inicio.y > caja.y + 1 && inicio.y < caja.y + caja.height - 1;
@@ -177,7 +186,8 @@ function obstaculosDe(registro: ElementRegistry, inicio: Punto, puestos: readonl
     // The gateway the flow leaves: its warning marker and selection outline stick out.
     salida.push(toca && e.type !== 'label'
       ? { x: caja.x - MARGEN_FORMA, y: caja.y - MARGEN_FORMA, width: caja.width + 2 * MARGEN_FORMA, height: caja.height + 2 * MARGEN_FORMA }
-      : caja);
+      // A label keeps a few pixels of air too: a box flush against «Rejected» reads as covering it.
+      : e.type === 'label' ? { x: caja.x - 4, y: caja.y - 4, width: caja.width + 8, height: caja.height + 8 } : caja);
   }
   return salida;
 }
@@ -312,7 +322,27 @@ function canvasDe(modeler: Modeler): Canvas | null {
   }
 }
 
+/**
+ * C6 (QA of #605): the flow's own label is hidden while its box is on the canvas — the box already
+ * says the flow's name, and a box beside the label covered half of it. A canvas marker per label.
+ */
+const MARCA_ETIQUETA = 'lila-pct-etiqueta';
+const etiquetasOcultas = new WeakMap<Modeler, unknown[]>();
+
+function ocultarEtiquetas(modeler: Modeler, etiquetas: readonly unknown[]): void {
+  const canvas = canvasDe(modeler) as unknown as { addMarker?: (e: unknown, m: string) => void; removeMarker?: (e: unknown, m: string) => void } | null;
+  for (const e of etiquetasOcultas.get(modeler) ?? []) {
+    try { canvas?.removeMarker?.(e, MARCA_ETIQUETA); } catch { /* gone from the canvas */ }
+  }
+  const hechas: unknown[] = [];
+  for (const e of etiquetas) {
+    try { canvas?.addMarker?.(e, MARCA_ETIQUETA); hechas.push(e); } catch { /* not on this canvas */ }
+  }
+  etiquetasOcultas.set(modeler, hechas);
+}
+
 function quitarTodo(modeler: Modeler, estado: EstadoModeler): void {
+  ocultarEtiquetas(modeler, []);
   const overlays = modeler.get<Overlays>('overlays');
   overlays.remove({ type: OVERLAY_TYPE });
   estado.cajas.clear();
@@ -364,6 +394,15 @@ function aplicar(modeler: Modeler, estado: EstadoModeler, datos: EstadoEtiquetas
   const zoom = estado.zoom;
   /** Boxes placed in this pass, so two boxes do not land on each other either. */
   const puestas: { x: number; y: number; width: number; height: number }[] = [];
+  const conCaja = new Set<unknown>();
+  for (const reparto of datos.repartos) {
+    for (const flujo of reparto.flujos) {
+      const id = idEnLienzo(flujo.id, datos.originalIds, registro);
+      const conexion = id === null ? undefined : registro.get(id);
+      if (conexion !== undefined) conCaja.add(conexion);
+    }
+  }
+  ocultarEtiquetas(modeler, [...conCaja].map((c) => (c as Conexion).label).filter((l) => l !== undefined && l !== null));
 
   for (const reparto of datos.repartos) {
     for (const flujo of reparto.flujos) {
@@ -374,7 +413,7 @@ function aplicar(modeler: Modeler, estado: EstadoModeler, datos: EstadoEtiquetas
       const clave = `${reparto.id}/${flujo.id}`;
       let posicion = estado.posiciones.get(clave);
       if (posicion === undefined) {
-        posicion = posicionDe(conexion, obstaculosDe(registro, wps[0]!, puestas), zoom)!;
+        posicion = posicionDe(conexion, obstaculosDe(registro, wps[0]!, puestas, conCaja), zoom)!;
         estado.posiciones.set(clave, posicion);
       }
       const escala = zoom < 1 ? 1 / zoom : 1;

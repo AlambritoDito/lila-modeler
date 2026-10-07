@@ -64,6 +64,15 @@ export function tituloKpi(k: Kpi, result: RunResult): string {
   return partes.join(' · ');
 }
 
+/**
+ * Lote M, C6: «187.09 h (11225.46 min)» → [«187.09 h», «(11225.46 min)»]. The narrow panel shows the
+ * first part only, on one line (the whole value is in the `title`); a wide one shows both.
+ */
+export function partirDuracion(texto: string): [string, string] {
+  const i = texto.indexOf(' (');
+  return i < 0 ? [texto, ''] : [texto.slice(0, i), texto.slice(i + 1)];
+}
+
 export interface PanelResumenProps {
   ir: ProcessIR;
   result: RunResult;
@@ -77,6 +86,7 @@ export function PanelResumen({ ir, result, scenario, seleccion, onSeleccionar }:
   const S = useStrings();
   const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
   const kpis = kpisDe(result, scenario);
+  const moneda = scenario.run.currency === undefined ? '' : ` ${scenario.run.currency}`;
   const tarea = seleccion !== null && ir.nodes[seleccion]?.type === 'task' ? seleccion : null;
   const m = tarea === null ? undefined : result.elements[tarea];
   const cuello = tarea === null ? undefined : result.bottlenecks.find((b) => b.elementId === tarea);
@@ -87,9 +97,20 @@ export function PanelResumen({ ir, result, scenario, seleccion, onSeleccionar }:
         {kpis.map((k) => (
           <div key={k.id} title={tituloKpi(k, result)}>
             <dt>{S.c5.resultados.kpis[k.id]}</dt>
-            <dd>{k.texto}</dd>
+            <dd>{partirDuracion(k.texto)[0]}{partirDuracion(k.texto)[1] !== '' && <span className="c6-kpi-paren">{` ${partirDuracion(k.texto)[1]}`}</span>}</dd>
           </div>
         ))}
+      </dl>
+      {/* Lote M, C6: the two figures the old dock showed without a click, under the design's six. */}
+      <dl className="c6-kpis-extra">
+        <div title={`${S.c6.throughputTitulo} · ${formatNumber(result.process.throughputPerHour)}`}>
+          <dt>{S.c6.throughput}</dt>
+          <dd>{S.c6.throughputValor(formatDisplay(result.process.throughputPerHour))}</dd>
+        </div>
+        <div title={`${S.c6.costoTotalTitulo} · ${formatNumber(result.process.totalCost)}${moneda}`}>
+          <dt>{S.c6.costoTotal}</dt>
+          <dd>{`${formatDisplay(result.process.totalCost)}${moneda}`}</dd>
+        </div>
       </dl>
       <BottleneckCard bottlenecks={result.bottlenecks} ir={ir} unit={unit} onElegir={onSeleccionar} />
       <p className="c5-nota">{S.c5.resultados.cuellosNota}</p>

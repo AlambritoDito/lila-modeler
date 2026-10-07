@@ -98,9 +98,13 @@ describe('templates', () => {
   });
 
   it('the grid arrows stop at the edges', () => {
+    // Days are columns and hours rows (C6): ←/→ change the day, ↑/↓ the hour.
     expect(celdaVecina(0, 0, 'ArrowLeft')).toBe(celda(0, 0));
+    expect(celdaVecina(0, 0, 'ArrowUp')).toBe(celda(0, 0));
     expect(celdaVecina(6, 23, 'ArrowDown')).toBe(celda(6, 23));
-    expect(celdaVecina(2, 9, 'ArrowUp')).toBe(celda(1, 9));
+    expect(celdaVecina(6, 23, 'ArrowRight')).toBe(celda(6, 23));
+    expect(celdaVecina(2, 9, 'ArrowLeft')).toBe(celda(1, 9));
+    expect(celdaVecina(2, 9, 'ArrowDown')).toBe(celda(2, 10));
     expect(celdaVecina(2, 9, 'End')).toBe(celda(2, 23));
     expect(celdaVecina(2, 9, 'a')).toBeNull();
   });
@@ -436,11 +440,11 @@ it('grid keyboard: one tab stop, arrows move, Space toggles, Shift+arrow paints 
   act(() => {
     primera.focus();
   });
-  for (let i = 0; i < 5; i++) tecla('ArrowDown');
+  for (let i = 0; i < 5; i++) tecla('ArrowRight');
   expect(document.activeElement?.getAttribute('aria-label')).toBe('Saturday 08:00');
   tecla(' ');
-  tecla('ArrowRight', true);
-  tecla('ArrowRight', true);
+  tecla('ArrowDown', true);
+  tecla('ArrowDown', true);
   expect((calendarios()['oficina'] as Json)['intervals']).toEqual([
     { days: ['MON'], from: '08:00', to: '16:00' },
     { days: ['SAT'], from: '08:00', to: '11:00' },

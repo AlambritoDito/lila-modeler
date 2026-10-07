@@ -221,13 +221,14 @@ export function aplicarEtiquetasPaso(modeler: Modeler, entrada: EntradaEtiquetas
     const idLienzo = entrada.originalIds?.[id] ?? id;
     const forma = registro.get(idLienzo) as { width?: number; height?: number } | undefined;
     if (forma === undefined) continue;
-    // A task's label goes under it. An event's goes above it, from its left edge: under an event sit
-    // its own name and, after a splitting gateway, the route percentages (Lote M, C4), and to its
-    // left the label of the flow coming in.
+    // A task's label goes under it. An event's goes above it: under an event sit its own name and,
+    // after a splitting gateway, the route percentages (Lote M, C4). It starts past the event's
+    // right edge, so it clears the flow coming in: its label (QA of #604: «≈ 10 min» stuck to
+    // «Approved») and the share box drawn above a short flow (QA of #605).
     const arriba = entrada.ir.nodes[id]?.type !== 'task';
     overlays.add(idLienzo, TIPO, {
       html: html(etiqueta, arriba),
-      position: arriba ? { left: 0, top: -18 } : { left: 0, top: (forma.height ?? 0) + 4 },
+      position: arriba ? { left: Math.round(forma.width ?? 0) + 12, top: -20 } : { left: 0, top: (forma.height ?? 0) + 4 },
     });
   }
 }

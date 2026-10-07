@@ -2067,4 +2067,22 @@ export const es: Strings = {
     problemasPendientes: (n: number): string => (n === 1 ? '1 problema impide simular' : `${n} problemas impiden simular`),
     compararConEscenario: (nombre: string): string => `Comparar con ${nombre}`,
   },
+  /** Lote M, C6: the Simulate sub-bar's steps and the Results summary's two extra figures. */
+  c6: {
+    pasosBarra: 'Pasos de la simulación',
+    throughput: 'Throughput',
+    throughputValor: (porHora: string): string => `${porHora} / h`,
+    throughputTitulo: 'Casos completados por hora simulada, media de las réplicas',
+    costoTotal: 'Costo total',
+    costoTotalTitulo: 'Lo que costó toda la corrida: recursos y costos fijos de cada caso, terminado o no',
+    pasoLienzo: (n: number): string => `Paso ${n}`,
+    pistasLienzo: {
+      arrivals: 'Elige el evento de inicio',
+      times: 'Elige una tarea para darle duración',
+      routes: 'Edita los % en las etiquetas de los flujos',
+      resources: 'Elige una tarea o el nombre de un carril',
+      calendars: 'Elige una tarea para ver su horario',
+      run: 'Los parámetros de ejecución afectan a todo el escenario',
+    },
+  },
 };

@@ -1891,7 +1891,11 @@ button.rec-fila.error {
    porque el gesto de pintar es un arrastre y el navegador lo interpretaría como desplazamiento. */
 .calendario {
   display: grid;
-  grid-template-columns: 2.4rem repeat(24, 1fr);
+  /* C6: the week as in the design — days are columns, hours rows. The DOM stays day by day (a
+     label, then its 24 hours), so the grid flows by column: the first column is the hour labels. */
+  grid-auto-flow: column;
+  grid-template-columns: 2rem repeat(7, minmax(0, 1fr));
+  grid-template-rows: auto repeat(24, calc(9px * var(--espacio, 1)));
   gap: 1px;
   margin: 4px 0;
   touch-action: none;
@@ -1907,10 +1911,14 @@ button.rec-fila.error {
 
 .calendario .dia {
   letter-spacing: 0.04em;
+  padding-bottom: 3px;
+  text-align: center;
 }
 
 .calendario .tramo {
-  grid-column: span 3;
+  align-self: start;
+  grid-row: span 3;
+  line-height: 9px;
 }
 
 .calendario .hora {
@@ -1918,7 +1926,8 @@ button.rec-fila.error {
   border: 0;
   border-radius: 0;
   cursor: pointer;
-  height: calc(11px * var(--espacio, 1));
+  height: 100%;
+  min-height: 0;
   padding: 0;
 }
 
@@ -4516,3 +4525,326 @@ button.gcal-uso-fila:hover {
   margin-left: 6px;
   padding: 2px 6px;
 }
+
+/* ===================================================================== *
+ * Lote M, C6: the Simulate sub-bar of design 1a/1b — the full width under the top bar, with
+ * «Scenario ▾», the six named steps and the keys' hint — and the Results summary's extras.
+ * ===================================================================== */
+
+/* Simulate and Results draw their bar across the whole window, over the canvas and the right
+   panel (the left column is empty in both modes). Comparing keeps its own bar inside its view. */
+.app.modo-simular,
+.app.modo-resultados {
+  grid-template-areas:
+    'barra     barra     barra'
+    'subbarra  subbarra  subbarra'
+    'paleta    lienzo    panel'
+    'paleta    dock      panel'
+    'paleta    diagramas panel'
+    'estado    estado    estado';
+}
+
+.app.modo-simular .c5-subbarra {
+  background: var(--bg-elevated);
+  flex-wrap: nowrap;
+  gap: 12px;
+  height: 50px;
+  min-height: 50px;
+  padding: 0 12px;
+  container-type: inline-size;
+}
+
+.app.modo-simular .c5-subbarra .c5-escenario { flex: none; }
+
+.c6-separador {
+  align-self: center;
+  background: var(--border-strong);
+  flex: none;
+  height: 26px;
+  width: 1px;
+}
+
+/* The slot takes what is left; the steps shrink into it, they never push the page sideways. */
+.c6-ranura-pasos {
+  align-items: center;
+  display: flex;
+  flex: 1 1 0;
+  gap: 12px;
+  min-width: 0;
+}
+
+.c6-pasos {
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* The design's separator between two steps. */
+.c6-pasos .paso + .paso::before {
+  background: var(--border-strong);
+  content: '';
+  flex: none;
+  height: 1px;
+  margin-left: -15px;
+  margin-right: 1px;
+  width: 10px;
+}
+
+.c6-pasos .paso {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0;
+  color: var(--fg-primary);
+  cursor: pointer;
+  display: flex;
+  flex: 0 1 auto;
+  font: inherit;
+  gap: 8px;
+  height: 34px;
+  min-width: 0;
+  padding: 0 12px 0 6px;
+  white-space: nowrap;
+}
+
+.c6-pasos .paso + .paso { margin-left: 14px; }
+
+.c6-pasos .paso:hover { background: var(--bg-hover); }
+
+.c6-pasos .paso:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.c6-pasos .paso.activo {
+  background: var(--bg-surface);
+  border-color: var(--accent-primary);
+  font-weight: 700;
+}
+
+.c6-pasos .paso.con-problemas:not(.activo) { border-color: var(--status-error); }
+
+.c6-pasos .paso-num {
+  border: 1px solid var(--border-strong);
+  color: var(--fg-muted);
+  display: grid;
+  flex: none;
+  font: 700 11px/1 var(--font-mono);
+  height: 20px;
+  place-items: center;
+  width: 20px;
+}
+
+.c6-pasos .paso.activo .paso-num {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: var(--fg-onAccent);
+}
+
+/* Narrow windows: the names give way with an ellipsis (never below a few letters), not the page. */
+.c6-pasos .paso-nombre {
+  min-width: 3ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.c6-pasos .paso-ok,
+.c6-pasos .paso-problemas {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.c6-pasos .paso-ok { color: var(--status-success); }
+
+.c6-pasos .paso-problemas { color: var(--status-error); }
+
+.c6-pista {
+  color: var(--fg-muted);
+  flex: none;
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+/* First the hint goes, then the gaps tighten; the six names stay, shortened if they must. */
+@container (max-width: 1400px) {
+  .c6-pista { display: none; }
+}
+
+@container (max-width: 1335px) {
+  .c6-pasos .paso { gap: 5px; padding: 0 6px 0 4px; }
+  .c6-pasos .paso + .paso { margin-left: 4px; }
+  .c6-pasos .paso + .paso::before { display: none; }
+  .app.modo-simular .c5-subbarra .c5-escenario .c5-rotulo { display: none; }
+}
+
+/* Narrower still (1024 px windows and below): Duplicate keeps its icon and title, the chips keep
+   their number (the words stay for screen readers); the six names and their marks stay whole. */
+@container (max-width: 1000px) {
+  .app.modo-simular .c5-subbarra .c5-duplicar { font-size: 0; padding-inline: 8px; }
+  .app.modo-simular .c5-subbarra .c5-duplicar > span { font-size: 14px; }
+  .app.modo-simular .c5-subbarra .c6-chip-largo {
+    clip: rect(0 0 0 0);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+  }
+  .app.modo-simular .c5-subbarra .c5-chips .chip::after { content: attr(data-n); }
+  .app.modo-simular .c5-subbarra .c5-chips .chip { gap: 5px; padding-inline: 6px; }
+}
+
+/* 900 px windows: the ✓ marks go (the «! n» stay), the bar's gaps close, and the open step keeps
+   its whole name; every name still reads whole in English and Spanish. */
+@container (max-width: 980px) {
+  .app.modo-simular .c5-subbarra { gap: 8px; }
+  .c6-ranura-pasos { gap: 8px; }
+  .c6-pasos { gap: 2px; }
+  .c6-pasos .paso { gap: 4px; padding: 0 5px 0 3px; }
+  .c6-pasos .paso + .paso { margin-left: 2px; }
+  .c6-pasos .paso-ok { display: none; }
+  .c6-pasos .paso.activo { flex-shrink: 0; }
+}
+
+/* Docked in Simulate the panel is only the step: its title starts at the top. */
+.sim-panel.c6-sin-cabecera .sim-paso-cabeza { margin-top: 0; }
+
+/* The Results summary's two extra figures, under the six KPIs (QA of #604). */
+.c6-kpis-extra {
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.c6-kpis-extra > div {
+  background: var(--bg-elevated);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 6px 10px;
+}
+
+.c6-kpis-extra dt {
+  color: var(--fg-muted);
+  font: 700 10px/1.2 var(--font-ui);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.c6-kpis-extra dd {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The file and its `extends` are in «Scenario ▾»; docked in Simulate the step comes first. */
+.sim-panel.c6-sin-cabecera > .sim-cuerpo > .escenario-archivo { display: none; }
+
+/* C6 (QA of #605): read-only views get no modelling handles — bpmn-js's context pad and its
+   popup menu stay in Model. */
+.app.modo-simular .lienzo .djs-context-pad,
+.app.modo-resultados .lienzo .djs-context-pad,
+.app.modo-simular .djs-popup,
+.app.modo-resultados .djs-popup {
+  display: none;
+}
+
+/* Results draws the map with its time bar and table, like design 05: no minimap over it, and the
+   time bar ends before the bpmn.io mark (which must stay where it is, see `.bjs-powered-by`). */
+.app.modo-resultados .lienzo .djs-minimap { display: none; }
+.app.modo-resultados .c5-tiempo { right: 84px; }
+
+/* A narrow summary reads each duration on one line: hours, with the exact value in the title. */
+.panel:not(.ancho) .c5-kpis .c6-kpi-paren { display: none; }
+.c5-kpis dd { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* «BASE» is a filled badge, as in the design (scenario button and the compact header). */
+.c5-escenario-boton .insignia-base,
+.sim-panel .insignia-base {
+  background: var(--accent-primary);
+  color: var(--fg-onAccent);
+  font: 700 9px/1 var(--font-ui);
+  letter-spacing: 0.1em;
+  padding: 3px 5px;
+  text-transform: uppercase;
+}
+
+/* C6: a distribution's parameters side by side, as in design 01 («Media (min)  Desv. (min)»): only
+   the nested groups made of plain number fields (no select, sub-group or text area inside). */
+.sim-panel .anidado:not(:has(select, .anidado, .entrada, textarea, .editor-calendario)) {
+  display: grid;
+  gap: 0 8px;
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+}
+
+.sim-panel .anidado:not(:has(select, .anidado, .entrada, textarea, .editor-calendario)) .campo-schema {
+  align-items: center;
+  display: grid;
+  gap: 2px 4px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.sim-panel .anidado:not(:has(select, .anidado, .entrada, textarea, .editor-calendario)) .campo-schema > label {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sim-panel .anidado:not(:has(select, .anidado, .entrada, textarea, .editor-calendario)) .campo-schema > input { text-align: right; }
+
+.sim-panel .anidado:not(:has(select, .anidado, .entrada, textarea, .editor-calendario)) .campo-schema > :not(label, input) {
+  grid-column: 1 / -1;
+}
+
+.sim-panel .anidado:not(:has(select, .anidado, .entrada, textarea, .editor-calendario)) .campo-schema > .unidad {
+  color: var(--fg-muted);
+  font-size: 11px;
+  grid-column: auto;
+}
+
+/* The step's hint over the canvas, top left (design 1a). */
+.c6-chip-lienzo {
+  align-items: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  display: flex;
+  font-size: 12px;
+  gap: 8px;
+  left: 12px;
+  margin: 0;
+  max-width: calc(100% - 24px);
+  padding: 6px 10px;
+  pointer-events: none;
+  position: absolute;
+  top: 10px;
+  z-index: 6;
+}
+
+.c6-chip-lienzo > .mono {
+  color: var(--accent-primary);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* Routes: the outgoing flows of the gateway being split, in the accent colour (bpmn-js writes the
+   stroke inline, hence `!important`). */
+.djs-element.c6-saliente .djs-visual > path {
+  stroke: var(--accent-primary) !important;
+  stroke-width: 2.5px !important;
+}
+
+/* The label of a flow whose share box is on the canvas: the box carries its name (C6). */
+.djs-element.lila-pct-etiqueta { visibility: hidden; }
+
+/* Calendars (C6, QA of #605): the calendar being edited is the editor below, with its name field,
+   so its row in the list is not drawn twice; the list shows the other calendars. */
+.gcal-lista li:has(> .gcal-fila[aria-current='true']) { display: none; }

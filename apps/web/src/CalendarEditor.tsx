@@ -626,8 +626,8 @@ export function CalendarEditor({
         >
           <span />
           {HORAS.filter((hora) => hora % 3 === 0).map((hora) => (
-            // Un rótulo cada tres horas, ocupando las tres columnas: con 24 columnas de 8 px una cifra
-            // de dos dígitos no cabe en la suya y se pisaría con la siguiente.
+            // Un rótulo cada tres horas, ocupando tres filas (C6: las horas son filas, los días
+            // columnas, como en el diseño): una cifra por hora no cabría en filas de 9 px.
             <span key={hora} className="rotulo tramo">
               {hora}
             </span>
@@ -692,18 +692,19 @@ export function CalendarEditor({
 }
 
 /**
- * The cell an arrow key moves to, or `null` for any other key: ←/→ by hour, ↑/↓ by day, Home/End
- * to the ends of the day. It stops at the edges instead of wrapping, as a spreadsheet does.
+ * The cell an arrow key moves to, or `null` for any other key. The grid is a week with the days
+ * as columns and the hours as rows (design 1a/1b, C6): ↑/↓ by hour, ←/→ by day, Home/End to the
+ * ends of the day. It stops at the edges instead of wrapping, as a spreadsheet does.
  */
 export function celdaVecina(dia: number, hora: number, tecla: string): number | null {
   switch (tecla) {
-    case 'ArrowLeft':
-      return celda(dia, Math.max(0, hora - 1));
-    case 'ArrowRight':
-      return celda(dia, Math.min(23, hora + 1));
     case 'ArrowUp':
-      return celda(Math.max(0, dia - 1), hora);
+      return celda(dia, Math.max(0, hora - 1));
     case 'ArrowDown':
+      return celda(dia, Math.min(23, hora + 1));
+    case 'ArrowLeft':
+      return celda(Math.max(0, dia - 1), hora);
+    case 'ArrowRight':
       return celda(Math.min(DIAS.length - 1, dia + 1), hora);
     case 'Home':
       return celda(dia, 0);
