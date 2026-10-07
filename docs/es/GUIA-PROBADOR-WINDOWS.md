@@ -50,14 +50,14 @@ abre **File ▸ Preferences…** (`Ctrl+,`), ve a **General** y pon **Language**
 6. **Abre un ejemplo.** En **Ejemplos**, pulsa **Pedido de restaurante**. Se abre un diagrama con dos
    escenarios listos para correr.
 7. **Corre una simulación.** Pulsa **Simular** en la barra superior y luego **Ejecutar simulación**.
-   Te quedas en Simular y el dock bajo el lienzo muestra los resultados rápidos. Pulsa **Abrir en
-   Resultados** para ver las tablas completas y expórtalas: pulsa **Exportar XLSX**,
+   La app pasa a **Resultados**: el diagrama muestra las esperas y los cuellos de botella, y la tabla
+   de resultados de abajo lista cada tarea. Expórtalas: pulsa **XLSX** en la cabecera de esa tabla,
    elige dónde guardar y abre el archivo en Excel. Comprueba que abre y tiene varias hojas con números.
 8. **Exporta el documento del proceso.** Elige **Archivo ▸ Exportar documento del proceso (Word)…**,
    guarda el archivo y ábrelo en Word. Comprueba que tiene portada, el diagrama y una sección por
    elemento.
-9. **Importa parámetros de escenario desde Excel.** Vuelve a **Simular**. En el panel del escenario,
-   a la derecha, pulsa **Descargar plantilla** y guarda el `.xlsx`. Ábrelo en Excel, cambia un número
+9. **Importa parámetros de escenario desde Excel.** Vuelve a **Simular**. Abre **Escenario ▾** sobre
+   el lienzo, pulsa **Descargar plantilla** y guarda el `.xlsx`. Ábrelo en Excel, cambia un número
    (en la hoja **Elements**, fila **Take order**, columna **min**: ponlo más pequeño), guarda y cierra Excel. De vuelta en Lila Modeler pulsa
    **Importar Excel/CSV…** y elige ese archivo. Un informe lista los cambios por aplicar: comprueba
    que tu cambio está, y pulsa **Aplicar**. Después puedes pulsar **Deshacer importación**. Más en

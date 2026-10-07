@@ -1,6 +1,7 @@
-/* The Simulate dock (#394): its own grid row under the canvas (`app.css`, area `dock`), as tall as
-   `--dock-alto`, which its divider sets inline on `.app`. Square corners and the panel tokens,
-   like the right panel it sits next to. */
+/* The results table under the Results map (Lote M; the Simulate dock of #394 before): its own grid
+   row under the canvas (`app.css`, area `dock`), as tall as `--dock-alto`, which its divider sets
+   inline on `.app`. Collapsed (`.plegada`, ⌘J) only its header row stays. Square corners and the
+   panel tokens, like the right panel it sits next to. */
 .dock-simular {
   background: var(--bg-surface);
   border-top: 1px solid var(--border);
@@ -25,33 +26,6 @@
 .dock-pestanas {
   display: flex;
   gap: 2px;
-}
-
-/* The KPIs take a row of their own above the tabs (`order`), so they read on one line. */
-.dock-kpis {
-  display: flex;
-  flex: 1 1 100%;
-  flex-wrap: wrap;
-  order: -1;
-  padding-top: calc(6px * var(--espacio, 1));
-  font-family: var(--font-mono);
-  font-size: 11px;
-  gap: 4px 16px;
-  margin: 0;
-}
-
-.dock-kpis div {
-  display: flex;
-  gap: 6px;
-}
-
-.dock-kpis dt {
-  color: var(--fg-muted);
-}
-
-.dock-kpis dd {
-  color: var(--fg-primary);
-  margin: 0;
 }
 
 .dock-acciones {
@@ -84,12 +58,6 @@
   margin: 8px 0;
 }
 
-.dock-vacio {
-  align-items: center;
-  display: flex;
-  gap: 12px;
-}
-
 .dock-avisos {
   margin: 0;
   padding-left: 20px;
@@ -112,13 +80,12 @@
   z-index: 1;
 }
 
-.app.sin-dock > .dock-simular {
-  display: none;
+.dock-simular.plegada {
+  height: auto;
 }
 
-/* Alone in its row, it would add 6 px under the canvas: the negative margin makes it take none. */
 .app.sin-dock > .divisor-dock {
-  margin-top: -6px;
+  pointer-events: none;
 }
 
 .divisor-dock:hover,
@@ -138,16 +105,28 @@
   width: 1px;
 }
 
-.dock-vacio .boton {
-  white-space: nowrap;
-}
-
-.dock-cuello .enlace {
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-
 .avisos-resto summary {
   color: var(--fg-muted);
   cursor: pointer;
+}
+
+.c5-tabla-titulo {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.c5-tabla-titulo .c5-nota {
+  color: var(--fg-muted);
+}
+
+.c5-plegar {
+  width: 24px;
+}
+
+.c5-tareas .c5-fila-activa > * {
+  background: var(--bg-hover, var(--bg-elevated));
+}
+
+.c5-tareas .enlace[aria-current='true'] {
+  font-weight: 600;
 }

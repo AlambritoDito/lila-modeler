@@ -263,7 +263,7 @@ it('text fields of the scenario and properties forms are 30 px like the themed s
 
 it('hidden regions collapse with child selectors, and their dividers stay over the canvas edge (#412)', () => {
   // Child selectors only: the detached window is an `.app` too and its `.panel` must stay.
-  const ocultos = bloque('.app.sin-izquierda > .paleta,\n.app.sin-izquierda > .rail-escenarios,\n.app.sin-panel > .panel,\n.app.sin-diagramas > .diagramas,\n.app.sin-estado > .estado');
+  const ocultos = bloque('.app.sin-izquierda > .paleta,\n.app.sin-panel > .panel,\n.app.sin-diagramas > .diagramas,\n.app.sin-estado > .estado');
   expect(ocultos).toContain('display: none');
   expect(appCss).not.toMatch(/\.sin-panel \.panel/);
   expect(bloque('.app.sin-panel')).toContain('grid-template-columns: auto 1fr 0');
@@ -271,7 +271,7 @@ it('hidden regions collapse with child selectors, and their dividers stay over t
   expect(bloque('.app.sin-izquierda > .divisor-izquierdo')).toContain('margin-right: -6px');
 });
 
-it('the left column divider sits on the right edge of the palette or rail, under the menus (#406)', () => {
+it('the left column divider sits on the right edge of the palette, under the menus (#406)', () => {
   const divisor = bloqueDeLinea('.divisor-izquierdo');
   expect(divisor).toContain('grid-area: paleta');
   expect(divisor).toContain('justify-self: end');
@@ -283,9 +283,9 @@ it('the left column divider sits on the right edge of the palette or rail, under
   expect(z).toBeLessThan(Number(/z-index: (\d+)/.exec(bloqueDeLinea('.menu-vista > div'))![1]));
   expect(bloqueDeLinea('.paleta')).toContain('width: var(--paleta-ancho, 236px)');
   expect(bloqueDeLinea('.paleta.compacta')).toContain('width: 48px');
-  expect(bloqueDeLinea('.rail-escenarios')).toContain('width: var(--rail-ancho, 212px)');
-  const rail = bloque('.rail-nombre,\n.rail-texto,\n.rail-sub');
-  for (const d of ['min-width: 0', 'overflow: hidden', 'text-overflow: ellipsis', 'white-space: nowrap']) expect(rail).toContain(d);
+  // The Simulate rail is gone (Lote M): «Scenario ▾» ellipsizes the scenario name instead.
+  const nombre = bloqueDeLinea('.c5-escenario-nombre');
+  for (const d of ['min-width: 0', 'overflow: hidden', 'text-overflow: ellipsis', 'white-space: nowrap']) expect(nombre).toContain(d);
 });
 
 it('the panel toggles swap to the single «View» menu below the measured 1480 px (#412)', () => {
@@ -410,7 +410,7 @@ it('the chrome is not text-selectable, but content still is (#463)', () => {
   const cuerpo = appCss.slice(apertura, cierre);
 
   expect(selectores).toEqual([
-    '.barra', '.menu-archivo', '.menu-vista', '.vista-grupo', '.paleta', '.rail-escenarios',
+    '.barra', '.menu-archivo', '.menu-vista', '.vista-grupo', '.paleta', '.c5-subbarra',
     '.modos', '.pestanas', '.diagramas', '.app > .estado', '.ajustes-nav', '.escenario summary',
     '.escenario-cabecera', '.paso', '.paleta-grupos summary', '.ajustes .grupo > summary',
     '.boton', '.chips-validacion', '.franjas-presets', '.djs-container svg',

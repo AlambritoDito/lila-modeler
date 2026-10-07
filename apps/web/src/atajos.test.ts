@@ -21,7 +21,7 @@ describe('the shortcut map (#413)', () => {
     // exactly the non-canvas entries, so a new one fails to compile there until it is handled.
     expectTypeOf<AtajoPropio | AtajoLienzo>().toEqualTypeOf<AtajoId>();
     expectTypeOf<Extract<AtajoPropio, AtajoLienzo>>().toBeNever();
-    expectTypeOf<'renombrar' | 'modo:rutas' | 'irPanel'>().toExtend<AtajoPropio>();
+    expectTypeOf<'renombrar' | 'modo:resultados' | 'reproducir' | 'irPanel'>().toExtend<AtajoPropio>();
     expect(propias.map((a) => a.id)).toContain('renombrar');
     for (const a of ATAJOS) {
       expect(en.atajos[a.id as keyof typeof en.atajos], a.id).toBeTypeOf('string');
@@ -74,7 +74,15 @@ describe('the shortcut map (#413)', () => {
     expect(tooltip(por('guardarComo'), true)).toBe(' (⇧⌘S)');
     expect(tooltip(por('ajustes'), false)).toBe(' (Ctrl+,)');
     expect(acelerador(por('guardarComo'))).toBe('CmdOrCtrl+Shift+S');
-    expect(acelerador(por('modo:rutas'))).toBe('CmdOrCtrl+6');
+    expect(acelerador(por('modo:resultados'))).toBe('CmdOrCtrl+3');
+    expect(etiqueta(por('reproducir'), true)).toBe('Space');
+  });
+
+  it('Space matches the space bar only, without modifiers (Lote M)', () => {
+    const tecla = (o: Partial<KeyboardEvent>): KeyboardEvent => ({ key: ' ', code: 'Space', metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, repeat: false, ...o }) as KeyboardEvent;
+    expect(coincide(por('reproducir'), tecla({}), true)).toBe(true);
+    expect(coincide(por('reproducir'), tecla({ key: 'a', code: 'KeyA' }), true)).toBe(false);
+    expect(coincide(por('reproducir'), tecla({ metaKey: true }), true)).toBe(false);
   });
 
   it('docs/SHORTCUTS.md lists every key of the map, on both platforms', () => {

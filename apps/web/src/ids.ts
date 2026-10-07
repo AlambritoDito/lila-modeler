@@ -13,8 +13,12 @@
  * id is not a text a person reads.
  */
 
-/** Modes of the top bar, in the order they are painted. */
-export const MODO_IDS = ['modelar', 'simular', 'resultados', 'comparar', 'animar', 'rutas'] as const;
+/**
+ * Modes of the top bar, in the order they are painted. Lote M (owner's decision 2, 2026-10-05) left
+ * three: Results absorbed Compare («Compare with…») and Animate (tokens on the same map), and
+ * Validate paths became a Model tool (the canvas button and ⌘K).
+ */
+export const MODO_IDS = ['modelar', 'simular', 'resultados'] as const;
 export type ModoId = (typeof MODO_IDS)[number];
 
 /** Tabs of the right panel, in the order they are painted. */

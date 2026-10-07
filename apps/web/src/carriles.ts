@@ -120,6 +120,9 @@ export class LilaCarriles {
   private alTerminar: (() => void) | null = null;
   private readonly escape = (e: KeyboardEvent): void => {
     if (e.key !== 'Escape') return;
+    // #581: an Escape meant for an open dialog (⌘K, Settings) is that dialog's: it closes it and
+    // the pick stays on, instead of being swallowed here first.
+    if ((e.target as Element | null)?.closest?.('dialog[open]') != null) return;
     e.preventDefault();
     e.stopPropagation();
     this.cancelar();

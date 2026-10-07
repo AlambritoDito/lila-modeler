@@ -25,8 +25,10 @@ import { Paleta } from './Paleta';
 import { PaletaComandos, type Comando } from './PaletaComandos';
 import { nombreDeTipo, PanelPropiedades } from './PropertiesPanel';
 import { duplicarEscenario, problemasEscenario, ScenarioPanel, type Problema } from './ScenarioPanel';
-import { RailEscenarios } from './RailEscenarios';
-import { DockSimular, type AvisoDock, type PestanaDock } from './DockSimular';
+import { ordenarEscenarios, SelectorEscenario } from './SelectorEscenario';
+import { TablaResultados, type AvisoDock, type PestanaDock } from './DockSimular';
+import { PanelResumen } from './PanelResumen';
+import { MenuComparar, VistaComparar, type OpcionComparar } from './VistaComparar';
 import { ResultsView } from './ResultsView';
 import { graficasDelDocumento, type LogDeCorrida } from './GraficasResultados';
 import { TokenSim } from './TokenSim';
@@ -51,11 +53,12 @@ import { abrirVentanaFlotante, geometriaDe, geometriaValida, VentanaFlotante, ty
 import { Bienvenida } from './Bienvenida';
 import { proyectoDeEjemplo, type EjemploId } from './ejemplos';
 import type { Recent } from '../../desktop/src/bridge.js';
-import { LOCALES, PREFERENCIAS, setLocale, strings, useLocale, useStrings, type Preferencia } from './i18n';
+import { LOCALES, PREFERENCIAS, setLocale, strings, useLocale, useStrings, type Locale, type Preferencia } from './i18n';
 import { ATAJOS, atajoPorId, coincide, etiqueta, MAC, tooltip, type AtajoId, type AtajoPropio } from './atajos';
 import { aPng, descargar, imprimirSvg, nombreArchivo } from './exportarDiagrama';
 import { DENSIDAD_IDS, MODO_IDS, PESTANA_IDS, type Densidad, type ModoId, type PasoId, type PestanaId, type VerboPerdida } from './ids';
 import { datosVistaRapida } from './vistaRapida';
+import { apply as aplicarCarriles } from './carrilClic';
 // Único punto de la SPA que conoce la implementación concreta (LILA-058, ADR-023): el resto
 // del shell habla con `store` solo por el tipo `ProjectStore`. Cambiar de modalidad —
 // `DesktopStore` (LILA-071), `RemoteStore` (LILA-086)— es cambiar esta línea.
@@ -300,12 +303,10 @@ const PANEL_MIN = 300;
 const PANEL_MAX = 520;
 const limitar = (px: number, min: number, max: number): number => Math.min(max, Math.max(min, Math.round(px)));
 const anchoPanel = (px: number): number => limitar(px, PANEL_MIN, PANEL_MAX);
-/** Left column width limits (#406): the shape palette in Model, the scenario rail in Simulate. */
+/** Left column width limits (#406): the shape palette in Model. */
 const PALETA_MIN = 180;
 const PALETA_MAX = 360;
-const RAIL_MIN = 160;
-const RAIL_MAX = 320;
-/** Height limits of the Simulate dock, in px (#394), and the height it starts with. */
+/** Height limits of the results table (the Simulate dock of #394), in px, and the height it starts with. */
 const DOCK_MIN = 120;
 const DOCK_MAX = 640;
 const DOCK_ALTO = 240;
@@ -322,13 +323,14 @@ const PALETA_SALTO = 114;
 
 /**
  * The regions that can be hidden, per mode (#412). `REGIONES` are the four with a toggle in the top
- * bar; the Simulate dock (#394) is hidden with its key, its divider or the command palette.
+ * bar; `dock` is the results table under the Results map (Lote M), collapsed with its ▾ button,
+ * ⌘J, its divider or the command palette.
  */
 type Region = 'izquierda' | 'derecha' | 'diagramas' | 'estado' | 'dock';
 const REGIONES: readonly Region[] = ['izquierda', 'derecha', 'diagramas', 'estado'];
 type Paneles = Record<ModoId, Record<Region, boolean>>;
-/** Modes that draw a left column: the palette in Model, the rail in Simulate. */
-const conIzquierda = (modo: ModoId): boolean => modo === 'modelar' || modo === 'simular';
+/** Modes that draw a left column: the palette in Model (the Simulate rail became «Scenario ▾», Lote M). */
+const conIzquierda = (modo: ModoId): boolean => modo === 'modelar';
 /**
  * Saved visibility, trimmed to the known modes and regions: anything missing or not a boolean is
  * visible, so a corrupt or older value can only show a panel, never lose one.
@@ -457,6 +459,47 @@ type EstadoSim =
   | { tipo: 'simulando'; progreso: SimulationProgress | null }
   | { tipo: 'error'; mensaje: string };
 
+/**
+ * What the Compare mode showed (`CompareView`: every scenario with a current run, the reference
+ * first) plus the summary line of each run, inside Compare's disclosure. Its own component so the
+ * comparison is only computed when it is drawn.
+ */
+function DetalleComparar({ ir, runs, escenarios, locale }: { ir: ProcessIR; runs: readonly StoredRun[]; escenarios: Escenarios; locale: Locale }): React.JSX.Element {
+  const S = useStrings();
+  const resuelto = (r: StoredRun): ResolvedScenario => r.inputs.scenario as unknown as ResolvedScenario;
+  return <>
+    <CompareView ir={ir} comparison={compare(runs.map((r) => r.result), { locale })}
+      entries={runs.map((r) => ({ result: r.result, scenario: resuelto(r) }))}
+      runs={runs.map((r) => runMetaFrom(etiquetaEscenario(r.scenarioName, escenarios), resuelto(r), r.result))}
+      scenarioNames={runs.map((r) => etiquetaEscenario(r.scenarioName, escenarios))}
+      seriesSlots={runs.map((r) => Object.keys(escenarios).indexOf(r.scenarioName))}
+      baseTimeUnit={resuelto(runs[0]!).run.baseTimeUnit ?? 's'} />
+    {runs.map((run) => <p key={run.id} className="c5-nota">{S.app.corridaResumen(
+      etiquetaEscenario(run.scenarioName, escenarios),
+      run.inputs.modelRevision,
+      run.inputs.scenarioRevision,
+      String((run.inputs.scenario.run as Record<string, unknown>).seed ?? 1),
+      String((run.inputs.scenario.run as Record<string, unknown>).currency ?? ''),
+    )}</p>)}
+  </>;
+}
+
+/** A card over the Results map: running, the run failed, or nothing simulated yet (design 05). */
+function Tarjeta({ tono, kicker, titulo, texto, children, lila = false }: { tono: 'acento' | 'error'; kicker: string; titulo: string; texto?: string | undefined; children?: React.ReactNode; lila?: boolean }): React.JSX.Element {
+  return (
+    <div className="c5-tarjeta-fondo">
+      <div role="status" className={`c5-tarjeta ${tono}`}>
+        <div className="c5-tarjeta-cabeza">
+          {lila && <img src={`${import.meta.env.BASE_URL}branding/lila-transparent.png`} alt="" aria-hidden="true" width="48" height="48" />}
+          <div><span className="c5-kicker">{kicker}</span><strong className="c5-tarjeta-titulo">{titulo}</strong></div>
+        </div>
+        {texto !== undefined && <p>{texto}</p>}
+        {children !== undefined && <div className="c5-tarjeta-acciones">{children}</div>}
+      </div>
+    </div>
+  );
+}
+
 export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; bpmnFilesEnabled?: boolean }): React.JSX.Element {
   const S = useStrings();
   const [modelador, setModelador] = useState<Modelador | null>(null);
@@ -467,6 +510,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   /** Whether an align entry would move anything: only in Model, the one mode that edits the layout. */
   const puedeAlinear = (id: AtajoAlinear): boolean => modo === 'modelar' && alineable[id.startsWith('distribuir') ? 'distribuir' : 'alinear'];
   useEffect(() => { if (modelador !== null) finishStartup(); }, [modelador]);
+  // Lote M, C2: a click on a lane's name in the Resources step picks it (carrilClic.ts), and the
+  // panel lists the lanes in their visual order with their names.
+  useEffect(() => (modelador === null ? undefined : aplicarCarriles(modelador)), [modelador]);
   const [estado, setEstado] = useState<EstadoLienzo>({
     zoom: 1,
     elementos: 0,
@@ -600,14 +646,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   /** Width of the right panel (design 2a); the divider drags it and `recordar` keeps it. */
   const [panelAncho, setPanelAncho] = useState(320);
   const arrastre = useRef<{ x: number; ancho: number } | null>(null);
-  /** Left column widths (#406): the palette in Model and the rail in Simulate, each its own. */
+  /** Left column width (#406): the palette in Model. */
   const [paletaAncho, setPaletaAncho] = useState(236);
-  const [railAncho, setRailAncho] = useState(212);
   const arrastreIzquierda = useRef<{ x: number; ancho: number } | null>(null);
-  /** Height of the Simulate dock (#394) and its tab, which survives leaving Simulate. */
+  /** Height of the results table under the Results map (the dock of #394) and its tab. */
   const [dockAlto, setDockAlto] = useState(DOCK_ALTO);
   const arrastreDock = useRef<{ x: number; ancho: number } | null>(null);
-  const [pestanaDock, setPestanaDock] = useState<PestanaDock>('rapidos');
+  const [pestanaDock, setPestanaDock] = useState<PestanaDock>('tareas');
   /** The window height bounds the dock (QA of #394): a saved 640 px must not swallow a small window. */
   const [altoVentana, setAltoVentana] = useState(() => window.innerHeight);
   useEffect(() => {
@@ -684,7 +729,29 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // `corrida` a `null` es lo que "apaga" el overlay al cambiar de escenario o de modelo: no hay
   // una segunda ruta de limpieza que se pueda olvidar de correr.
   const [corrida, setCorrida] = useState<Corrida | null>(null);
+  /** Results' «Heat map» layer (it took the place of the Simulate panel's «Bottlenecks» switch). */
   const [verCuellos, setVerCuellos] = useState(true);
+  /** Results' «Tokens» layer: the time bar and the replay on the same map (it replaced Animate). */
+  const [verTokens, setVerTokens] = useState(true);
+  /** The tokens playing; Space and the bar's button flip it. */
+  const [reproduciendo, setReproduciendo] = useState(false);
+  /**
+   * Compare inside Results (Lote M): `ref` is the reference (left map, the base of every delta),
+   * `otro` the scenario compared with it. A side without a current run is simulated by the effect
+   * below («simulated when picked»); `fallaComparar` holds the side that failed, for its card.
+   */
+  const [comparacion, setComparacion] = useState<{ ref: string; otro: string } | null>(null);
+  const [fallaComparar, setFallaComparar] = useState<{ id: string; mensaje: string } | null>(null);
+  /** The comparison side being simulated right now, if the run in flight is one. */
+  const ladoEnVuelo = useRef<string | null>(null);
+  /** A comparison side whose run was cancelled: it waits on its card for Retry (QA of #603). */
+  const [pausaComparar, setPausaComparar] = useState<string | null>(null);
+  /** Sides already simulated for the comparison at a revision, so a run that fails is not retried in a loop. */
+  const intentosComparar = useRef(new Set<string>());
+  /** The scenario each duplicate came from (this session): its first run opens compared with it. */
+  const origenDuplicado = useRef(new Map<string, string>());
+  /** Model's «Validate paths» (the token walk of bpmn-js-token-simulation, LILA-065), on or off. */
+  const [rutasActivas, setRutasActivas] = useState(false);
   const [sim, setSim] = useState<EstadoSim>({ tipo: 'inactivo' });
   // Corrida en vuelo. `runInWorker` traduce `abort()` a `worker.terminate()` (LILA-059), que es
   // la única forma real de pararla: `simulate` es síncrono y el worker no lee su cola mientras
@@ -876,7 +943,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // Una carpeta sin `*.scenario.json` —un `.bpmn` suelto abierto por doble clic (LILA-072), o
     // una carpeta con el modelo puesto a mano— arranca con el AS-IS por defecto, el mismo de
     // «Nuevo», en vez de dejar el pie con un «escenario desconocido» que el usuario no provocó.
-    const scenarios = Object.keys(doc.scenarios).length === 0 ? defaultScenarios(parsed.ir) : doc.scenarios;
+    // #581: bases first, each followed by what extends it — the engine stores them by file name.
+    const scenarios = Object.keys(doc.scenarios).length === 0 ? defaultScenarios(parsed.ir) : ordenarEscenarios(doc.scenarios);
+    setComparacion(null); setFallaComparar(null); origenDuplicado.current.clear();
     setEscenarios(scenarios); setScenarioRevisions({ ...doc.scenarioRevisions }); setRuns([...doc.runs]);
     const first = Object.keys(scenarios)[0] ?? 'as-is.scenario.json';
     // #420: the first IR of an opened project is a baseline, not a list of new nodes to seed.
@@ -900,7 +969,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     procesoEnLienzo.current = destino.slug;
     revisionRef.current = destino.model.revision; setRevision(destino.model.revision);
     setProcesoId(destino.model.id); setArchivo(destino.model.name);
-    const scenarios = Object.keys(destino.scenarios).length === 0 ? defaultScenarios(parsed.ir) : destino.scenarios;
+    const scenarios = Object.keys(destino.scenarios).length === 0 ? defaultScenarios(parsed.ir) : ordenarEscenarios(destino.scenarios);
+    setComparacion(null); setFallaComparar(null);
     setEscenarios(scenarios); setScenarioRevisions({ ...destino.scenarioRevisions }); setRuns([...destino.runs]);
     const first = Object.keys(scenarios)[0] ?? 'as-is.scenario.json';
     nodosVistos.current = null; conocidos.current.clear(); sembrados.current.clear();
@@ -1194,6 +1264,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
 
   /** Mata la corrida en vuelo, si la hay. Idempotente. */
   function cancelarCorrida(): void {
+    // QA of #603: a comparison side cancelled here waits on its card for Retry.
+    const lado = ladoEnVuelo.current;
+    if (lado !== null && enVuelo.current !== null) {
+      ladoEnVuelo.current = null;
+      for (const k of [...intentosComparar.current]) if (k.startsWith(`${lado}@`)) intentosComparar.current.delete(k);
+      setPausaComparar(lado);
+    }
     enVuelo.current?.abort();
     enVuelo.current = null;
     setSim({ tipo: 'inactivo' });
@@ -1222,7 +1299,20 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     setCorrida(null);
   }
 
-  /** A new scenario (a duplicate, from the panel or the rail) becomes the active one. */
+  /**
+   * «Duplicate» of «Scenario ▾» (#581): the copy extends the active scenario, becomes the active
+   * one with its name ready to edit in the dropdown, and remembers where it came from so its first
+   * run opens compared with it. A copy is made to be changed, so Results gives way to Simulate.
+   */
+  function duplicarActivo(): { archivo: string; nombre: string } {
+    const copia = duplicarEscenario(escenarioId, escenarios[escenarioId] ?? {}, Object.keys(escenarios));
+    anadirEscenario(copia.archivo, copia.escenario);
+    origenDuplicado.current.set(copia.archivo, escenarioId);
+    if (modo === 'resultados') elegirModo('simular');
+    return { archivo: copia.archivo, nombre: String(copia.escenario['name'] ?? copia.archivo) };
+  }
+
+  /** A new scenario (a duplicate, from the dropdown or the panel) becomes the active one. */
   function anadirEscenario(archivo: string, escenario: Record<string, unknown>): void {
     setEscenarios((previos) => ({ ...previos, [archivo]: escenario }));
     // Cualquier padre extends editado invalida también sus descendientes.
@@ -1287,15 +1377,20 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     };
   }
 
+  /** Task ids of the IR: the heat map tints and labels tasks only (the result has no node types). */
+  const tareasIr = useMemo(() => (ir === null ? [] : Object.keys(ir.nodes).filter((id) => ir.nodes[id]!.type === 'task')), [ir]);
   // Único punto donde se pinta o se limpia el overlay. Todo lo que puede cambiarlo —terminar una
   // corrida, elegir otro escenario, abrir otro `.bpmn`, mover el interruptor, remontar el lienzo—
-  // pasa por aquí, y `cuellos` es idempotente, así que repetirlo no acumula nada. En «Validar
-  // rutas» (LILA-065) se apaga: la animación de tokens no convive con la tinta de cuellos.
+  // pasa por aquí, y `cuellos` es idempotente, así que repetirlo no acumula nada. Lote M: it is the
+  // Results heat map, so it shows in Results only (the modelling canvas stays clean), and never
+  // under «Validate paths» (LILA-065), whose token walk does not mix with the tint.
   useEffect(() => {
     // El idioma está en las dependencias porque la etiqueta del overlay se escribe en el lienzo,
     // fuera de React: sin esto se quedaría en el idioma en el que se pintó (LILA-210).
-    modelador?.cuellos(corrida, modo !== 'rutas' && modo !== 'animar' && verCuellos);
-  }, [modelador, corrida, verCuellos, modo, locale]);
+    modelador?.cuellos(corrida === null ? null : { ...corrida, calor: { tareas: tareasIr } }, modo === 'resultados' && verCuellos && !rutasActivas);
+  }, [modelador, corrida, verCuellos, modo, locale, tareasIr, rutasActivas]);
+  // «Validate paths» is a Model tool: leaving Model switches it off.
+  useEffect(() => { if (modo !== 'modelar') setRutasActivas(false); }, [modo]);
 
   /**
    * Errores y avisos de ahora mismo (LILA-209): el lint del escenario activo —la misma lista
@@ -1351,8 +1446,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // Same reason as the overlay for carrying the locale: the `title` of the disc is written by
     // `ValidationMarkers` onto the canvas DOM. The messages inside are the engine's, and since
     // #280 `validacion` is already recomputed in the active locale (see the `useMemo` above).
-    modelador?.validacion(modo === 'rutas' || modo === 'animar' ? null : validacion);
-  }, [modelador, validacion, modo, locale]);
+    modelador?.validacion(rutasActivas ? null : validacion);
+  }, [modelador, validacion, rutasActivas, locale]);
 
   useEffect(() => {
     if (modelador === null) return;
@@ -1467,7 +1562,6 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       setAvanzado(guardadas.avanzado === true);
       if (typeof guardadas.panelAncho === 'number') setPanelAncho(anchoPanel(guardadas.panelAncho));
       if (typeof guardadas.paletaAncho === 'number') setPaletaAncho(limitar(guardadas.paletaAncho, PALETA_MIN, PALETA_MAX));
-      if (typeof guardadas.railAncho === 'number') setRailAncho(limitar(guardadas.railAncho, RAIL_MIN, RAIL_MAX));
       if (typeof guardadas.dockAlto === 'number') setDockAlto(limitar(guardadas.dockAlto, DOCK_MIN, DOCK_MAX));
       panelesRef.current = sanearPaneles(guardadas.paneles);
       setPaneles(panelesRef.current);
@@ -1735,14 +1829,6 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     window.focus();
     toggleResultados.current?.focus();
   }
-  /** «Open in Results»: raises the detached Results window, or switches to the Results mode. */
-  function enfocarResultados(): void {
-    if (ventanaResultados !== null) { ventanaResultados.focus(); return; }
-    // The button pressed (the dock's) goes away with Simulate: the focus goes to the Results view,
-    // not to <body> (QA of #394).
-    flushSync(() => elegirModo('resultados'));
-    document.querySelector<HTMLElement>('section.zona-resultados')?.focus();
-  }
   /**
    * Command palette (#410). Not while a file operation holds the app (`ioBusy`: the canvas and the
    * rail are inert), nor over another modal, the welcome screen or the karaoke: those own the
@@ -1766,7 +1852,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const desdeHija = useRef(false);
   /** The palette's rows, built when it opens: the canvas elements are read at that moment. */
   function comandosPaleta(): Comando[] {
-    const irAModo = (m: ModoId): void => { setModo(m); if (m === 'simular') setPestana('simulacion'); };
+    const irAModo = (m: ModoId): void => elegirModo(m);
     const elementos: Comando[] = serviciosDe(modelador)?.elementRegistry.filter((el) =>
       // Roots have no parent: the process, the collaboration and each collapsed sub-process's plane.
       el.id !== undefined && el.labelTarget === undefined && el.parent !== undefined
@@ -1774,15 +1860,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       .map((el): Comando => ({
         grupo: 'elementos', nombre: el.businessObject?.name || el.businessObject?.text || el.id!, id: el.id!, tipo: nombreDeTipo(el.type ?? ''),
         elegir: () => {
-          // The canvas is hidden in Results and Compare; it has to be on screen before the focus.
-          if (modo === 'resultados' || modo === 'comparar') flushSync(() => setModo('modelar'));
+          // Comparing hides the canvas behind the two maps; it has to be on screen before the focus.
+          if (comparando) flushSync(() => setComparacion(null));
           modelador?.seleccionar?.(el.id!, { centrar: true });
           modelador?.enfocar?.();
         },
       })) ?? [];
     const libre = !ioBusy && modelador !== null;
-    // Zoom, fit and rename act on the canvas, hidden in Results and Compare (the keys skip it too).
-    const conLienzo = modelador !== null && modo !== 'resultados' && modo !== 'comparar';
+    // Zoom, fit and rename act on the canvas, hidden while comparing (the keys skip it too).
+    const conLienzo = modelador !== null && !comparando;
     const corriendo = sim.tipo === 'simulando';
     // The actions are the app's own entries of the shortcut map (#413), with the same labels the
     // Settings → Shortcuts table prints and the same handlers the keys run; modes are their own
@@ -1799,7 +1885,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       accion('ejecutar', libre && !corriendo), accion('cancelar', corriendo),
       accion('zoomMas', conLienzo), accion('zoomMenos', conLienzo), accion('ajustarVista', conLienzo), accion('renombrar', conLienzo),
       ...ALINEAR_IDS.map((id) => accion(id, puedeAlinear(id))),
-      accion('izquierda'), accion('derecha'), accion('diagramas'), accion('estado'), accion('dock', modo === 'simular'),
+      accion('reproducir', modo === 'resultados' && !comparando && replay !== null),
+      accion('izquierda'), accion('derecha'), accion('diagramas'), accion('estado'), accion('dock', modo === 'resultados' && !comparando),
+      // Validate paths (LILA-065) lost its mode (Lote M): a Model tool, here and over the canvas.
+      modelador !== null && { grupo: 'acciones', nombre: S.c5.validarRutas, elegir: () => { elegirModo('modelar'); setRutasActivas(true); } },
       accion('ajustes'),
       // The exports have no key of their own (#451): the File menu's entries, reachable from here too.
       modelador !== null && { grupo: 'acciones', nombre: (DESKTOP ? S.app.menuEscritorio : S.app).exportarSvg, elegir: () => ejecutar('exportarSvg') },
@@ -1815,6 +1904,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       ...Object.keys(escenarios).map((id): Comando => ({
         grupo: 'escenarios', nombre: etiquetaEscenario(id, escenarios), elegir: () => { elegirEscenario(id); irAModo('simular'); },
       })),
+      // Compare (Lote M): from anywhere, straight to Results compared with that scenario.
+      ...opcionesComparar.map((o): Comando => ({ grupo: 'escenarios', nombre: S.c5.compararConEscenario(o.nombre), elegir: () => compararCon(o.id) })),
       ...MODO_IDS.map((m): Comando => ({ grupo: 'modos', nombre: S.app.modos[m], tecla: teclaDe(`modo:${m}`), elegir: () => irAModo(m) })),
       ...acciones.filter((a): a is Comando => a !== false),
     ];
@@ -1942,24 +2033,28 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * `ir.source.originalIds` que sale de ahí es el que deja al overlay pintar sobre los ids que
    * bpmn-js conoce cuando el archivo traía ids no-NCName (ver `BottleneckOverlay.ts`).
    */
-  async function simular(): Promise<void> {
+  async function simular(objetivo: string = escenarioId, paraComparar = false): Promise<void> {
     if (modelador === null) return;
     // A label being typed (bpmn-js opens the editor on every append) is committed first, so Run
     // waits for that edit too instead of losing it and its own results to it (QA S1 of #507).
     // The same for a form field still being typed in (#509): `confirmarEdicionEnCurso`.
     confirmarEdicionEnCurso(serviciosDe(modelador)?.directEditing);
-    if (reparseandoRef.current) { setEjecutarPendiente(true); return; }
+    // A comparison side waits for the reparse by itself (its effect re-runs when it settles).
+    if (reparseandoRef.current) { if (!paraComparar) setEjecutarPendiente(true); return; }
     cancelarCorrida();
     const control = new AbortController();
     enVuelo.current = control;
     setSim({ progreso: null, tipo: 'simulando' });
+    if (paraComparar) { setFallaComparar(null); setPausaComparar(null); }
+    ladoEnVuelo.current = paraComparar ? objetivo : null;
+    let ok = false;
     try {
       const modelRevision = revisionRef.current;
-      const scenarioRevision = scenarioRevisions[escenarioId] ?? 0;
+      const scenarioRevision = scenarioRevisions[objetivo] ?? 0;
       const xml = await modelador.exportar();
       // The language is decided when the run starts and travels with it: a run already stored
       // keeps the language it was produced in (its warnings are data, not text that is repainted).
-      const { ir, scenario, warnings } = await prepareSimulation(xml, escenarioId, escenarios, archivo, { locale });
+      const { ir, scenario, warnings } = await prepareSimulation(xml, objetivo, escenarios, archivo, { locale });
       if (control.signal.aborted || enVuelo.current !== control) return;
       const { result: rawResult, logSample, cycleTimes } = await runInWorker(ir, scenario, {
         locale,
@@ -1980,28 +2075,44 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // The shape and the revisions of a stored run are the engine's (`storedRun`, #538), so a run an
       // agent saves with `lila run --save` is current here exactly when one of ours would be.
       setRuns((previous) => [...previous, storedRun({
-        id: runId, scenarioName: escenarioId, result, xml, modelRevision, scenarioRevision,
+        id: runId, scenarioName: objetivo, result, xml, modelRevision, scenarioRevision,
         scenario: scenario as unknown as Record<string, unknown>,
       })]);
-      setCorrida({ originalIds: ir.source.originalIds, result, scenario });
-      // #394, the owner's decision: a finished run no longer jumps to Results. It lands in Simulate
-      // (Results and Compare stay where they are, they show the new run) with the dock open on
-      // «Quick results»; the full view is one click away (`enfocarResultados`, which raises the
-      // detached Results window when there is one).
-      setModo((m) => (m === 'resultados' || m === 'comparar' ? m : 'simular'));
-      setPestanaDock('rapidos');
-      mostrarRegion('simular', 'dock');
+      if (objetivo === escenarioId) setCorrida({ originalIds: ir.source.originalIds, result, scenario });
+      // Lote M (design 01, «if it ends well it moves to Results by itself»): a finished run lands in
+      // Results, on the map, with the heat map, the bottlenecks, the KPIs and the tokens ready.
+      // This replaces #394's «stay in Simulate with the dock open».
+      // A comparison side lands where the person is: they may have left Results meanwhile.
+      ok = true;
+      if (!paraComparar) { setModo('resultados'); setReproduciendo(false); }
+      // A duplicate's first run opens compared with the scenario it came from (#581, design 06):
+      // Duplicate + the change + Simulate is the whole what-if.
+      const origen = origenDuplicado.current.get(objetivo);
+      if (!paraComparar && origen !== undefined && origen in escenarios) {
+        origenDuplicado.current.delete(objetivo);
+        setComparacion((c) => c ?? { ref: origen, otro: objetivo });
+      }
       setSim({ tipo: 'inactivo' });
     } catch (e: unknown) {
       // Cancelar no es un error que enseñar: quien canceló ya dejó la UI como quería. Se
       // comprueba la señal y no el nombre de la excepción, porque `parseBpmn` puede fallar por
       // su cuenta después de que se haya cancelado.
       if (control.signal.aborted) return;
-      setSim({ mensaje: e instanceof Error ? e.message : String(e), tipo: 'error' });
-      // The dock shows the failure where it is listed (QA of #394).
+      const mensaje = e instanceof Error ? e.message : String(e);
+      // A comparison side that fails is the comparison's card («B has problems»), not the active
+      // scenario's error: Run on the active one did not fail.
+      if (paraComparar) { ok = true; setFallaComparar({ id: objetivo, mensaje }); setSim({ tipo: 'inactivo' }); return; }
+      setSim({ mensaje, tipo: 'error' });
+      // The table lists the failure in its Warnings tab.
       setPestanaDock('avisos');
     } finally {
-      if (enVuelo.current === control) enVuelo.current = null;
+      if (enVuelo.current === control) { enVuelo.current = null; ladoEnVuelo.current = null; }
+      // QA of #603: a comparison side whose run was cancelled (or went stale) must not leave
+      // «Simulating…» on screen forever: it waits on its card for Retry instead of re-running.
+      if (paraComparar && (control.signal.aborted || !ok)) {
+        for (const k of [...intentosComparar.current]) if (k.startsWith(`${objetivo}@`)) intentosComparar.current.delete(k);
+        setPausaComparar(objetivo);
+      }
     }
   }
 
@@ -2012,6 +2123,50 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // `simular` is this render's, the one with the settled scenarios.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reparseando, ejecutarPendiente]);
+
+  /**
+   * «Simulated when picked» (design 06): a side of the comparison with no current run is run here,
+   * one at a time, with its own seed and replications. Each side is tried once per revision of the
+   * model and of that scenario, so a scenario that does not run shows its card instead of looping.
+   */
+  const faltaComparar = comparacion === null ? null
+    : [comparacion.ref, comparacion.otro].find((id) => id in escenarios && !latest.some((r) => r.scenarioName === id)) ?? null;
+  useEffect(() => {
+    if (faltaComparar === null || faltaComparar === pausaComparar || modelador === null || reparseando || sim.tipo === 'simulando') return;
+    const intento = `${faltaComparar}@${revision}:${scenarioRevisions[faltaComparar] ?? 0}`;
+    if (intentosComparar.current.has(intento)) return;
+    intentosComparar.current.add(intento);
+    void simular(faltaComparar, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [faltaComparar, pausaComparar, modelador, reparseando, sim.tipo, revision, scenarioRevisions]);
+
+  /**
+   * «Compare with…» from Results (or ⌘K). Not comparing yet: the active scenario against `elegido`,
+   * and the reference is the one the other descends from (`extends`), or the base scenario, or else
+   * the active one. Already comparing («Choose scenario»): `elegido` replaces the other side.
+   */
+  function compararCon(elegido: string): void {
+    setFallaComparar(null);
+    setPausaComparar(null);
+    intentosComparar.current.clear();
+    if (comparacion !== null) {
+      if (elegido !== comparacion.ref) setComparacion({ ref: comparacion.ref, otro: elegido });
+    } else {
+      const actual = escenarioId;
+      if (elegido === actual) return;
+      const desciende = (hijo: string, padre: string): boolean => {
+        for (let p = escenarios[hijo]?.['extends'], n = 0; typeof p === 'string' && n < 20; p = escenarios[p]?.['extends'], n++) if (p === padre) return true;
+        return false;
+      };
+      const ref = desciende(actual, elegido) || (elegido === baseId && !desciende(elegido, actual)) ? elegido : actual;
+      setComparacion({ ref, otro: ref === elegido ? actual : elegido });
+    }
+    if (modo !== 'resultados') elegirModo('resultados');
+  }
+  /** The entries of «Compare with…»: every scenario not already on screen, «Simulated» or not. */
+  const opcionesComparar: OpcionComparar[] = Object.keys(escenarios)
+    .filter((id) => (comparacion === null ? id !== escenarioId : id !== comparacion.ref && id !== comparacion.otro))
+    .map((id) => ({ id, nombre: etiquetaEscenario(id, escenarios), simulado: latest.some((r) => r.scenarioName === id) }));
 
   /**
    * The diagram as an image (#451): the SVG in the theme's colours, the PNG (2×), the PDF and the
@@ -2103,27 +2258,32 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const visibles = paneles[modo];
   const hayIzquierda = conIzquierda(modo);
   /** The detached scenario window counts as «right panel hidden» while it shows the scenario. */
-  const ocultoPorVentana = ventanaEscenario !== null && pestana === 'simulacion' && modo !== 'animar';
-  const derechaVisible = visibles.derecha && !(ocultoPorVentana && !verConVentana);
+  const ocultoPorVentana = ventanaEscenario !== null && pestana === 'simulacion' && modo !== 'resultados';
+  /** Comparing takes the whole width for the two maps (design 06: no side panel). */
+  const comparando = modo === 'resultados' && comparacion !== null;
+  const derechaVisible = visibles.derecha && !(ocultoPorVentana && !verConVentana) && !comparando;
   /**
    * #419: a failed Run is drawn in the Simulation tab; when that tab is not the one on screen the
    * error goes to the status bar instead, so Run never fails silently and never shows it twice.
    * Everything that hides the tab belongs in this one condition, the hidden right panel (#412)
    * included.
    */
-  const errorSimOculto = sim.tipo === 'error' && (pestana !== 'simulacion' || modo === 'animar' || !derechaVisible) ? sim.mensaje : null;
+  const errorSimOculto = sim.tipo === 'error' && modo !== 'resultados' && (pestana !== 'simulacion' || !derechaVisible) ? sim.mensaje : null;
   /**
    * #430: a Run refused only because of orphan scenario entries (a configured shape was deleted)
    * offers to drop them in the status bar; the scenario panel lists them with the same button.
    * Changing the scenarios clears the failed run (`cambiarEscenario` → `cancelarCorrida`).
    */
   const soloHuerfanas = sim.tipo === 'error' && sim.mensaje.split('\n').every((linea) => linea.startsWith('E-ELEMENTO-DESCONOCIDO:'));
-  // Only in the status bar: with the Simulation tab on screen the scenario panel already offers it.
-  const botonHuerfanas = errorSimOculto !== null && soloHuerfanas && ir !== null && Object.keys(sinHuerfanas(escenarios, ir)).length > 0 && (
+  const quitarHuerfanas = soloHuerfanas && ir !== null && Object.keys(sinHuerfanas(escenarios, ir)).length > 0 && (
     <button type="button" className="boton" onClick={() => {
       for (const [otro, escenario] of Object.entries(sinHuerfanas(escenarios, ir))) cambiarEscenario(otro, escenario);
     }}>{S.escenario.quitarHuerfanas}</button>
   );
+  // Only in the status bar: with the Simulation tab on screen the scenario panel already offers it.
+  const botonHuerfanas = errorSimOculto !== null && quitarHuerfanas;
+  // And on the Results error card, where a failed Run lands when it is pressed from Results.
+  const botonHuerfanasTarjeta = quitarHuerfanas;
   /**
    * An error the status bar is showing right now. A hidden status bar comes back for it: an
    * error nobody can see is worse than a bar the user asked to hide. Errors only — the loose
@@ -2137,14 +2297,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     derecha: derechaVisible,
     diagramas: visibles.diagramas,
     estado: visibles.estado || hayAlerta,
-    dock: modo === 'simular' && visibles.dock,
+    dock: modo === 'resultados' && visibles.dock,
   };
   /**
    * What the toggles show as pressed and flip: what is on screen, except for the status bar, whose
    * toggle keeps showing (and recording) the user's choice while an error forces the bar in.
    */
   const pulsado: Record<Region, boolean> = { ...visible, estado: visibles.estado };
-  /** The Warnings tab of the dock (#394): the live lint, then a failed Run. */
+  /** The Warnings tab of the results table: the live lint, then a failed Run. */
   const avisosDock: AvisoDock[] = [
     ...validacion.problemas.map((p) => ({ mensaje: p.mensaje, severidad: p.severidad })),
     ...(sim.tipo === 'error' ? [{ mensaje: S.app.errorSimular(sim.mensaje), severidad: 'error' as const }] : []),
@@ -2154,10 +2314,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   /** Show or hide `region` in the current mode, and save the whole map. `false` = nothing to do. */
   function alternarRegion(region: Region): boolean {
     if (region === 'izquierda' && !hayIzquierda) return false;
-    if (region === 'dock' && modo !== 'simular') return false;
+    if (region === 'dock' && modo !== 'resultados') return false;
     const mostrar = !pulsado[region];
     // Hiding the region that holds the focus would drop it on `<body>`: it goes to the toggle.
-    if (!mostrar && !(region === 'estado' && hayAlerta) && document.getElementById(ID_REGION[region])?.contains(document.activeElement)) enfocarToggle(region);
+    // The collapsed results table keeps its header, so the focus can stay where it is.
+    if (!mostrar && region !== 'dock' && !(region === 'estado' && hayAlerta) && document.getElementById(ID_REGION[region])?.contains(document.activeElement)) enfocarToggle(region);
     // While detached the right toggle only peeks at the docked panel: the saved choice stays.
     if (region === 'derecha' && ocultoPorVentana) {
       setVerConVentana(mostrar);
@@ -2175,12 +2336,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     setPaneles(siguiente);
     recordar({ paneles: siguiente });
   }
-  const mostrarRegion = (m: ModoId, region: Region): void => fijarRegion(m, region, true);
 
   // --- Shortcuts (#413): one handler per entry of `atajos.ts` that the app owns ---
   function elegirModo(m: ModoId): void {
     setModo(m);
     if (m === 'simular') setPestana('simulacion');
+    if (m !== 'resultados') setReproduciendo(false);
   }
   /** F2: rename the one selected element in place (bpmn-js has no key for it). */
   function renombrar(): void {
@@ -2208,6 +2369,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // The Run button is replaced by Cancel while a run is in flight; the key follows the button.
     ejecutar: () => { if (enVuelo.current === null && modelador !== null) void simular(); },
     cancelar: cancelarCorrida,
+    // Space (Lote M): the tokens on the Results map; nothing elsewhere (`despachar` lets it through).
+    reproducir: () => { if (modo === 'resultados' && !comparando && verTokens && replay !== null) setReproduciendo((r) => !r); },
     zoomMas: () => modelador?.zoom(1.2),
     zoomMenos: () => modelador?.zoom(1 / 1.2),
     ajustarVista: () => modelador?.ajustar(),
@@ -2251,13 +2414,17 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     const conMod = a.tecla.startsWith('Mod+');
     if (!conMod && (e.target as Element | null)?.closest?.(CAMPO)) return;
     if ('ambito' in a && (enVuelo.current === null || menuAbierto())) return;
-    // Results and Compare hide the canvas: its keys go back to the browser (page zoom, WCAG 1.4.4).
-    if (a.grupo === 'lienzo' && (modo === 'resultados' || modo === 'comparar')) return;
+    // Space is the tokens' key in Results only, and a focused control's own key everywhere: a
+    // button, a tab, a summary or a link presses on Space, so it is left to it (design 05).
+    if (a.id === 'reproducir' && (modo !== 'resultados' || comparando || replay === null || !verTokens
+      || (e.target as Element | null)?.closest?.('button, summary, a, [role="tab"], [role="slider"], input, select, textarea, [contenteditable]'))) return;
+    // Comparing hides the canvas behind the maps: its keys go back to the browser (page zoom, WCAG 1.4.4).
+    if (a.grupo === 'lienzo' && comparando) return;
     // Aligning is a Model action (#453): elsewhere ⌥⇧ + letter stays out of the app's own
     // handling, but it must still be kept from bpmn-js-token-simulation's canvas listener (#492:
     // Alt+Shift+T toggled the token simulation in Simulate/Validate paths) — same hiding as below.
-    // ⌘J / Ctrl+J only acts in Simulate (#394); elsewhere it stays the browser's (Downloads).
-    if (a.id === 'dock' && modo !== 'simular') return;
+    // ⌘J / Ctrl+J only acts in Results (the results table); elsewhere it stays the browser's (Downloads).
+    if (a.id === 'dock' && (modo !== 'resultados' || comparando)) return;
     if (a.id in ALINEACIONES && modo !== 'modelar') {
       if (conMod || e.altKey) e.stopPropagation();
       return;
@@ -2299,11 +2466,103 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     setCompacta(!compacta);
   }
 
-  /** The Results view, written once: docked in `zona-resultados` or inside its own window (#395). */
+  /**
+   * The full Results view (its four sections, charts and CSV/XLSX), written once: the «Full
+   * results» tab of the results table, or the detached Results window (#395) with the summary.
+   */
   const vistaResultados = corrida !== null && ir !== null
-    ? <ResultsView ir={ir} scenario={corrida.scenario} result={corrida.result} onAnimar={() => setModo('animar')} sinLog={replay === null}
+    ? <ResultsView ir={ir} scenario={corrida.scenario} result={corrida.result}
         log={corridaActual === undefined ? undefined : logs.current.get(corridaActual.id)} />
     : <p>{S.app.sinResultados} {runs.length > 0 && S.app.sinCorridaActual}</p>;
+
+  const nombreActivo = etiquetaEscenario(escenarioId, escenarios);
+  const tarjetaResultados = sim.tipo === 'simulando' ? null
+    : sim.tipo === 'error' ? (
+      <Tarjeta tono="error" kicker={S.c5.resultados.errorKicker} titulo={S.c5.resultados.errorTitulo(Math.max(1, validacion.errores))} texto={sim.mensaje.split('\n')[0]}>
+        {validacion.primero !== null && (
+          <button type="button" className="boton" onClick={() => { const id = validacion.primero!; elegirModo('simular'); modelador?.seleccionar?.(id); }}>{S.c5.resultados.irAlPrimero}</button>
+        )}
+        {botonHuerfanasTarjeta}
+        <button type="button" className="boton primario" disabled={modelador === null} onClick={() => void simular()}>{S.c5.resultados.reintentar}</button>
+      </Tarjeta>
+    ) : corrida === null ? (
+      <Tarjeta tono="acento" lila kicker={S.c5.resultados.vacioKicker} titulo={S.c5.resultados.vacioTitulo(nombreActivo)} texto={S.c5.resultados.vacioTexto}>
+        <button type="button" className="boton primario" disabled={modelador === null} onClick={() => void simular()}>{S.c5.resultados.simularAhora}</button>
+      </Tarjeta>
+    ) : null;
+
+  /** Compare (design 06): cards while a side is missing, the comparison once both have a run. */
+  const vistaComparar = ((): React.ReactNode => {
+    if (comparacion === null) return null;
+    const runDe = (id: string): StoredRun | undefined => latest.find((r) => r.scenarioName === id);
+    const nombreRef = etiquetaEscenario(comparacion.ref, escenarios);
+    const nombreOtro = etiquetaEscenario(comparacion.otro, escenarios);
+    const cerrar = (
+      <button type="button" className="boton" onClick={() => setComparacion(null)}>{`${S.c5.comparar.cerrar} ✕`}</button>
+    );
+    if (!(comparacion.ref in escenarios) || !(comparacion.otro in escenarios)) {
+      return (
+        <Tarjeta tono="acento" kicker={S.c5.comparar.vacioKicker} titulo={S.c5.comparar.vacioTitulo} texto={S.c5.comparar.vacioTexto}>
+          <button type="button" className="boton primario" onClick={() => { setComparacion(null); duplicarActivo(); }}>{S.c5.comparar.duplicarComo(nombreActivo)}</button>
+          {cerrar}
+        </Tarjeta>
+      );
+    }
+    if (fallaComparar !== null) {
+      const nombre = etiquetaEscenario(fallaComparar.id, escenarios);
+      return (
+        <Tarjeta tono="error" kicker={S.c5.comparar.errorKicker} titulo={S.c5.comparar.errorTitulo(nombre)} texto={fallaComparar.mensaje.split('\n')[0]}>
+          <button type="button" className="boton primario" onClick={() => { const id = fallaComparar.id; setComparacion(null); setFallaComparar(null); elegirEscenario(id); elegirModo('simular'); }}>{S.c5.comparar.corregir}</button>
+          <MenuComparar opciones={opcionesComparar} onElegir={compararCon} etiqueta={S.c5.comparar.elegirOtro} />
+          {cerrar}
+        </Tarjeta>
+      );
+    }
+    const a = runDe(comparacion.ref);
+    const b = runDe(comparacion.otro);
+    if (a === undefined || b === undefined || ir === null) {
+      const faltaId = a === undefined ? comparacion.ref : comparacion.otro;
+      const falta = etiquetaEscenario(faltaId, escenarios);
+      // Cancelled (QA of #603): the card says so and offers Retry, instead of «Simulating…» forever.
+      if (pausaComparar === faltaId && sim.tipo !== 'simulando') {
+        return (
+          <Tarjeta tono="acento" kicker={S.c5.comparar.canceladaKicker} titulo={S.c5.comparar.cancelada(falta)} texto={S.c5.comparar.canceladaTexto}>
+            <button type="button" className="boton primario" onClick={() => setPausaComparar(null)}>{S.c5.resultados.reintentar}</button>
+            {cerrar}
+          </Tarjeta>
+        );
+      }
+      return (
+        <Tarjeta tono="acento" kicker={S.c5.comparar.simulandoKicker} titulo={S.c5.comparar.simulando(falta)} texto={S.c5.comparar.simulandoTexto}>
+          {sim.tipo === 'simulando' && sim.progreso !== null && (
+            <div className="progreso-pista c5-progreso"><div style={{ width: `${Math.round(sim.progreso.fraction * 100)}%` }} /></div>
+          )}
+          {sim.tipo === 'simulando' && <button type="button" className="boton" onClick={cancelarCorrida}>{S.app.cancelar}</button>}
+          {cerrar}
+        </Tarjeta>
+      );
+    }
+    const lado = (r: StoredRun): { result: StoredRun['result']; scenario: ResolvedScenario; originalIds: Readonly<Record<string, string>> } =>
+      ({ result: r.result, scenario: r.inputs.scenario as unknown as ResolvedScenario, originalIds: ir.source.originalIds });
+    // The full comparison of before (CompareView): the reference first, then the other side, then
+    // every other scenario with a current run (its chips hide them), as the Compare mode did.
+    const todos = [a, b, ...latest.filter((r) => r !== a && r !== b)];
+    return (
+      <VistaComparar
+        referencia={lado(a)}
+        otro={lado(b)}
+        nombreRef={nombreRef}
+        nombreOtro={nombreOtro}
+        metas={[a, b].map((r) => runMetaFrom(etiquetaEscenario(r.scenarioName, escenarios), r.inputs.scenario as unknown as ResolvedScenario, r.result))}
+        mapas={{ xml: b.inputs.xml ?? null, tareas: tareasIr, tema: `${temaId}|${tema?.tokens?.['diagram.fill'] ?? ''}` }}
+        opciones={opcionesComparar}
+        onElegir={compararCon}
+        onIntercambiar={() => setComparacion({ ref: comparacion.otro, otro: comparacion.ref })}
+        onCerrar={() => setComparacion(null)}
+        detalle={<DetalleComparar ir={ir} runs={todos} escenarios={escenarios} locale={locale} />}
+      />
+    );
+  })();
   /**
    * The scenario panel, written once: it is drawn docked in the aside or inside the detached window
    * (design 2c), never both. ponytail: moving it between the two remounts it, so the step it was
@@ -2317,7 +2576,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       escenarios={escenarios}
       onCambio={cambiarEscenario}
       onGuardar={() => { void guardar(); }}
-      onDuplicar={anadirEscenario}
+      onDuplicar={(copia, escenario) => { origenDuplicado.current.set(copia, escenarioId); anadirEscenario(copia, escenario); }}
       ir={ir}
       otrosProcesos={otrosProcesos}
       problemasExtra={problemasModelo}
@@ -2338,11 +2597,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     <div
       className={['app', ...(hayIzquierda && !visible.izquierda ? ['sin-izquierda'] : []), ...(visible.derecha ? [] : ['sin-panel']),
         ...(visible.diagramas ? [] : ['sin-diagramas']), ...(visible.estado ? [] : ['sin-estado']),
-        ...(modo === 'simular' && !visible.dock ? ['sin-dock'] : [])].join(' ')}
+        ...(modo === 'resultados' && !visible.dock ? ['sin-dock'] : []), `modo-${modo}`, ...(comparando ? ['comparando'] : [])].join(' ')}
       data-densidad={densidad}
       data-theme={decoratedTheme}
       data-esquema={esquema}
-      style={{ '--panel-ancho': `${panelAncho}px`, '--paleta-ancho': `${paletaAncho}px`, '--rail-ancho': `${railAncho}px`, '--dock-alto': `${altoDock}px` } as React.CSSProperties}
+      style={{ '--panel-ancho': `${panelAncho}px`, '--paleta-ancho': `${paletaAncho}px`, '--dock-alto': `${altoDock}px` } as React.CSSProperties}
     >
       {pendingAction !== null && <dialog ref={replaceDialog} className="confirmar-reemplazo" aria-labelledby="reemplazo-titulo" onCancel={(event) => { event.preventDefault(); if (!ioBusy) setPendingAction(null); }}>
         <h2 id="reemplazo-titulo">{S.app.reemplazoTitulo}</h2>
@@ -2411,6 +2670,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               onClick={() => elegirModo(m)}
             >
               {S.app.modos[m]}
+              {/* Results has a run to show (design 05): a dot, named for screen readers by the title. */}
+              {m === 'resultados' && corridaActual !== undefined && <span className="c5-punto" title={S.c5.escenario.simulado} />}
             </button>
           ))}
         </nav>
@@ -2567,8 +2828,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         }}>
           <summary className="boton icono" aria-label={S.app.vista} title={S.app.vista}><IconoRegion region={null} /></summary>
           <div>
-            {/* The dock (#394) has no top-bar button; in Simulate it is listed here (QA of #394). */}
-            {[...REGIONES, ...(modo === 'simular' ? ['dock' as const] : [])].map((r) => (
+            {/* The results table has no top-bar button; in Results it is listed here (QA of #394). */}
+            {[...REGIONES, ...(modo === 'resultados' && !comparando ? ['dock' as const] : [])].map((r) => (
               <button key={r} type="button" data-region={r} aria-pressed={pulsado[r]} title={`${tituloRegion(r)}${atajo(r)}`}
                 disabled={r === 'izquierda' && !hayIzquierda}
                 onClick={(e) => {
@@ -2657,56 +2918,79 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       )}
 
       {/* Paleta propia (LILA-207): un raíl a la izquierda del lienzo, no los iconos que bpmn-js
-          pinta dentro del contenedor (escondidos en `app.css`). In Simulate the same column is the
-          scenario rail (design 2a); in the other modes nothing is drawn and it shrinks to 0. */}
-      {modo === 'simular' ? (
-        <RailEscenarios
-          escenarios={escenarios}
-          activo={escenarioId}
-          corridas={latest}
-          validacion={validacion}
-          onElegir={elegirEscenario}
-          onNuevo={() => { const copia = duplicarEscenario(escenarioId, escenarios[escenarioId] ?? {}, Object.keys(escenarios)); anadirEscenario(copia.archivo, copia.escenario); }}
-          onProblema={(id) => modelador?.seleccionar?.(id)}
-          enVentana={ventanaEscenario !== null ? escenarioId : null}
-          id={ID_REGION.izquierda}
-        />
-      ) : modo === 'modelar' ? <Paleta servicios={serviciosDe(modelador)} seleccion={seleccion} id={ID_REGION.izquierda} compacta={compacta} onCompacta={cambiarCompacta} /> : null}
-      {/* Divider of the left column (#406): the palette in Model, the rail in Simulate, each
-          with its own width. It stays on screen when the column is hidden, so a double-click
-          or Enter can bring it back. */}
+          pinta dentro del contenedor (escondidos en `app.css`). Only Model draws a left column: the
+          Simulate rail became «Scenario ▾» over the canvas (Lote M). */}
+      {modo === 'modelar' && <Paleta servicios={serviciosDe(modelador)} seleccion={seleccion} id={ID_REGION.izquierda} compacta={compacta} onCompacta={cambiarCompacta} />}
+      {/* Divider of the left column (#406). It stays on screen when the column is hidden, so a
+          double-click or Enter can bring it back. */}
       {hayIzquierda && (() => {
-        const rail = modo === 'simular';
-        const valor = rail ? railAncho : compacta ? PALETA_COMPACTA : paletaAncho;
+        const valor = compacta ? PALETA_COMPACTA : paletaAncho;
         return <div className="divisor-izquierdo" role="separator" aria-orientation="vertical" tabIndex={0} aria-label={S.app.redimensionarIzquierda}
-          aria-valuemin={rail ? RAIL_MIN : PALETA_COMPACTA} aria-valuemax={rail ? RAIL_MAX : PALETA_MAX} aria-valuenow={valor} aria-controls={ID_REGION.izquierda}
+          aria-valuemin={PALETA_COMPACTA} aria-valuemax={PALETA_MAX} aria-valuenow={valor} aria-controls={ID_REGION.izquierda}
           {...divisor({
             valor,
             signo: 1,
             oculto: !visible.izquierda,
             gesto: arrastreIzquierda,
             alternar: () => alternarRegion('izquierda'),
-            resolver: rail ? (px) => limitar(px, RAIL_MIN, RAIL_MAX) : (px, teclado) => {
+            resolver: (px, teclado) => {
               if (!teclado) return px < PALETA_SALTO ? PALETA_COMPACTA : limitar(px, PALETA_MIN, PALETA_MAX);
               // Arrows: below the minimum, a step left lands on 180 first and then on compact;
               // a step right from compact lands on 180.
               if (px >= PALETA_MIN) return limitar(px, PALETA_MIN, PALETA_MAX);
               return px > valor || valor > PALETA_MIN ? PALETA_MIN : PALETA_COMPACTA;
             },
-            fijar: rail ? setRailAncho : (px) => {
+            fijar: (px) => {
               setCompacta(px === PALETA_COMPACTA);
               if (px !== PALETA_COMPACTA) setPaletaAncho(px);
             },
-            persistir: rail ? (px) => recordar({ railAncho: px }) : (px) => {
+            persistir: (px) => {
               guardarCompacta(px === PALETA_COMPACTA);
               if (px !== PALETA_COMPACTA) recordar({ paletaAncho: px });
             },
           })} />;
       })()}
 
+      {/* «Scenario ▾» over the canvas in Simulate and Results (Lote M), and Results' own tools:
+          the meta of the run, the two map layers and «Compare with…». Comparing has its own bar. */}
+      {(modo === 'simular' || (modo === 'resultados' && !comparando)) && (
+        <div className="c5-subbarra" role="toolbar" aria-label={modo === 'resultados' ? S.c5.resultados.barra : S.c5.escenario.lista} inert={ioBusy}>
+          <SelectorEscenario
+            escenarios={escenarios}
+            activo={escenarioId}
+            corridas={latest}
+            validacion={validacion}
+            ir={ir}
+            onElegir={elegirEscenario}
+            onDuplicar={duplicarActivo}
+            onCambio={cambiarEscenario}
+            onGuardar={() => { void guardar(); }}
+            onProblema={(id) => { modelador?.seleccionar?.(id); }}
+            enVentana={ventanaEscenario !== null ? escenarioId : null}
+          />
+          {modo === 'resultados' && <>
+            {corridaActual !== undefined && (
+              <span className="c5-meta mono">{S.c5.resultados.meta(
+                Number((corridaActual.inputs.scenario.run as Record<string, unknown> | undefined)?.replications ?? 1),
+                String((corridaActual.inputs.scenario.run as Record<string, unknown> | undefined)?.seed ?? 1),
+                String((corridaActual.inputs.scenario.run as Record<string, unknown> | undefined)?.baseTimeUnit ?? 's'),
+              )}</span>
+            )}
+            <span className="c5-hueco" />
+            {corrida !== null && (
+              <div className="c5-capas" role="group" aria-label={S.c5.resultados.capas}>
+                <button type="button" className="boton" aria-pressed={verCuellos} onClick={() => setVerCuellos(!verCuellos)}>{S.c5.resultados.mapaCalor}</button>
+                <button type="button" className="boton" aria-pressed={verTokens} onClick={() => { setVerTokens(!verTokens); setReproduciendo(false); }}>{S.c5.resultados.tokens}</button>
+              </div>
+            )}
+            <MenuComparar className="c5-comparar-con" opciones={opcionesComparar} onElegir={compararCon} etiqueta={S.c5.resultados.compararCon} titulo={S.c5.resultados.compararTitulo} />
+          </>}
+        </div>
+      )}
+
       {/* La esquina inferior derecha del lienzo queda libre para la marca de agua
           «Powered by bpmn.io», que es obligatoria por la licencia de bpmn.io. */}
-      <div className="zona-modelo" inert={ioBusy} style={{ visibility: modo === 'resultados' || modo === 'comparar' ? 'hidden' : 'visible' }}>
+      <div className="zona-modelo" inert={ioBusy} style={{ visibility: comparando ? 'hidden' : 'visible' }}>
       {tema === undefined ? (
         <div className="lienzo" />
       ) : (
@@ -2738,14 +3022,33 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           activo no cambia el id (LILA-114), así que la `key` lleva además los dos tokens que el
           modo congela en el DI (QA de #277). Y el idioma (LILA-210): el módulo escribe su interfaz
           una sola vez al encenderse, así que sin remontar quedaba medio lienzo en el anterior. */}
-      {modo === 'rutas' && (
+      {modo === 'modelar' && rutasActivas && (
         <TokenSim key={`${locale}|${temaId}|${tema?.tokens?.['diagram.fill'] ?? ''}|${tema?.tokens?.['diagram.stroke'] ?? ''}`} modelador={modelador} />
+      )}
+      {/* Results on the map (Lote M, design 05): the card when there is nothing to show yet or the
+          run failed, and the time bar of the tokens over the bottom of the same canvas. */}
+      {modo === 'resultados' && !comparando && tarjetaResultados}
+      {modo === 'resultados' && !comparando && corrida !== null && verTokens && (
+        <Replay
+          modelador={modelador}
+          replay={replay}
+          originalIds={ir?.source.originalIds ?? {}}
+          motivo={corridaActual === undefined ? S.animacion.sinCorrida : S.animacion.sinLog}
+          reproduciendo={reproduciendo}
+          onReproducir={setReproduciendo}
+          leyenda={verCuellos ? (
+            <span className="c5-leyenda" title={S.c5.tiempo.leyenda}>
+              {(['low', 'mid', 'high'] as const).map((n) => <span key={n} className={`c5-nivel ${n}`}>{S.c5.tiempo.niveles[n]}</span>)}
+            </span>
+          ) : undefined}
+        />
       )}
       {/* The top edge of the canvas (#453): validation chips on the left, the align group on the
           right; one wrapping row, so a narrow canvas drops the group below the chips instead of
           stacking one on the other. */}
       <div className="lienzo-arriba">
-        {(validacion.errores > 0 || validacion.avisos > 0) && (
+        {/* In Simulate and Results «Scenario ▾» carries the same chips (QA of #603: not twice). */}
+        {modo === 'modelar' && (validacion.errores > 0 || validacion.avisos > 0) && (
           <div className="chips-validacion">
             {validacion.errores > 0 && (
               <button type="button" className="chip error" title={S.app.irAlPrimerProblema} disabled={validacion.primero === null}
@@ -2761,9 +3064,16 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             )}
           </div>
         )}
+        {/* Validate paths (LILA-065) is a Model tool since Lote M: a toggle here and in ⌘K. */}
+        {modo === 'modelar' && (
+          <button type="button" className="boton c5-validar-rutas" aria-pressed={rutasActivas} title={S.c5.validarRutasTitulo}
+            disabled={modelador === null} onClick={() => setRutasActivas(!rutasActivas)}>
+            {S.c5.validarRutas}
+          </button>
+        )}
         {/* Align and distribute (#453): on the canvas, not in the top bar, which is already full at
             1440 px. Disabled until bpmn-js would move something. */}
-        {modo === 'modelar' && (
+        {modo === 'modelar' && !rutasActivas && (
           <div className="alinear-grupo" role="group" aria-label={S.app.alinear}>
             {ALINEAR_IDS.map((id) => (
               <button key={id} type="button" className="boton icono" aria-label={S.atajos[id]} title={`${S.atajos[id]}${atajo(id)}`}
@@ -2775,10 +3085,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         )}
       </div>
       </div>
-      {/* The Simulate dock (#394) and its divider, which stays while the dock is hidden so a
-          double-click or Enter brings it back. */}
-      {modo === 'simular' && <>
-        <div className="divisor-dock" role="separator" aria-orientation="horizontal" tabIndex={0} aria-label={S.dock.redimensionar}
+      {/* The results table under the Results map (Lote M; the Simulate dock of #394 before) and
+          its divider, which stays while the table is collapsed so a double-click or Enter opens it. */}
+      {modo === 'resultados' && !comparando && <>
+        <div className="divisor-dock" role="separator" aria-orientation="horizontal" tabIndex={0} aria-label={S.c5.tabla.redimensionar}
           aria-valuemin={DOCK_MIN} aria-valuemax={dockMax(altoVentana)} aria-valuenow={altoDock} aria-controls={ID_REGION.dock}
           {...divisor({
             valor: altoDock,
@@ -2791,7 +3101,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             fijar: setDockAlto,
             persistir: (px) => recordar({ dockAlto: px }),
           })} />
-        <DockSimular
+        <TablaResultados
           id={ID_REGION.dock}
           ir={ir}
           corrida={corrida}
@@ -2800,42 +3110,24 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           pestana={pestanaDock}
           onPestana={setPestanaDock}
           onSeleccionar={(id) => { setSeleccion(id); modelador?.seleccionar?.(id, { centrar: true }); }}
-          onAbrirResultados={enfocarResultados}
-          onEjecutar={() => void simular()}
-          puedeEjecutar={modelador !== null && sim.tipo !== 'simulando'}
-        />
-      </>}
-      {modo === 'resultados' && (
-        <section className="zona-resultados" tabIndex={-1} aria-label={S.app.modos.resultados}>
-          {ventanaResultados === null ? vistaResultados : (
+          seleccion={seleccion}
+          plegada={!visible.dock}
+          onPlegar={() => alternarRegion('dock')}
+          detalle={ventanaResultados === null ? vistaResultados : (
             <div className="panel-desacoplado">
               <p>{S.app.resultadosEnVentana}</p>
-              <button type="button" className="boton" onClick={enfocarResultados}>{S.app.mostrarVentana}</button>
+              <button type="button" className="boton" onClick={() => ventanaResultados.focus()}>{S.app.mostrarVentana}</button>
               <button type="button" className="boton" onClick={acoplarResultados}>{S.app.acoplar}</button>
             </div>
           )}
+        />
+      </>}
+      {/* Compare inside Results (design 06): the six deltas, the two maps and the full comparison. */}
+      {comparando && (
+        <section className="zona-resultados c5-zona-comparar" tabIndex={-1} aria-label={S.c5.comparar.comparando} inert={ioBusy}>
+          {vistaComparar}
         </section>
       )}
-      {modo === 'comparar' && <section className="zona-resultados">
-        <label>{S.app.escenarioBase} <select value={baseId} onChange={(e) => setBaseId(e.target.value)}>
-          {Object.keys(escenarios).map((name) => <option key={name} value={name}>{etiquetaEscenario(name, escenarios)}</option>)}
-        </select></label>
-        {comparable && ir !== null
-          ? <CompareView ir={ir} comparison={compare(ordered.map((r) => r.result), { locale })}
-              entries={ordered.map((r) => ({ result: r.result, scenario: r.inputs.scenario as unknown as ResolvedScenario }))}
-              runs={ordered.map((r) => runMetaFrom(etiquetaEscenario(r.scenarioName, escenarios), r.inputs.scenario as unknown as ResolvedScenario, r.result))}
-              scenarioNames={ordered.map((r) => etiquetaEscenario(r.scenarioName, escenarios))}
-              seriesSlots={ordered.map((r) => Object.keys(escenarios).indexOf(r.scenarioName))}
-              baseTimeUnit={(ordered[0]!.inputs.scenario as unknown as ResolvedScenario).run.baseTimeUnit ?? 's'} />
-          : <p>{S.app.sinComparacion}</p>}
-        {ordered.map((run) => <p key={run.id}>{S.app.corridaResumen(
-          etiquetaEscenario(run.scenarioName, escenarios),
-          run.inputs.modelRevision,
-          run.inputs.scenarioRevision,
-          String((run.inputs.scenario.run as Record<string, unknown>).seed ?? 1),
-          String((run.inputs.scenario.run as Record<string, unknown>).currency ?? ''),
-        )}</p>)}
-      </section>}
       <div className="divisor" role="separator" aria-orientation="vertical" tabIndex={0} aria-label={S.app.redimensionarPanel}
         aria-valuemin={PANEL_MIN} aria-valuemax={PANEL_MAX} aria-valuenow={panelAncho} aria-controls={ID_REGION.derecha}
         {...divisor({
@@ -2849,15 +3141,19 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           persistir: (px) => recordar({ panelAncho: px }),
         })} />
       <aside id={ID_REGION.derecha} className={panelAncho >= 440 ? 'panel ancho' : 'panel'} inert={ioBusy}>
-        {/* En «Animar» el panel entero son los controles de la reproducción: las pestañas de
-            propiedades no tienen nada que decir sobre una corrida que ya terminó (#331). */}
-        {modo === 'animar' ? (
-          <Replay
-            modelador={modelador}
-            replay={replay}
-            originalIds={ir?.source.originalIds ?? {}}
-            motivo={corridaActual === undefined ? S.animacion.sinCorrida : S.animacion.sinLog}
-          />
+        {/* In Results the panel is the run's summary (design 05): the six KPIs, the engine's
+            bottlenecks and the selected task. The properties tabs say nothing about a finished run. */}
+        {modo === 'resultados' ? (
+          ventanaResultados !== null ? (
+            <div className="panel-desacoplado">
+              <p>{S.c5.resultados.enVentana}</p>
+              <button type="button" className="boton" onClick={() => ventanaResultados.focus()}>{S.app.mostrarVentana}</button>
+              <button type="button" className="boton" onClick={acoplarResultados}>{S.app.acoplar}</button>
+            </div>
+          ) : corrida !== null && ir !== null ? (
+            <PanelResumen ir={ir} result={corrida.result} scenario={corrida.scenario} seleccion={seleccion}
+              onSeleccionar={(id) => { setSeleccion(id); modelador?.seleccionar?.(id, { centrar: true }); }} />
+          ) : <p className="vacio c5-resumen-vacio">{S.app.sinResultados}</p>
         ) : <>
         <nav className="pestanas">
           {PESTANA_IDS.map((p) => (
@@ -2882,22 +3178,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
                 {S.app.errorSimular(sim.mensaje)}
               </p>
             )}
-            <label className="campo interruptor">
-              <input
-                type="checkbox"
-                checked={verCuellos}
-                onChange={(e) => {
-                  setVerCuellos(e.target.checked);
-                }}
-              />
-              {S.app.verCuellos}
-            </label>
-            <p className="vacio">
-              {corrida === null
-                ? S.app.cuellosSinCorrida
-                : (nombreDeCuello(corrida.result.bottlenecks[0]?.elementId, ir, avanzado) ??
-                  S.app.cuellosSinEspera)}
-            </p>
+            {/* The bottlenecks switch moved to Results' «Heat map» (Lote M); the main one is still
+                named here once there is a run, as a pointer to it. */}
+            {corrida !== null && nombreDeCuello(corrida.result.bottlenecks[0]?.elementId, ir, avanzado) !== undefined && (
+              <p className="vacio">{`${S.c5.resultados.cuellos}: ${nombreDeCuello(corrida.result.bottlenecks[0]?.elementId, ir, avanzado)}`}</p>
+            )}
             {ventanaEscenario === null ? panelEscenario : (
               <div className="panel-desacoplado">
                 <p>{S.app.enVentanaAparte}</p>

@@ -49,8 +49,8 @@ row selects that element on the canvas. Every control lives in exactly one step:
 
 With an activity selected in **Model**, the properties panel shows a **Quick view · simulation**
 block: its time distribution and resource in the active scenario, and its wait in the last run (or
-*no run*). The wait is the wait for a resource — the same measure as the canvas labels, the Simulate
-dock and the Results «waiting for resource» columns. It is the **p95** of the cases measured after the warmup in the first replication,
+*no run*). The wait is the wait for a resource — the same measure as the canvas labels, the Results
+table and its «waiting for resource» columns. It is the **p95** of the cases measured after the warmup in the first replication,
 when that run's event-log sample is complete; a longer run (more than 10,000 log rows in its first
 replication) shows the **mean** resource wait over every replication instead, and says so. Its **Edit in
 Times** / **Edit in Resources** links open that step in Simulate.
@@ -161,10 +161,10 @@ the table stays the reference.
 
 | Bizagi | Lila |
 |---|---|
-| What-if analysis *(Bizagi's name may differ by version)* | **Compare** mode, or `lila compare`: scenarios side by side, differences marked, 95 % confidence intervals when replications ≥ 2, and bar charts of average cycle time, cost per case and utilization with each scenario's delta against the base |
+| What-if analysis *(Bizagi's name may differ by version)* | **Compare with…** in Results, or `lila compare`: scenarios side by side, differences marked, 95 % confidence intervals when replications ≥ 2, and bar charts of average cycle time, cost per case and utilization with each scenario's delta against the base |
 | Export results to Excel *(Bizagi's name may differ by version)* | CSV per table and a single `.xlsx` (`--csv`, `--xlsx`, or the export buttons in Results) |
 | Publish to Word / Web | File → Export process document (Word or HTML): cover, diagram, process description, one section per element in flow order grouped by lane, then the scenario and the results tables, with the charts of the run. No templates or table of contents field; Word's navigation pane lists the headings |
-| Watch the tokens move | **Animate**: Play from Results replays replication 1 of the stored run over the diagram, with per-element counters coming from the engine's own event log — not from a toy walker. The separate **Validate paths** mode is the didactic bpmn-js animation and reads no scenario at all |
+| Watch the tokens move | **Tokens** on the Results map (`Space` or ▶) replay replication 1 of the stored run over the diagram, with per-element counters coming from the engine's own event log — not from a toy walker. **Validate paths**, a Model tool, is the didactic bpmn-js animation and reads no scenario at all |
 
 ## Three differences you will feel
 
