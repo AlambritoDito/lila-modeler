@@ -12,7 +12,7 @@ import { flushSync } from 'react-dom';
 import { failStartup, finishStartup, setStartupLocale } from './startup';
 import { parseBpmn, readAnnotations, validateBpmnModel, type ValidatedBpmnModel } from '@lila-modeler/engine/bpmn';
 import { buildProcessDocument, DOCX_MIME_TYPE, toDocx, toHtml } from '@lila-modeler/engine/process-document';
-import { resolveExtends, type ResolvedScenario } from '@lila-modeler/engine/schema';
+import { resolveExtends, resolveScenarioPath, type ResolvedScenario } from '@lila-modeler/engine/schema';
 import { compare } from '@lila-modeler/engine';
 import { CompareView } from './CompareView';
 import { runMetaFrom } from './compareWarnings';
@@ -58,6 +58,9 @@ import { ATAJOS, atajoPorId, coincide, etiqueta, MAC, tooltip, type AtajoId, typ
 import { aPng, descargar, imprimirSvg, nombreArchivo } from './exportarDiagrama';
 import { DENSIDAD_IDS, MODO_IDS, PESTANA_IDS, type Densidad, type ModoId, type PasoId, type PestanaId, type VerboPerdida } from './ids';
 import { datosVistaRapida } from './vistaRapida';
+import { construirEtiquetas } from './etiquetasPorcentaje';
+import { escribirPorcentaje } from './repartoRutas';
+import { esUnidadTiempo } from './scenarioFields';
 import { apply as aplicarCarriles } from './carrilClic';
 // Único punto de la SPA que conoce la implementación concreta (LILA-058, ADR-023): el resto
 // del shell habla con `store` solo por el tipo `ProjectStore`. Cambiar de modalidad —
@@ -700,6 +703,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [ventanaEscenario, setVentanaEscenario] = useState<Window | null>(null);
   /** #396: the step the quick view's «Edit in …» asked the scenario panel to open, until it does. */
   const [pasoPedido, setPasoPedido] = useState<PasoId | null>(null);
+  /**
+   * Lote M, C1: the problems that hold a run back as the panel counts them (E-* only: warnings
+   * run), for the badge of «▶ Simulate»; and a request to the panel to take the person to the first
+   * one (a new number is a new request, `null` none; the panel acknowledges it).
+   */
+  const [conteoPanel, setConteoPanel] = useState(0);
+  const [irAlProblema, setIrAlProblema] = useState<number | null>(null);
+  /** Lote M, C4: the Simulate panel's step on screen (`ScenarioPanel.onPasoVisible`). */
+  const [pasoVisible, setPasoVisible] = useState<PasoId | null>(null);
   /** Last known geometry of that window; read with the preferences, written when it moves away. */
   const geomEscenario = useRef<Geometria | undefined>(undefined);
   const toggleEscenario = useRef<HTMLButtonElement>(null);
@@ -1389,6 +1401,45 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // fuera de React: sin esto se quedaría en el idioma en el que se pintó (LILA-210).
     modelador?.cuellos(corrida === null ? null : { ...corrida, calor: { tareas: tareasIr } }, modo === 'resultados' && verCuellos && !rutasActivas);
   }, [modelador, corrida, verCuellos, modo, locale, tareasIr, rutasActivas]);
+  // Lote M, C4 and C1: the Simulate layers of the canvas, from the panel's step on screen. The
+  // percentages of every splitting gateway's outgoing flows are fields in Routes and text in the
+  // other steps; under each element, the step's own parameter (`etiquetasPaso.ts`). Neither shows
+  // outside Simulate, so they never meet the Results heat map. Both are idempotent, like `cuellos`.
+  useEffect(() => {
+    if (modelador === null) return;
+    if (modo !== 'simular' || ir === null) {
+      modelador.porcentajes?.(null);
+      modelador.etiquetasPaso?.(null);
+      return;
+    }
+    const delta = escenarios[escenarioId] ?? {};
+    const { resuelto: r, error } = escenarioResuelto(escenarioId, escenarios);
+    const resuelto = (error === null ? r : delta) as Record<string, unknown>;
+    const referencia = delta['extends'];
+    const padre = typeof referencia === 'string'
+      ? (escenarioResuelto(resolveScenarioPath(escenarioId, referencia), escenarios).resuelto as Record<string, unknown>)
+      : null;
+    modelador.porcentajes?.(construirEtiquetas({
+      ir,
+      resuelto,
+      editable: pasoVisible === 'routes',
+      seleccion,
+      onCambiar: (flujo, porcentaje) => { cambiarEscenario(escenarioId, escribirPorcentaje(delta, padre, flujo, porcentaje)); },
+      // A field reports its flow, a text box outside Routes only its gateway (which opens Routes).
+      onEnfocar: (compuerta, flujo) => { modelador.seleccionar?.(flujo ?? compuerta); },
+    }));
+    const run = resuelto['run'];
+    const unidad = typeof run === 'object' && run !== null ? (run as Record<string, unknown>)['baseTimeUnit'] : undefined;
+    modelador.etiquetasPaso?.(pasoVisible === null ? null : {
+      paso: pasoVisible,
+      resuelto,
+      ir,
+      unidad: esUnidadTiempo(unidad) ? unidad : 's',
+      originalIds: ir.source.originalIds,
+    });
+    // `cambiarEscenario` is recreated every render and reads nothing stale that the deps miss.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modelador, modo, ir, escenarios, escenarioId, seleccion, pasoVisible, locale]);
   // «Validate paths» is a Model tool: leaving Model switches it off.
   useEffect(() => { if (modo !== 'modelar') setRutasActivas(false); }, [modo]);
 
@@ -2338,6 +2389,31 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   }
 
   // --- Shortcuts (#413): one handler per entry of `atajos.ts` that the app owns ---
+  /**
+   * «▶ Simulate» of the top bar and ⌘↩ (Lote M, C1): with problems that hold the run back it takes
+   * the person to the first one in the Simulate panel instead of running; otherwise it runs.
+   */
+  /**
+   * The badge's count. While the panel is mounted (its tab, or detached) it is the panel's own
+   * number, so the two always agree; otherwise (Results, or another tab) the shell's lint: its
+   * errors, plus the unsupported elements that Model shows as warnings and every other mode, and
+   * Run, treats as errors (#455).
+   */
+  const panelMontado = ventanaEscenario !== null || (modo !== 'resultados' && pestana === 'simulacion');
+  const conteoProblemas = panelMontado
+    ? conteoPanel
+    : validacion.problemas.filter((p) => p.severidad === 'error').length + (modo === 'modelar' ? problemasModelo.length : 0);
+  function simularDesdeBarra(): void {
+    if (conteoProblemas > 0) {
+      elegirModo('simular');
+      // The panel has to be on screen to show the problem (a hidden right panel would swallow it).
+      fijarRegion('simular', 'derecha', true);
+      setIrAlProblema((n) => (n ?? 0) + 1);
+      return;
+    }
+    void simular();
+  }
+
   function elegirModo(m: ModoId): void {
     setModo(m);
     if (m === 'simular') setPestana('simulacion');
@@ -2367,7 +2443,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     paleta: () => abrirPaletaRef.current(desdeHija.current),
     ...Object.fromEntries(MODO_IDS.map((m) => [`modo:${m}`, () => elegirModo(m)])) as Record<`modo:${ModoId}`, () => void>,
     // The Run button is replaced by Cancel while a run is in flight; the key follows the button.
-    ejecutar: () => { if (enVuelo.current === null && modelador !== null) void simular(); },
+    ejecutar: () => { if (enVuelo.current === null && modelador !== null) simularDesdeBarra(); },
     cancelar: cancelarCorrida,
     // Space (Lote M): the tokens on the Results map; nothing elsewhere (`despachar` lets it through).
     reproducir: () => { if (modo === 'resultados' && !comparando && verTokens && replay !== null) setReproduciendo((r) => !r); },
@@ -2406,6 +2482,17 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // `e.key`, not `e.code`: the library reads the typed character, so on Dvorak the physical T
     // types «y» and «t» sits on KeyK (QA of #504, second pass).
     if ((e.key === 't' || e.key === 'T') && (e.altKey || e.ctrlKey || e.metaKey)) e.stopPropagation();
+    // Lote M: Alt+1…6 open a Simulate step from any mode. The panel handles them itself while it is
+    // on screen (Simulate, its tab, or detached); elsewhere the shell switches to Simulate and asks.
+    const pasoEnPantalla = ventanaEscenario !== null || (modo === 'simular' && pestana === 'simulacion');
+    const paso = pasoEnPantalla ? undefined : ATAJOS.find((x) => 'panel' in x && coincide(x, e, MAC));
+    if (paso !== undefined && !bloqueado() && !(e.target as Element | null)?.closest?.(CAMPO)) {
+      e.preventDefault();
+      e.stopPropagation();
+      elegirModo('simular');
+      setPasoPedido(paso.id.slice('paso:'.length) as PasoId);
+      return;
+    }
     const a = ATAJOS.find((x) => !('lienzo' in x) && (!soloHija || 'hija' in x) && coincide(x, e, MAC));
     if (a === undefined || (DESKTOP && 'menu' in a) || bloqueado()) return;
     // On the web Ctrl+1…6 (and ⌘1…⌘6 in Firefox) switch browser tabs: the modes are the tabs'
@@ -2585,6 +2672,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       avanzado={avanzado}
       pasoPedido={pasoPedido}
       onPasoAtendido={() => { setPasoPedido(null); }}
+      onSimular={() => { void simular(); }}
+      onConteoProblemas={setConteoPanel}
+      irAlProblema={irAlProblema}
+      onProblemaAtendido={() => { setIrAlProblema(null); }}
+      onPasoVisible={setPasoVisible}
       onSeleccionar={(id) => { setSeleccion(id); if (id !== null) modelador?.seleccionar?.(id); else modelador?.servicios.selection.select([]); }}
     />
   );
@@ -2800,9 +2892,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             <button type="button" className="boton cancelar" title={`${S.app.cancelar}${atajo('cancelar')}`} onClick={cancelarCorrida}>{S.app.cancelar}</button>
           </>
         ) : (
-          <button type="button" className="boton primario ejecutar" title={`${S.app.ejecutar}${atajo('ejecutar')}`} disabled={modelador === null} onClick={() => void simular()}>
+          <button type="button" className="boton primario ejecutar" title={`${S.app.ejecutar}${atajo('ejecutar')}`} disabled={modelador === null} onClick={simularDesdeBarra}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4l14 8-14 8z" /></svg>
             {S.app.ejecutar}
+            {/* Design 01: the number of problems that hold the run back, on the button itself. */}
+            {conteoProblemas > 0 && <span className="c5-insignia" title={S.c5.problemasPendientes(conteoProblemas)}>{conteoProblemas}</span>}
           </button>
         )}
         <button type="button" className="boton icono" title={`${S.app.ajustes}${atajo('ajustes')}`} aria-label={S.app.ajustes} onClick={() => ejecutar('ajustes')}>⚙</button>

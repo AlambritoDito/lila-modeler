@@ -383,11 +383,11 @@ describe('el paso elegido sobrevive', () => {
     }
   });
 
-  it('el JSON avanzado está en los seis pasos', () => {
+  it('el JSON avanzado ya no está en el panel en ningún paso: vive en «Escenario ▾» (Lote M)', () => {
     montar(<Anfitrion inicial={asIs()} />);
     for (const paso of PASO_IDS) {
       irAPaso(paso);
-      expect(texto()).toContain(en.escenario.seccionJson);
+      expect(texto()).not.toContain(en.escenario.seccionJson);
     }
   });
 });

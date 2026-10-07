@@ -55,8 +55,8 @@ botón sobre el lienzo, o «Validar rutas» en `⌘K`.
 | Reproducir o pausar los tokens (solo en Resultados) | `Space` | `Space` |
 
 En el panel de Simular, `←`/`→` recorren las pestañas de los pasos cuando una de ellas tiene el
-foco (`Inicio`/`Fin` saltan a la primera y a la última), y `Alt+1…6` funcionan también en la ventana desacoplada; ni ellos ni `Esc` actúan mientras escribes en un campo. «▶ Simular» del panel te lleva al
-primer error en vez de correr mientras el escenario tenga alguno; los avisos («! n» en un paso) no lo detienen.
+foco (`Inicio`/`Fin` saltan a la primera y a la última), y `Alt+1…6` funcionan también en la ventana desacoplada, y desde Modelar o Resultados pasan a Simular en ese paso; ni ellos ni `Esc` actúan mientras escribes en un campo. «▶ Simular» (el del panel, el de la barra superior y `⌘↩`) te lleva al
+primer error en vez de correr mientras el escenario tenga alguno —el botón de la barra dice cuántos—; los avisos («! n» en un paso) no lo detienen.
 
 `Space` (la barra espaciadora) no hace nada mientras escribes en un campo ni cuando un botón tiene
 el foco (ahí pulsa el botón).

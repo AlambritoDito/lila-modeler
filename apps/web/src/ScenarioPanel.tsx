@@ -60,7 +60,6 @@ import {
 } from './escenarioModelo.js';
 import { atajoPorId, etiqueta, MAC } from './atajos.js';
 import { PASO_IDS, type PasoId } from './ids.js';
-import { ImportarExcel } from './ImportarExcel.js';
 import { BotonElemento, type Rotulo } from './ListaElementos.js';
 import { PasoCalendarios } from './PasoCalendarios.js';
 import { FichaLlegada, ListaLlegadas } from './PasoLlegadas.js';
@@ -259,7 +258,7 @@ function desplazable(nodo: HTMLElement | null): HTMLElement | null {
  * todavía no dibuja. Se aplica de golpe con el botón, no al teclear: un JSON a medio escribir no
  * parsea y aplicarlo en cada tecla borraría el escenario entre dos llaves.
  */
-function VistaJson({
+export function VistaJson({
   delta,
   onAplicar,
 }: {
@@ -325,8 +324,8 @@ export interface ScenarioPanelProps {
   escenarios: Readonly<Record<string, Record<string, unknown>>>;
   /** Cada cambio del panel, ya aplicado al delta del archivo en edición. */
   onCambio: (archivo: string, escenario: Record<string, unknown>) => void;
-  /** «Guardar»: lo escribe el shell con `ProjectStore.putScenario`. Nunca se deshabilita. */
-  onGuardar: () => void;
+  /** Unused since Lote M: Save lives in «Scenario ▾» (and ⌘S). Kept so callers need not change. */
+  onGuardar?: () => void;
   /** «Duplicar»: el shell registra el nuevo archivo y lo selecciona. */
   onDuplicar: (archivo: string, escenario: Record<string, unknown>) => void;
   /** IR del diagrama del lienzo. `null` mientras no se haya parseado: solo se valida el esquema. */
@@ -386,7 +385,6 @@ export function ScenarioPanel({
   archivo,
   escenarios,
   onCambio,
-  onGuardar,
   onDuplicar,
   ir,
   otrosProcesos,
@@ -758,11 +756,6 @@ export function ScenarioPanel({
     if (hueco < 0) contenedor.scrollTop += hueco;
   }, [paso, idSeleccionado]);
 
-  const guardarBoton = (
-    <button type="button" className={enVentana ? 'boton primario' : 'boton'} onClick={onGuardar}>
-      {S.escenario.guardar}
-    </button>
-  );
   const duplicarBoton = (
     <button
       type="button"
@@ -901,7 +894,8 @@ export function ScenarioPanel({
           <span className={errores > 0 ? 'error sim-conteo' : 'aviso sim-conteo'}>
             {S.escenario.conteo(errores, avisos)}
           </span>
-          {!enVentana && guardarBoton}
+          {/* Lote M: Save, the Excel import and the JSON view live in «Scenario ▾»; Duplicate stays
+              here too, one click (step 7 of the baseline). */}
           {!enVentana && duplicarBoton}
           <button
             type="button"
@@ -1068,15 +1062,6 @@ export function ScenarioPanel({
           </section>
         )}
 
-        <ImportarExcel key={archivo} archivo={archivo} resuelto={resuelto} delta={delta} padre={padre} ir={ir} onCambio={onCambio} />
-
-        <VistaJson
-          delta={delta}
-          onAplicar={(escenario) => {
-            onCambio(archivo, escenario);
-          }}
-        />
-
         {/* The validation list is live in **every** step: a resource you break in Resources has to
             be told there, and `docs/COMING-FROM-BIZAGI.md` promises exactly this. */}
         {problemas.length > 0 && (
@@ -1095,9 +1080,8 @@ export function ScenarioPanel({
         {enVentana && (
           <footer className="escenario-pie">
             <span>{S.escenario.pieVentana}</span>
-            {/* Duplicate, then Save: the order they are painted in is the order Tab visits. */}
+            {/* Save is ⌘S here (the window forwards it); Duplicate stays one click. */}
             {duplicarBoton}
-            {guardarBoton}
           </footer>
         )}
       </div>

@@ -201,9 +201,9 @@ export function modeloEtiquetas({ paso, resuelto, ir, unidad }: EntradaEtiquetas
  * The only function that touches bpmn-js
  * ------------------------------------------------------------------ */
 
-function html(etiqueta: EtiquetaPaso): HTMLElement {
+function html(etiqueta: EtiquetaPaso, arriba: boolean): HTMLElement {
   const div = document.createElement('div');
-  div.className = etiqueta.falta ? 'lila-etiqueta-paso falta' : 'lila-etiqueta-paso';
+  div.className = ['lila-etiqueta-paso', ...(etiqueta.falta ? ['falta'] : []), ...(arriba ? ['arriba'] : [])].join(' ');
   div.textContent = etiqueta.texto;
   return div;
 }
@@ -221,9 +221,13 @@ export function aplicarEtiquetasPaso(modeler: Modeler, entrada: EntradaEtiquetas
     const idLienzo = entrada.originalIds?.[id] ?? id;
     const forma = registro.get(idLienzo) as { width?: number; height?: number } | undefined;
     if (forma === undefined) continue;
+    // A task's label goes under it. An event's goes above it, from its left edge: under an event sit
+    // its own name and, after a splitting gateway, the route percentages (Lote M, C4), and to its
+    // left the label of the flow coming in.
+    const arriba = entrada.ir.nodes[id]?.type !== 'task';
     overlays.add(idLienzo, TIPO, {
-      html: html(etiqueta),
-      position: { left: 0, top: (forma.height ?? 0) + 4 },
+      html: html(etiqueta, arriba),
+      position: arriba ? { left: 0, top: -18 } : { left: 0, top: (forma.height ?? 0) + 4 },
     });
   }
 }

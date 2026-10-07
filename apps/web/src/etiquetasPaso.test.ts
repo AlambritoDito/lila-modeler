@@ -93,16 +93,16 @@ describe('modeloEtiquetas', () => {
 
 describe('aplicarEtiquetasPaso', () => {
   /** Just the two services it uses: overlays (kept in a list) and the element registry. */
-  function falso(): { modeler: Modeler; pintadas: () => { id: string; texto: string }[] } {
-    let lista: { id: string; type: string; html: HTMLElement }[] = [];
+  function falso(): { modeler: Modeler; pintadas: () => { id: string; texto: string }[]; lista: () => { id: string; html: HTMLElement; position: object | undefined }[] } {
+    let lista: { id: string; type: string; html: HTMLElement; position: object | undefined }[] = [];
     const overlays = {
-      add: (id: string, type: string, o: { html: HTMLElement }) => { lista.push({ id, type, html: o.html }); },
+      add: (id: string, type: string, o: { html: HTMLElement; position?: object }) => { lista.push({ id, type, html: o.html, position: o.position }); },
       remove: (f: { type: string }) => { lista = lista.filter((x) => x.type !== f.type); },
     };
     const formas: Record<string, { width: number; height: number }> = { Start: { width: 36, height: 36 }, T1: { width: 100, height: 80 }, T2: { width: 100, height: 80 }, W: { width: 36, height: 36 } };
     const registro = { get: (id: string) => formas[id] };
     const modeler = { get: (n: string) => (n === 'overlays' ? overlays : registro) } as unknown as Modeler;
-    return { modeler, pintadas: () => lista.map((x) => ({ id: x.id, texto: x.html.textContent ?? '' })) };
+    return { modeler, pintadas: () => lista.map((x) => ({ id: x.id, texto: x.html.textContent ?? '' })), lista: () => lista };
   }
 
   it('paints the step\'s labels, repaints without duplicating, and null clears them', () => {
@@ -125,5 +125,15 @@ describe('aplicarEtiquetasPaso', () => {
     const { modeler, pintadas } = falso();
     aplicarEtiquetasPaso(modeler, { paso: 'times', resuelto, ir, unidad: 'min', originalIds: { T1: 'Ghost', T2: 'T1' } });
     expect(pintadas().map((x) => x.id)).toEqual(['T1', 'W']);
+  });
+
+  it('puts a task\'s label under it and an event\'s above it, clear of its name and the route %', () => {
+    const { modeler, lista } = falso();
+    aplicarEtiquetasPaso(modeler, { paso: 'times', resuelto, ir, unidad: 'min' });
+    const de = (id: string) => lista().find((x) => x.id === id)!;
+    expect(de('T1').position).toEqual({ left: 0, top: 84 });
+    expect(de('W').position).toEqual({ left: 0, top: -18 });
+    expect(de('W').html.classList.contains('arriba')).toBe(true);
+    expect(de('T1').html.classList.contains('arriba')).toBe(false);
   });
 });

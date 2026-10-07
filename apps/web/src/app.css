@@ -4507,3 +4507,12 @@ button.gcal-uso-fila:hover {
 @media (max-width: 1399px) {
   .c5-tiempo > .aviso { display: none; }
 }
+
+/* The number of problems on «▶ Simulate» (design 01). */
+.ejecutar .c5-insignia {
+  background: var(--status-error);
+  color: var(--fg-onAccent);
+  font: 700 10.5px/1 var(--font-ui);
+  margin-left: 6px;
+  padding: 2px 6px;
+}

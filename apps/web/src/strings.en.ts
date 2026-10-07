@@ -2104,6 +2104,7 @@ export const en = {
     },
     validarRutas: 'Validate paths',
     validarRutasTitulo: 'Walk tokens through the routes (Model only; not the simulation)',
+    problemasPendientes: (n: number): string => (n === 1 ? '1 problem holds the run back' : `${n} problems hold the run back`),
     compararConEscenario: (nombre: string): string => `Compare with ${nombre}`,
   },
 } as const;
