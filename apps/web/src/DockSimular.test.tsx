@@ -21,6 +21,7 @@ import { FILAS_LOG, filasTareas, PESTANAS_DOCK, TablaResultados, type PestanaDoc
 import type { LogDeCorrida } from './GraficasResultados';
 import { agruparAvisos } from './avisos';
 import { exactDuration, formatDisplayDurationWithUnit } from './formatDisplay';
+import { ESPERA_RECURSO, percentilesPorElemento } from './percentilesPorElemento';
 import { setLocale, strings } from './i18n';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -84,7 +85,7 @@ describe('the Tasks tab (Lote M, design 05)', () => {
     expect(tareas.length).toBeGreaterThan(0);
     expect(tabla.querySelectorAll('tbody tr')).toHaveLength(tareas.length);
     const C = S.c5.tabla.columnas;
-    expect([...tabla.querySelectorAll('thead th')].map((t) => t.textContent)).toEqual([C.tarea, C.recurso, C.casos, C.proceso, C.espera, C.utilizacion, C.costo]);
+    expect([...tabla.querySelectorAll('thead th')].map((t) => t.textContent)).toEqual([C.tarea, C.recurso, C.casos, C.proceso, C.espera, C.esperaP95, C.utilizacion, C.costo]);
     const unidad = scenario.run.baseTimeUnit as BaseTimeUnit;
     const id = tareas[0]!;
     const espera = tabla.querySelector('tbody tr')!.querySelectorAll('td')[3]!;
@@ -95,6 +96,24 @@ describe('the Tasks tab (Lote M, design 05)', () => {
     expect(largas.length).toBeGreaterThan(0);
     for (const tr of largas) expect(tr.querySelectorAll('td')[3]!.textContent).toMatch(/^[\d.]+ h \([\d.]+ min\)$/);
     expect(container.querySelector('.dock-nota')!.textContent).toBe(S.c5.tabla.notaCosto);
+    expect(container.textContent).toContain(S.c5.tabla.notaPercentiles(log.rows.length));
+    // The total row: cases and fixed cost only.
+    const total = tabla.querySelector('tfoot tr')!;
+    expect(total.querySelector('th')!.textContent).toBe(S.c5.tabla.total);
+    const celdas = [...total.querySelectorAll('td')].map((td) => td.textContent);
+    expect(celdas[1]).toBe(String(Math.round(result.process.completed * 100) / 100));
+    expect(celdas.slice(2, 6)).toEqual(['—', '—', '—', '—']);
+  });
+
+  test('the p95 is the shared per-element percentile; a truncated or missing log hides its column and says why', async () => {
+    const filas = filasTareas(ir, result, scenario, log);
+    const compartido = percentilesPorElemento(log.rows, [0.95], { warmup: scenario.run.warmup, medida: ESPERA_RECURSO });
+    for (const f of filas) expect(f.esperaP95).toBe(compartido.get(f.id)?.[0] ?? null);
+    expect(filas.some((f) => f.esperaP95 !== null)).toBe(true);
+    expect(filasTareas(ir, result, scenario, undefined).every((f) => f.esperaP95 === null)).toBe(true);
+    await montar({ log: { rows: log.rows, truncated: true } });
+    expect([...container.querySelectorAll('table.c5-tareas thead th')].map((t) => t.textContent)).not.toContain(S.c5.tabla.columnas.esperaP95);
+    expect(container.textContent).toContain(S.c5.tabla.muestraParcial(log.rows.length));
   });
 
   test('resources and utilization come from the scenario, so a run without a log has them too', () => {

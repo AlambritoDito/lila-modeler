@@ -18,6 +18,7 @@ import type { LogDeCorrida } from './GraficasResultados';
 import { exactDuration, formatDisplay, formatDisplayDurationWithUnit } from './formatDisplay';
 import { getLocale, useStrings } from './i18n';
 import { agruparAvisos, AvisoAgrupado, type GrupoAvisos } from './avisos';
+import { ESPERA_RECURSO, p95Fiable, percentilesPorElemento } from './percentilesPorElemento';
 import { numerosLegibles } from './escenarioModelo';
 import './DockSimular.css';
 
@@ -79,6 +80,8 @@ export interface FilaTarea {
   casos: number;
   proceso: number;
   espera: number;
+  /** 95th percentile of the same wait over the log sample; `null` without a usable sample. */
+  esperaP95: number | null;
   /** The busiest of its resources (`null` without resources). */
   utilizacion: number | null;
   costo: number;
@@ -90,7 +93,10 @@ export interface FilaTarea {
  * reopened from a file has them too); the cost is the task's own fixed cost (`fixedCostTotal`):
  * the engine does not split resource cost per task, and the table says so.
  */
-export function filasTareas(ir: ProcessIR, result: RunResult, scenario: ResolvedScenario): FilaTarea[] {
+export function filasTareas(ir: ProcessIR, result: RunResult, scenario: ResolvedScenario, log?: LogDeCorrida): FilaTarea[] {
+  // Same rule as the quick view (`p95Fiable`): no p95 from a truncated sample.
+  const p95 = !p95Fiable(log) ? new Map<string, number[]>()
+    : percentilesPorElemento(log.rows, [0.95], { warmup: scenario.run.warmup, medida: ESPERA_RECURSO });
   return Object.entries(ir.nodes)
     .filter(([id, nodo]) => nodo.type === 'task' && result.elements[id] !== undefined)
     .map(([id, nodo]): FilaTarea => {
@@ -104,6 +110,7 @@ export function filasTareas(ir: ProcessIR, result: RunResult, scenario: Resolved
         casos: m.completed,
         proceso: m.processing.mean,
         espera: m.resourceWait.mean,
+        esperaP95: ((v) => (v === undefined || Number.isNaN(v) ? null : v))(p95.get(id)?.[0]),
         utilizacion: utilizaciones.length === 0 ? null : Math.max(...utilizaciones),
         costo: m.fixedCostTotal,
       };
@@ -175,7 +182,7 @@ export function TablaResultados(props: TablaResultadosProps): ReactNode {
         <div role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-tab-${pestana}`} tabIndex={0} className="dock-panel">
           {pestana === 'avisos' ? <Avisos grupos={grupos} />
             : !conCorrida ? <p className="vacio">{S.dock.vacio}</p>
-              : pestana === 'tareas' ? <Tareas ir={ir} result={corrida.result} scenario={corrida.scenario} seleccion={props.seleccion ?? null} onSeleccionar={props.onSeleccionar} />
+              : pestana === 'tareas' ? <Tareas ir={ir} result={corrida.result} scenario={corrida.scenario} log={props.log} seleccion={props.seleccion ?? null} onSeleccionar={props.onSeleccionar} />
                 : pestana === 'detalle' ? props.detalle
                   : <Log ir={ir} scenario={corrida.scenario} log={props.log} />}
         </div>
@@ -184,13 +191,14 @@ export function TablaResultados(props: TablaResultadosProps): ReactNode {
   );
 }
 
-function Tareas({ ir, result, scenario, seleccion, onSeleccionar }: {
-  ir: ProcessIR; result: RunResult; scenario: ResolvedScenario; seleccion: string | null; onSeleccionar: (id: string) => void;
+function Tareas({ ir, result, scenario, log, seleccion, onSeleccionar }: {
+  ir: ProcessIR; result: RunResult; scenario: ResolvedScenario; log: LogDeCorrida | undefined; seleccion: string | null; onSeleccionar: (id: string) => void;
 }): ReactNode {
   const S = useStrings();
   const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
   const moneda = scenario.run.currency === undefined ? '' : ` ${scenario.run.currency}`;
-  const filas = filasTareas(ir, result, scenario);
+  const filas = filasTareas(ir, result, scenario, log);
+  const conP95 = p95Fiable(log);
   const C = S.c5.tabla.columnas;
   const tiempo = (v: number): string => formatDisplayDurationWithUnit(v, unit);
   const derecha = (): CSSProperties => ({ ...th(), textAlign: 'right' });
@@ -204,6 +212,7 @@ function Tareas({ ir, result, scenario, seleccion, onSeleccionar }: {
             <th scope="col" style={derecha()}>{C.casos}</th>
             <th scope="col" style={derecha()}>{C.proceso}</th>
             <th scope="col" style={derecha()}>{C.espera}</th>
+            {conP95 && <th scope="col" style={derecha()} title={S.c5.tabla.p95Titulo}>{C.esperaP95}</th>}
             <th scope="col" style={derecha()} title={S.c5.tabla.utilizacionTitulo}>{C.utilizacion}</th>
             <th scope="col" style={derecha()} title={S.c5.tabla.costoTitulo}>{C.costo}</th>
           </tr>
@@ -219,13 +228,28 @@ function Tareas({ ir, result, scenario, seleccion, onSeleccionar }: {
               <td style={numero()} title={formatNumber(f.casos)}>{formatDisplay(f.casos)}</td>
               <td style={numero()} title={exactDuration(f.proceso, unit)}>{tiempo(f.proceso)}</td>
               <td style={numero()} title={exactDuration(f.espera, unit)}>{tiempo(f.espera)}</td>
+              {conP95 && <td style={numero()} title={guion(f.esperaP95, (v) => exactDuration(v, unit))}>{guion(f.esperaP95, tiempo)}</td>}
               <td style={numero()} title={guion(f.utilizacion, (v) => formatNumber(v * 100))}>{guion(f.utilizacion, (v) => `${formatDisplay(v * 100)} %`)}</td>
               <td style={numero()} title={`${formatNumber(f.costo)}${moneda}`}>{`${formatDisplay(f.costo)}${moneda}`}</td>
             </tr>
           ))}
         </tbody>
+        <tfoot>
+          {/* Cases and fixed cost only: the process wait per case is another quantity (QA of #394). */}
+          <tr className="total">
+            <th scope="row" style={{ ...tdStyle, textAlign: 'left' }}>{S.c5.tabla.total}</th>
+            <td style={tdStyle} />
+            <td style={numero()} title={formatNumber(result.process.completed)}>{formatDisplay(result.process.completed)}</td>
+            <td style={numero()}>—</td>
+            <td style={numero()}>—</td>
+            {conP95 && <td style={numero()}>—</td>}
+            <td style={numero()}>—</td>
+            <td style={numero()}>{`${formatDisplay(filas.reduce((suma, f) => suma + f.costo, 0))}${moneda}`}</td>
+          </tr>
+        </tfoot>
       </table>
       <p className="dock-nota">{S.c5.tabla.notaCosto}</p>
+      <p className="dock-nota">{log === undefined ? S.c5.tabla.notaSinLog : log.truncated ? S.c5.tabla.muestraParcial(log.rows.length) : S.c5.tabla.notaPercentiles(log.rows.length)}</p>
     </>
   );
 }
