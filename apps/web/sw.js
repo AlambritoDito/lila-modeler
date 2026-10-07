@@ -21,7 +21,11 @@ const scope = () => self.registration.scope;
 const enScope = (url) => new URL(url, scope()).href;
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(PRECACHE.map(enScope))));
+  // `cache: 'reload'` skips the HTTP cache: GitHub Pages serves everything with `max-age=600`, so
+  // right after a deploy a plain fetch could precache the previous version's `index.html`, whose
+  // hashed bundles are in the cache this version's `activate` deletes — offline it would not open.
+  const peticiones = PRECACHE.map((url) => new Request(enScope(url), { cache: 'reload' }));
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(peticiones)));
 });
 
 self.addEventListener('activate', (event) => {
