@@ -3859,6 +3859,10 @@ button.gcal-uso-fila:hover {
   font: inherit;
   gap: 10px;
   padding: 10px;
+  text-align: left;
+  width: 100%;
+}
+
 /* ---------- Lote M, C5: results on the map, compare, «Scenario ▾» ---------- */
 
 /* The row over the canvas in Simulate and Results (`grid-area: subbarra`): «Scenario ▾», and in
