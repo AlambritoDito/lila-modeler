@@ -13,6 +13,9 @@ if (webVersion !== desktopVersion) throw new Error('Web and desktop versions mus
 mkdirSync(here('./public'), { recursive: true });
 cpSync(here('./src/theme/themes'), here('./public'), { recursive: true });
 cpSync(here('../../docs/design/branding/web'), here('./public/branding'), { recursive: true });
+// The web app manifest (#571, ADR-031): every URL in it is relative to its own, so the same file
+// works at `/` (dev, Electron) and at `/lila-modeler/app/` (Pages).
+cpSync(here('./manifest.webmanifest'), here('./public/manifest.webmanifest'));
 
 export default defineConfig({
   // The welcome's «What's new» paragraph (#425), from this version's CHANGELOG section.
