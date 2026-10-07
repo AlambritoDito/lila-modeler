@@ -4210,6 +4210,46 @@ describe('launchQueue (#572)', () => {
     expect(container.textContent).toContain('Lanzado');
   });
 
+  it('cold start: a launch queued before the canvas exists waits for the restored session, then opens once', async () => {
+    // Chromium hands queued launches to the consumer as soon as it is set: before the canvas.
+    const lila = archivo('Lanzado.lila');
+    let consumidor: ((params: { files: readonly unknown[] }) => void) | null = null;
+    vi.stubGlobal('launchQueue', { setConsumer: (c: typeof consumidor) => { consumidor = c; c!({ files: [lila] }); } });
+    const openHandle = vi.fn().mockResolvedValue(proyecto('p9', 'Lanzado'));
+    const restaurado = proyecto('p1', 'Restaurado');
+    session = { ...session, openHandle, restoreSession: vi.fn(() => restaurado) } as unknown as ProjectSessionStore;
+    // The restore holds the I/O lock for a while: the launch must wait for it, not be dropped.
+    mocks.abrir.mockImplementationOnce(() => new Promise((ok) => setTimeout(() => ok(true), 400)));
+    // The canvas holds the restored model: the startup reparse must not seed tasks into it.
+    mocks.exportXml.mockResolvedValue(restaurado.model.xml);
+    await remontar();
+    expect(consumidor).not.toBeNull();
+    expect(openHandle).not.toHaveBeenCalled();
+    await vi.waitFor(async () => {
+      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+      expect(openHandle).toHaveBeenCalledOnce();
+      expect(container.textContent).toContain('Lanzado');
+    }, { timeout: 3000 });
+    expect(mocks.abrir).toHaveBeenNthCalledWith(1, restaurado.model.xml);
+    expect(openHandle).toHaveBeenCalledWith(lila);
+  });
+
+  it('a second launch while the unsaved-changes dialog is up is refused; only the first file opens', async () => {
+    const cola = colaDeLanzamiento();
+    const openHandle = vi.fn().mockResolvedValue(proyecto('p9', 'Lanzado'));
+    session = { ...session, openHandle } as unknown as ProjectSessionStore;
+    await remontar();
+    await act(async () => mocks.changed());
+    const primero = archivo('Lanzado.lila');
+    await cola.lanzar(primero);
+    await cola.lanzar(archivo('Otro.lila'));
+    expect(container.textContent).toContain(T.app.errorAbrirOcupado('Otro.lila'));
+    expect(openHandle).not.toHaveBeenCalled();
+    await click(T.app.descartar);
+    expect(openHandle).toHaveBeenCalledOnce();
+    expect(openHandle).toHaveBeenCalledWith(primero);
+  });
+
   it('a plain launch with no files opens nothing', async () => {
     const cola = colaDeLanzamiento();
     const openHandle = vi.fn();

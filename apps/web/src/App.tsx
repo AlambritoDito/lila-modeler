@@ -1902,10 +1902,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * double-click on the desktop; while another open or save holds the lock (the session restored
    * at startup, typically) it waits for it instead, since that is no choice the user made.
    */
-  function abrirLanzado(handle: FileSystemFileHandle): void {
+  function abrirLanzado(handle: FileSystemFileHandle, intentos = 0): void {
     if (modelador === null) { lanzadoPendiente.current = handle; return; }
     if (pendingAction !== null) { setIoError(S.app.errorAbrirOcupado(handle.name)); return; }
-    if (ioLock.current || respuestaPerdida.current !== null) { setTimeout(() => abrirLanzadoRef.current(handle), 300); return; }
+    if (ioLock.current || respuestaPerdida.current !== null) {
+      // Up to 30 s (a save dialog left open, a slow restore); then say so instead of waiting forever.
+      if (intentos >= 100) { setIoError(S.app.errorAbrirOcupado(handle.name)); return; }
+      setTimeout(() => abrirLanzadoRef.current(handle, intentos + 1), 300);
+      return;
+    }
     void projectAction({ lanzado: handle });
   }
   const abrirLanzadoRef = useRef(abrirLanzado);
