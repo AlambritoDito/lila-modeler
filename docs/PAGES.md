@@ -31,6 +31,27 @@ Reload restores that saved model, draft scenarios, revisions and simulation resu
 changes are not autosaved. Storage failure does not prevent downloading; keep the download
 as a portable backup. Clearing browser data removes the local copy.
 
+In Chrome and Edge the same **Save** writes back to the `.lila` that was opened or last saved,
+through the File System Access API, and the first save asks where with the system dialog; other
+browsers download as described above (#573).
+
+### Installable app (ADR-031)
+
+The app is an installable Progressive Web App: `apps/web/manifest.webmanifest` (relative
+`start_url`/`scope`, brand icons, a `.lila` file handler) is linked from `index.html`, and
+`vite build` writes `sw.js`, a service worker that precaches the build under the cache
+`lila-modeler-<version>`. A new version is picked up once every window of the old one has closed,
+so **bump the version** whenever a Pages deploy changes the app: an unchanged version keeps serving
+the previous non-hashed files (themes, icons, manifest) to installed apps. Before asking someone to
+test on Windows ([tester guide](WINDOWS-PWA-TESTER-GUIDE.md)), run
+
+```bash
+npm run build:pages && npm run check:pwa
+```
+
+which checks the manifest and installability over CDP, the service worker, save-in-place and the
+offline start in headless Chrome.
+
 ## Publish an update (owner action)
 
 1. Repository Settings → Pages is configured to use GitHub Actions.

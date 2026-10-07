@@ -7,6 +7,10 @@ de Windows en una máquina Windows real**, así que eres la primera persona: pue
 funcione, y un reporte claro de qué funcionó y qué no es justo lo que necesitamos. No hace falta ser
 desarrollador. Reserva unos 30 minutos.
 
+> En Windows el canal principal es ahora la app web instalada desde Edge o Chrome
+> ([ADR-031](DECISIONS.md)); su guía es [GUIA-PROBADOR-WINDOWS-PWA.md](GUIA-PROBADOR-WINDOWS-PWA.md).
+> Esta guía cubre el canal secundario, el instalador sin firmar.
+
 Dos cosas que conviene saber antes de empezar:
 
 - El instalador **no está firmado**, así que Windows te avisará antes de dejarte ejecutarlo (paso 3).
