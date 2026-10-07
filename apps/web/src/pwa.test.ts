@@ -3,9 +3,11 @@
  * «Install». The browser-side check (`Page.getInstallabilityErrors` on the Pages build) is
  * `tools/check-pwa.mjs`; this one keeps the manifest honest on every `npm test`.
  */
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { precacheList, serviceWorkerSource } from '../serviceWorker';
+import { buildHash, precacheList, serviceWorkerSource } from '../serviceWorker';
 
 const read = (path: string): Buffer => readFileSync(new URL(path, import.meta.url));
 interface Icon { src: string; sizes: string; type: string; purpose?: string }
@@ -80,6 +82,20 @@ describe('service worker (#574)', () => {
     expect(src).toContain('const VERSION = "1.0.0-beta.22";');
     expect(src).toContain('const PRECACHE = ["./"];');
     expect(() => serviceWorkerSource('self.addEventListener()', '1', [])).toThrow(/placeholders/);
+    // The build hash joins the version in the cache name: a deploy without a bump still renews it.
+    expect(serviceWorkerSource(template, '1.0.0', ['index.html'], 'abcd1234')).toContain('const VERSION = "1.0.0-abcd1234";');
+  });
+
+  it('the build hash follows the content of the files, not only their names', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'lila-sw-'));
+    writeFileSync(join(dir, 'index.html'), 'a');
+    writeFileSync(join(dir, 'lila-dark.json'), '{}');
+    const primero = buildHash(dir, ['index.html', 'lila-dark.json']);
+    expect(primero).toMatch(/^[0-9a-f]{8}$/);
+    expect(buildHash(dir, ['index.html', 'lila-dark.json'])).toBe(primero);
+    writeFileSync(join(dir, 'lila-dark.json'), '{"x":1}');
+    expect(buildHash(dir, ['index.html', 'lila-dark.json'])).not.toBe(primero);
+    rmSync(dir, { recursive: true, force: true });
   });
 
   /** Runs the worker for `version` with in-memory caches (shared across versions, like a browser). */
@@ -144,14 +160,22 @@ describe('service worker (#574)', () => {
     expect(w.self.clients.claim).toHaveBeenCalled();
   });
 
-  it('serves assets from the cache, and caches what was not precached on first use', async () => {
+  it('serves hashed assets from the cache, and caches what was not precached on first use', async () => {
     const w = worker('1.0.0', ['assets/main.js']);
     await w.dispatch('install');
     expect(await w.dispatch('fetch', get('assets/main.js'))).toEqual({ body: `pre:${SCOPE}assets/main.js` });
     expect(w.fetchMock).not.toHaveBeenCalled();
-    await w.dispatch('fetch', get('lila-dark.json'));
-    expect(await w.dispatch('fetch', get('lila-dark.json'))).toEqual({ body: `net:${SCOPE}lila-dark.json` });
+    await w.dispatch('fetch', get('assets/lazy.js'));
+    expect(await w.dispatch('fetch', get('assets/lazy.js'))).toEqual({ body: `net:${SCOPE}assets/lazy.js` });
     expect(w.fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('files with a fixed name (themes, manifest) go to the network first and to the cache offline', async () => {
+    const w = worker('1.0.0', ['lila-dark.json']);
+    await w.dispatch('install');
+    expect(await w.dispatch('fetch', get('lila-dark.json'))).toMatchObject({ body: `net:${SCOPE}lila-dark.json` });
+    w.fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    expect(await w.dispatch('fetch', get('lila-dark.json'))).toEqual({ body: `pre:${SCOPE}lila-dark.json` });
   });
 
   it('navigations go to the network first and fall back to the cached index offline', async () => {
