@@ -201,16 +201,18 @@ function Anfitrion({
     espejo.escenarios = escenarios;
     espejo.volver = () => setArchivo(archivoInicial);
   }
+  // Lote M: «Save» lives in «Scenario ▾» (the shell); the harness keeps its own button.
+  const guardar = (): void => { guardados.push({ archivo, escenario: escenarios[archivo] ?? {} }); };
   return (
+    <>
+    <button type="button" onClick={guardar}>Guardar</button>
     <ScenarioPanel
       archivo={archivo}
       escenarios={escenarios}
       onCambio={(a, e) => {
         setEscenarios((previos) => ({ ...previos, [a]: e }));
       }}
-      onGuardar={() => {
-        guardados.push({ archivo, escenario: escenarios[archivo] ?? {} });
-      }}
+      onGuardar={guardar}
       onDuplicar={(a, e) => {
         setEscenarios((previos) => ({ ...previos, [a]: e }));
         setArchivo(a);
@@ -220,6 +222,7 @@ function Anfitrion({
       onSeleccionar={setSeleccion}
       avanzado={avanzado}
     />
+    </>
   );
 }
 

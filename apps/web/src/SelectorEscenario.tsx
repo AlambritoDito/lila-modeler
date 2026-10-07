@@ -15,6 +15,7 @@ import type { ProcessIR } from '@lila-modeler/engine';
 import { resolveExtends, resolveScenarioPath } from '@lila-modeler/engine/schema';
 import type { StoredRun } from './store/ProjectStore';
 import { ImportarExcel } from './ImportarExcel';
+import { VistaJson } from './ScenarioPanel';
 import { esEscenarioBase } from './RailEscenarios';
 import { useStrings } from './i18n';
 
@@ -211,6 +212,8 @@ export function SelectorEscenario(props: SelectorEscenarioProps): React.JSX.Elem
             </div>
             <div className="c5-escenario-importar">
               <ImportarExcel key={activo} archivo={activo} resuelto={resuelto} delta={delta} padre={padre} ir={props.ir} onCambio={props.onCambio} />
+              {/* The scenario as JSON (paste a whole one, or touch what the form does not draw). */}
+              <VistaJson key={`json-${activo}`} delta={delta} onAplicar={(escenario) => props.onCambio(activo, escenario)} />
             </div>
           </>}
         </div>

@@ -69,7 +69,13 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   // QA of #539: the canvas's `onSeleccion`, to play bpmn-js reporting a selection.
   onSeleccion: (_id: string | null) => {},
   // Lote M: the last props of the time bar over the Results map.
-  replay: null as null | { reproduciendo?: boolean } }));
+  replay: null as null | { reproduciendo?: boolean },
+  // Lote M, C1: the props the shell wires into the Simulate panel.
+  panel: {} as { seleccion?: string | null; onConteoProblemas?: (n: number) => void; onSimular?: () => void; irAlProblema?: number | null; onProblemaAtendido?: () => void; onPasoVisible?: (paso: string) => void },
+  // Lote M, C4 and C1: the Simulate layers of the canvas the shell feeds.
+  porcentajes: vi.fn(), etiquetasPaso: vi.fn(),
+  // Lote M, C5b: bpmn-js's `selection.select`, called with `[]` when the shell drops the selection.
+  soltar: vi.fn() }));
 /**
  * The canvas elements the command palette lists (#410), with no box, so the shape palette's
  * drop-target search (which wants a width and a height) still ignores them. Three named shapes,
@@ -118,7 +124,9 @@ vi.mock('./replay/Replay', () => ({ Replay: (props: { reproduciendo?: boolean })
 vi.mock('./ScenarioPanel', async (importOriginal) => ({ problemasEscenario: () => mocks.problemas,
   // The rail «+» (#397) goes through the real naming, which is pure.
   duplicarEscenario: (await importOriginal<typeof import('./ScenarioPanel')>()).duplicarEscenario,
-  ScenarioPanel: ({ onCambio, onDuplicar, escenarios }: { onCambio: (file: string, raw: object) => void; onDuplicar: typeof mocks.duplicarPanel; escenarios: typeof mocks.escenarios }) => {
+  VistaJson: (await importOriginal<typeof import('./ScenarioPanel')>()).VistaJson,
+  ScenarioPanel: ({ onCambio, onDuplicar, escenarios, ...resto }: { onCambio: (file: string, raw: object) => void; onDuplicar: typeof mocks.duplicarPanel; escenarios: typeof mocks.escenarios } & typeof mocks.panel) => {
+    mocks.panel = resto;
     mocks.scenarioChange = (raw = {}) => onCambio('as-is.scenario.json', raw);
     mocks.duplicarPanel = onDuplicar;
     mocks.escenarios = escenarios;
@@ -131,6 +139,7 @@ vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado, onSeleccion }: { onL
     exportar: mocks.exportXml, abrir: mocks.abrir, cuellos: mocks.cuellos, ajustar: mocks.ajustar, zoom: mocks.zoom,
     repintar: mocks.repintar, exportarSvg: mocks.exportarSvg,
     validacion: mocks.validacion, seleccionar: mocks.seleccionar, simulacionTokens: mocks.simulacionTokens, enfocar: mocks.enfocar,
+    porcentajes: mocks.porcentajes, etiquetasPaso: mocks.etiquetasPaso,
     suscribir: (events: string[], callback: () => void) => {
       // The lane layer of C2 (`carrilClic.ts`) listens to several events at once: not the shell's.
       if (events.length > 1) return () => {};
@@ -147,7 +156,7 @@ vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado, onSeleccion }: { onL
       canvas: { viewbox: () => ({ x: 100, y: 50, width: 800, height: 400 }), getRootElement: () => 'raiz', scrollToElement: vi.fn() },
       create: { start: mocks.arrastrar },
       directEditing: { activate: mocks.editarNombre, isActive: () => mocks.edicionActiva(), complete: () => mocks.completarEdicion() },
-      selection: { get: () => mocks.seleccionados },
+      selection: { get: () => mocks.seleccionados, select: mocks.soltar },
       // Sin elementos con caja, la figura cuelga de la raíz visible, que es lo que aquí permiten
       // las reglas; el reparto entre pools y carriles es de bpmn-js y se prueba en el navegador.
       elementRegistry: { filter: (prueba: (el: object) => boolean) => ELEMENTOS.filter(prueba) },
@@ -4394,6 +4403,111 @@ it('the Duplicate of the panel header (C1) also records the copy\'s origin: its 
   await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
   await act(async () => mocks.duplicarPanel('as-is (copy).scenario.json', { version: 1, name: 'AS-IS (copy)', extends: 'as-is.scenario.json' }));
   await click(T.app.ejecutar);
+  for (let i = 0; i < 4; i++) await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  expect(mocks.gate.mock.calls.map((c) => c[1])).toEqual(['as-is (copy).scenario.json', 'as-is.scenario.json']);
+  expect(container.querySelector('[data-mock="comparar"]')!.textContent).toBe('AS-IS vs AS-IS (copy)');
+});
+
+it('«▶ Simulate» and ⌘↩ go to the first problem in the panel while the panel counts errors, and run otherwise (Lote M, C1)', async () => {
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await act(async () => mocks.panel.onConteoProblemas!(2));
+  expect(container.querySelector('.ejecutar .c5-insignia')!.textContent).toBe('2');
+  await click(T.app.modos.modelar);
+  await act(async () => container.querySelector<HTMLButtonElement>('.ejecutar')!.click());
+  expect(mocks.gate).not.toHaveBeenCalled();
+  expect(modoActivo()).toBe(T.app.modos.simular);
+  expect(mocks.panel.irAlProblema).toBe(1);
+  await pulsar(document.body, mod('Enter'));
+  expect(mocks.panel.irAlProblema).toBe(2);
+  expect(mocks.gate).not.toHaveBeenCalled();
+  // The panel's own «▶ Simulate» runs through the shell; with no problems the bar runs too.
+  await act(async () => mocks.panel.onConteoProblemas!(0));
+  expect(container.querySelector('.ejecutar .c5-insignia')).toBeNull();
+  await act(async () => { mocks.panel.onSimular!(); });
+  expect(mocks.gate).toHaveBeenCalledOnce();
+});
+
+it('the badge of «▶ Simulate» counts only the errors (E-*) while the panel is not mounted; warnings still run (Lote M, C1)', async () => {
+  await click(T.app.modos.modelar);
+  await click(T.app.pestanas.propiedades);
+  await act(async () => {
+    mocks.problemas = [
+      { ruta: 'elements.Task_1', mensaje: 'sin duración', severidad: 'warning' },
+      { ruta: 'run.duration', mensaje: 'falta parada', severidad: 'error' },
+    ];
+    mocks.scenarioChange();
+  });
+  expect(container.querySelector('.ejecutar .c5-insignia')!.textContent).toBe('1');
+  await act(async () => {
+    mocks.problemas = [{ ruta: 'elements.Task_1', mensaje: 'sin duración', severidad: 'warning' }];
+    mocks.scenarioChange();
+  });
+  expect(container.querySelector('.ejecutar .c5-insignia')).toBeNull();
+  await act(async () => container.querySelector<HTMLButtonElement>('.ejecutar')!.click());
+  expect(mocks.gate).toHaveBeenCalledOnce();
+});
+
+it('the panel acknowledging the jump clears it, and Alt+n from Model opens Simulate on step n (Lote M, C1)', async () => {
+  await act(async () => mocks.panel.onConteoProblemas!(1));
+  await pulsar(document.body, mod('Enter'));
+  expect(mocks.panel.irAlProblema).toBe(1);
+  await act(async () => mocks.panel.onProblemaAtendido!());
+  expect(mocks.panel.irAlProblema).toBeNull();
+  await click(T.app.modos.modelar);
+  await click(T.app.pestanas.propiedades);
+  expect(await pulsar(document.body, { key: '5', code: 'Digit5', altKey: true })).toBe(true);
+  expect(modoActivo()).toBe(T.app.modos.simular);
+  expect((mocks.panel as { pasoPedido?: string }).pasoPedido).toBe('calendars');
+});
+
+/** Start → XOR «Approved?» → Yes / No → end: one gateway that splits cases. */
+const conCompuerta = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="x"><bpmn:process id="Process_semilla" isExecutable="false">
+<bpmn:startEvent id="Start_A"/><bpmn:exclusiveGateway id="Gw_A"/><bpmn:task id="Task_Si"/><bpmn:task id="Task_No"/><bpmn:endEvent id="End_A"/>
+<bpmn:sequenceFlow id="F0" sourceRef="Start_A" targetRef="Gw_A"/><bpmn:sequenceFlow id="Flow_Si" name="Yes" sourceRef="Gw_A" targetRef="Task_Si"/>
+<bpmn:sequenceFlow id="Flow_No" name="No" sourceRef="Gw_A" targetRef="Task_No"/><bpmn:sequenceFlow id="F3" sourceRef="Task_Si" targetRef="End_A"/><bpmn:sequenceFlow id="F4" sourceRef="Task_No" targetRef="End_A"/>
+</bpmn:process></bpmn:definitions>`;
+
+it('Routes turns the canvas percentages into fields that write 0.7/0.3; outside Simulate they go (Lote M, C4)', async () => {
+  await reparsear(conCompuerta);
+  await act(async () => mocks.panel.onPasoVisible!('times'));
+  type Estado = { editable: boolean; repartos: { id: string }[]; onCambiar: (flujo: string, p: number | null) => void; onEnfocar: (g: string, f: string | null) => void };
+  const ultimo = () => mocks.porcentajes.mock.calls.at(-1)![0] as Estado | null;
+  expect(ultimo()!.editable).toBe(false);
+  await act(async () => mocks.panel.onPasoVisible!('routes'));
+  expect(ultimo()!.editable).toBe(true);
+  expect(ultimo()!.repartos.map((r) => r.id)).toEqual(['Gw_A']);
+  await act(async () => ultimo()!.onCambiar('Flow_Si', 70));
+  await act(async () => ultimo()!.onCambiar('Flow_No', 30));
+  expect(asIs()['Flow_Si']).toEqual({ probability: 0.7 });
+  expect(asIs()['Flow_No']).toEqual({ probability: 0.3 });
+  await act(async () => ultimo()!.onEnfocar('Gw_A', 'Flow_Si'));
+  expect(mocks.seleccionar).toHaveBeenLastCalledWith('Flow_Si');
+  await click(T.app.modos.modelar);
+  expect(ultimo()).toBeNull();
+});
+
+it('the step labels follow the panel\'s step under each element and are cleared outside Simulate (Lote M, C1)', async () => {
+  await reparsear(conCompuerta);
+  await act(async () => mocks.panel.onPasoVisible!('times'));
+  const ultima = () => mocks.etiquetasPaso.mock.calls.at(-1)![0] as { paso: string; ir: { nodes: object }; unidad: string } | null;
+  expect(ultima()!.paso).toBe('times');
+  expect(Object.keys(ultima()!.ir.nodes)).toContain('Task_Si');
+  await act(async () => mocks.panel.onPasoVisible!('resources'));
+  expect(ultima()!.paso).toBe('resources');
+  await click(T.app.modos.resultados);
+  expect(ultima()).toBeNull();
+});
+
+it('duplicating drops the selection, so the copy\'s next step is not filtered to the old element, and its first ▶ Simulate opens compared (Lote M, C5b)', async () => {
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await act(async () => mocks.onSeleccion('Flow_Si'));
+  expect(mocks.panel.seleccion).toBe('Flow_Si');
+  await act(async () => mocks.panel.onConteoProblemas!(0));
+  await act(async () => container.querySelector<HTMLButtonElement>('.c5-subbarra .c5-duplicar')!.click());
+  expect(mocks.panel.seleccion).toBeNull();
+  expect(mocks.soltar).toHaveBeenLastCalledWith([]);
+  await act(async () => container.querySelector<HTMLButtonElement>('.ejecutar')!.click());
   for (let i = 0; i < 4; i++) await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
   expect(mocks.gate.mock.calls.map((c) => c[1])).toEqual(['as-is (copy).scenario.json', 'as-is.scenario.json']);
   expect(container.querySelector('[data-mock="comparar"]')!.textContent).toBe('AS-IS vs AS-IS (copy)');

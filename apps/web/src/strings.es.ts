@@ -2064,6 +2064,7 @@ export const es: Strings = {
     },
     validarRutas: 'Validar rutas',
     validarRutasTitulo: 'Recorrer las rutas con tokens (solo en Modelar; no es la simulación)',
+    problemasPendientes: (n: number): string => (n === 1 ? '1 problema impide simular' : `${n} problemas impiden simular`),
     compararConEscenario: (nombre: string): string => `Comparar con ${nombre}`,
   },
 };
