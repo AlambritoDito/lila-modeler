@@ -1,9 +1,10 @@
 import { fileURLToPath } from 'node:url';
-import { cpSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve, sep } from 'node:path';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import { novedades } from './novedades';
+import { buildServiceWorker } from './serviceWorker';
 
 // Stage local assets without moving theme sources or changing their public URLs.
 const here = (relative: string) => fileURLToPath(new URL(relative, import.meta.url));
@@ -21,6 +22,15 @@ export default defineConfig({
   // The welcome's «What's new» paragraph (#425), from this version's CHANGELOG section.
   define: { __LILA_NOVEDADES__: JSON.stringify(novedades(readFileSync(here('../../CHANGELOG.md'), 'utf8'), webVersion)) },
   plugins: [react(), {
+    // #574: `sw.js` is written after everything else (the bundle and the public directory), so its
+    // precache list is the build as shipped and its cache is named after this version.
+    name: 'lila-service-worker',
+    apply: 'build',
+    closeBundle() {
+      const outDir = here('./dist');
+      writeFileSync(resolve(outDir, 'sw.js'), buildServiceWorker(here('./sw.js'), outDir, webVersion));
+    },
+  }, {
     name: 'lila-branding',
     transformIndexHtml: (html) => html.replaceAll('%LILA_APP_VERSION%', webVersion),
     configureServer(server) {

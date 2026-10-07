@@ -4,7 +4,8 @@
  * `tools/check-pwa.mjs`; this one keeps the manifest honest on every `npm test`.
  */
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { precacheList, serviceWorkerSource } from '../serviceWorker';
 
 const read = (path: string): Buffer => readFileSync(new URL(path, import.meta.url));
 interface Icon { src: string; sizes: string; type: string; purpose?: string }
@@ -55,5 +56,107 @@ describe('manifest.webmanifest', () => {
     const html = read('../index.html').toString('utf8');
     expect(html).toContain('<link rel="manifest" href="%BASE_URL%manifest.webmanifest" />');
     expect(html).toContain(`<meta name="theme-color" content="${manifest.theme_color}" />`);
+  });
+});
+
+// #574: the worker is a template filled at build time; here it runs against in-memory doubles of
+// `caches`, `fetch` and the worker's `self`.
+describe('service worker (#574)', () => {
+  const SCOPE = 'https://alambritodito.github.io/lila-modeler/app/';
+  const template = read('../sw.js').toString('utf8');
+
+  it('precaches the build as shipped: index as ./, no worker, no legacy font formats', () => {
+    expect(precacheList(['index.html', 'sw.js', 'assets/main-abc.js', 'assets/f.woff2', 'assets/f.woff', 'assets/f.ttf', 'assets/f.eot', 'manifest.webmanifest']))
+      .toEqual(['./', 'assets/f.woff2', 'assets/main-abc.js', 'manifest.webmanifest']);
+  });
+
+  it('fills in the version and the list, and refuses a template without its placeholders', () => {
+    const src = serviceWorkerSource(template, '1.0.0-beta.22', ['index.html']);
+    expect(src).toContain('const VERSION = "1.0.0-beta.22";');
+    expect(src).toContain('const PRECACHE = ["./"];');
+    expect(() => serviceWorkerSource('self.addEventListener()', '1', [])).toThrow(/placeholders/);
+  });
+
+  /** Runs the worker for `version` with in-memory caches (shared across versions, like a browser). */
+  function worker(version: string, files: string[], store = new Map<string, Map<string, string>>()) {
+    const listeners: Record<string, (event: unknown) => void> = {};
+    const fetchMock = vi.fn(async (req: { url: string } | string) => {
+      const url = typeof req === 'string' ? req : req.url;
+      return { ok: true, type: 'basic', body: `net:${url}`, clone() { return this; } };
+    });
+    const cacheOf = (name: string) => {
+      const entries = store.get(name) ?? new Map<string, string>();
+      store.set(name, entries);
+      return {
+        addAll: async (urls: string[]) => { for (const u of urls) entries.set(u, `pre:${u}`); },
+        match: async (req: { url: string } | string) => {
+          const body = entries.get(typeof req === 'string' ? req : req.url);
+          return body === undefined ? undefined : { body };
+        },
+        put: async (req: { url: string }, res: { body: string }) => { entries.set(req.url, res.body); },
+      };
+    };
+    const caches = {
+      open: async (name: string) => cacheOf(name),
+      keys: async () => [...store.keys()],
+      delete: async (name: string) => store.delete(name),
+    };
+    const self = {
+      registration: { scope: SCOPE },
+      clients: { claim: vi.fn(async () => undefined) },
+      addEventListener: (type: string, fn: (event: unknown) => void) => { listeners[type] = fn; },
+    };
+    new Function('self', 'caches', 'fetch', serviceWorkerSource(template, version, files))(self, caches, fetchMock);
+    const dispatch = async (type: string, extra: object = {}) => {
+      let pending: Promise<unknown> | undefined;
+      const event = { ...extra, waitUntil: (p: Promise<unknown>) => { pending = p; }, respondWith: (p: Promise<unknown>) => { pending = p; } };
+      listeners[type]!(event);
+      return pending === undefined ? undefined : await pending;
+    };
+    return { store, fetchMock, self, dispatch };
+  }
+  const get = (path: string, mode = 'cors') => ({ request: { url: new URL(path, SCOPE).href, method: 'GET', mode } });
+
+  it('install precaches every listed file under a cache named after the version', async () => {
+    const w = worker('1.0.0', ['index.html', 'assets/main.js']);
+    await w.dispatch('install');
+    expect([...w.store.keys()]).toEqual(['lila-modeler-1.0.0']);
+    expect([...w.store.get('lila-modeler-1.0.0')!.keys()]).toEqual([SCOPE, `${SCOPE}assets/main.js`]);
+  });
+
+  it('activating a new version deletes older Lila caches, and only those', async () => {
+    const store = new Map([['lila-modeler-0.9.0', new Map()], ['another-app', new Map()]]);
+    const w = worker('1.0.0', ['index.html'], store);
+    await w.dispatch('install');
+    await w.dispatch('activate');
+    expect([...store.keys()].sort()).toEqual(['another-app', 'lila-modeler-1.0.0']);
+    expect(w.self.clients.claim).toHaveBeenCalled();
+  });
+
+  it('serves assets from the cache, and caches what was not precached on first use', async () => {
+    const w = worker('1.0.0', ['assets/main.js']);
+    await w.dispatch('install');
+    expect(await w.dispatch('fetch', get('assets/main.js'))).toEqual({ body: `pre:${SCOPE}assets/main.js` });
+    expect(w.fetchMock).not.toHaveBeenCalled();
+    await w.dispatch('fetch', get('lila-dark.json'));
+    expect(await w.dispatch('fetch', get('lila-dark.json'))).toEqual({ body: `net:${SCOPE}lila-dark.json` });
+    expect(w.fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('navigations go to the network first and fall back to the cached index offline', async () => {
+    const w = worker('1.0.0', ['index.html']);
+    await w.dispatch('install');
+    expect(await w.dispatch('fetch', get('./', 'navigate'))).toMatchObject({ body: `net:${SCOPE}` });
+    w.fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    expect(await w.dispatch('fetch', get('./?file=x', 'navigate'))).toEqual({ body: `pre:${SCOPE}` });
+  });
+
+  it('leaves other origins, other paths and non-GET requests to the browser', async () => {
+    const w = worker('1.0.0', []);
+    for (const request of [
+      { url: 'https://api.github.com/repos/x/releases', method: 'GET', mode: 'cors' },
+      { url: 'https://alambritodito.github.io/lila-modeler/docs/', method: 'GET', mode: 'navigate' },
+      { url: `${SCOPE}x`, method: 'POST', mode: 'cors' },
+    ]) expect(await w.dispatch('fetch', { request })).toBeUndefined();
   });
 });
