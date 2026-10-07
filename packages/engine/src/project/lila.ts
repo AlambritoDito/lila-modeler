@@ -430,5 +430,5 @@ function decodeRepository(parsed: Record<string, unknown>, entries: Record<strin
     runs: first.runs,
     ...(problems.length > 0 ? { problems } : {}),
   };
-  return readProjectDocument(withProcesses(base, processes));
+  return readProjectDocument(withProcesses(base, processes, { repository: true }));
 }

@@ -85,6 +85,9 @@ processes/<slug>/runs/<id>.result.json
 - **La versión 2 solo se escribe cuando hace falta.** Mientras un proyecto tiene un proceso se
   guarda en la versión 1, byte a byte, así que las versiones de la app que solo leen la 1 lo siguen
   abriendo. Añadir un segundo proceso escribe la versión 2; volver a uno escribe otra vez la 1.
+  Un manifiesto versión 2 que lista un solo proceso (escrito por otra herramienta, o editado a mano)
+  se sigue leyendo como repositorio: ese proceso conserva su slug y su nombre, y un proceso añadido
+  después va a su lado en vez de moverlo a otra carpeta.
 - **Un proyecto versión 1 se lee como un repositorio de un proceso**, en carpeta y en `.lila`. No
   se migra nada: abrirlo y guardarlo sin cambios devuelve los mismos bytes.
 - **La carpeta se mueve, no se copia.** El primer guardado en versión 2 de una *carpeta* versión 1

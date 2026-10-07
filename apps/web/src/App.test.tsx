@@ -1716,6 +1716,69 @@ it('borrar el primer proceso deja al otro con su nombre (QA de #511, nit 9)', as
   expect(pestanasProceso().map((b) => b.textContent)).toEqual(['Cobro', 'Envío']);
 });
 
+/** A repository read from disk (#517): its processes' folders are on disk and listed by it. */
+function repositorio(procesos: readonly { slug: string; name: string }[]): ProjectDocument {
+  const proceso = ({ slug, name }: { slug: string; name: string }) => ({
+    slug, name, model: { id: `Process_${slug}`, name: 'model.bpmn', xml: newModelXml(name), revision: 0 },
+    scenarios: { 'as-is.scenario.json': { version: 1, name: 'AS-IS', model: 'model.bpmn' } }, scenarioRevisions: {}, runs: [],
+  });
+  const [first, ...rest] = procesos.map(proceso);
+  return { version: 1, id: 'repo', name: 'Organización', model: first!.model, scenarios: first!.scenarios, scenarioRevisions: {}, runs: [],
+    process: { slug: first!.slug, name: first!.name }, ...(rest.length > 0 ? { processes: rest } : {}) };
+}
+async function abrirRepositorio(doc: ProjectDocument): Promise<void> {
+  (session as { occupiedSlugs?: () => readonly string[] }).occupiedSlugs = () => [doc.process!.slug, ...(doc.processes ?? []).map((p) => p.slug)];
+  vi.mocked(session.openProject).mockResolvedValueOnce(doc);
+  await click(T.app.abrir);
+  if (container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open === true) await click(T.app.descartar);
+}
+async function borrarConfirmando(nombre: string): Promise<void> {
+  // The delete button is on the tab on the canvas.
+  await act(async () => pestanasProceso().find((b) => b.textContent === nombre)!.click());
+  await act(async () => porEtiqueta(T.procesos.borrarProceso(nombre)).click());
+  await act(async () => container.querySelector<HTMLButtonElement>('dialog.dialogo-proceso button[type="submit"]')!.click());
+}
+
+it('deleting down to one process and adding another keeps the first in its own folder (#517, item 4)', async () => {
+  lienzoQueRecuerda();
+  await abrirRepositorio(repositorio([{ slug: 'pedido', name: 'Pedido' }, { slug: 'cobro', name: 'Cobro' }]));
+  expect(pestanasProceso().map((b) => b.textContent)).toEqual(['Pedido', 'Cobro']);
+  await borrarConfirmando('Cobro');
+  await nuevoProcesoConNombre('Envío');
+  expect(pestanasProceso().map((b) => b.textContent)).toEqual(['Pedido', 'Envío']);
+  await click(T.app.guardar);
+  const guardado = vi.mocked(session.saveProject).mock.calls.at(-1)![0];
+  expect(guardado.process).toEqual({ slug: 'pedido', name: 'Pedido' });
+  expect(guardado.processes?.map((p) => p.slug)).toEqual(['envio']);
+});
+
+it('a repository that lists a single process opens with its name and keeps its slug when it grows (#517, item 5)', async () => {
+  lienzoQueRecuerda();
+  await abrirRepositorio(repositorio([{ slug: 'facturacion', name: 'Facturación' }]));
+  // One process: the plain tab, as for any one-process project.
+  expect(pestanasProceso()).toEqual([]);
+  await nuevoProcesoConNombre('Envío');
+  expect(pestanasProceso().map((b) => b.textContent)).toEqual(['Facturación', 'Envío']);
+  await click(T.app.guardar);
+  const guardado = vi.mocked(session.saveProject).mock.calls.at(-1)![0];
+  expect(guardado.process).toEqual({ slug: 'facturacion', name: 'Facturación' });
+  expect(guardado.processes?.map((p) => p.slug)).toEqual(['envio']);
+});
+
+it('once saved back to one process (version 1), growing again takes a new folder: the old one is stale (#517)', async () => {
+  lienzoQueRecuerda();
+  await abrirRepositorio(repositorio([{ slug: 'pedido', name: 'Pedido' }, { slug: 'cobro', name: 'Cobro' }]));
+  await borrarConfirmando('Cobro');
+  await click(T.app.guardar);
+  expect(vi.mocked(session.saveProject).mock.calls.at(-1)![0].processes).toBeUndefined();
+  await nuevoProcesoConNombre('Envío');
+  await click(T.app.guardar);
+  const guardado = vi.mocked(session.saveProject).mock.calls.at(-1)![0];
+  // `processes/pedido/` still holds the copy from before the version 1 save; it is not reused.
+  expect(guardado.process).toEqual({ slug: 'pedido-2', name: 'Pedido' });
+  expect(guardado.processes?.map((p) => p.slug)).toEqual(['envio']);
+});
+
 it('doble clic en una actividad de llamada abre el proceso llamado y «Volver a» regresa (#461)', async () => {
   const lienzo = lienzoQueRecuerda();
   const primero = lienzo.xml();

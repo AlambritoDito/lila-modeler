@@ -495,6 +495,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    */
   const slugsBorrados = useRef(new Set<string>());
   const slugsOcupados = (): string[] => [...(adapter?.occupiedSlugs?.() ?? []), ...slugsBorrados.current];
+  /** The slugs the project lists on disk, as last opened or saved: `processes/<slug>/` of its own (#517). */
+  const slugsEnDisco = useRef(new Set<string>());
   /** #461: the slug of the process a call activity was opened from, for «Back to …». */
   const [origen, setOrigen] = useState<string | null>(null);
   /** #461: a double-click on a call activity that calls nothing here; a notice, not an error. */
@@ -787,9 +789,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // #546: every reader of a process picks it by its scenarios (`ParseBpmnOptions.scenarios`).
     const parsed = await parseBpmn(xml, { scenarios: Object.values(escenarios) });
     const yo = procesos[activo];
-    // A one-process project has no slug on disk yet: the day it grows it takes a free one, never
-    // the folder of a process deleted before (QA of #511).
-    return { slug: procesos.length > 1 && yo !== undefined ? yo.slug : processSlug(yo?.name ?? projectName, slugsOcupados()), name: yo?.name ?? projectName,
+    // A one-process project keeps the slug it already has (#517, item 4: deleting down to one and
+    // adding another must not move it to a new folder) while that slug is still its own on disk —
+    // listed by the repository it was read from or last saved as — or no folder holds it yet.
+    // Otherwise (a version 1 project, or one saved back to version 1 over its old `processes/`
+    // folder) the day it grows it takes a free one, never the folder of a process deleted before
+    // (QA of #511).
+    const propio = yo !== undefined && (procesos.length > 1 || slugsEnDisco.current.has(yo.slug) || !slugsOcupados().includes(yo.slug));
+    return { slug: propio ? yo.slug : processSlug(yo?.name ?? projectName, slugsOcupados()), name: yo?.name ?? projectName,
       model: { id: parsed.ir.id, name: archivo, xml, revision: atRevision },
       scenarios: escenarios, scenarioRevisions, runs };
   }
@@ -845,6 +852,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         : changeToken(doc.id, doc.model.revision, previo[2], previo[3]);
       const saved = await adapter.saveProject(doc, { saveAs, ...(asFolder ? { asFolder: true } : {}) });
       if (saved === null) return 'cancelled';
+      // A one-process save writes version 1: its old `processes/<slug>/` is no longer its own (#517).
+      slugsEnDisco.current = new Set(repositorio ? processesOf(doc).map((p) => p.slug) : []);
       // «Guardar como» crea el proyecto completo en la carpeta elegida: deja de ser suelto.
       if (saveAs || repositorio) setSuelto(false);
       setSavedToken(token);
@@ -863,8 +872,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     cancelarCorrida();
     if (!await modelador.abrir(doc.model.xml)) return false;
     revisionRef.current = doc.model.revision; setRevision(doc.model.revision);
-    // #498: a repository opens on its first process; a version 1 project has no list at all.
-    const lista = (doc.processes?.length ?? 0) > 0 ? processesOf(doc) : [];
+    // #498: a repository opens on its first process; a version 1 project has no list at all. A
+    // repository that lists a single process is still one (#517, item 5): it keeps its name and slug.
+    const lista = doc.process !== undefined || (doc.processes?.length ?? 0) > 0 ? processesOf(doc) : [];
+    slugsEnDisco.current = new Set(lista.map((p) => p.slug));
     procesoEnLienzo.current = lista[0]?.slug;
     setProcesos(lista); setActivo(0); setOrigen(null); setAvisoLlamada(null);
     slugsBorrados.current.clear();

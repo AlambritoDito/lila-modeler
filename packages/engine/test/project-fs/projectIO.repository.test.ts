@@ -307,3 +307,43 @@ describe('process folders that are not this project\'s (#517)', () => {
     expect(await files(dir)).toEqual(antes);
   });
 });
+
+describe('a version 2 manifest that lists a single process (#517, items 4 and 5)', () => {
+  const repo = (): ProjectDocument => withProcesses(v1, [...processesOf(v1), facturacion]);
+
+  /** A repository on disk whose manifest lists only `facturacion`, the way a hand edit or another writer leaves it. */
+  async function soloFacturacion(): Promise<void> {
+    await writeProjectFolder(dir, repo());
+    const path = join(dir, 'lila-project.json');
+    const manifest = JSON.parse(await readFile(path, 'utf8')) as { processes: { slug: string }[] };
+    manifest.processes = manifest.processes.filter((p) => p.slug === 'facturacion');
+    await writeFile(path, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+  }
+
+  it('is read as a repository: the process keeps its slug and name, and its own content', async () => {
+    await soloFacturacion();
+    const { document, problems } = await readProjectFolder(dir);
+    expect(problems).toEqual([]);
+    expect(document.process).toEqual({ slug: 'facturacion', name: 'Facturación' });
+    expect(document.processes).toBeUndefined();
+    const [only, ...rest] = processesOf(document);
+    expect(rest).toEqual([]);
+    expect(only).toMatchObject({ slug: 'facturacion', name: 'Facturación', model: facturacion.model, scenarios: facturacion.scenarios });
+  });
+
+  it('adding a process back keeps the first one in its own folder: nothing moves, nothing is orphaned', async () => {
+    await soloFacturacion();
+    const { document } = await readProjectFolder(dir);
+    const envio: ProcessDocument = { ...facturacion, slug: processSlug('Envío', processesOf(document).map((p) => p.slug)), name: 'Envío', runs: [] };
+    await writeProjectFolder(dir, withProcesses(document, [...processesOf(document), envio]));
+    const reopened = (await readProjectFolder(dir)).document;
+    expect(processesOf(reopened).map((p) => [p.slug, p.name])).toEqual([['facturacion', 'Facturación'], ['envio', 'Envío']]);
+    // `processes/pedido/` is the folder of the process the hand edit dropped; no `facturacion-2`.
+    expect((await readdir(join(dir, 'processes'))).sort()).toEqual(['envio', 'facturacion', 'pedido']);
+  });
+
+  it('withProcesses without the option still folds one process into a plain version 1 document', () => {
+    expect(withProcesses(repo(), processesOf(repo()).slice(0, 1))).toEqual(v1);
+    expect(withProcesses(repo(), processesOf(repo()).slice(1), { repository: true }).process).toEqual({ slug: 'facturacion', name: 'Facturación' });
+  });
+});
