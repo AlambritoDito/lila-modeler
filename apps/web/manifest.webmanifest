@@ -15,6 +15,7 @@
     { "src": "branding/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "branding/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
+  "launch_handler": { "client_mode": ["focus-existing", "auto"] },
   "file_handlers": [
     {
       "action": "./",

@@ -13,6 +13,7 @@ const manifest = JSON.parse(read('../manifest.webmanifest').toString('utf8')) as
   id: string; name: string; short_name: string; start_url: string; scope: string; display: string;
   theme_color: string; background_color: string; icons: Icon[];
   file_handlers: { action: string; accept: Record<string, string[]>; icons?: Icon[] }[];
+  launch_handler?: { client_mode: string | string[] };
 };
 
 /** Width and height from a PNG's IHDR chunk. */
@@ -52,6 +53,10 @@ describe('manifest.webmanifest', () => {
     expect(manifest.file_handlers[0]!.accept).toEqual({ 'application/vnd.lila-modeler+zip': ['.lila'] });
   });
 
+  it('sends a launched file to the window already open, where the unsaved-changes prompt is', () => {
+    expect(manifest.launch_handler).toEqual({ client_mode: ['focus-existing', 'auto'] });
+  });
+
   it('is linked from index.html with the same theme color', () => {
     const html = read('../index.html').toString('utf8');
     expect(html).toContain('<link rel="manifest" href="%BASE_URL%manifest.webmanifest" />');
@@ -80,6 +85,8 @@ describe('service worker (#574)', () => {
   /** Runs the worker for `version` with in-memory caches (shared across versions, like a browser). */
   function worker(version: string, files: string[], store = new Map<string, Map<string, string>>()) {
     const listeners: Record<string, (event: unknown) => void> = {};
+    /** The `cache` mode of every precache request. */
+    const modos: RequestCache[] = [];
     const fetchMock = vi.fn(async (req: { url: string } | string) => {
       const url = typeof req === 'string' ? req : req.url;
       return { ok: true, type: 'basic', body: `net:${url}`, clone() { return this; } };
@@ -88,7 +95,9 @@ describe('service worker (#574)', () => {
       const entries = store.get(name) ?? new Map<string, string>();
       store.set(name, entries);
       return {
-        addAll: async (urls: string[]) => { for (const u of urls) entries.set(u, `pre:${u}`); },
+        addAll: async (reqs: Request[]) => {
+          for (const r of reqs) { modos.push(r.cache); entries.set(r.url, `pre:${r.url}`); }
+        },
         match: async (req: { url: string } | string) => {
           const body = entries.get(typeof req === 'string' ? req : req.url);
           return body === undefined ? undefined : { body };
@@ -113,7 +122,7 @@ describe('service worker (#574)', () => {
       listeners[type]!(event);
       return pending === undefined ? undefined : await pending;
     };
-    return { store, fetchMock, self, dispatch };
+    return { store, fetchMock, self, dispatch, modos };
   }
   const get = (path: string, mode = 'cors') => ({ request: { url: new URL(path, SCOPE).href, method: 'GET', mode } });
 
@@ -122,6 +131,8 @@ describe('service worker (#574)', () => {
     await w.dispatch('install');
     expect([...w.store.keys()]).toEqual(['lila-modeler-1.0.0']);
     expect([...w.store.get('lila-modeler-1.0.0')!.keys()]).toEqual([SCOPE, `${SCOPE}assets/main.js`]);
+    // Past the HTTP cache: Pages' max-age could hand back the previous version's index.html.
+    expect(w.modos).toEqual(['reload', 'reload']);
   });
 
   it('activating a new version deletes older Lila caches, and only those', async () => {

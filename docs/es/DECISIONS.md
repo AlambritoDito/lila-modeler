@@ -597,7 +597,8 @@ Electron como canal principal y Linux el AppImage y el `.deb`.
   permisos de administrador ni firma, y cada despliegue de Pages la actualiza.
 - **Qué es.** `apps/web` gana `manifest.webmanifest` (nombre, `start_url` y `scope` relativos para
   que el mismo archivo sirva en `/` y en `/lila-modeler/app/`, `display: standalone`, iconos de
-  marca 192, 512 y maskable, `file_handlers` para `.lila`), un service worker que guarda el
+  marca 192, 512 y maskable, `file_handlers` para `.lila` con `launch_handler` `focus-existing`, para
+  que un doble clic vaya a la ventana ya abierta y a su aviso de cambios sin guardar), un service worker que guarda el
   esqueleto de la app en una caché con el nombre de la versión para que la app instalada abra sin
   conexión, y mejora progresiva en `BrowserStore`: con la File System Access API, Abrir conserva el
   identificador del archivo y Guardar escribe sobre él; sin ella (Safari, Firefox, un Chromium
