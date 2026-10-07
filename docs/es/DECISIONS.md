@@ -599,7 +599,7 @@ Electron como canal principal y Linux el AppImage y el `.deb`.
   que el mismo archivo sirva en `/` y en `/lila-modeler/app/`, `display: standalone`, iconos de
   marca 192, 512 y maskable, `file_handlers` para `.lila` con `launch_handler` `focus-existing`, para
   que un doble clic vaya a la ventana ya abierta y a su aviso de cambios sin guardar), un service worker que guarda el
-  esqueleto de la app en una caché con el nombre de la versión para que la app instalada abra sin
+  esqueleto de la app en una caché con el nombre de la versión y un hash del build para que la app instalada abra sin
   conexión, y mejora progresiva en `BrowserStore`: con la File System Access API, Abrir conserva el
   identificador del archivo y Guardar escribe sobre él; sin ella (Safari, Firefox, un Chromium
   antiguo) Abrir es el selector de archivos y Guardar descarga, exactamente como antes.

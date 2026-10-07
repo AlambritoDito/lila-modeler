@@ -40,9 +40,11 @@ browsers download as described above (#573).
 The app is an installable Progressive Web App: `apps/web/manifest.webmanifest` (relative
 `start_url`/`scope`, brand icons, a `.lila` file handler) is linked from `index.html`, and
 `vite build` writes `sw.js`, a service worker that precaches the build under the cache
-`lila-modeler-<version>`. A new version is picked up once every window of the old one has closed,
-so **bump the version** whenever a Pages deploy changes the app: an unchanged version keeps serving
-the previous non-hashed files (themes, icons, manifest) to installed apps. Before asking someone to
+`lila-modeler-<version>-<hash of the built files>`, so any deploy that changes the app installs a
+new worker (the version bump is still the project's rule for every batch). A new build is picked up
+once every window of the old one has closed. Navigations and the files with fixed names (themes,
+icons, manifest) go to the network first, Vite's hashed `assets/` come from the cache, and all of
+it comes from the cache offline. Before asking someone to
 test on Windows ([tester guide](WINDOWS-PWA-TESTER-GUIDE.md)), run
 
 ```bash

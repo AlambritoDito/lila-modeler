@@ -593,7 +593,7 @@ primary channel and Linux keeps the AppImage and `.deb`.
   so the same file works at `/` and at `/lila-modeler/app/`, `display: standalone`, brand icons
   192, 512 and maskable, `file_handlers` for `.lila` with `launch_handler` `focus-existing`, so a
   double-click goes to the window already open and its unsaved-changes prompt), a service worker that caches the app shell
-  under a cache named after the app version so the installed app opens offline, and progressive
+  under a cache named after the app version and a hash of the build so the installed app opens offline, and progressive
   enhancement in `BrowserStore`: with the File System Access API, Open keeps the file handle and
   Save writes back to it; without it (Safari, Firefox, an older Chromium) Open is the file input
   and Save downloads, exactly as before. `DesktopStore` and Electron are untouched.
