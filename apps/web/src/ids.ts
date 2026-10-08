@@ -49,3 +49,15 @@ export type Densidad = (typeof DENSIDAD_IDS)[number];
  */
 export const PASO_IDS = ['arrivals', 'times', 'routes', 'resources', 'calendars', 'run'] as const;
 export type PasoId = (typeof PASO_IDS)[number];
+
+/**
+ * The id the shell keeps as «the selection» for what bpmn-js selected: one element, or `null`. A
+ * click on an external label («Approved», «Order received») selects the label shape, whose id
+ * (`Flow_Aprobado_label`) neither the IR nor the scenario knows; the selection is its owner (C7, QA
+ * of #615: Simulate showed the label's id and its form wrote `elements.Flow_Aprobado_label`).
+ */
+export function idDeSeleccion(elegidos: readonly { id: string; labelTarget?: { id: string } | null }[]): string | null {
+  if (elegidos.length !== 1) return null;
+  const [unico] = elegidos;
+  return unico?.labelTarget?.id ?? unico?.id ?? null;
+}

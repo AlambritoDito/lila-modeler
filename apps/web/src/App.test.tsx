@@ -25,6 +25,7 @@ import { en as T } from './strings.en';
 import { es as ES } from './strings.es';
 import { version } from '../package.json';
 import { atajoPorId, etiqueta, type AtajoId } from './atajos';
+import { publicarCarriles } from './carrilClic';
 
 const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.fn(), zoom: vi.fn(), ajustar: vi.fn(), changed: () => {}, scenarioChange: (_raw?: object) => {},
   // The panel header's Duplicate (C1): what App wires as the panel's `onDuplicar`.
@@ -4628,6 +4629,25 @@ it('Simulate shows the step\'s hint over the canvas; Model and Results do not (L
   expect(chip?.textContent).toBe(`${T.c6.pasoLienzo(3)}${T.c6.pistasLienzo.routes}`);
   await click(T.app.modos.modelar);
   expect(container.querySelector('.c6-chip-lienzo')).toBeNull();
+});
+
+it('the Resources hint mentions lanes only when the diagram has some, never the pool (Lote M, C7)', async () => {
+  await click(T.app.modos.simular);
+  await act(async () => mocks.panel.onPasoVisible!('resources'));
+  // Sample order has pools and no lane (the mocked canvas may have published some earlier).
+  await act(async () => publicarCarriles([]));
+  const chip = (): string | null | undefined => container.querySelector('.zona-modelo .c6-chip-lienzo')?.textContent;
+  expect(chip()).toBe(`${T.c6.pasoLienzo(4)}${T.c6.pistasLienzo.resources}`);
+  expect(T.c6.pistasLienzo.resources).not.toMatch(/lane|pool/i);
+  try {
+    await act(async () => publicarCarriles([{ id: 'Lane_1', nombre: 'Kitchen', nodos: ['Task_A'] }]));
+    expect(chip()).toBe(`${T.c6.pasoLienzo(4)}${T.c7.pistaRecursosCarril}`);
+    expect(T.c7.pistaRecursosCarril).not.toMatch(/pool/i);
+    await act(async () => publicarCarriles([]));
+    expect(chip()).toBe(`${T.c6.pasoLienzo(4)}${T.c6.pistasLienzo.resources}`);
+  } finally {
+    await act(async () => publicarCarriles(null));
+  }
 });
 
 it('with Properties in front the sub-bar tabs control nothing; Alt+n from the main window focuses the step tab (Lote M, C6)', async () => {

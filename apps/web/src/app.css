@@ -4509,13 +4509,6 @@ button.gcal-uso-fila:hover {
 .c5-tiempo .c5-deslizador { flex: 1 1 80px; min-width: 60px; }
 .c5-tiempo .c5-reloj { overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; }
 .c5-tiempo .c5-velocidad .c5-rotulo { display: none; }
-@media (max-width: 1599px) {
-  .c5-tiempo .c5-ocupacion,
-  .c5-tiempo .c5-leyenda { display: none; }
-}
-@media (max-width: 1399px) {
-  .c5-tiempo > .aviso { display: none; }
-}
 
 /* The number of problems on «▶ Simulate» (design 01). */
 .ejecutar .c5-insignia {
@@ -4756,14 +4749,15 @@ button.gcal-uso-fila:hover {
   display: none;
 }
 
-/* Results draws the map with its time bar and table, like design 05: no minimap over it, and the
-   time bar ends before the bpmn.io mark (which must stay where it is, see `.bjs-powered-by`). */
+/* Results draws the map with its time bar and table, like design 05: no minimap over it. The time
+   bar is a row of its own under the map (C7, below), clear of the bpmn.io mark. */
 .app.modo-resultados .lienzo .djs-minimap { display: none; }
-.app.modo-resultados .c5-tiempo { right: 84px; }
 
 /* A narrow summary reads each duration on one line: hours, with the exact value in the title. */
-.panel:not(.ancho) .c5-kpis .c6-kpi-paren { display: none; }
-.c5-kpis dd { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.panel:not(.ancho) .c5-kpis .c6-kpi-paren,
+.panel:not(.ancho) .c5-tarea-datos .c6-kpi-paren { display: none; }
+.c5-kpis dd,
+.c5-tarea-datos dd { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* «BASE» is a filled badge, as in the design (scenario button and the compact header). */
 .c5-escenario-boton .insignia-base,
@@ -4848,3 +4842,46 @@ button.gcal-uso-fila:hover {
 /* Calendars (C6, QA of #605): the calendar being edited is the editor below, with its name field,
    so its row in the list is not drawn twice; the list shows the other calendars. */
 .gcal-lista li:has(> .gcal-fila[aria-current='true']) { display: none; }
+
+/* ---------- Lote M · C7: final polish ---------- */
+
+/* Results, design 05: the time bar is a 48 px row under the map, above the collapsible table — not
+   a box over the bottom of the diagram. The canvas gives up that height (Modeler.tsx resizes
+   bpmn-js through its ResizeObserver); the zoom buttons keep their place above the bpmn.io mark,
+   which now sits at the bottom of the smaller canvas. */
+.app.modo-resultados .zona-modelo:has(> .c5-tiempo) { display: flex; flex-direction: column; }
+.app.modo-resultados .zona-modelo:has(> .c5-tiempo) > .lienzo { flex: 1 1 auto; height: auto; min-height: 0; }
+.app.modo-resultados .zona-modelo > .c5-tiempo {
+  background: var(--bg-surface);
+  border: 0;
+  border-top: 1px solid var(--border);
+  box-shadow: none;
+  box-sizing: border-box;
+  flex: none;
+  gap: 10px;
+  height: 48px;
+  order: 1;
+  padding: 0 14px;
+  position: static;
+}
+.app.modo-resultados .zona-modelo:has(> .c5-tiempo) > .zoom { bottom: calc(46px + 48px); }
+
+/* What the row shows depends on the row's own width (its content box), not on the window's: the
+   panel can be wider than 320 px. The clock is always read whole, at the end too («Fin»), and the
+   slider is what gives way (QA of #615). Thresholds, measured in Spanish (the longer catalog):
+   - 910 px: buttons, speed, a 60 px slider, the clock, «Fin», «1/30» and «Partial replay: first n
+     log rows» — read whole at 1280 px with the 320 px panel (a 932 px content box);
+   - 1170 px: plus the pools' occupancy (Sample order's three pools);
+   - 1490 px: plus the heat-map legend. */
+.c5-tiempo { container-type: inline-size; }
+@container (max-width: 909px) {
+  .c5-tiempo > .aviso { display: none; }
+}
+@container (max-width: 1169px) {
+  .c5-tiempo .c5-ocupacion { display: none; }
+}
+@container (max-width: 1489px) {
+  .c5-tiempo .c5-leyenda { display: none; }
+}
+.app.modo-resultados .zona-modelo > .c5-tiempo .c5-reloj { flex-shrink: 0; }
+.app.modo-resultados .zona-modelo > .c5-tiempo .c5-deslizador { flex: 1 1 60px; }

@@ -8,7 +8,7 @@
  * KPI reads, how it is formatted and which direction is better.
  */
 import type { ReactNode } from 'react';
-import { formatNumber, type BaseTimeUnit } from '@lila-modeler/engine/format';
+import { formatNumber, SECONDS_PER_UNIT, type BaseTimeUnit } from '@lila-modeler/engine/format';
 import type { ResolvedScenario } from '@lila-modeler/engine/schema';
 import type { ProcessIR, RunResult } from '@lila-modeler/engine';
 import { BottleneckCard } from './ResultsView';
@@ -29,6 +29,11 @@ export interface Kpi {
   menosEsMejor: boolean;
   /** Key of `result.replications.kpis`, for the confidence interval. */
   clave: string | null;
+  /**
+   * Formats one end of the 95 % CI like `exacto`: the engine keeps durations in seconds, so a
+   * duration's interval goes through the scenario's unit (not the raw seconds next to «min»).
+   */
+  ic: (v: number) => string;
 }
 
 /** The busiest resource's utilization, 0 without resources. */
@@ -40,18 +45,21 @@ export function kpisDe(result: RunResult, scenario: ResolvedScenario): Kpi[] {
   const p = result.process;
   const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
   const moneda = scenario.run.currency === undefined ? '' : ` ${scenario.run.currency}`;
+  const corta = strings().lienzo.unidadesCortas[unit];
+  const enUnidad = (v: number): string => `${formatDisplay(v / SECONDS_PER_UNIT[unit])} ${corta}`;
+  const num = (v: number): string => formatDisplay(v);
   const dur = (id: KpiId, v: number, clave: string): Kpi => ({
-    id, valor: v, clave, menosEsMejor: true,
+    id, valor: v, clave, menosEsMejor: true, ic: enUnidad,
     texto: p.completed > 0 ? formatDisplayDurationWithUnit(v, unit) : '—', exacto: exactDuration(v, unit),
   });
   const util = utilizacionMaxima(result);
   return [
     dur('ciclo', p.cycleTime.mean, 'process.cycleTime.mean'),
     dur('espera', p.waitTime.mean, 'process.waitTime.mean'),
-    { id: 'completados', valor: p.completed, texto: formatDisplay(p.completed), exacto: formatNumber(p.completed), menosEsMejor: false, clave: 'process.completed' },
-    { id: 'costoCaso', valor: p.costPerCase, texto: `${formatDisplay(p.costPerCase)}${moneda}`, exacto: `${formatNumber(p.costPerCase)}${moneda}`, menosEsMejor: true, clave: 'process.costPerCase' },
-    { id: 'utilMax', valor: util, texto: `${formatDisplay(util * 100)} %`, exacto: `${formatNumber(util * 100)} %`, menosEsMejor: true, clave: null },
-    { id: 'enCurso', valor: p.inFlight, texto: formatDisplay(p.inFlight), exacto: formatNumber(p.inFlight), menosEsMejor: true, clave: 'process.inFlight' },
+    { id: 'completados', valor: p.completed, texto: formatDisplay(p.completed), exacto: formatNumber(p.completed), menosEsMejor: false, clave: 'process.completed', ic: num },
+    { id: 'costoCaso', valor: p.costPerCase, texto: `${formatDisplay(p.costPerCase)}${moneda}`, exacto: `${formatNumber(p.costPerCase)}${moneda}`, menosEsMejor: true, clave: 'process.costPerCase', ic: (v) => `${formatDisplay(v)}${moneda}` },
+    { id: 'utilMax', valor: util, texto: `${formatDisplay(util * 100)} %`, exacto: `${formatNumber(util * 100)} %`, menosEsMejor: true, clave: null, ic: num },
+    { id: 'enCurso', valor: p.inFlight, texto: formatDisplay(p.inFlight), exacto: formatNumber(p.inFlight), menosEsMejor: true, clave: 'process.inFlight', ic: num },
   ];
 }
 
@@ -60,7 +68,7 @@ export function tituloKpi(k: Kpi, result: RunResult): string {
   const S = strings();
   const ic = k.clave === null ? undefined : result.replications?.kpis[k.clave]?.ci95;
   const partes = [S.c5.resultados.kpiTitulos[k.id], k.exacto];
-  if (ic !== undefined) partes.push(S.c5.resultados.ic95(formatDisplay(ic[0]), formatDisplay(ic[1])));
+  if (ic !== undefined) partes.push(S.c5.resultados.ic95(k.ic(ic[0]), k.ic(ic[1])));
   return partes.join(' · ');
 }
 
@@ -71,6 +79,16 @@ export function tituloKpi(k: Kpi, result: RunResult): string {
 export function partirDuracion(texto: string): [string, string] {
   const i = texto.indexOf(' (');
   return i < 0 ? [texto, ''] : [texto.slice(0, i), texto.slice(i + 1)];
+}
+
+/**
+ * A value as the KPIs draw it: «187.09 h» on one line, and the «(11225.46 min)» part only when the
+ * panel is wide (CSS hides `.c6-kpi-paren` in the narrow panel). Lote M, C7: the selected task's
+ * durations use it too, so its mean wait no longer wraps onto two lines.
+ */
+export function TextoCompacto({ texto }: { texto: string }): ReactNode {
+  const [corto, paren] = partirDuracion(texto);
+  return <>{corto}{paren !== '' && <span className="c6-kpi-paren">{` ${paren}`}</span>}</>;
 }
 
 export interface PanelResumenProps {
@@ -97,7 +115,7 @@ export function PanelResumen({ ir, result, scenario, seleccion, onSeleccionar }:
         {kpis.map((k) => (
           <div key={k.id} title={tituloKpi(k, result)}>
             <dt>{S.c5.resultados.kpis[k.id]}</dt>
-            <dd>{partirDuracion(k.texto)[0]}{partirDuracion(k.texto)[1] !== '' && <span className="c6-kpi-paren">{` ${partirDuracion(k.texto)[1]}`}</span>}</dd>
+            <dd><TextoCompacto texto={k.texto} /></dd>
           </div>
         ))}
       </dl>
@@ -120,8 +138,8 @@ export function PanelResumen({ ir, result, scenario, seleccion, onSeleccionar }:
           <p className="c5-tarea-nombre">{ir.nodes[tarea]?.name || tarea}</p>
           <dl className="c5-tarea-datos">
             <div><dt>{S.c5.resultados.casos}</dt><dd title={formatNumber(m.completed)}>{formatDisplay(m.completed)}</dd></div>
-            <div><dt>{S.c5.resultados.proceso}</dt><dd title={exactDuration(m.processing.mean, unit)}>{formatDisplayDurationWithUnit(m.processing.mean, unit)}</dd></div>
-            <div><dt>{S.c5.resultados.espera}</dt><dd title={exactDuration(m.resourceWait.mean, unit)}>{formatDisplayDurationWithUnit(m.resourceWait.mean, unit)}</dd></div>
+            <div><dt>{S.c5.resultados.proceso}</dt><dd title={exactDuration(m.processing.mean, unit)}><TextoCompacto texto={formatDisplayDurationWithUnit(m.processing.mean, unit)} /></dd></div>
+            <div><dt>{S.c5.resultados.espera}</dt><dd title={exactDuration(m.resourceWait.mean, unit)}><TextoCompacto texto={formatDisplayDurationWithUnit(m.resourceWait.mean, unit)} /></dd></div>
             {cuello !== undefined && <div><dt>{S.c5.resultados.utilizacion}</dt><dd>{`${formatDisplay(cuello.utilization * 100)} %`}</dd></div>}
           </dl>
           <p className="c5-nota">{cuello !== undefined ? S.c5.resultados.consejoCuello : S.c5.resultados.consejoSinEspera}</p>
