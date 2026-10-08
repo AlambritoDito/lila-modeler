@@ -20,7 +20,22 @@ try {
       const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
       const ctx = canvas.getContext('2d');
       ctx.imageSmoothingQuality = 'high';
-      if (rounded) {
+      if (rounded === 'maskable') {
+        // Web app manifest `purpose: maskable` (#571): the platform crops the icon to its own
+        // shape and only promises the centered circle of 80% diameter. The tile is scaled to 80%,
+        // centered horizontally and resting on the bottom edge (the body already bleeds off it),
+        // over the tile's own purple sampled from its corner, so ears and face stay in that circle.
+        // The outermost 2% of the master (a slightly darker rim) is left out of the tile so its
+        // edge melts into the fill; the fill is the average purple just inside that rim.
+        ctx.drawImage(img, 0, 0, width, height);
+        const rim = Math.round(width * .03), band = ctx.getImageData(rim, rim, width - 2 * rim, 1).data;
+        const rgb = [0, 1, 2].map((c) => { let sum = 0; for (let i = c; i < band.length; i += 4) sum += band[i]; return Math.round(sum / (band.length / 4)); });
+        ctx.fillStyle = `rgb(${rgb.join(', ')})`; ctx.fillRect(0, 0, width, height);
+        // A square crop of the master (the rim left out on every side), so the illustration is
+        // only scaled, never stretched.
+        const side = width * .8, inset = img.width * .02, crop = Math.min(img.width, img.height) - 2 * inset;
+        ctx.drawImage(img, inset, inset, crop, crop, (width - side) / 2, height - side, side, side);
+      } else if (rounded) {
         // Native desktop tile: 5% outer transparent margin, 20% corner radius.
         const margin = width * .05, side = width - margin * 2;
         ctx.beginPath(); ctx.roundRect(margin, margin, side, side, side * .2); ctx.clip();
@@ -36,6 +51,7 @@ try {
   for (const size of [16, 32, 48, 180, 192, 512]) {
     writeFileSync(join(web, `icon-${size}.png`), await render('lila-app-master.png', size, size));
   }
+  writeFileSync(join(web, 'icon-maskable-512.png'), await render('lila-app-master.png', 512, 512, 'maskable'));
   const images = [16, 32, 48].map(size => ({ size, data: readFileSync(join(web, `icon-${size}.png`)) }));
   const header = Buffer.alloc(6); header.writeUInt16LE(1, 2); header.writeUInt16LE(images.length, 4);
   let offset = 6 + 16 * images.length;

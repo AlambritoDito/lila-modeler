@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { act, StrictMode, useEffect } from 'react';
 import { startStartup, finishStartup } from './startup';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Modelador } from './Modeler';
 import { parseBpmn } from '@lila-modeler/engine/bpmn';
 import { simulate } from '@lila-modeler/engine';
@@ -4231,4 +4231,95 @@ it('the status bar shows the seed of the run on screen, not only the scenario\'s
     expect(container.querySelector('.estado')!.textContent).toContain(T.app.semilla('7'));
   });
   expect(container.querySelector('.estado')!.textContent).not.toContain(T.app.semilla('42'));
+});
+
+// #572 (ADR-031): a `.lila` double-clicked with the installed PWA arrives through
+// `window.launchQueue` and goes through the same door as Open.
+describe('launchQueue (#572)', () => {
+  /** Stubs `window.launchQueue`; `lanzar` plays Chromium handing the consumer a launch. */
+  function colaDeLanzamiento() {
+    let consumidor: ((params: { files: readonly unknown[] }) => void) | null = null;
+    vi.stubGlobal('launchQueue', { setConsumer: (c: typeof consumidor) => { consumidor = c; } });
+    return {
+      lanzar: async (...files: unknown[]) => {
+        await act(async () => { consumidor!({ files }); await new Promise((r) => setTimeout(r, 0)); });
+      },
+    };
+  }
+  const archivo = (name: string) => ({ kind: 'file', name, getFile: vi.fn() });
+
+  it('a launched .lila opens like Open when nothing is unsaved', async () => {
+    const cola = colaDeLanzamiento();
+    const openHandle = vi.fn().mockResolvedValue(proyecto('p9', 'Lanzado'));
+    session = { ...session, openHandle } as unknown as ProjectSessionStore;
+    await remontar();
+    const lila = archivo('Lanzado.lila');
+    await cola.lanzar(lila);
+    expect(openHandle).toHaveBeenCalledWith(lila);
+    expect(container.textContent).toContain('Lanzado');
+  });
+
+  it('with unsaved changes it asks first, and opens the file after Discard', async () => {
+    const cola = colaDeLanzamiento();
+    const openHandle = vi.fn().mockResolvedValue(proyecto('p9', 'Lanzado'));
+    session = { ...session, openHandle } as unknown as ProjectSessionStore;
+    await remontar();
+    await act(async () => mocks.changed());
+    await cola.lanzar(archivo('Lanzado.lila'));
+    expect(container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open).toBe(true);
+    expect(openHandle).not.toHaveBeenCalled();
+    await click(T.app.descartar);
+    expect(openHandle).toHaveBeenCalledOnce();
+    expect(container.textContent).toContain('Lanzado');
+  });
+
+  it('cold start: a launch queued before the canvas exists waits for the restored session, then opens once', async () => {
+    // Chromium hands queued launches to the consumer as soon as it is set: before the canvas.
+    const lila = archivo('Lanzado.lila');
+    let consumidor: ((params: { files: readonly unknown[] }) => void) | null = null;
+    vi.stubGlobal('launchQueue', { setConsumer: (c: typeof consumidor) => { consumidor = c; c!({ files: [lila] }); } });
+    const openHandle = vi.fn().mockResolvedValue(proyecto('p9', 'Lanzado'));
+    const restaurado = proyecto('p1', 'Restaurado');
+    session = { ...session, openHandle, restoreSession: vi.fn(() => restaurado) } as unknown as ProjectSessionStore;
+    // The restore holds the I/O lock for a while: the launch must wait for it, not be dropped.
+    mocks.abrir.mockImplementationOnce(() => new Promise((ok) => setTimeout(() => ok(true), 400)));
+    // The canvas holds the restored model: the startup reparse must not seed tasks into it.
+    mocks.exportXml.mockResolvedValue(restaurado.model.xml);
+    await remontar();
+    expect(consumidor).not.toBeNull();
+    expect(openHandle).not.toHaveBeenCalled();
+    await vi.waitFor(async () => {
+      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+      expect(openHandle).toHaveBeenCalledOnce();
+      expect(container.textContent).toContain('Lanzado');
+    }, { timeout: 3000 });
+    expect(mocks.abrir).toHaveBeenNthCalledWith(1, restaurado.model.xml);
+    expect(openHandle).toHaveBeenCalledWith(lila);
+  });
+
+  it('a second launch while the unsaved-changes dialog is up is refused; only the first file opens', async () => {
+    const cola = colaDeLanzamiento();
+    const openHandle = vi.fn().mockResolvedValue(proyecto('p9', 'Lanzado'));
+    session = { ...session, openHandle } as unknown as ProjectSessionStore;
+    await remontar();
+    await act(async () => mocks.changed());
+    const primero = archivo('Lanzado.lila');
+    await cola.lanzar(primero);
+    await cola.lanzar(archivo('Otro.lila'));
+    expect(container.textContent).toContain(T.app.errorAbrirOcupado('Otro.lila'));
+    expect(openHandle).not.toHaveBeenCalled();
+    await click(T.app.descartar);
+    expect(openHandle).toHaveBeenCalledOnce();
+    expect(openHandle).toHaveBeenCalledWith(primero);
+  });
+
+  it('a plain launch with no files opens nothing', async () => {
+    const cola = colaDeLanzamiento();
+    const openHandle = vi.fn();
+    session = { ...session, openHandle } as unknown as ProjectSessionStore;
+    await remontar();
+    await cola.lanzar();
+    await cola.lanzar({ kind: 'directory', name: 'carpeta' });
+    expect(openHandle).not.toHaveBeenCalled();
+  });
 });

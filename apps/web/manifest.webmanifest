@@ -1,0 +1,27 @@
+{
+  "id": "./",
+  "name": "Lila Modeler",
+  "short_name": "Lila",
+  "description": "BPMN process modeler and discrete-event simulator.",
+  "lang": "en",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "theme_color": "#7028f0",
+  "background_color": "#ffffff",
+  "categories": ["business", "productivity", "education"],
+  "icons": [
+    { "src": "branding/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "branding/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "branding/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "launch_handler": { "client_mode": ["focus-existing", "auto"] },
+  "file_handlers": [
+    {
+      "action": "./",
+      "accept": { "application/vnd.lila-modeler+zip": [".lila"] },
+      "icons": [{ "src": "branding/icon-192.png", "sizes": "192x192", "type": "image/png" }],
+      "launch_type": "single-client"
+    }
+  ]
+}

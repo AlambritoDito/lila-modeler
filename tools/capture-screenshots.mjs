@@ -30,7 +30,10 @@ const browser = await chromium.launch({ headless: true, ...(process.env.CHROME_P
 const screenshots = [];
 try {
   await mkdir(output, { recursive: true });
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'en-US', timezoneId: 'America/Mexico_City', deviceScaleFactor: 1, colorScheme: 'light' });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'en-US', timezoneId: 'America/Mexico_City', deviceScaleFactor: 1, colorScheme: 'light', serviceWorkers: 'block' });
+  // This script checks the download/file-input path of Save and Open, so the File System Access
+  // pickers (#573, checked by tools/check-pwa.mjs) are taken away, as in Safari and Firefox.
+  await context.addInitScript(() => { for (const name of ['showOpenFilePicker', 'showSaveFilePicker']) Object.defineProperty(window, name, { value: undefined, configurable: true }); });
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -127,7 +130,7 @@ try {
   assert.deepEqual(errors, []);
   // Lila Dark is what a dark-mode system gets on first launch (#404): one Model capture per size,
   // from a fresh context (no saved theme) with the dark scheme emulated, so nothing else changes.
-  const dark = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'en-US', timezoneId: 'America/Mexico_City', deviceScaleFactor: 1, colorScheme: 'dark' });
+  const dark = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'en-US', timezoneId: 'America/Mexico_City', deviceScaleFactor: 1, colorScheme: 'dark', serviceWorkers: 'block' });
   const darkPage = await dark.newPage(); darkPage.on('pageerror', error => errors.push(error.message));
   await darkPage.goto(url); await darkPage.getByRole('button', { name: 'Run simulation', exact: true }).waitFor(); await darkPage.evaluate(() => document.fonts.ready);
   assert.equal(await darkPage.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg-base').trim().toUpperCase()), '#1C0F2E');

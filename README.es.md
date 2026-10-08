@@ -93,7 +93,16 @@ archivo `SHA256SUMS` para verificarlos. Cómo está cada plataforma:
   **Abrir** ▸ **Abrir** funciona directamente. No desactives Gatekeeper para evitar esto.
   [`docs/es/GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md) explica el flujo completo, incluida la
   verificación del checksum.
-- **Windows (x64)** — `Lila-Modeler-1.0.0-beta.16-win-x64.exe`, el instalador NSIS construido por CI.
+- **Windows** — el canal principal es la **app web instalada desde Chrome o Edge**
+  ([ADR-031](docs/es/DECISIONS.md)): abre <https://alambritodito.github.io/lila-modeler/app/> y luego
+  **Instalar Lila Modeler** (el icono de instalar a la derecha de la barra de direcciones en Chrome;
+  **⋯ ▸ Aplicaciones ▸ Instalar este sitio como una aplicación** en Edge). Tiene su propia ventana y
+  su entrada en el menú Inicio, abre archivos `.lila` con doble clic, guarda sobre el mismo archivo y
+  funciona sin conexión una vez abierta. Sin instalador, sin permisos de administrador, sin aviso de
+  SmartScreen. Todavía no se ha probado en una máquina Windows real:
+  [`docs/es/GUIA-PROBADOR-WINDOWS-PWA.md`](docs/es/GUIA-PROBADOR-WINDOWS-PWA.md) guía paso a paso a
+  quien no es desarrollador y termina con una plantilla de reporte.
+- **Instalador de Windows (x64, secundario)** — `Lila-Modeler-1.0.0-beta.16-win-x64.exe`, el instalador NSIS construido por CI.
   **No está firmado** y **todavía no se ha probado en una máquina Windows real**: nadie lo ha
   ejecutado en una instalación limpia, así que espera asperezas. SmartScreen de Windows mostrará
   «Windows protegió su PC»; **Más información ▸ Ejecutar de todas formas** permite continuar.
@@ -103,7 +112,9 @@ archivo `SHA256SUMS` para verificarlos. Cómo está cada plataforma:
   desarrollador y termina con una plantilla de reporte.
 - **Linux** — CI construye un AppImage, sin probar y no adjunto al release.
 - **Web** — funciona en el navegador; Chrome es el que se ha probado. La aceptación en Safari está
-  pendiente (#379).
+  pendiente (#379). En Chrome y Edge se puede instalar como app (ver Windows arriba; lo mismo sirve
+  en macOS y Linux); en otros navegadores Abrir usa el selector de archivos y Guardar descarga el
+  `.lila`.
 
 La app de escritorio se registra como editor de archivos `.bpmn` y `.lila` y, desde la beta.10, te
 avisa cuando hay una versión nueva (no se actualiza sola).
@@ -205,7 +216,7 @@ usuarios, en [`docs/es/COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md).
 | Exportación de resultados | Excel | CSV y XLSX |
 | Percentiles, longitud de cola, throughput, costo por caso, ranking de cuellos, espera fuera de horario | ✗ | ✓ |
 | Animación con contadores en vivo | ✓ | ✓ Animar reproduce el log de eventos |
-| Plataformas | solo Windows | app web (probada en Chrome), macOS (probado); instalador de Windows sin firmar y sin probar; AppImage de Linux sin probar |
+| Plataformas | solo Windows | app web (probada en Chrome), macOS (probado); Windows con la app web instalada desde Chrome o Edge (sin probar en Windows), instalador sin firmar y sin probar; AppImage de Linux sin probar |
 | Importar un `.bpmn` de Bizagi | — | solo el diagrama: Bizagi no exporta sus parámetros de simulación |
 | Publicación de documentos (Word/PDF/web) | ✓ | ✓ documento del proceso en Word (.docx) o en un HTML imprimible de una página; sin plantillas ni repositorio compartido |
 | Compuerta basada en eventos (ramas de tiempo y de mensaje) | ✓ | ✓ gana la primera rama que vence |
@@ -252,12 +263,13 @@ El inglés es el idioma base; las versiones en español viven en `docs/es/`.
 - [`MCP.md`](docs/es/MCP.md) — el servidor MCP y sus dieciséis tools.
 - [`THEMES.md`](docs/es/THEMES.md) — el formato de tema.
 - [`DECISIONS.md`](docs/es/DECISIONS.md) — registros de decisiones de arquitectura (ADR-001 …
-  ADR-030).
+  ADR-031).
 - [`BIZAGI_PARITY.md`](docs/es/BIZAGI_PARITY.md) — checklist de comportamiento de referencia y
   diferencias documentadas.
 - [`COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md) — guía pantalla por pantalla para
   usuarios de Bizagi.
 - [`GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md) — la beta de escritorio.
+- [`GUIA-PROBADOR-WINDOWS-PWA.md`](docs/es/GUIA-PROBADOR-WINDOWS-PWA.md) — instalar la app web en Windows desde Chrome o Edge, abrir y guardar archivos `.lila`, y reportar qué pasa.
 - [`GUIA-PROBADOR-WINDOWS.md`](docs/es/GUIA-PROBADOR-WINDOWS.md) — probar el instalador de Windows, sin firmar y sin probar, y reportar qué pasa.
 - [`EXAMPLES_POLICY.md`](docs/es/EXAMPLES_POLICY.md), [`ORACLES.md`](docs/es/ORACLES.md),
   [`PAGES.md`](docs/PAGES.md) — política de ejemplos, oráculos de test, despliegue de Pages (este
