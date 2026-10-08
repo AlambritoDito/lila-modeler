@@ -528,7 +528,7 @@ async function readRepositoryFolder(
     scenarioRevisions: first.scenarioRevisions,
     runs: first.runs,
   };
-  return { document: withProcesses(base, processes), problems, loose: false };
+  return { document: withProcesses(base, processes, { repository: true }), problems, loose: false };
 }
 
 /**

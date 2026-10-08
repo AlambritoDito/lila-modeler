@@ -84,6 +84,9 @@ processes/<slug>/runs/<id>.result.json
 - **Version 2 is written only when it is needed.** While a project has one process it is saved as
   version 1, byte for byte, so the builds that only read version 1 keep opening it. Adding a second
   process writes version 2; deleting back to one writes version 1 again.
+  A version 2 manifest that lists a single process (written by another tool, or edited by hand) is
+  still read as a repository: that process keeps its slug and name, and a process added later goes
+  next to it instead of moving it to a new folder.
 - **A version 1 project reads as a one-process repository**, folder and `.lila` alike. Nothing
   migrates: opening and saving it without changes gives back the same bytes.
 - **The folder moves, it does not copy.** The first version 2 save of a version 1 *folder* moves
