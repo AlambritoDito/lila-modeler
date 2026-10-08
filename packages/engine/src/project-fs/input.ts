@@ -21,6 +21,7 @@ import { messages, type Locale } from '../messages/index.js';
 import {
   decodeLila,
   processesOf,
+  processSlug,
   ProjectFormatError,
   withProcesses,
   type ProcessDocument,
@@ -88,6 +89,18 @@ function absolute(file: string): string {
  */
 function isVersion2(document: ProjectDocument): boolean {
   return document.process !== undefined || (document.processes !== undefined && document.processes.length > 0);
+}
+
+/**
+ * Where `input`'s process is once `written` is on disk (#613): its slug and its virtual folder. A
+ * project with a single process is written as version 1 (`encodeLila`, #517), whose process is
+ * named after the project and lives at the archive's root, so a version 2 archive with a single
+ * process gets a new slug on its first write; what a write reports has to name the process as it is
+ * now. With several processes nothing moves.
+ */
+export function lilaWritten(input: LilaProcess, written: ProjectDocument): { readonly slug: string; readonly root: string } {
+  if ((written.processes?.length ?? 0) > 0) return { slug: input.process.slug, root: `${input.file}/processes/${input.process.slug}/` };
+  return { slug: processSlug(written.name), root: `${input.file}/` };
 }
 
 /**

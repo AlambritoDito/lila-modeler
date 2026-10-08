@@ -41,6 +41,7 @@ import {
   lilaScenarioEntryName,
   lilaScenarioPath,
   lilaScenarioReader,
+  lilaWritten,
   openLilaProcess,
   readLilaOutline,
   writeLilaScenario,
@@ -52,6 +53,7 @@ import {
   writeExportFile,
   type LilaProcess,
 } from '@lila-modeler/engine/project-fs';
+import type { ProjectDocument } from '@lila-modeler/engine/project';
 import { runResultSchema } from '@lila-modeler/engine/result-schema';
 import {
   resolveExtends,
@@ -733,8 +735,13 @@ async function patchLilaScenario(
     return fail(message(error));
   }
   const read = lilaScenarioReader(lila, (file) => readJsonFile(file, locale), locale);
-  const written = (target: string, resolvedScenario: ResolvedScenario, notes: string[]): CallToolResult =>
-    textResult({ scenario: resolvedScenario, file: lila.file, process: lila.process.slug, entry: target, notes });
+  const written = (target: string, resolvedScenario: ResolvedScenario, notes: string[], document: ProjectDocument): CallToolResult => {
+    // Where the process is in the file now (#613): a one-process version 2 archive is version 1 after
+    // the write, so its slug and the folder its `model` resolves under change with it.
+    const { slug, root } = lilaWritten(lila, document);
+    const model = resolvedScenario.model.startsWith(lila.root) ? `${root}${resolvedScenario.model.slice(lila.root.length)}` : resolvedScenario.model;
+    return textResult({ scenario: { ...resolvedScenario, model }, file: lila.file, process: slug, entry: target, notes });
+  };
 
   let patchedRaw: unknown;
   try {
@@ -752,8 +759,8 @@ async function patchLilaScenario(
     if (!outcome.ok) return fail(outcome.error);
     try {
       const path = lilaScenarioPath(lila, entry);
-      await writeLilaScenario(lila, entry, withRelativeModel(outcome.scenario, path), locale);
-      return written(entry, outcome.scenario, outcome.notes);
+      const document = await writeLilaScenario(lila, entry, withRelativeModel(outcome.scenario, path), locale);
+      return written(entry, outcome.scenario, outcome.notes, document);
     } catch (error) {
       return fail(message(error));
     }
@@ -790,8 +797,8 @@ async function patchLilaScenario(
   if (!outcome.ok) return fail(outcome.error);
 
   try {
-    await writeLilaScenario(lila, target, candidate, locale);
-    return written(target, outcome.scenario, outcome.notes);
+    const document = await writeLilaScenario(lila, target, candidate, locale);
+    return written(target, outcome.scenario, outcome.notes, document);
   } catch (error) {
     return fail(message(error));
   }
