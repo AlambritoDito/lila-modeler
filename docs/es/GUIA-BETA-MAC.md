@@ -105,7 +105,7 @@ Eva-01 como pintura previa a cualquier tema.
 
 ## Recorrido de uso
 
-La barra superior tiene tres modos: **Modelar**, **Simular** y **Resultados** (desde 1.0.0-beta.22).
+La barra superior tiene tres modos: **Modelar**, **Simular** y **Resultados** (desde 1.0.0-beta.23).
 Comparar escenarios («Comparar con…») y la reproducción de tokens viven en Resultados; **Validar
 rutas** es una herramienta de Modelar (el botón sobre el lienzo, o `⌘K`). Los textos de abajo son literales de la interfaz (desde LILA-066 todos viven en
 `apps/web/src/strings.es.ts`), no paráfrasis.
@@ -346,7 +346,7 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
 
 ## Limitaciones de esta beta
 
-*(a fecha 1.0.0-beta.22, tag `v1.0.0-beta.22`; las notas de verificación de macOS de abajo se
+*(a fecha 1.0.0-beta.23, tag `v1.0.0-beta.23`; las notas de verificación de macOS de abajo se
 registraron para la Beta 1. Revisar si alguna de estas ya se resolvió antes de creer esta lista a
 ciegas en una fecha posterior)*
 
@@ -389,10 +389,10 @@ npm run dist:mac -w @lila-modeler/desktop   # tsc + copia dist/web + electron-bu
 
 El último comando encadena: `tsc --build` de `apps/desktop`, copia de `apps/web/dist` a
 `apps/desktop/dist/web`, y `electron-builder --mac --arm64`. El resultado queda en
-`apps/desktop/release/` (la versión en `apps/desktop/package.json`: `1.0.0-beta.22` para la Beta 22):
+`apps/desktop/release/` (la versión en `apps/desktop/package.json`: `1.0.0-beta.23` para la Beta 23):
 
-- `apps/desktop/release/Lila-Modeler-1.0.0-beta.22-mac-arm64.dmg` — el instalador.
-- `apps/desktop/release/Lila-Modeler-1.0.0-beta.22-mac-arm64.dmg.blockmap`.
+- `apps/desktop/release/Lila-Modeler-1.0.0-beta.23-mac-arm64.dmg` — el instalador.
+- `apps/desktop/release/Lila-Modeler-1.0.0-beta.23-mac-arm64.dmg.blockmap`.
 - `apps/desktop/release/mac-arm64/Lila Modeler.app` — la app sin empaquetar en DMG, útil para
   probar rápido.
 - `apps/desktop/release/ORIGEN.txt` — `sha`, `fecha` (ISO) y `arch` (`uname -m`) del build,

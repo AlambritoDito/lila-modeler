@@ -3,6 +3,52 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.23] - 2026-10-08
+
+Simulate and Results redesigned from the owner's Claude Design draft (Lote M, #581, epic #582). The
+professor's script — edit a resource, add and assign a second calendar, set a gateway's split,
+simulate, read bottlenecks, see tokens on the map, compare AS-IS with TO-BE, detach the panel — now
+takes 18 clicks and no scrolling instead of 30 clicks and about 4,300 px. Results are identical: the
+redesign changes neither the model nor the engine.
+
+### Changed
+
+- **Six Simulate steps (#598, #600, #605)**: Arrivals, Times, Routes, Resources, Calendars and Run,
+  numbered in a full-width bar under the top bar, each with ✓ or its problem count. Alt+1…6 open a
+  step from any mode, also with the panel detached. The docked panel shows only the open step: what
+  it asks, its problems and previous/next. The step survives docking, detaching and coming back
+  from Results.
+- **▶ Simulate goes to the first problem (#600, #604)**: with an error that holds the run back, the
+  top-bar button (with the count) and ⌘↩ open that step and select the element instead of failing.
+  Warnings still run.
+- **Resources as a list and a sheet (#601)**: compact rows (calendar, capacity, cost per hour) and a
+  sheet with Capacity (fixed or by shifts), Costs and Lanes. In the Resources step a click on a
+  lane's name on the canvas assigns it. Lanes are listed in visual order; an unnamed lane reads
+  «Unnamed lane n», never its id.
+- **Calendar manager (#599)**: templates (a calendar from a template is born with hours), «Used by»,
+  rename, and one editor at a time with Week, Holidays and list tabs. The week grid has days in
+  columns and hours in rows and works from the keyboard (arrows, Space, Shift+arrow paints).
+- **Route split in percent (#602, #604)**: type 70, not 0.7, in the Routes step or in a box on each
+  outgoing flow on the canvas; the total turns green at 100 %. The file still stores fractions.
+- **Results on the map (#603)**: heat map of waits, BOTTLENECK marks and the token replay on the
+  same canvas, with the time bar in its own row under the map; a Summary with six KPIs and their
+  95 % CI; the collapsible results table (⌘J) holds Tasks, the full results and the charts.
+- **Compare inside Results (#603)**: «Compare with…» simulates the other side when needed and shows
+  KPI deltas and both heat maps side by side; everything the old Compare view had sits below them.
+- **Step labels on the canvas (#604)**: each step paints its parameter under every element, e.g.
+  «≈ 1.25 h», the pool or the calendar.
+
+### Fixed
+
+- The 95 % CI of a duration KPI is shown in the scenario's unit, not in raw seconds (#615).
+- Picking a pool or a lane in Simulate shows its name and never writes `elements.<pool or lane id>`
+  into the scenario; the first click on a lane's name in Resources works even with a task selected
+  (#615).
+- A click on an element's label selects the element, so Simulate never shows a label id nor writes
+  `elements.*_label` (#615).
+- The replay clock is never cut at the end of a run, the «Instant» speed jumps to the end instead of
+  showing «Invalid Date», and the % boxes stay next to their flow without covering the timer (#615).
+
 ## [1.0.0-beta.22] - 2026-10-07
 
 Windows through the browser (epic #577): the web app installs from Chrome or Edge and opens and
