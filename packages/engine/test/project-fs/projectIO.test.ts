@@ -103,6 +103,33 @@ describe('readProjectFolder — tolerancia', () => {
     expect((error as ProjectIOError).code).toBe('E-SIN-MODELO');
   });
 
+  it('a folder without lila-project.json is named after the folder, but its model is model.bpmn (#556)', async () => {
+    await writeFile(join(dir, 'model.bpmn'), XML_MINIMO, 'utf8');
+    await writeFile(join(dir, 'as-is.scenario.json'), JSON.stringify({ version: 1, name: 'AS-IS', model: 'model.bpmn' }), 'utf8');
+
+    const { document, loose } = await readProjectFolder(dir);
+
+    expect(loose).toBe(false);
+    expect(document.name).toBe(dir.split('/').at(-1));
+    // What the scenario's `model` names, so Run does not refuse the folder's own scenarios.
+    expect(document.model.name).toBe('model.bpmn');
+    expect(document.scenarios['as-is.scenario.json']?.['model']).toBe(document.model.name);
+
+    // Saving writes that name into the manifest, so reopening keeps it.
+    await writeProjectFolder(dir, document);
+    expect((await readProjectFolder(dir)).document.model.name).toBe('model.bpmn');
+  });
+
+  it('a broken lila-project.json is rebuilt with model.bpmn as the model too (#556)', async () => {
+    await writeFile(join(dir, 'model.bpmn'), XML_MINIMO, 'utf8');
+    await writeFile(join(dir, 'lila-project.json'), '{ roto', 'utf8');
+
+    const { document, problems } = await readProjectFolder(dir);
+
+    expect(problems.map((p) => p.file)).toEqual(['lila-project.json']);
+    expect(document.model.name).toBe('model.bpmn');
+  });
+
   it('un .bpmn con otro nombre se abre ESE, no el model.bpmn de al lado (LILA-072)', async () => {
     const otro = '<?xml version="1.0"?><definitions xmlns="http://example.org" id="Ventas"/>';
     await writeFile(join(dir, 'model.bpmn'), XML_MINIMO, 'utf8');

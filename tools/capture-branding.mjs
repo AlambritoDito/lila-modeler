@@ -27,7 +27,9 @@ const browser = await chromium.launch({ headless: true, ...(process.env.CHROME_P
 const base = `http://127.0.0.1:${server.address().port}/lila-modeler/`;
 const version = JSON.parse(await readFile(path.join(root, 'apps/web/package.json'), 'utf8')).version;
 try {
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'es-MX' });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'es-MX', serviceWorkers: 'block' });
+  // `serviceWorkers: 'block'`: the app's worker (#574) would answer `main-*.js` from its cache and
+  // bypass the routes below that hold or fail that download.
   const page = await context.newPage();
   const errors = [], missing = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -78,7 +80,7 @@ try {
   }, nativeIcon);
   assert.deepEqual(alpha, [0, 255]);
   await context.close();
-  const failure = await browser.newContext({ locale: 'es-MX', viewport: { width: 1440, height: 900 } });
+  const failure = await browser.newContext({ locale: 'es-MX', viewport: { width: 1440, height: 900 }, serviceWorkers: 'block' });
   const broken = await failure.newPage();
   await broken.route('**/assets/main-*.js', route => route.abort());
   await broken.goto(base + 'app/');

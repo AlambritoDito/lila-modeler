@@ -1657,6 +1657,14 @@ export const en = {
   },
 
   almacen: {
+    /** #573: the file type in Chrome and Edge's Open and Save dialogs. */
+    tipoLila: 'Lila Modeler project',
+    /** #573: earlier saves of the web app, `.lila.json`, in the Open dialog. */
+    tipoLilaJson: 'Lila Modeler project (JSON)',
+    /** #573: the web app's Save found its `.lila` changed since this window read or wrote it. */
+    errorCambioExternoWeb: (nombre: string): string =>
+      `${nombre} changed outside this window since it was opened, so nothing was saved. ` +
+      'Open it again to get the other version, or use Save As to keep yours in another file.',
     errorSinBridge: 'DesktopStore requires `window.lila`: is it being instantiated outside Electron?',
     errorProyectoDistinto:
       'E-PROYECTO-DISTINTO: the document to save is not the active project; use "Save as" ' +

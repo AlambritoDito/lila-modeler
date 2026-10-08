@@ -1,5 +1,10 @@
-import { readFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { parseBpmn } from '@lila-modeler/engine/bpmn';
+import { readProjectFolder, writeProjectFolder } from '@lila-modeler/engine/project-fs';
 import { expect, it } from 'vitest';
+import { defaultScenarios } from './project';
 import { entradasHuerfanas, prepareSimulation, sinHuerfanas, sinRepetir } from './simulationGate';
 import { setLocale } from './i18n';
 
@@ -163,4 +168,73 @@ it('the process simulated is the one all the project scenarios target, whichever
   await expect(prepareSimulation(xml, 'cliente.scenario.json', escenarios, 'model.bpmn', { locale: 'en' })).rejects.toThrow(
     'E-ELEMENTO-DESCONOCIDO: the id StartEvent_ClienteInicio belongs to the process "Customer" (Process_Cliente), but the simulated process is "Restaurant" (Process_Restaurante).',
   );
+});
+
+// #556: examples/pedido has no lila-project.json. Opened as a folder, the reconstructed manifest
+// named the model after the folder («pedido»), and Run refused the folder's own scenarios with
+// «the scenario points at model.bpmn, but the active model is pedido». The same read the desktop
+// app does, then the same gate Run goes through, with the model name the app gets from it.
+it('examples/pedido opened as a folder simulates its scenarios: their model is the folder\'s model.bpmn (#556)', async () => {
+  const { document, loose } = await readProjectFolder('examples/pedido');
+  expect(loose).toBe(false);
+  for (const file of ['as-is.scenario.json', 'to-be-3-cajeros.scenario.json']) {
+    const prepared = await prepareSimulation(document.model.xml, file, document.scenarios, document.model.name);
+    expect(prepared.scenario.model).toBe('model.bpmn');
+  }
+});
+
+// The other half of #556: a manifest saved before the fix keeps the folder's name as the model's.
+// The run is still checked against the project's model.bpmn, the model Run always passes (#610).
+it('a manifest saved before #556 with the folder name as the model still simulates (#556)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'lila-556-'));
+  try {
+    cpSync('examples/pedido', dir, { recursive: true });
+    writeFileSync(join(dir, 'lila-project.json'), JSON.stringify({ version: 1, id: 'p', name: 'pedido', model: { id: 'm', name: 'pedido', revision: 0 }, scenarioRevisions: {} }));
+    const { document, loose } = await readProjectFolder(dir);
+    expect(loose).toBe(false);
+    expect(document.model.name).toBe('pedido');
+    await expect(prepareSimulation(document.model.xml, 'as-is.scenario.json', document.scenarios, 'model.bpmn')).resolves.toBeDefined();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// #610: a loose diagram not called model.bpmn (File › Import BPMN…, a double-clicked ventas.bpmn)
+// opens with the default scenarios, whose `model` is model.bpmn. Run checked them against the
+// opened file («ventas.bpmn») and never ran. The same read and defaults the app does, then the gate
+// with the model Run passes; then «Save As», which writes the full project with its model.bpmn.
+it('a loose diagram with any file name simulates its default scenarios, before and after «Save As» (#610)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'lila-610-'));
+  const saved = mkdtempSync(join(tmpdir(), 'lila-610-saved-'));
+  try {
+    writeFileSync(join(dir, 'ventas.bpmn'), xml);
+    const { document, loose } = await readProjectFolder(dir, 'ventas.bpmn');
+    expect(loose).toBe(true);
+    expect(document.model.name).toBe('ventas.bpmn');
+    const scenarios = defaultScenarios((await parseBpmn(document.model.xml)).ir);
+    const prepared = await prepareSimulation(document.model.xml, 'as-is.scenario.json', scenarios, 'model.bpmn');
+    expect(prepared.scenario.model).toBe('model.bpmn');
+
+    await writeProjectFolder(saved, { ...document, scenarios }, { saveAs: true });
+    const reopened = await readProjectFolder(saved);
+    expect(reopened.loose).toBe(false);
+    for (const file of Object.keys(scenarios)) {
+      const again = await prepareSimulation(reopened.document.model.xml, file, reopened.document.scenarios, 'model.bpmn');
+      expect(again.scenario.model).toBe('model.bpmn');
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(saved, { recursive: true, force: true });
+  }
+});
+
+// QA of #612: a CLI-style folder, `ventas.bpmn` with a scenario whose `model` is `ventas.bpmn`
+// (docs/SCENARIO_FORMAT.md: a path relative to the scenario), opened loose. It still runs, and a
+// scenario that names another file is refused against the file on the canvas.
+it('a loose diagram also runs a scenario that names it, and refuses one that names another file (#610)', async () => {
+  const scenarios = { 'ventas.scenario.json': { ...defaultScenarios((await parseBpmn(xml)).ir)['as-is.scenario.json'], model: 'ventas.bpmn' } };
+  const loose = ['model.bpmn', 'ventas.bpmn'];
+  expect((await prepareSimulation(xml, 'ventas.scenario.json', scenarios, loose)).scenario.model).toBe('ventas.bpmn');
+  const other = { 'otro.scenario.json': { ...scenarios['ventas.scenario.json'], model: 'other.bpmn' } };
+  await expect(prepareSimulation(xml, 'otro.scenario.json', other, loose)).rejects.toThrow(/other\.bpmn.*ventas\.bpmn/);
 });
