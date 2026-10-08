@@ -3,6 +3,37 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.22] - 2026-10-07
+
+Windows through the browser (epic #577): the web app installs from Chrome or Edge and opens and
+saves `.lila` files like a desktop app. Plus fixes for folder projects, loose diagrams, repositories
+and quitting the desktop app.
+
+### Added
+
+- **Install the web app from Chrome or Edge (#570–#576)**: the editor on Pages is an installable
+  PWA with Lila's icons and its own window. Installed, it opens `.lila` files with a double-click
+  (through the unsaved-changes prompt), Save writes back to the file Open chose (File System Access
+  API; the download stays where the browser lacks it) and it starts offline from a cache tied to
+  the version. ADR-031 makes it the primary Windows channel; the unsigned `.exe` stays as a
+  secondary one. Tester guide: `docs/WINDOWS-PWA-TESTER-GUIDE.md`.
+
+### Fixed
+
+- **Quitting the desktop app keeps the window's place and leaves no `estado.json.tmp-*` (#565)**:
+  quit waits (up to 3 s) for the session-state write, and leftovers from earlier versions are
+  removed at startup.
+- **A folder project without `lila-project.json` runs its own scenarios (#556)**: `examples/pedido`
+  opened as a folder refused Run with «the scenario points at model.bpmn, but the active model is
+  pedido». Manifests that earlier builds saved that way run too.
+- **A loose diagram with any file name runs (#610)**: a `.bpmn` not called `model.bpmn` (Import
+  BPMN…, a double-click on `ventas.bpmn`) always failed the model check. Its default scenarios run,
+  before and after Save As, and so does a scenario that names the loose file itself.
+- **A repository that drops to one process keeps its slug (#517)**: deleting down to one process
+  and adding another no longer moves the first to a new folder; a version 2 manifest that lists a
+  single process keeps that process's slug and name, the CLI and the MCP server report its real
+  paths, and two concurrent `lila run --save` on it both land.
+
 ## [1.0.0-beta.21] - 2026-10-05
 
 Two more gaps from the same feedback round (epic #582): files from other tools and activity size.

@@ -1632,6 +1632,11 @@ export const es: Strings = {
   },
 
   almacen: {
+    tipoLila: 'Proyecto de Lila Modeler',
+    tipoLilaJson: 'Proyecto de Lila Modeler (JSON)',
+    errorCambioExternoWeb: (nombre: string): string =>
+      `${nombre} cambió fuera de esta ventana desde que se abrió, así que no se guardó nada. ` +
+      'Ábrelo de nuevo para tener la otra versión, o usa Guardar como para conservar la tuya en otro archivo.',
     errorSinBridge: 'DesktopStore requiere `window.lila`: ¿se está instanciando fuera de Electron?',
     errorProyectoDistinto:
       'E-PROYECTO-DISTINTO: el documento a guardar no es el proyecto activo; usa "Guardar como" ' +

@@ -273,6 +273,8 @@ Soportado en v1: la lista de la sección 3 de `LILA_MODELER_ESTRUCTURA.md` (ver 
 
 **Porqué TypeScript sale reforzado**: el mismo bundle corre en el Worker de la app de escritorio y en el Node del servidor; un motor Python habría exigido empaquetar un runtime Python dentro del instalador o cargar Pyodide (~12 MB).
 
+> **Nota:** enmendada por ADR-031 (2026-10-05). En Windows el canal principal pasa a ser la app web instalada como PWA desde Chrome o Edge; la objeción de arriba a «PWA como modalidad principal» es sobre Safari y Firefox, y ahí sigue en pie.
+
 ---
 
 ## ADR-024 — Agregado top-level de varias replicaciones
@@ -570,6 +572,47 @@ motor publicado traía el subcomando `lila mcp` pero no el servidor que carga, y
 
 La primera publicación la hace el dueño a mano, y después se configura el publicador de confianza
 de npm (OIDC) para el paquete nuevo, como se hizo con el motor. *(prueba: #569)*
+
+---
+
+## ADR-031 — En Windows el canal principal es la PWA en Chrome y Edge
+
+**Estado:** Aceptada (decidida por Brito el 2026-10-05). Enmienda ADR-023.
+
+Quien usa Windows corre la app web desde GitHub Pages (`https://alambritodito.github.io/lila-modeler/app/`)
+en Chrome o Edge y la instala como aplicación web progresiva (PWA). El `.exe` NSIS sin firmar
+queda como canal secundario; la firma (SignPath, #501) está en pausa. macOS conserva la app de
+Electron como canal principal y Linux el AppImage y el `.deb`.
+
+- **Por qué la objeción de ADR-023 ya no aplica en Windows.** ADR-023 descartó la PWA como
+  modalidad principal porque Safari y Firefox no tienen diálogos de archivo nativos ni asociación
+  de archivos. Chromium, que es lo que ya tienen los usuarios de Windows (Edge viene con el
+  sistema), tiene las dos cosas: la File System Access API (`showOpenFilePicker` /
+  `showSaveFilePicker`, un identificador de archivo sobre el que Guardar reescribe) y los
+  `file_handlers` del manifiesto con `window.launchQueue`, que hacen de la PWA instalada la app que
+  abre un `.lila` con doble clic.
+- **Por qué no el `.exe` firmado.** Un instalador sin firmar se topa con el «Windows protegió su
+  PC» de SmartScreen y algunos equipos administrados lo rechazan sin más; un certificado de firma
+  exige un historial de organización que el proyecto aún no tiene (#501). Instalar una PWA no pide
+  permisos de administrador ni firma, y cada despliegue de Pages la actualiza.
+- **Qué es.** `apps/web` gana `manifest.webmanifest` (nombre, `start_url` y `scope` relativos para
+  que el mismo archivo sirva en `/` y en `/lila-modeler/app/`, `display: standalone`, iconos de
+  marca 192, 512 y maskable, `file_handlers` para `.lila` con `launch_handler` `focus-existing`, para
+  que un doble clic vaya a la ventana ya abierta y a su aviso de cambios sin guardar), un service worker que guarda el
+  esqueleto de la app en una caché con el nombre de la versión y un hash del build para que la app instalada abra sin
+  conexión, y mejora progresiva en `BrowserStore`: con la File System Access API, Abrir conserva el
+  identificador del archivo y Guardar escribe sobre él; sin ella (Safari, Firefox, un Chromium
+  antiguo) Abrir es el selector de archivos y Guardar descarga, exactamente como antes.
+  `DesktopStore` y Electron no cambian.
+- **Qué no hace.** No hay manejador de archivos para `.bpmn` (en el navegador un diagrama suelto se
+  importa, no se abre como proyecto); no hay proyectos carpeta (ADR-018) en el navegador, solo el
+  contenedor `.lila` (ADR-027); no hay actualización automática con la app abierta: una versión
+  nueva entra la siguiente vez que se hayan cerrado todas las ventanas de la app.
+
+Revisar: si la firma de Windows llega a estar disponible y los probadores reportan que el manejo de
+archivos de la PWA no basta, el `.exe` puede volver a ser el principal sin cambiar código; la SPA es
+la misma. *(prueba: #576 — `Page.getInstallabilityErrors` vacío sobre el build de Pages; guía del
+probador #575)*
 
 ---
 

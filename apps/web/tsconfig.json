@@ -18,6 +18,7 @@
     "src",
     "vite.config.ts",
     "novedades.ts",
+    "serviceWorker.ts",
     "../../packages/engine/src/bpmn/bpmn-moddle.d.ts"
   ]
 }

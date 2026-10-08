@@ -145,6 +145,9 @@ async function main() {
     await cdp.send('Runtime.enable');
     await cdp.send('DOM.enable');
     await cdp.send('Page.setInterceptFileChooserDialog', { enabled: true });
+    // Open and Save are checked here through the file input and the download, as in Safari and
+    // Firefox: the File System Access pickers (#573, checked by tools/check-pwa.mjs) are taken away.
+    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: "for (const name of ['showOpenFilePicker', 'showSaveFilePicker']) Object.defineProperty(window, name, { value: undefined, configurable: true });" });
 
     const evaluate = async (expression) => {
       // `userGesture`: opening a file chooser needs user activation, and a plain `Runtime.evaluate`

@@ -42,7 +42,9 @@ export async function saveLilaRun(input: LilaProcess, run: StoredRun, locale: Lo
       // read the file again and append to what is there now.
       const code = (error as { code?: unknown }).code;
       if ((code !== 'E-CAMBIO-EXTERNO' && code !== 'E-ARCHIVO-OCUPADO') || attempt >= ATTEMPTS) throw error;
-      current = await openLilaProcess(input.file, { process: process.slug, locale });
+      // A one-process archive is opened without a slug: a version 2 one is written back as version
+      // 1, and its slug changes with it (#517). The checks above still stop a run in another process.
+      current = await openLilaProcess(input.file, { process: input.slugs.length === 1 ? undefined : process.slug, locale });
     }
   }
 }

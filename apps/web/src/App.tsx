@@ -84,7 +84,14 @@ import './theme/montana.css';
 import { confirmarEdicionEnCurso, useBorradorPendiente } from './edicionEnCurso';
 
 /** `file` (LILA-072): el `.bpmn` pulsado, cuando no es el `model.bpmn` de la carpeta. */
-type ProjectAction = 'new' | 'open' | 'openFile' | 'bpmn' | { readonly recent: string; readonly file?: string } | { readonly ejemplo: EjemploId };
+type ProjectAction = 'new' | 'open' | 'openFile' | 'bpmn' | { readonly recent: string; readonly file?: string } | { readonly ejemplo: EjemploId }
+  // #572: a `.lila` the installed PWA was launched with (`window.launchQueue`).
+  | { readonly lanzado: FileSystemFileHandle };
+
+/** `window.launchQueue` (Chromium, installed PWA with `file_handlers`); not in TypeScript's DOM lib. */
+interface LaunchQueue {
+  setConsumer(consumer: (params: { readonly files: readonly FileSystemHandle[] }) => void): void;
+}
 
 /**
  * Nombre del cuello de botella principal para el panel derecho (#226): antes se enseñaba el id
@@ -547,6 +554,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    */
   const slugsBorrados = useRef(new Set<string>());
   const slugsOcupados = (): string[] => [...(adapter?.occupiedSlugs?.() ?? []), ...slugsBorrados.current];
+  /** The slugs the project lists on disk, as last opened or saved: `processes/<slug>/` of its own (#517). */
+  const slugsEnDisco = useRef(new Set<string>());
   /** #461: the slug of the process a call activity was opened from, for «Back to …». */
   const [origen, setOrigen] = useState<string | null>(null);
   /** #461: a double-click on a call activity that calls nothing here; a notice, not an error. */
@@ -582,6 +591,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const cerrarMenuFuera = useRef<{ menu: HTMLDetailsElement; cerrar: (e: PointerEvent) => void } | null>(null);
   /** `.bpmn` que llegó antes de que el lienzo estuviera listo; lo abre `abrirRuta` (LILA-072). */
   const rutaPendiente = useRef<OpenPathRequest | null>(null);
+  /** #572: the same for a `.lila` the installed PWA was launched with; `abrirLanzado` opens it. */
+  const lanzadoPendiente = useRef<FileSystemFileHandle | null>(null);
   const replaceDialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     if (pendingAction !== null && !replaceDialog.current?.open) replaceDialog.current?.showModal();
@@ -614,6 +625,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [runs, setRuns] = useState<StoredRun[]>([]);
   const [scenarioRevisions, setScenarioRevisions] = useState<Record<string, number>>({});
   const [archivo, setArchivo] = useState('model.bpmn');
+  /** What a scenario's `model` may name (#610): the project's `model.bpmn`, or the loose file on the canvas. */
+  const modelosDeEscenarios = suelto && archivo !== 'model.bpmn' ? ['model.bpmn', archivo] : 'model.bpmn';
   const [pestana, setPestana] = useState<PestanaId>('propiedades');
   // El lienzo no se monta hasta que el tema está resuelto: bpmn-js lee los colores de las
   // figuras de los tokens al montar (ver Modeler.tsx). `tema === undefined` es "todavía no se
@@ -874,9 +887,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // #546: every reader of a process picks it by its scenarios (`ParseBpmnOptions.scenarios`).
     const parsed = await parseBpmn(xml, { scenarios: Object.values(escenarios) });
     const yo = procesos[activo];
-    // A one-process project has no slug on disk yet: the day it grows it takes a free one, never
-    // the folder of a process deleted before (QA of #511).
-    return { slug: procesos.length > 1 && yo !== undefined ? yo.slug : processSlug(yo?.name ?? projectName, slugsOcupados()), name: yo?.name ?? projectName,
+    // A one-process project keeps the slug it already has (#517, item 4: deleting down to one and
+    // adding another must not move it to a new folder) while that slug is still its own on disk —
+    // listed by the repository it was read from or last saved as — or no folder holds it yet.
+    // Otherwise (a version 1 project, or one saved back to version 1 over its old `processes/`
+    // folder) the day it grows it takes a free one, never the folder of a process deleted before
+    // (QA of #511).
+    const propio = yo !== undefined && (procesos.length > 1 || slugsEnDisco.current.has(yo.slug) || !slugsOcupados().includes(yo.slug));
+    return { slug: propio ? yo.slug : processSlug(yo?.name ?? projectName, slugsOcupados()), name: yo?.name ?? projectName,
       model: { id: parsed.ir.id, name: archivo, xml, revision: atRevision },
       scenarios: escenarios, scenarioRevisions, runs };
   }
@@ -932,6 +950,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         : changeToken(doc.id, doc.model.revision, previo[2], previo[3]);
       const saved = await adapter.saveProject(doc, { saveAs, ...(asFolder ? { asFolder: true } : {}) });
       if (saved === null) return 'cancelled';
+      // A one-process save writes version 1: its old `processes/<slug>/` is no longer its own (#517).
+      slugsEnDisco.current = new Set(repositorio ? processesOf(doc).map((p) => p.slug) : []);
       // «Guardar como» crea el proyecto completo en la carpeta elegida: deja de ser suelto.
       if (saveAs || repositorio) setSuelto(false);
       setSavedToken(token);
@@ -950,8 +970,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     cancelarCorrida();
     if (!await modelador.abrir(doc.model.xml)) return false;
     revisionRef.current = doc.model.revision; setRevision(doc.model.revision);
-    // #498: a repository opens on its first process; a version 1 project has no list at all.
-    const lista = (doc.processes?.length ?? 0) > 0 ? processesOf(doc) : [];
+    // #498: a repository opens on its first process; a version 1 project has no list at all. A
+    // repository that lists a single process is still one (#517, item 5): it keeps its name and slug.
+    const lista = doc.process !== undefined || (doc.processes?.length ?? 0) > 0 ? processesOf(doc) : [];
+    slugsEnDisco.current = new Set(lista.map((p) => p.slug));
     procesoEnLienzo.current = lista[0]?.slug;
     setProcesos(lista); setActivo(0); setOrigen(null); setAvisoLlamada(null);
     slugsBorrados.current.clear();
@@ -1153,6 +1175,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       if (kind === 'open' || kind === 'openFile') {
         const doc = await adapter.openProject(kind === 'openFile' ? { fileOnly: true } : undefined);
         if (doc) await activarLeido(doc, beforeToken); return;
+      }
+      if (typeof kind === 'object' && 'lanzado' in kind) {
+        const doc = await adapter.openHandle?.(kind.lanzado) ?? null;
+        if (doc) await activarLeido(doc, beforeToken);
+        return;
       }
       if (typeof kind === 'object' && 'ejemplo' in kind) {
         // #458, QA of #505 (S2c, N3): forget the adapter's previously active folder/document so
@@ -2048,6 +2075,41 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const abrirRutaRef = useRef(abrirRuta);
   abrirRutaRef.current = abrirRuta;
 
+  /**
+   * #572 (ADR-031): a `.lila` double-clicked in the system opens the installed PWA, which hands it
+   * over through `window.launchQueue` (the manifest's `file_handlers`). It goes through the same
+   * door as Open — `projectAction`, unsaved-changes prompt included. Before the canvas exists it
+   * waits like `rutaPendiente`; while the dialog of unsaved changes is up it says so, like a
+   * double-click on the desktop; while another open or save holds the lock (the session restored
+   * at startup, typically) it waits for it instead, since that is no choice the user made.
+   */
+  function abrirLanzado(handle: FileSystemFileHandle, intentos = 0): void {
+    if (modelador === null) { lanzadoPendiente.current = handle; return; }
+    if (pendingAction !== null) { setIoError(S.app.errorAbrirOcupado(handle.name)); return; }
+    if (ioLock.current || respuestaPerdida.current !== null) {
+      // Up to 30 s (a save dialog left open, a slow restore); then say so instead of waiting forever.
+      if (intentos >= 100) { setIoError(S.app.errorAbrirOcupado(handle.name)); return; }
+      setTimeout(() => abrirLanzadoRef.current(handle, intentos + 1), 300);
+      return;
+    }
+    void projectAction({ lanzado: handle });
+  }
+  const abrirLanzadoRef = useRef(abrirLanzado);
+  abrirLanzadoRef.current = abrirLanzado;
+  useEffect(() => {
+    // Chromium calls the consumer for every launch, also a plain one with no files.
+    (window as { launchQueue?: LaunchQueue }).launchQueue?.setConsumer(({ files }) => {
+      const handle = files.find((f): f is FileSystemFileHandle => f.kind === 'file');
+      if (handle !== undefined) abrirLanzadoRef.current(handle);
+    });
+  }, []);
+  useEffect(() => {
+    const handle = lanzadoPendiente.current;
+    if (modelador === null || handle === null) return;
+    lanzadoPendiente.current = null;
+    abrirLanzadoRef.current(handle);
+  }, [modelador]);
+
   /** The autosave copy the user chose to restore (#459), waiting for the canvas like `rutaPendiente`. */
   const copiaPendiente = useRef<Uint8Array | null>(null);
   /**
@@ -2131,7 +2193,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const xml = await modelador.exportar();
       // The language is decided when the run starts and travels with it: a run already stored
       // keeps the language it was produced in (its warnings are data, not text that is repainted).
-      const { ir, scenario, warnings } = await prepareSimulation(xml, objetivo, escenarios, archivo, { locale });
+      // A scenario lives (or will after «Save As») next to the project's `model.bpmn`, also for a
+      // loose `ventas.bpmn` (#610); one that names the loose file itself (a CLI-style folder) runs too.
+      const { ir, scenario, warnings } = await prepareSimulation(xml, objetivo, escenarios, modelosDeEscenarios, { locale });
       if (control.signal.aborted || enVuelo.current !== control) return;
       const { result: rawResult, logSample, cycleTimes } = await runInWorker(ir, scenario, {
         locale,
@@ -2300,7 +2364,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       ]);
       const escenario = run !== undefined
         ? { scenario: run.inputs.scenario as unknown as ResolvedScenario, result: run.result }
-        : await prepareSimulation(xml, escenarioId, escenarios, archivo, { locale }).then(({ scenario }) => ({ scenario }), () => ({}));
+        : await prepareSimulation(xml, escenarioId, escenarios, modelosDeEscenarios, { locale }).then(({ scenario }) => ({ scenario }), () => ({}));
       const hoy = new Date();
       const date = [hoy.getFullYear(), hoy.getMonth() + 1, hoy.getDate()].map((n) => String(n).padStart(2, '0')).join('-');
       // #460: the run's charts, rasterised like the diagram; no run, no charts.

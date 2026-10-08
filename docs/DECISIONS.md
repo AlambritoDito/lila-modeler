@@ -273,6 +273,8 @@ Supported in v1: the list in section 3 of `LILA_MODELER_ESTRUCTURA.md` (see `doc
 
 **Why TypeScript comes out stronger**: the same bundle runs in the desktop app's Worker and in the server's Node; a Python engine would have required bundling a Python runtime inside the installer or loading Pyodide (~12 MB).
 
+> **Note:** amended by ADR-031 (2026-10-05). On Windows the primary channel is now the web app installed as a PWA from Chrome or Edge; the "PWA as the primary mode" objection above is about Safari and Firefox and still holds there.
+
 ---
 
 ## ADR-024 — Top-level aggregate across multiple replications
@@ -565,6 +567,44 @@ engine had the `lila mcp` subcommand but not the server it loads, and
 
 The first publication is by hand by the owner, and then the npm trusted publisher (OIDC) is set up
 for the new package, as was done for the engine. *(test: #569)*
+
+---
+
+## ADR-031 — On Windows the main channel is the PWA in Chrome and Edge
+
+**Status:** Accepted (decided by Brito on 2026-10-05). Amends ADR-023.
+
+Windows users run the web app from GitHub Pages (`https://alambritodito.github.io/lila-modeler/app/`)
+in Chrome or Edge and install it as a Progressive Web App. The unsigned NSIS `.exe` stays as a
+secondary channel; signing it (SignPath, #501) is paused. macOS keeps the Electron app as its
+primary channel and Linux keeps the AppImage and `.deb`.
+
+- **Why the ADR-023 objection no longer applies on Windows.** ADR-023 ruled out a PWA as the
+  primary mode because Safari and Firefox have no native file dialogs and no file association.
+  Chromium, which is what Windows users already have (Edge ships with the system), has both: the
+  File System Access API (`showOpenFilePicker` / `showSaveFilePicker`, a file handle that Save
+  rewrites in place) and the manifest's `file_handlers` with `window.launchQueue`, which makes an
+  installed PWA the handler for `.lila` on double click.
+- **Why not the signed `.exe`.** An unsigned installer meets SmartScreen's «Windows protected your
+  PC» and some managed machines refuse it outright; a signing certificate needs an organization
+  history the project does not have yet (#501). Installing a PWA needs no administrator rights and
+  no signature, and every deploy of Pages updates it.
+- **What it is.** `apps/web` gains `manifest.webmanifest` (name, relative `start_url` and `scope`
+  so the same file works at `/` and at `/lila-modeler/app/`, `display: standalone`, brand icons
+  192, 512 and maskable, `file_handlers` for `.lila` with `launch_handler` `focus-existing`, so a
+  double-click goes to the window already open and its unsaved-changes prompt), a service worker that caches the app shell
+  under a cache named after the app version and a hash of the build so the installed app opens offline, and progressive
+  enhancement in `BrowserStore`: with the File System Access API, Open keeps the file handle and
+  Save writes back to it; without it (Safari, Firefox, an older Chromium) Open is the file input
+  and Save downloads, exactly as before. `DesktopStore` and Electron are untouched.
+- **What it does not do.** No `.bpmn` file handler (a loose diagram is imported, not opened as a
+  project, in the browser); no folder projects (ADR-018) in the browser, only the `.lila` container
+  (ADR-027); no automatic background update while the app is open — a new version takes over the
+  next time every window of the app has been closed.
+
+Revisit: if Windows signing becomes available and testers report that the PWA's file handling is
+not enough, the `.exe` can become primary again without code changes; the SPA is the same.
+*(test: #576 — `Page.getInstallabilityErrors` empty on the Pages build; tester guide #575)*
 
 ---
 
