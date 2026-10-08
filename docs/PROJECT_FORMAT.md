@@ -88,10 +88,10 @@ processes/<slug>/runs/<id>.result.json
   still read as a repository: that process keeps its slug and name, and a process added later goes
   next to it instead of moving it to a new folder — until it is saved as a one-process project
   (version 1). From then on its slug and name come from the project's name again, so the slug can
-  change. Any save counts, the engine's included: once the CLI or the MCP server writes into such a
-  `.lila` (a scenario, a saved run, an edited process) it is version 1, and an agent that still
-  passes the old slug as `--process` (`process` in the MCP tools) gets «has no process». With a
-  single process, leave `--process` out.
+  change. Adding a process keeps it version 2; any other save counts, the engine's included: once
+  the CLI or the MCP server writes into such a `.lila` (a scenario, a saved run, an edited process)
+  it is version 1, and an agent that still passes the old slug as `--process` (`process` in the MCP
+  tools) gets «has no process». With a single process, leave `--process` out.
 - **A version 1 project reads as a one-process repository**, folder and `.lila` alike. Nothing
   migrates: opening and saving it without changes gives back the same bytes.
 - **The folder moves, it does not copy.** The first version 2 save of a version 1 *folder* moves
