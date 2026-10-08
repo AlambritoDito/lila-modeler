@@ -10,13 +10,14 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { parseBpmn } from '../../src/bpmn/index.js';
 import { resolveScenarioArgument, withRunOverrides } from '../../src/cli-shared.js';
 import { main } from '../../src/cli.js';
 import { simulate } from '../../src/index.js';
-import { isCurrentRun, runProblem, withProcesses, processesOf } from '../../src/project/index.js';
+import { encodeLila, isCurrentRun, runProblem, withProcesses, processesOf } from '../../src/project/index.js';
 import {
   exportDocument,
   openLilaProcess,
@@ -106,6 +107,23 @@ describe('saveSimulationRun', () => {
     const { document } = await readLilaFile(file);
     expect(document.runs.map((r) => (r.inputs.scenario['run'] as { seed: number }).seed).sort()).toEqual([1, 2, 3]);
   }, 60_000);
+
+  // QA of #611: a one-process version 2 archive is written back as version 1, and its slug changes
+  // with it, so the retry of the save that lost the race must not ask for the old slug.
+  test('concurrent saves on a one-process version 2 archive all land', async () => {
+    const { document } = await readLilaFile(file);
+    const copia = { ...processesOf(document)[0]!, slug: 'copia', name: 'Copia' };
+    const entries = unzipSync(encodeLila({ ...document, process: { slug: 'mostrador', name: 'Mostrador' }, processes: [copia] }));
+    const manifest = JSON.parse(strFromU8(entries['lila-project.json']!)) as { processes: { slug: string }[] };
+    manifest.processes = manifest.processes.filter((p) => p.slug === 'mostrador');
+    const kept = Object.fromEntries(Object.entries(entries).filter(([name]) => !name.startsWith('processes/copia/')));
+    writeFileSync(file, zipSync({ ...kept, 'lila-project.json': strToU8(JSON.stringify(manifest)) }));
+    expect((await openLilaProcess(file)).process.slug).toBe('mostrador');
+
+    const runs = await Promise.all(['as-is', 'as-is'].map(simulated));
+    const saved = await Promise.all(runs.map(({ lila, scenario, result }) => saveSimulationRun(lila, 'as-is', scenario, result)));
+    expect((await readLilaFile(file)).document.runs.map((r) => r.id).sort()).toEqual(saved.map((s) => s.id).sort());
+  });
 
   test('a run whose model changed meanwhile is refused, and nothing is written', async () => {
     const { lila, scenario, result } = await simulated('as-is');

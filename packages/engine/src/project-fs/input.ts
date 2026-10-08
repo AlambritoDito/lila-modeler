@@ -82,8 +82,12 @@ function absolute(file: string): string {
   return resolve(file).replaceAll('\\', '/');
 }
 
+/**
+ * `true` when the archive has the version 2 layout. A version 2 manifest that lists a single
+ * process decodes with `process` and no `processes` (#517); a version 1 archive never has `process`.
+ */
 function isVersion2(document: ProjectDocument): boolean {
-  return document.processes !== undefined && document.processes.length > 0;
+  return document.process !== undefined || (document.processes !== undefined && document.processes.length > 0);
 }
 
 /**
