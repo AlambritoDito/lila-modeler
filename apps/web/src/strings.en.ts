@@ -341,6 +341,9 @@ export const en = {
     eliminar: 'Delete',
     integrado: 'Built-in',
     delUsuario: 'Mine',
+    /** The tag of each theme card (#441), singular where `integrado`/`delUsuario` name a group. */
+    tarjetaIntegrado: 'Built-in',
+    tarjetaDelUsuario: 'Mine',
     muestraTexto: 'Text on surface',
     muestraSecundario: 'Secondary text',
     muestraBoton: 'Accent',
