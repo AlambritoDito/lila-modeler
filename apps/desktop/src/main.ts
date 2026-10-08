@@ -48,13 +48,13 @@ import { pickUpdate, RELEASES_URL, updateDialogOptions } from './updateCheck.js'
 import { clearRecoveryFile, readRecoveryFile, recoveryChoice, recoveryDialogOptions, writeRecoveryFile } from './recovery.js';
 import {
   addRecent,
+  createSessionStateWriter,
   fitsAnyDisplay,
   parseAjustes,
   readSessionState,
   removeRecent,
   withAjustes,
   withWindowBounds,
-  writeSessionState,
   type SessionState,
   type WindowBounds,
 } from './sessionState.js';
@@ -416,8 +416,12 @@ function clearRecovery(): Promise<void> {
   return recoveryAtLaunch === null ? queueRecovery(() => clearRecoveryFile(recoveryPath)) : recoveryQueue;
 }
 
+const sessionWriter = createSessionStateWriter(sessionStatePath);
+/** Set once the queued session-state writes have drained at quit (#565, see `will-quit` below). */
+let sessionFlushed = false;
+
 async function persistSessionState(): Promise<void> {
-  await writeSessionState(sessionStatePath, sessionState);
+  await sessionWriter.write(sessionState);
 }
 
 /** Añade/mueve `dir` al frente de recientes y persiste — llamar tras abrir/crear/guardar con éxito. */
@@ -483,7 +487,7 @@ async function saveBounds(win: BrowserWindow): Promise<void> {
 /** Debounce simple: varios `move`/`resize` seguidos solo escriben disco una vez, 400 ms después del último. */
 function scheduleSaveBounds(win: BrowserWindow): void {
   if (boundsSaveTimer !== null) clearTimeout(boundsSaveTimer);
-  boundsSaveTimer = setTimeout(() => void saveBounds(win), 400);
+  boundsSaveTimer = setTimeout(() => void saveBounds(win).catch(() => {}), 400);
 }
 
 // -- Reload when the open project changes on disk (#539, `projectWatcher.ts`) -----------------
@@ -1133,12 +1137,13 @@ function createWindow(show: boolean, bounds: WindowBounds | null): BrowserWindow
   });
 
   // Guardar bounds al mover/redimensionar (debounce simple) y al cerrar (sin debounce: puede ser
-  // lo último que se ejecute antes de que el proceso termine).
+  // lo último que se ejecute antes de que el proceso termine). The close write is queued
+  // synchronously here and `will-quit` waits for it to land (#565).
   win.on('move', () => scheduleSaveBounds(win));
   win.on('resize', () => scheduleSaveBounds(win));
   win.on('close', () => {
     if (boundsSaveTimer !== null) clearTimeout(boundsSaveTimer);
-    void saveBounds(win);
+    void saveBounds(win).catch(() => {}); // Losing the bounds is acceptable; crashing on quit is not.
   });
   // Reload starts a new renderer subscription lifecycle; only pendingOpenPath marks ready.
   win.webContents.on('did-start-loading', () => {
@@ -1284,4 +1289,19 @@ app.whenReady().then(async () => {
 // abrir desde Finder se crea una sesión nueva con sus handlers IPC propios.
 app.on('window-all-closed', () => {
   app.quit();
+});
+
+// The last session-state write (the window bounds at `close`) is still in flight when the app
+// quits; without waiting for it, the process dies between creating `estado.json.tmp-*` and
+// renaming it, leaving an empty temporary behind and the old bounds in place (#565).
+app.on('will-quit', (event) => {
+  if (sessionFlushed) return;
+  event.preventDefault();
+  // Bounded: a write that never settles (a stalled network profile) must not keep a windowless
+  // process alive; whatever temporary it leaves is swept at the next launch.
+  const limit = new Promise<void>((resolve) => setTimeout(resolve, 3000));
+  void Promise.race([sessionWriter.idle(), limit]).then(() => {
+    sessionFlushed = true;
+    app.quit();
+  });
 });
