@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { act, StrictMode, useEffect } from 'react';
 import { startStartup, finishStartup } from './startup';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Modelador } from './Modeler';
 import { parseBpmn } from '@lila-modeler/engine/bpmn';
 import { simulate } from '@lila-modeler/engine';
@@ -1419,6 +1419,22 @@ it('un diagrama suelto lo advierte en el pie, y «Guardar como» deja de adverti
   expect(pie.textContent).not.toContain(T.app.diagramaSuelto);
 });
 
+// #610: a loose diagram is read with the opened file's name as its model's (`readProjectFolder`),
+// and its default scenarios name model.bpmn. Run checked them against «ventas.bpmn» and never ran;
+// it checks against model.bpmn, where the scenarios live once «Save As» writes the project.
+it('Run on a loose ventas.bpmn checks its default scenarios against model.bpmn (#610)', async () => {
+  const base = proyecto('p610', 'Ventas');
+  const suelto = { ...base, model: { ...base.model, name: 'ventas.bpmn' }, scenarios: {}, loose: true };
+  (session as unknown as { openRecent: unknown }).openRecent = vi.fn().mockResolvedValue(suelto);
+  puenteConRutas({ dir: '/p/descargas', file: 'ventas.bpmn' });
+  await remontar();
+  await click(T.app.ejecutar);
+  const [, file, escenarios, modelo] = mocks.gate.mock.calls.at(-1)!;
+  expect(file).toBe('as-is.scenario.json');
+  expect((escenarios as Record<string, { model?: string }>)[file]?.model).toBe('model.bpmn');
+  expect(modelo).toEqual(['model.bpmn', 'ventas.bpmn']);
+});
+
 it.each([
   ['escenario editado', 'escenario', T.app.sinGuardar],
   ['corrida sin guardar', 'corrida', T.app.sinGuardar],
@@ -1714,6 +1730,69 @@ it('borrar el primer proceso deja al otro con su nombre (QA de #511, nit 9)', as
   teclear(container.querySelector<HTMLInputElement>('dialog.dialogo-proceso input')!, 'Envío');
   await act(async () => container.querySelector<HTMLButtonElement>('dialog.dialogo-proceso button[type="submit"]')!.click());
   expect(pestanasProceso().map((b) => b.textContent)).toEqual(['Cobro', 'Envío']);
+});
+
+/** A repository read from disk (#517): its processes' folders are on disk and listed by it. */
+function repositorio(procesos: readonly { slug: string; name: string }[]): ProjectDocument {
+  const proceso = ({ slug, name }: { slug: string; name: string }) => ({
+    slug, name, model: { id: `Process_${slug}`, name: 'model.bpmn', xml: newModelXml(name), revision: 0 },
+    scenarios: { 'as-is.scenario.json': { version: 1, name: 'AS-IS', model: 'model.bpmn' } }, scenarioRevisions: {}, runs: [],
+  });
+  const [first, ...rest] = procesos.map(proceso);
+  return { version: 1, id: 'repo', name: 'Organización', model: first!.model, scenarios: first!.scenarios, scenarioRevisions: {}, runs: [],
+    process: { slug: first!.slug, name: first!.name }, ...(rest.length > 0 ? { processes: rest } : {}) };
+}
+async function abrirRepositorio(doc: ProjectDocument): Promise<void> {
+  (session as { occupiedSlugs?: () => readonly string[] }).occupiedSlugs = () => [doc.process!.slug, ...(doc.processes ?? []).map((p) => p.slug)];
+  vi.mocked(session.openProject).mockResolvedValueOnce(doc);
+  await click(T.app.abrir);
+  if (container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open === true) await click(T.app.descartar);
+}
+async function borrarConfirmando(nombre: string): Promise<void> {
+  // The delete button is on the tab on the canvas.
+  await act(async () => pestanasProceso().find((b) => b.textContent === nombre)!.click());
+  await act(async () => porEtiqueta(T.procesos.borrarProceso(nombre)).click());
+  await act(async () => container.querySelector<HTMLButtonElement>('dialog.dialogo-proceso button[type="submit"]')!.click());
+}
+
+it('deleting down to one process and adding another keeps the first in its own folder (#517, item 4)', async () => {
+  lienzoQueRecuerda();
+  await abrirRepositorio(repositorio([{ slug: 'pedido', name: 'Pedido' }, { slug: 'cobro', name: 'Cobro' }]));
+  expect(pestanasProceso().map((b) => b.textContent)).toEqual(['Pedido', 'Cobro']);
+  await borrarConfirmando('Cobro');
+  await nuevoProcesoConNombre('Envío');
+  expect(pestanasProceso().map((b) => b.textContent)).toEqual(['Pedido', 'Envío']);
+  await click(T.app.guardar);
+  const guardado = vi.mocked(session.saveProject).mock.calls.at(-1)![0];
+  expect(guardado.process).toEqual({ slug: 'pedido', name: 'Pedido' });
+  expect(guardado.processes?.map((p) => p.slug)).toEqual(['envio']);
+});
+
+it('a repository that lists a single process opens with its name and keeps its slug when it grows (#517, item 5)', async () => {
+  lienzoQueRecuerda();
+  await abrirRepositorio(repositorio([{ slug: 'facturacion', name: 'Facturación' }]));
+  // One process: the plain tab, as for any one-process project.
+  expect(pestanasProceso()).toEqual([]);
+  await nuevoProcesoConNombre('Envío');
+  expect(pestanasProceso().map((b) => b.textContent)).toEqual(['Facturación', 'Envío']);
+  await click(T.app.guardar);
+  const guardado = vi.mocked(session.saveProject).mock.calls.at(-1)![0];
+  expect(guardado.process).toEqual({ slug: 'facturacion', name: 'Facturación' });
+  expect(guardado.processes?.map((p) => p.slug)).toEqual(['envio']);
+});
+
+it('once saved back to one process (version 1), growing again takes a new folder: the old one is stale (#517)', async () => {
+  lienzoQueRecuerda();
+  await abrirRepositorio(repositorio([{ slug: 'pedido', name: 'Pedido' }, { slug: 'cobro', name: 'Cobro' }]));
+  await borrarConfirmando('Cobro');
+  await click(T.app.guardar);
+  expect(vi.mocked(session.saveProject).mock.calls.at(-1)![0].processes).toBeUndefined();
+  await nuevoProcesoConNombre('Envío');
+  await click(T.app.guardar);
+  const guardado = vi.mocked(session.saveProject).mock.calls.at(-1)![0];
+  // `processes/pedido/` still holds the copy from before the version 1 save; it is not reused.
+  expect(guardado.process).toEqual({ slug: 'pedido-2', name: 'Pedido' });
+  expect(guardado.processes?.map((p) => p.slug)).toEqual(['envio']);
 });
 
 it('doble clic en una actividad de llamada abre el proceso llamado y «Volver a» regresa (#461)', async () => {
@@ -4168,4 +4247,95 @@ it('the status bar shows the seed of the run on screen, not only the scenario\'s
     expect(container.querySelector('.estado')!.textContent).toContain(T.app.semilla('7'));
   });
   expect(container.querySelector('.estado')!.textContent).not.toContain(T.app.semilla('42'));
+});
+
+// #572 (ADR-031): a `.lila` double-clicked with the installed PWA arrives through
+// `window.launchQueue` and goes through the same door as Open.
+describe('launchQueue (#572)', () => {
+  /** Stubs `window.launchQueue`; `lanzar` plays Chromium handing the consumer a launch. */
+  function colaDeLanzamiento() {
+    let consumidor: ((params: { files: readonly unknown[] }) => void) | null = null;
+    vi.stubGlobal('launchQueue', { setConsumer: (c: typeof consumidor) => { consumidor = c; } });
+    return {
+      lanzar: async (...files: unknown[]) => {
+        await act(async () => { consumidor!({ files }); await new Promise((r) => setTimeout(r, 0)); });
+      },
+    };
+  }
+  const archivo = (name: string) => ({ kind: 'file', name, getFile: vi.fn() });
+
+  it('a launched .lila opens like Open when nothing is unsaved', async () => {
+    const cola = colaDeLanzamiento();
+    const openHandle = vi.fn().mockResolvedValue(proyecto('p9', 'Lanzado'));
+    session = { ...session, openHandle } as unknown as ProjectSessionStore;
+    await remontar();
+    const lila = archivo('Lanzado.lila');
+    await cola.lanzar(lila);
+    expect(openHandle).toHaveBeenCalledWith(lila);
+    expect(container.textContent).toContain('Lanzado');
+  });
+
+  it('with unsaved changes it asks first, and opens the file after Discard', async () => {
+    const cola = colaDeLanzamiento();
+    const openHandle = vi.fn().mockResolvedValue(proyecto('p9', 'Lanzado'));
+    session = { ...session, openHandle } as unknown as ProjectSessionStore;
+    await remontar();
+    await act(async () => mocks.changed());
+    await cola.lanzar(archivo('Lanzado.lila'));
+    expect(container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open).toBe(true);
+    expect(openHandle).not.toHaveBeenCalled();
+    await click(T.app.descartar);
+    expect(openHandle).toHaveBeenCalledOnce();
+    expect(container.textContent).toContain('Lanzado');
+  });
+
+  it('cold start: a launch queued before the canvas exists waits for the restored session, then opens once', async () => {
+    // Chromium hands queued launches to the consumer as soon as it is set: before the canvas.
+    const lila = archivo('Lanzado.lila');
+    let consumidor: ((params: { files: readonly unknown[] }) => void) | null = null;
+    vi.stubGlobal('launchQueue', { setConsumer: (c: typeof consumidor) => { consumidor = c; c!({ files: [lila] }); } });
+    const openHandle = vi.fn().mockResolvedValue(proyecto('p9', 'Lanzado'));
+    const restaurado = proyecto('p1', 'Restaurado');
+    session = { ...session, openHandle, restoreSession: vi.fn(() => restaurado) } as unknown as ProjectSessionStore;
+    // The restore holds the I/O lock for a while: the launch must wait for it, not be dropped.
+    mocks.abrir.mockImplementationOnce(() => new Promise((ok) => setTimeout(() => ok(true), 400)));
+    // The canvas holds the restored model: the startup reparse must not seed tasks into it.
+    mocks.exportXml.mockResolvedValue(restaurado.model.xml);
+    await remontar();
+    expect(consumidor).not.toBeNull();
+    expect(openHandle).not.toHaveBeenCalled();
+    await vi.waitFor(async () => {
+      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+      expect(openHandle).toHaveBeenCalledOnce();
+      expect(container.textContent).toContain('Lanzado');
+    }, { timeout: 3000 });
+    expect(mocks.abrir).toHaveBeenNthCalledWith(1, restaurado.model.xml);
+    expect(openHandle).toHaveBeenCalledWith(lila);
+  });
+
+  it('a second launch while the unsaved-changes dialog is up is refused; only the first file opens', async () => {
+    const cola = colaDeLanzamiento();
+    const openHandle = vi.fn().mockResolvedValue(proyecto('p9', 'Lanzado'));
+    session = { ...session, openHandle } as unknown as ProjectSessionStore;
+    await remontar();
+    await act(async () => mocks.changed());
+    const primero = archivo('Lanzado.lila');
+    await cola.lanzar(primero);
+    await cola.lanzar(archivo('Otro.lila'));
+    expect(container.textContent).toContain(T.app.errorAbrirOcupado('Otro.lila'));
+    expect(openHandle).not.toHaveBeenCalled();
+    await click(T.app.descartar);
+    expect(openHandle).toHaveBeenCalledOnce();
+    expect(openHandle).toHaveBeenCalledWith(primero);
+  });
+
+  it('a plain launch with no files opens nothing', async () => {
+    const cola = colaDeLanzamiento();
+    const openHandle = vi.fn();
+    session = { ...session, openHandle } as unknown as ProjectSessionStore;
+    await remontar();
+    await cola.lanzar();
+    await cola.lanzar({ kind: 'directory', name: 'carpeta' });
+    expect(openHandle).not.toHaveBeenCalled();
+  });
 });

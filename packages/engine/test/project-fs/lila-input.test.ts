@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { strFromU8, unzipSync } from 'fflate';
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { main } from '../../src/cli.js';
@@ -193,6 +193,25 @@ describe('a version 2 repository', () => {
     const document = repositoryDocument();
     const file = writeArchive('one.lila', { ...document, processes: undefined, process: undefined } as ProjectDocument);
     expect(await cli('validate', file)).toBe(0);
+  });
+
+  // #517: a version 2 manifest that lists a single process (another tool, or a hand edit) keeps its
+  // files under processes/<slug>/, and the virtual paths the CLI and MCP report have to say so.
+  test('a version 2 manifest with a single process: the paths are under processes/<slug>/', async () => {
+    const entries = unzipSync(encodeLila(repositoryDocument()));
+    const manifest = JSON.parse(strFromU8(entries['lila-project.json']!)) as { processes: { slug: string }[] };
+    manifest.processes = manifest.processes.filter((p) => p.slug === 'pedido');
+    const kept = Object.fromEntries(Object.entries(entries).filter(([name]) => !name.startsWith('processes/copia/')));
+    const file = join(scratch, 'one-v2.lila');
+    writeFileSync(file, zipSync({ ...kept, 'lila-project.json': strToU8(JSON.stringify(manifest)) }));
+
+    const lila = await openLilaProcess(file);
+    expect(lila.process.slug).toBe('pedido');
+    expect(Object.keys(kept)).toContain('processes/pedido/model.bpmn');
+    expect(lila.root).toBe(`${lila.file}/processes/pedido/`);
+    expect(lila.modelPath).toBe(`${lila.file}/processes/pedido/model.bpmn`);
+    // The scenario and its "model": "model.bpmn" still resolve inside the archive.
+    expect(await cli('run', file, 'as-is', '--seed', '3', '--replications', '1'), out.join('\n')).toBe(0);
   });
 });
 

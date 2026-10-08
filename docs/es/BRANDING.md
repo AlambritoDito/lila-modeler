@@ -34,6 +34,10 @@ fondos claros y oscuros. Para composiciones grandes usa el archivo fuente y para
 nuevos tamaños usa `tools/generate-branding.mjs`, sin regenerar el personaje.
 El favicon y los iconos de plataforma mantienen el fondo morado; el logo
 horizontal continúa sobre blanco en la presentación principal y el arranque.
+`web/icon-maskable-512.png` es el icono `maskable` del manifiesto de la app web
+(#571): el mismo mosaico escalado al 80 %, apoyado en el borde inferior sobre su
+propio morado, para que la plataforma lo recorte con cualquier forma sin cortar
+las orejas ni la cara. Lo produce el mismo script; no se redibuja.
 
 ## Excepción de la ventana Acerca de — 23 de septiembre de 2026 (#408)
 

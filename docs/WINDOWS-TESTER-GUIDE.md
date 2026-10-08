@@ -7,6 +7,10 @@ on a real Windows machine yet**, so you are the first: things may not work, and 
 what did and did not work is exactly what we need. You do not have to be a developer. Set aside about
 30 minutes.
 
+> On Windows the main channel is now the web app installed from Edge or Chrome
+> ([ADR-031](DECISIONS.md)); its guide is [WINDOWS-PWA-TESTER-GUIDE.md](WINDOWS-PWA-TESTER-GUIDE.md).
+> This guide covers the secondary channel, the unsigned installer.
+
 Two things to know before you start:
 
 - The installer is **not signed**, so Windows will warn you before it lets you run it (step 3). The

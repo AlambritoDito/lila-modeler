@@ -67,8 +67,17 @@ export function processesOf(document: ProjectDocument): ProcessDocument[] {
  * `base` with its processes replaced by `list` (at least one). With a single process the result
  * is a plain version 1 document — no `process`, no `processes` — which is what keeps a project
  * that never grew a second process writing the exact version 1 layout.
+ *
+ * `options.repository` is for the readers of a version 2 manifest (#517, item 5): a repository
+ * that lists a single process keeps that process's slug and name in `process`, instead of being
+ * read as a version 1 project whose process is named after the project. It still has no
+ * `processes`, so saving it writes version 1, as any one-process project does.
  */
-export function withProcesses(base: ProjectDocument, list: readonly ProcessDocument[]): ProjectDocument {
+export function withProcesses(
+  base: ProjectDocument,
+  list: readonly ProcessDocument[],
+  options: { readonly repository?: boolean } = {},
+): ProjectDocument {
   const [first, ...rest] = list;
   if (first === undefined) throw new RangeError('a project has at least one process.');
   const { process: _process, processes: _processes, ...keep } = base;
@@ -79,5 +88,7 @@ export function withProcesses(base: ProjectDocument, list: readonly ProcessDocum
     scenarioRevisions: first.scenarioRevisions,
     runs: first.runs,
   };
-  return rest.length === 0 ? top : { ...top, process: { slug: first.slug, name: first.name }, processes: rest };
+  const process = { slug: first.slug, name: first.name };
+  if (rest.length > 0) return { ...top, process, processes: rest };
+  return options.repository === true ? { ...top, process } : top;
 }

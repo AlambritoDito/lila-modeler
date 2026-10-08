@@ -142,3 +142,25 @@ describe('the .lila container', () => {
     expect(() => decodeLila(strToU8('not a zip'))).toThrow(/readable \.lila archive/);
   });
 });
+
+// #517, item 5: an archive whose version 2 manifest lists a single process is not read as version 1.
+test('a version 2 .lila that lists a single process keeps its slug and name (#517)', () => {
+  const xml = '<?xml version="1.0"?><definitions xmlns="http://example.org"><process id="Process_F"/></definitions>';
+  const manifest = {
+    version: 2,
+    id: 'repo',
+    name: 'Organización',
+    processes: [{ slug: 'facturacion', name: 'Facturación', model: { id: 'Process_F', name: 'model.bpmn', revision: 4 }, scenarioRevisions: {} }],
+  };
+  const bytes = zipSync({
+    'lila-project.json': strToU8(JSON.stringify(manifest)),
+    'processes/facturacion/model.bpmn': strToU8(xml),
+    'processes/facturacion/as-is.scenario.json': strToU8(JSON.stringify({ version: 1, name: 'AS-IS', model: 'model.bpmn' })),
+  });
+  const document = decodeLila(bytes);
+  expect(document.process).toEqual({ slug: 'facturacion', name: 'Facturación' });
+  expect(document.processes).toBeUndefined();
+  expect(document.name).toBe('Organización');
+  expect(document.model).toEqual({ id: 'Process_F', name: 'model.bpmn', xml, revision: 4 });
+  expect(Object.keys(document.scenarios)).toEqual(['as-is.scenario.json']);
+});

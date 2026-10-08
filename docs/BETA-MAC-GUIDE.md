@@ -336,7 +336,7 @@ This is real, working functionality: `DesktopStore` is wired up in `main.tsx` an
 
 ## Limitations of this beta
 
-*(as of 1.0.0-beta.21, tag `v1.0.0-beta.21`; the macOS verification notes below were recorded for
+*(as of 1.0.0-beta.22, tag `v1.0.0-beta.22`; the macOS verification notes below were recorded for
 Beta 1. Check whether any of these has already been resolved before trusting this list blindly at a
 later date)*
 
@@ -378,10 +378,10 @@ npm run dist:mac -w @lila-modeler/desktop   # tsc + copia dist/web + electron-bu
 
 The last command chains together: `apps/desktop`'s `tsc --build`, copying `apps/web/dist` to
 `apps/desktop/dist/web`, and `electron-builder --mac --arm64`. The result lands in
-`apps/desktop/release/` (the version in `apps/desktop/package.json`: `1.0.0-beta.21` for Beta 21):
+`apps/desktop/release/` (the version in `apps/desktop/package.json`: `1.0.0-beta.22` for Beta 22):
 
-- `apps/desktop/release/Lila-Modeler-1.0.0-beta.21-mac-arm64.dmg` — the installer.
-- `apps/desktop/release/Lila-Modeler-1.0.0-beta.21-mac-arm64.dmg.blockmap`.
+- `apps/desktop/release/Lila-Modeler-1.0.0-beta.22-mac-arm64.dmg` — the installer.
+- `apps/desktop/release/Lila-Modeler-1.0.0-beta.22-mac-arm64.dmg.blockmap`.
 - `apps/desktop/release/mac-arm64/Lila Modeler.app` — the app unpackaged from the DMG, useful for
   quick testing.
 - `apps/desktop/release/ORIGEN.txt` — the build's `sha`, `fecha` (date, ISO), and `arch`

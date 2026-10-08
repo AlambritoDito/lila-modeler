@@ -5,8 +5,8 @@
  * (`app.getPath`/`BrowserWindow`/`screen` viven en `main.ts`, que es quien decide la ruta real y
  * llama a estas funciones).
  */
-import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { mkdir, readdir, readFile, rename, rm, unlink, writeFile } from 'node:fs/promises';
+import { basename, dirname, join } from 'node:path';
 // Solo el tipo (se borra al compilar): `Ajustes` es parte del contrato del puente, así que se
 // define una vez en `bridge.ts` y aquí se reusa en vez de duplicar la forma.
 import type { Ajustes, TemaGuardado, VisibilidadPaneles } from './bridge.js';
@@ -171,6 +171,7 @@ function isTemaGuardado(value: unknown): value is TemaGuardado {
  * en vez de tirar toda la lista.
  */
 export async function readSessionState(path: string): Promise<SessionState> {
+  await sweepOrphanTemps(path);
   let raw: string;
   try {
     raw = await readFile(path, 'utf8');
@@ -189,6 +190,18 @@ export async function readSessionState(path: string): Promise<SessionState> {
   }
 }
 
+/**
+ * Deletes the `estado.json.tmp-*` files a previous session left behind (#565): a write the process
+ * did not live to finish. Same sweep `readRecoveryFile` does for `recovery.lila`; only called at
+ * startup, before this session has a write of its own in flight. Never throws.
+ */
+async function sweepOrphanTemps(path: string): Promise<void> {
+  const dir = dirname(path);
+  const prefix = `${basename(path)}.tmp-`;
+  const orphans = (await readdir(dir).catch(() => [] as string[])).filter((n) => n.startsWith(prefix));
+  await Promise.all(orphans.map((n) => rm(join(dir, n), { force: true }).catch(() => {})));
+}
+
 function randomSuffix(): string {
   return `${process.pid}-${Math.random().toString(36).slice(2)}`;
 }
@@ -204,6 +217,40 @@ export async function writeSessionState(path: string, state: SessionState): Prom
     await unlink(tmp).catch(() => {});
     throw error;
   }
+}
+
+/**
+ * Serialised writes to one `estado.json` (#565): each write starts after the previous one settled,
+ * so an older state can never land after a newer one, and `idle()` resolves once the queue is
+ * empty: every write has finished or failed, including those queued while it waited. `main.ts` holds the quit on `idle()`, because the last
+ * write — the window bounds at close — would otherwise die with the process and leave an empty
+ * temporary behind.
+ */
+export interface SessionStateWriter {
+  write(state: SessionState): Promise<void>;
+  idle(): Promise<void>;
+}
+
+export function createSessionStateWriter(
+  path: string,
+  write: (path: string, state: SessionState) => Promise<void> = writeSessionState,
+): SessionStateWriter {
+  let tail: Promise<void> = Promise.resolve();
+  return {
+    write(state) {
+      const done = tail.then(() => write(path, state));
+      tail = done.catch(() => {});
+      return done;
+    },
+    // Until the queue stops growing: a write queued while an earlier one runs is waited for too.
+    async idle() {
+      let seen: Promise<void>;
+      do {
+        seen = tail;
+        await seen;
+      } while (seen !== tail);
+    },
+  };
 }
 
 /** Nuevo estado con `bounds` como ventana recordada (o `null` para olvidarla). */

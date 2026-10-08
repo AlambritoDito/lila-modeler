@@ -70,6 +70,9 @@ ignored public directory while preserving theme URLs and live edits. `build:page
 copies branding into the product site. Builds do not depend on `output/`, external
 services, or personal paths. Native PNGs have a transparent outer margin and rounded
 corners; web PNGs remain square for platform-specific masking.
+`web/icon-maskable-512.png` is the web app manifest's `maskable` icon (#571): the same tile
+scaled to 80%, resting on the bottom edge over its own purple, so the platform can crop it to any
+shape without cutting the ears or the face. It is produced by the same script, not redrawn.
 
 ## Startup and version
 
