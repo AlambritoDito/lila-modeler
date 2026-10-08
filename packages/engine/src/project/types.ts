@@ -72,7 +72,10 @@ export interface ProjectDocument {
   readonly scenarios: Readonly<Record<string, ScenarioDocument>>;
   readonly scenarioRevisions: Readonly<Record<string, number>>;
   readonly runs: readonly StoredRun[];
-  /** Slug and name of the first process; only with `processes`. */
+  /**
+   * Slug and name of the first process: with `processes`, and also when read from a version 2
+   * manifest that lists a single process (#517).
+   */
   readonly process?: { readonly slug: string; readonly name: string };
   /** The repository's other processes, in order (ADR-029). Absent: a one-process project. */
   readonly processes?: readonly ProcessDocument[];
