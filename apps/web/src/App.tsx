@@ -1286,7 +1286,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     const escenario = escenarioId;
     const base = baseId;
     const modoPrevio = modo;
-    const elegido = seleccion;
+    // Every selected element by id, one or several (#568).
+    const elegidos = (serviciosDe(modelador)?.selection.get() ?? []).map((el) => el.id);
     const beforeToken = tokenRef.current;
     recordarFocoLienzo();
     const soltar = tomarIoLock();
@@ -1305,10 +1306,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       if (escenario in escenarios) setEscenarioId(escenario);
       if (base in escenarios) setBaseId(base);
       setModo(modoPrevio); // `activate` goes back to Model, as an Open does; a reload stays put.
-      // The import made new elements: select the same id in them, so the properties panel and the
-      // quick view show (and edit) the reloaded element, not the one from before (QA of #539).
-      // `seleccionar` does nothing when the id is gone, and the selection stays empty.
-      if (elegido !== null) modelador.seleccionar?.(elegido);
+      // The import made new elements: select the same ids in them, so the properties panel and the
+      // quick view show (and edit) the reloaded elements, not the ones from before (QA of #539).
+      // `seleccionar` leaves out an id that is gone or not on the plane on screen (#568).
+      if (elegidos.length > 0) modelador.seleccionar?.(elegidos);
     } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
     finally {
       soltar();
@@ -3512,7 +3513,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             <button type="button" className="enlace" onClick={() => { setCambioExterno(false); modelador?.enfocar?.(); }}>{S.app.mantenerMios}</button>
           </span>
         )}
-        {ioError !== null && <span role="alert" className="error">{ioError}</span>}
+        {ioError !== null && (
+          <span role="alert" className="error">
+            {ioError}
+            {/* #568: the error says «Reload»; after «Keep mine» the notice with that button is gone. */}
+            {adapter?.reload !== undefined && ioError.startsWith('E-CAMBIO-EXTERNO') && (
+              <>{' '}<button type="button" className="enlace" disabled={ioBusy} onClick={() => void recargar(true)}>{S.app.recargarCambioExterno}</button></>
+            )}
+          </span>
+        )}
         {errorSimOculto !== null && (
           <span role="alert" className="error corrida-fallida" title={errorSimOculto}>{S.app.errorSimular(errorSimOculto.split('\n')[0]!)}</span>
         )}

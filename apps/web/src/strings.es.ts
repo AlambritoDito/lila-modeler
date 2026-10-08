@@ -1635,7 +1635,7 @@ export const es: Strings = {
     tipoLila: 'Proyecto de Lila Modeler',
     tipoLilaJson: 'Proyecto de Lila Modeler (JSON)',
     errorCambioExternoWeb: (nombre: string): string =>
-      `${nombre} cambió fuera de esta ventana desde que se abrió, así que no se guardó nada. ` +
+      `${nombre} cambió fuera de esta ventana desde que se leyó o guardó aquí por última vez, así que no se guardó nada. ` +
       'Ábrelo de nuevo para tener la otra versión, o usa Guardar como para conservar la tuya en otro archivo.',
     errorSinBridge: 'DesktopStore requiere `window.lila`: ¿se está instanciando fuera de Electron?',
     errorProyectoDistinto:
@@ -1653,7 +1653,7 @@ export const es: Strings = {
       'Vuelve a intentarlo en un momento.',
     /** `E-CAMBIO-EXTERNO` del disco (#539): `nombre` cambió fuera de Lila desde la última lectura. */
     errorCambioExterno: (nombre: string): string =>
-      `E-CAMBIO-EXTERNO: ${nombre} cambió fuera de Lila desde que se abrió, así que no se guardó nada. ` +
+      `E-CAMBIO-EXTERNO: ${nombre} cambió fuera de Lila desde que Lila lo leyó o guardó por última vez, así que no se guardó nada. ` +
       'Recarga para traer la otra versión, o usa «Guardar como» para conservar la tuya en otro archivo.',
     /** `E-CARPETA-OCUPADA` del disco (#517): `ruta` tiene archivos de otro proyecto. */
     errorCarpetaOcupada: (ruta: string): string =>

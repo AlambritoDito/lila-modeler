@@ -1663,7 +1663,7 @@ export const en = {
     tipoLilaJson: 'Lila Modeler project (JSON)',
     /** #573: the web app's Save found its `.lila` changed since this window read or wrote it. */
     errorCambioExternoWeb: (nombre: string): string =>
-      `${nombre} changed outside this window since it was opened, so nothing was saved. ` +
+      `${nombre} changed outside this window since it was last read or saved here, so nothing was saved. ` +
       'Open it again to get the other version, or use Save As to keep yours in another file.',
     errorSinBridge: 'DesktopStore requires `window.lila`: is it being instantiated outside Electron?',
     errorProyectoDistinto:
@@ -1681,7 +1681,7 @@ export const en = {
       'Try again in a moment.',
     /** `E-CAMBIO-EXTERNO` from the disk (#539): `nombre` changed outside Lila since it was last read. */
     errorCambioExterno: (nombre: string): string =>
-      `E-CAMBIO-EXTERNO: ${nombre} changed outside Lila since it was opened, so nothing was saved. ` +
+      `E-CAMBIO-EXTERNO: ${nombre} changed outside Lila since Lila last read or saved it, so nothing was saved. ` +
       'Reload to get the other version, or use Save As to keep yours in another file.',
     /** `E-CARPETA-OCUPADA` from the disk (#517): `ruta` holds another project's files. */
     errorCarpetaOcupada: (ruta: string): string =>
