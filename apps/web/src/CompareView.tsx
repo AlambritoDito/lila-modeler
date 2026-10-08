@@ -43,6 +43,8 @@ import { MAX_SERIES } from './graficas';
 import { GraficaBarras, geometriaBarras, PLOT_MINIMO, useAncho, type GraficaBarrasProps } from './GraficasSvg';
 import { exactDuration, formatDisplay, formatDisplayDuration, roundDisplay } from './formatDisplay';
 import { getLocale, strings, useStrings } from './i18n';
+import { agruparAvisos, AvisoAgrupado } from './avisos';
+import { nombreRecurso } from './recursosModelo.js';
 
 export type { CompareRunMeta } from './compareWarnings.js';
 
@@ -55,7 +57,8 @@ export interface CompareViewProps {
   /**
    * id de recurso -> nombre, fusionando **todos** los escenarios comparados y no solo el base
    * (`printCompareResult` en cli.ts hace lo mismo): un pool puede nacer en el TO-BE, y su fila
-   * existe igual con la base en guion.
+   * existe igual con la base en guion. #554: without it, the names come from `entries`
+   * (`nombresDeRecursos`), so the shell's Compare reads «Cashier» and not «cajero».
    */
   resourceNames?: Readonly<Record<string, string>>;
   /**
@@ -228,6 +231,18 @@ export function visibleCompareRows(
         DEFAULT_COMPARE_METRICS.has(`${scope}:${row.metric}`) ||
         isDefaultOutcomeMetric(scope, row.metric)),
   );
+}
+
+/**
+ * #554: pool id -> the name the Resources step shows (`nombreRecurso`), merging every compared
+ * scenario like the CLI: a pool may be born in the TO-BE.
+ */
+export function nombresDeRecursos(entries: readonly CompareEntry[]): Record<string, string> {
+  const nombres: Record<string, string> = {};
+  for (const { scenario } of entries) {
+    for (const [id, recurso] of Object.entries(scenario.resources ?? {})) nombres[id] ??= nombreRecurso(id, recurso);
+  }
+  return nombres;
 }
 
 function rowName(
@@ -520,12 +535,13 @@ export function CompareView({
   comparison,
   scenarioNames,
   baseTimeUnit,
-  resourceNames = {},
+  resourceNames: nombresDados,
   runs,
   entries,
   seriesSlots,
 }: CompareViewProps): ReactNode {
   const S = useStrings();
+  const resourceNames = nombresDados ?? nombresDeRecursos(entries ?? []);
   // Se guardan los índices ocultos y no los visibles: así un escenario que aparezca después (el
   // shell puede recomparar con uno más sin remontar la vista) nace visible en vez de quedar
   // atrapado fuera de un array de booleanos que se quedó corto.
@@ -622,16 +638,18 @@ export function CompareView({
           )}
           {anyLegacy && <p style={{ ...notaStyle, margin: '8px 0 0' }}>{S.resultados.notaReplicacionesLegado}</p>}
           {(runs ?? []).map((run, index) => {
-            const warnings = run.warnings ?? [];
-            if (warnings.length === 0) return null;
+            // #554: one line per cause, like Results and the results table (#394): the engine
+            // repeats a warning once per replication.
+            const grupos = agruparAvisos((run.warnings ?? []).map((mensaje) => ({ mensaje, severidad: 'warning' as const })));
+            if (grupos.length === 0) return null;
             return (
-              <details key={index} open={warnings.length <= 10}>
+              <details key={index} open={grupos.length <= 10}>
                 <summary style={{ ...h2Style, fontSize: 13, margin: '12px 0 0' }}>
-                  {index === 0 ? S.comparar.base(run.name) : run.name} ({warnings.length})
+                  {index === 0 ? S.comparar.base(run.name) : run.name} ({grupos.length})
                 </summary>
                 <ul style={warningListStyle}>
-                  {warnings.map((warning) => (
-                    <li key={warning}>{warning}</li>
+                  {grupos.map((grupo) => (
+                    <AvisoAgrupado key={grupo.clave} grupo={grupo} />
                   ))}
                 </ul>
               </details>

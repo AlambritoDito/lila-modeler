@@ -16,7 +16,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, describe, expect, test } from 'vitest';
 
 import { parseBpmn } from '@lila-modeler/engine/bpmn';
-import { resolveExtends } from '@lila-modeler/engine/schema';
+import { resolveExtends, type ResolvedScenario } from '@lila-modeler/engine/schema';
 import {
   compare,
   simulate,
@@ -30,7 +30,7 @@ import {
   type SimScenario,
 } from '@lila-modeler/engine';
 
-import { CompareView, compareMetricLabel, visibleCompareRows, type CompareRunMeta } from './CompareView.js';
+import { CompareView, compareMetricLabel, nombresDeRecursos, visibleCompareRows, type CompareRunMeta } from './CompareView.js';
 import { setLocale } from './i18n';
 import { en } from './strings.en';
 import { es } from './strings.es';
@@ -408,7 +408,8 @@ describe('CompareView (OP-05): metadatos por corrida y avisos', () => {
 
   test('long per-run warning lists remain available without pushing KPIs below them', () => {
     const comparison = compare([syntheticResult(10), syntheticResult(30)]);
-    const warnings = Array.from({ length: 30 }, (_, i) => `Warning from replication ${i}`);
+    // Thirty different causes (ids, not counts: #554 groups the per-replication repeats).
+    const warnings = Array.from({ length: 30 }, (_, i) => `W-X: Task_${i} has no time`);
     const html = renderToStaticMarkup(
       <CompareView baseTimeUnit="s" comparison={comparison} ir={fakeIr}
         runs={[{ name: 'AS-IS', warnings }, { name: 'TO-BE', warnings: [] }]}
@@ -419,6 +420,46 @@ describe('CompareView (OP-05): metadatos por corrida y avisos', () => {
     expect(html).toContain('(30)</summary>');
     for (const warning of warnings) expect(html).toContain(warning);
     expect(html).toContain('<table');
+  });
+
+  test('#554: the per-run warnings are grouped like Results: one line per cause, ×N for its repeats', () => {
+    const comparison = compare([syntheticResult(10), syntheticResult(30)]);
+    const repetido = (n: number): string => `W-TAREA-SIN-TIEMPO: Task_Empacar: no processingTime; it takes 0 seconds. (${n} times)`;
+    const asIs = [repetido(3021), 'W-MSGFLOW: 2 message flows were ignored.', repetido(2975), repetido(2990)];
+    const html = renderToStaticMarkup(
+      <CompareView baseTimeUnit="s" comparison={comparison} ir={fakeIr}
+        runs={[{ name: 'AS-IS', warnings: asIs }, { name: 'TO-BE', warnings: [repetido(10), repetido(12)] }]}
+        scenarioNames={['AS-IS', 'TO-BE']} />,
+    );
+    // The heading counts causes, not lines: 2 and 1 instead of 4 and 2.
+    expect(html).toContain(`${es.comparar.base('AS-IS')} (2)</summary>`);
+    expect(html).toContain('TO-BE (1)</summary>');
+    expect(html).toContain(es.dock.ocurrencias(3));
+    expect(html).toContain(es.dock.ocurrencias(2));
+    // Every original message stays one click away.
+    for (const w of asIs) expect(html).toContain(w);
+  });
+
+  test('#554: without `resourceNames`, the pools read by the names of the compared scenarios', () => {
+    const comparison = compare([
+      syntheticResult(10, { cajero: resourceMetrics(0.4) }),
+      syntheticResult(10, { cajero: resourceMetrics(0.3), mesero: resourceMetrics(0.5), barra: resourceMetrics(0.1) }),
+    ]);
+    const escenario = (resources: Record<string, unknown>) => ({ scenario: { resources } as unknown as ResolvedScenario });
+    const entries = [
+      { result: syntheticResult(10), ...escenario({ cajero: { name: 'Cashier', capacity: 2 } }) },
+      // A pool born in the TO-BE is named too; one without a name reads as its key.
+      { result: syntheticResult(10), ...escenario({ cajero: { name: 'Cashier', capacity: 3 }, mesero: { name: 'Waiter', capacity: 1 }, barra: { capacity: 1 } }) },
+    ];
+    const html = renderToStaticMarkup(
+      <CompareView baseTimeUnit="s" comparison={comparison} ir={fakeIr} entries={entries} scenarioNames={['AS-IS', 'TO-BE']} />,
+    );
+    const nombre = (id: string): string => {
+      const tr = (html.match(/<tr[^]*?<\/tr>/g) ?? []).find((b) => b.includes(`>${id}<`) && b.includes('>Utilization (%)<'))!;
+      return textOf(cellsOf(tr)[1]!);
+    };
+    expect([nombre('cajero'), nombre('mesero'), nombre('barra')]).toEqual(['Cashier', 'Waiter', 'barra']);
+    expect(nombresDeRecursos(entries)).toEqual({ cajero: 'Cashier', mesero: 'Waiter', barra: 'barra' });
   });
 
   test('(d) unidades de tiempo distintas: aviso y formato por corrida', () => {

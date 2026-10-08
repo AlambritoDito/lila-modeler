@@ -57,7 +57,15 @@ describe('datosVistaRapida', () => {
 
   it('a task: its distribution in the base unit, its pool, and «no run» without a run', () => {
     const datos = datosVistaRapida({ id: 'Task_TomarPedido', ir, escenario: asIs, resultado: null, S: S() });
-    expect(datos).toEqual({ tiempo: 'Triangular 1 / 2 / 5 min', recurso: 'cajero ×1', espera: null });
+    // #554: the pool by the name the Resources step shows («Cashier»), not its key («cajero»).
+    expect(datos).toEqual({ tiempo: 'Triangular 1 / 2 / 5 min', recurso: 'Cashier ×1', espera: null });
+    expect(datosVistaRapida({ id: 'Task_Preparar', ir, escenario: asIs, resultado: null, S: S() })?.recurso).toBe('Cook ×1, Oven ×1');
+  });
+
+  it('#554: a pool without a name reads as its key, like the Resources step', () => {
+    const recursos = asIs['resources'] as Record<string, Record<string, unknown>>;
+    const sinNombre = { ...asIs, resources: { ...recursos, horno: { ...recursos['horno'], name: '  ' } } };
+    expect(datosVistaRapida({ id: 'Task_Preparar', ir, escenario: sinNombre, resultado: null, S: S() })?.recurso).toBe('Cook ×1, horno ×1');
   });
 
   it('with a run but no log, the mean resource wait (off hours apart, as the dock and the canvas), flagged as not p95', () => {

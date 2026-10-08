@@ -78,6 +78,10 @@ describe('buildReplay over packages/engine/test/fixtures/service-request', () =>
     expect(started - completed).toBe(unfinished.length);
   });
 
+  it('#554: names each pool as the Resources step does', () => {
+    expect(replay.poolNames).toEqual({ analyst: 'Technical Reviewer', executive: 'Service Coordinator', operator: 'Service Operator' });
+  });
+
   it('keeps every pool within its capacity', () => {
     expect(Object.keys(replay.pools).sort()).toEqual(['analyst', 'executive', 'operator']);
     for (let i = 0; i <= 200; i++) {

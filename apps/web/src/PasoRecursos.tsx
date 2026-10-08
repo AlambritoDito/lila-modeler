@@ -231,7 +231,7 @@ export function ListaRecursos({ ids, rotulo, resuelto, seleccion, onSeleccionar 
       titulo={S.escenario.listaRecursos}
       ids={ids}
       rotulo={rotulo}
-      resumen={(id) => resumenRecursos(leer(resuelto, ['elements', id, 'resources']), S)}
+      resumen={(id) => resumenRecursos(leer(resuelto, ['elements', id, 'resources']), S, resuelto['resources'])}
       seleccion={seleccion}
       onSeleccionar={onSeleccionar}
     />
