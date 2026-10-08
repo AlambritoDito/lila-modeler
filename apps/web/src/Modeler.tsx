@@ -63,6 +63,7 @@ import { moduloTraduccion } from './bpmnTranslate';
 import { moduloColores, type LilaColores } from './colores';
 import { moduloLote, type LilaLote } from './lote';
 import { moduloCarriles, type LilaCarriles } from './carriles';
+import { moduloControlesCarriles } from './controlesCarriles';
 import { moduloAncho, type LilaAncho } from './ancho';
 import { centrar, type CanvasCentrable } from './centrar';
 import { svgDelLienzo, type LienzoExportable } from './exportarDiagrama';
@@ -137,8 +138,11 @@ export interface Servicios {
   colores?: Pick<LilaColores, 'pintar'>;
   /** Runs several `modeling` calls as one undoable command (#509). */
   lote?: (hacer: () => void) => void;
-  /** The lane tool's «pick a pool» mode (#580, `carriles.ts`). */
-  carriles?: Pick<LilaCarriles, 'elegirPool' | 'cancelar' | 'eligiendo'>;
+  /**
+   * The lane tool's «pick a pool» mode (#580, `carriles.ts`), and adding, moving and deleting lanes
+   * from the lane list of Properties (#596).
+   */
+  carriles?: Pick<LilaCarriles, 'elegirPool' | 'cancelar' | 'eligiendo' | 'insertar' | 'mover' | 'moverA' | 'quitar' | 'fijarTamano'>;
   /** Sets an activity's width as one undoable command (#563, `ancho.ts`). */
   ancho?: Pick<LilaAncho, 'fijar'>;
 }
@@ -323,7 +327,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
       // tokens del tema en vez de en blanco y negro (#264).
       // `moduloTraduccion` replaces bpmn-js's `translate` (#456); the minimap's patch below stays,
       // because the minimap writes its title once per toggle and a language change is not one.
-      additionalModules: [moduloMinimapa, tokenSimulationModule, moduloColoresDelTema, moduloSinTeclaT, moduloTraduccion, moduloColores, moduloLote, moduloCarriles, moduloAncho],
+      additionalModules: [moduloMinimapa, tokenSimulationModule, moduloColoresDelTema, moduloSinTeclaT, moduloTraduccion, moduloColores, moduloLote, moduloCarriles, moduloControlesCarriles, moduloAncho],
       // Abierto de entrada, como en el artboard; el plugin guarda el estado en su clase `open`
       // y su cabecera es el propio botón de plegar, restilizado en `app.css`.
       minimap: { open: true },

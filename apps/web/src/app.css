@@ -1060,6 +1060,9 @@ body {
   --bendpoint-fill-color: var(--diagram-selected);
   --bendpoint-stroke-color: var(--bg-base);
   --resizer-stroke-color: var(--bg-base);
+  /* #596: the resize handles of a selected lane, pool or activity in the selection colour of the
+     theme (purple in Lila), not bpmn-js's fixed blue. */
+  --resizer-fill-color: var(--diagram-selected);
 
   --palette-background-color: var(--bg-surface);
   --palette-border-color: var(--border);
@@ -1078,6 +1081,178 @@ body {
   --popup-shadow-color: var(--shadow);
 
   --bjs-font-family: var(--font-diagram);
+}
+
+/* ---------- lane controls (#596, design 07 «pools») ---------- */
+
+/* The «+» on the pool's edge and the ⠿ in each lane's header (`controlesCarriles.ts`). Each is
+   anchored at a point of the lane and centred on it here, so diagram-js's scaling (from the top
+   left of the overlay) keeps it on that point. */
+.lienzo .lila-carril-ancla {
+  height: 0;
+  position: relative;
+  width: 0;
+}
+
+.lienzo .lila-carril-mas,
+.lienzo .lila-carril-asa {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  font-family: var(--font-ui);
+  justify-content: center;
+  left: 0;
+  line-height: 1;
+  padding: 0;
+  position: absolute;
+  top: 0;
+  transform: translate(-50%, -50%);
+}
+
+/* Square, like every control here (radius 0, LILA-206): the draft drew it round. */
+.lienzo .lila-carril-mas {
+  background: var(--bg-surface);
+  border: 1.5px solid var(--accent-primary);
+  color: var(--accent-primary);
+  font-size: 15px;
+  font-weight: 700;
+  height: 20px;
+  width: 20px;
+}
+
+.lienzo .lila-carril-mas:hover,
+.lienzo .lila-carril-mas:focus-visible {
+  background: var(--accent-primary);
+  color: var(--fg-onAccent);
+}
+
+.lienzo .lila-carril-asa {
+  background: transparent;
+  border: 0;
+  color: var(--fg-muted);
+  cursor: grab;
+  font-size: 18px;
+  height: 24px;
+  touch-action: none;
+  width: 20px;
+}
+
+.lienzo .lila-carril-asa:hover {
+  background: var(--bg-hover);
+  color: var(--accent-primary);
+}
+
+.lienzo .lila-carril-mas:focus-visible,
+.lienzo .lila-carril-asa:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.lienzo .lila-arrastrando-carril,
+.lienzo .lila-arrastrando-carril * {
+  cursor: grabbing !important;
+}
+
+/* The resize handles of a selected shape (a lane's included): bpmn-js draws them 8 px wide; a
+   quarter larger they are easier to see on a lane's long edges. The hit area stays bpmn-js's. */
+.lienzo .djs-resizer-visual {
+  transform: scale(1.25);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* The lane a dragged lane would take the place of. */
+.lienzo .djs-element.lila-carril-destino .djs-visual > rect {
+  fill: var(--accent-primary) !important;
+  fill-opacity: 0.12 !important;
+  stroke: var(--accent-primary) !important;
+  stroke-width: 3px !important;
+}
+
+/* Model only: not in Simulate or Results, nor while «Validate paths» animates tokens. */
+.app.modo-simular .lienzo .djs-overlay-lila-carril,
+.app.modo-resultados .lienzo .djs-overlay-lila-carril,
+.lienzo .bjs-container.simulation .djs-overlay-lila-carril,
+.app.modo-simular .panel .carriles-modelar,
+.app.modo-resultados .panel .carriles-modelar {
+  display: none !important;
+}
+
+/* The lane list of a pool in Properties: number, name and size, ↑ ↓ ×. */
+.lista-carriles-cabecera {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.lista-carriles-cabecera small,
+.lista-carriles-datos small,
+.lista-carriles-ayuda {
+  color: var(--fg-muted);
+  font-size: 0.8em;
+}
+
+.lista-carriles ol {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.lista-carriles li {
+  align-items: center;
+  border: 1px solid var(--border);
+  display: grid;
+  gap: 4px;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto auto;
+  padding: 6px 6px 6px 8px;
+}
+
+.lista-carriles li.actual {
+  background: var(--bg-hover);
+  border-color: var(--accent-primary);
+}
+
+.lista-carriles-num {
+  color: var(--fg-muted);
+  font-size: 11px;
+}
+
+.lista-carriles-datos {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.lista-carriles-datos input {
+  font-weight: 600;
+}
+
+/* «+ Add a lane at the end»: the dashed accent box of the design, the width of the list. */
+.lista-carriles .anadir {
+  align-self: stretch;
+  border: 1.5px dashed var(--accent-primary);
+  color: var(--accent-primary);
+  font-weight: 700;
+  padding: calc(7px * var(--espacio, 1)) 8px;
+}
+
+.lista-carriles .anadir:hover {
+  background: var(--bg-hover);
+}
+
+.lista-carriles .quitar:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.lista-carriles .quitar:disabled:hover {
+  border-color: var(--border);
+  color: var(--fg-muted);
 }
 
 /* ---------- panel de propiedades (LILA-060) ---------- */

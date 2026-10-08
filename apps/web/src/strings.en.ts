@@ -1545,6 +1545,46 @@ export const en = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Lane controls (#596): the canvas «+» and ⠿ handle (`controlesCarriles.ts`) and the lane
+   * list and lane size of the properties panel (`PropertiesPanel.tsx`)
+   * ------------------------------------------------------------------ */
+  carriles: {
+    /** What a lane without a name is called everywhere it is listed; `n` is its position. */
+    sinNombre: (n: number): string => `Unnamed lane ${n}`,
+    anadirAqui: 'Add a lane here',
+    anadirEn: (posicion: number, pool: string): string => `Add a lane at position ${posicion} of «${pool}»`,
+    asaTitulo: 'Drag to reorder · Alt+↑/↓',
+    asa: (carril: string): string => `Lane «${carril}». Drag it, or press Alt+↑/↓, to move it`,
+    titulo: 'Lanes',
+    pista: 'Alt+↑/↓ on the canvas',
+    lista: (pool: string): string => `Lanes of «${pool}»`,
+    nombreDe: (n: number): string => `Name of lane ${n}`,
+    resumen: (elementos: number, medida: string, valor: number): string =>
+      `${elementos} ${elementos === 1 ? 'element' : 'elements'} · ${medida.toLowerCase()} ${valor}`,
+    /** ↑ and ↓ of a row; a vertical pool stacks its lanes left to right. */
+    subir: (carril: string): string => `Move «${carril}» up`,
+    bajar: (carril: string): string => `Move «${carril}» down`,
+    aLaIzquierda: (carril: string): string => `Move «${carril}» left`,
+    aLaDerecha: (carril: string): string => `Move «${carril}» right`,
+    borrar: (carril: string): string => `Delete «${carril}»`,
+    anadirAlFinal: '+ Add a lane at the end',
+    ayuda: 'No need to select the pool first: the «+» on its edge adds a lane right there. Drag a selected lane\'s handles to resize it.',
+    confirmarTitulo: 'Delete lane',
+    confirmarTexto: (carril: string, elementos: number): string =>
+      `«${carril}» holds ${elementos} ${elementos === 1 ? 'element' : 'elements'}. Deleting the lane keeps ${elementos === 1 ? 'it' : 'them'} in the pool, in the lane that takes its room.`,
+    confirmarBorrar: 'Delete lane',
+    /** The size of a selected lane across the pool: its height, or its width in a vertical pool. */
+    alto: 'Height',
+    ancho: 'Width',
+    medidaProblemas: {
+      vacio: 'Enter a size.',
+      numero: 'The size must be a number, for example 120.',
+      minimo: (minimo: number): string => `The size must be at least ${minimo}: anything smaller leaves an element outside the lane.`,
+      maximo: (maximo: number): string => `The size must be at most ${maximo}.`,
+    },
+  },
+
+  /* ------------------------------------------------------------------ *
    * Routes step and the canvas percentage fields (Lote M, C4: `PasoRutas.tsx`,
    * `etiquetasPorcentaje.ts`, the gateway block of the properties panel)
    * ------------------------------------------------------------------ */

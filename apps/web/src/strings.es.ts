@@ -1477,6 +1477,43 @@ export const es: Strings = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Controles de carriles (#596): el «+» y el asa ⠿ del lienzo (`controlesCarriles.ts`) y la
+   * lista de carriles y el tamaño de un carril en el panel de propiedades (`PropertiesPanel.tsx`)
+   * ------------------------------------------------------------------ */
+  carriles: {
+    sinNombre: (n: number): string => `Carril sin nombre ${n}`,
+    anadirAqui: 'Añadir un carril aquí',
+    anadirEn: (posicion: number, pool: string): string => `Añadir un carril en la posición ${posicion} de «${pool}»`,
+    asaTitulo: 'Arrastra para reordenar · Alt+↑/↓',
+    asa: (carril: string): string => `Carril «${carril}». Arrástralo, o pulsa Alt+↑/↓, para moverlo`,
+    titulo: 'Carriles',
+    pista: 'Alt+↑/↓ en el lienzo',
+    lista: (pool: string): string => `Carriles de «${pool}»`,
+    nombreDe: (n: number): string => `Nombre del carril ${n}`,
+    resumen: (elementos: number, medida: string, valor: number): string =>
+      `${elementos} ${elementos === 1 ? 'elemento' : 'elementos'} · ${medida.toLowerCase()} ${valor}`,
+    subir: (carril: string): string => `Subir «${carril}»`,
+    bajar: (carril: string): string => `Bajar «${carril}»`,
+    aLaIzquierda: (carril: string): string => `Mover «${carril}» a la izquierda`,
+    aLaDerecha: (carril: string): string => `Mover «${carril}» a la derecha`,
+    borrar: (carril: string): string => `Eliminar «${carril}»`,
+    anadirAlFinal: '+ Añadir carril al final',
+    ayuda: 'No hace falta seleccionar el pool: el «+» de su borde añade un carril justo ahí. Arrastra las asas de un carril seleccionado para cambiar su tamaño.',
+    confirmarTitulo: 'Eliminar carril',
+    confirmarTexto: (carril: string, elementos: number): string =>
+      `«${carril}» tiene ${elementos} ${elementos === 1 ? 'elemento' : 'elementos'}. Al eliminar el carril ${elementos === 1 ? 'se queda' : 'se quedan'} en el pool, en el carril que ocupe su sitio.`,
+    confirmarBorrar: 'Eliminar carril',
+    alto: 'Alto',
+    ancho: 'Ancho',
+    medidaProblemas: {
+      vacio: 'Escribe un tamaño.',
+      numero: 'El tamaño tiene que ser un número, por ejemplo 120.',
+      minimo: (minimo: number): string => `El tamaño tiene que ser al menos ${minimo}: con menos, algún elemento queda fuera del carril.`,
+      maximo: (maximo: number): string => `El tamaño tiene que ser como mucho ${maximo}.`,
+    },
+  },
+
+  /* ------------------------------------------------------------------ *
    * Paso Rutas y campos de porcentaje del lienzo (Lote M, C4: `PasoRutas.tsx`,
    * `etiquetasPorcentaje.ts`, el bloque de compuerta del panel de propiedades)
    * ------------------------------------------------------------------ */

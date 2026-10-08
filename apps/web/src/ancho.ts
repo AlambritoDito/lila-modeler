@@ -35,14 +35,22 @@ export function conAncho(forma: unknown): boolean {
   return is(forma as never, 'bpmn:Task') || is(forma as never, 'bpmn:CallActivity');
 }
 
-/** Why `texto` is not a width that can be set, or `null` if it is (then `Number(texto)` is it). */
-export function problemaDeAncho(texto: string): 'vacio' | 'numero' | 'minimo' | 'maximo' | null {
+/**
+ * Why `texto` is not a size between `minimo` and `maximo`, or `null` if it is (then
+ * `Number(texto)` is it). The width of an activity, and the size of a lane (#596).
+ */
+export function problemaDeMedida(texto: string, minimo: number, maximo: number): 'vacio' | 'numero' | 'minimo' | 'maximo' | null {
   if (texto.trim() === '') return 'vacio';
   // Plain decimals only: `Number` would also take `0x64` and `1e2`.
   if (!/^\d+(\.\d+)?$/.test(texto.trim())) return 'numero';
   const valor = Number(texto.trim());
-  if (valor < ANCHO_MINIMO) return 'minimo';
-  return valor > ANCHO_MAXIMO ? 'maximo' : null;
+  if (valor < minimo) return 'minimo';
+  return valor > maximo ? 'maximo' : null;
+}
+
+/** Why `texto` is not a width that can be set, or `null` if it is (then `Number(texto)` is it). */
+export function problemaDeAncho(texto: string): 'vacio' | 'numero' | 'minimo' | 'maximo' | null {
+  return problemaDeMedida(texto, ANCHO_MINIMO, ANCHO_MAXIMO);
 }
 
 export class LilaAncho extends RuleProvider {
