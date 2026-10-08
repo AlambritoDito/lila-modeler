@@ -14,6 +14,9 @@
  * on a lane's label band into `elegirCarril(id)`, which the step answers with «Lane X · n tasks →
  * resource [Assign]». Without `apply` (tests, or before the shell wires it) `useCarriles()` is
  * `null` and the panel falls back to the IR order, as it did before.
+ *
+ * C7: it also publishes every pool and lane with its name (`useContenedores`), so a selected one
+ * reads «Restaurant · Pool» in the Simulate panel instead of its raw id.
  */
 import { useEffect, useSyncExternalStore } from 'react';
 
@@ -25,6 +28,19 @@ export interface CarrilVisual {
   readonly nombre: string | null;
   /** BPMN ids of the flow nodes the lane holds (`flowNodeRef`). */
   readonly nodos: readonly string[];
+}
+
+/**
+ * A pool or a lane of the canvas (Lote M, C7). The IR knows neither a pool nor a lane's id, so a
+ * selected one used to reach the Simulate panel as its raw id («Participant_Restaurante»); the
+ * panel reads its name from here instead.
+ */
+export interface ContenedorVisual {
+  /** BPMN id: the key, never shown. */
+  readonly id: string;
+  readonly tipo: 'bpmn:Participant' | 'bpmn:Lane';
+  /** Its name, or `null` when it has none (the panel then says «Unnamed pool»). */
+  readonly nombre: string | null;
 }
 
 /** A canvas shape, reduced to what this module reads. */
@@ -96,11 +112,25 @@ export function ordenVisual(formas: readonly FormaCarril[]): CarrilVisual[] {
     });
 }
 
+function esContenedor(forma: FormaCarril): boolean {
+  return forma.type === 'bpmn:Participant' || forma.type === 'bpmn:Lane';
+}
+
+/** The pools and lanes of `formas`, with their names. */
+export function contenedoresDe(formas: readonly FormaCarril[]): ContenedorVisual[] {
+  return formas.flatMap((f) => {
+    if (!esContenedor(f) || typeof f.id !== 'string') return [];
+    const nombre = f.businessObject?.name?.trim() ?? '';
+    return [{ id: f.id, tipo: f.type as ContenedorVisual['tipo'], nombre: nombre === '' ? null : nombre }];
+  });
+}
+
 /* ------------------------------------------------------------------ *
  * The store
  * ------------------------------------------------------------------ */
 
 let carriles: readonly CarrilVisual[] | null = null;
+let contenedores: readonly ContenedorVisual[] | null = null;
 let elegido: string | null = null;
 let pasosMontados = 0;
 const oyentes = new Set<() => void>();
@@ -125,6 +155,13 @@ export function publicarCarriles(lista: readonly CarrilVisual[] | null): void {
   avisar();
 }
 
+/** Replaces the published pools and lanes; `null` means «no modeler wired». */
+export function publicarContenedores(lista: readonly ContenedorVisual[] | null): void {
+  if (JSON.stringify(lista) === JSON.stringify(contenedores)) return;
+  contenedores = lista;
+  avisar();
+}
+
 /** The lane picked on the canvas (or `null` to dismiss it). */
 export function elegirCarril(id: string | null): void {
   if (elegido === id) return;
@@ -144,6 +181,11 @@ export function pasoRecursosVisible(): boolean {
 
 export function useCarriles(): readonly CarrilVisual[] | null {
   return useSyncExternalStore(suscribirse, () => carriles);
+}
+
+/** The pools and lanes of the canvas, or `null` without a modeler wired (tests, before `apply`). */
+export function useContenedores(): readonly ContenedorVisual[] | null {
+  return useSyncExternalStore(suscribirse, () => contenedores);
 }
 
 export function useCarrilElegido(): string | null {
@@ -211,7 +253,9 @@ export function apply(lienzo: LienzoCarriles): () => void {
   }
 
   function publicar(): void {
-    publicarCarriles(ordenVisual(formas()));
+    const todas = lienzo.servicios.elementRegistry.filter(esContenedor);
+    publicarCarriles(ordenVisual(todas));
+    publicarContenedores(contenedoresDe(todas));
     marcar();
   }
 
@@ -246,5 +290,6 @@ export function apply(lienzo: LienzoCarriles): () => void {
     dejarStore();
     desmarcar();
     publicarCarriles(null);
+    publicarContenedores(null);
   };
 }

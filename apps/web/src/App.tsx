@@ -62,7 +62,7 @@ import { datosVistaRapida } from './vistaRapida';
 import { construirEtiquetas } from './etiquetasPorcentaje';
 import { escribirPorcentaje } from './repartoRutas';
 import { esUnidadTiempo } from './scenarioFields';
-import { apply as aplicarCarriles } from './carrilClic';
+import { apply as aplicarCarriles, useCarriles } from './carrilClic';
 // Único punto de la SPA que conoce la implementación concreta (LILA-058, ADR-023): el resto
 // del shell habla con `store` solo por el tipo `ProjectStore`. Cambiar de modalidad —
 // `DesktopStore` (LILA-071), `RemoteStore` (LILA-086)— es cambiar esta línea.
@@ -517,6 +517,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // Lote M, C2: a click on a lane's name in the Resources step picks it (carrilClic.ts), and the
   // panel lists the lanes in their visual order with their names.
   useEffect(() => (modelador === null ? undefined : aplicarCarriles(modelador)), [modelador]);
+  // Lote M, C7: the Resources hint names lanes only when there are some to click (C2); a pool never.
+  const hayCarriles = (useCarriles()?.length ?? 0) > 0;
   const [estado, setEstado] = useState<EstadoLienzo>({
     zoom: 1,
     elementos: 0,
@@ -3133,7 +3135,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       <div className="zona-modelo" inert={ioBusy} style={{ visibility: comparando ? 'hidden' : 'visible' }}>
       {/* Lote M, C6: the step's short hint over the canvas (design 1a, «PASO 2 · Elige una tarea…»). */}
       {modo === 'simular' && pasoVisible !== null && (
-        <p className="c6-chip-lienzo"><span className="mono">{S.c6.pasoLienzo(PASO_IDS.indexOf(pasoVisible) + 1)}</span>{S.c6.pistasLienzo[pasoVisible]}</p>
+        <p className="c6-chip-lienzo"><span className="mono">{S.c6.pasoLienzo(PASO_IDS.indexOf(pasoVisible) + 1)}</span>{pasoVisible === 'resources' && hayCarriles ? S.c7.pistaRecursosCarril : S.c6.pistasLienzo[pasoVisible]}</p>
       )}
       {tema === undefined ? (
         <div className="lienzo" />

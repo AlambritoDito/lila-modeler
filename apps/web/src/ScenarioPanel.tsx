@@ -60,6 +60,7 @@ import {
   type Ruta,
 } from './escenarioModelo.js';
 import { atajoPorId, etiqueta, MAC } from './atajos.js';
+import { useContenedores } from './carrilClic.js';
 import { PASO_IDS, type PasoId } from './ids.js';
 import { BotonElemento, type Rotulo } from './ListaElementos.js';
 import { PasoCalendarios } from './PasoCalendarios.js';
@@ -607,6 +608,15 @@ export function ScenarioPanel({
 
   /** Qué es lo seleccionado (#332): decide qué campos se ofrecen y si sale la vista de compuerta. */
   const clase = claseDeElemento(ir, idSeleccionado);
+  /**
+   * Lote M, C7: a pool or a lane is not in the IR (`clase` is `null`). The canvas gives its name and
+   * kind (`carrilClic.ts`), so the panel names it instead of printing «Participant_Restaurante», and
+   * offers it no element fields: the scenario has none for it.
+   */
+  const contenedores = useContenedores();
+  const contenedor = clase === null && idSeleccionado !== null ? (contenedores?.find((c) => c.id === idSeleccionado) ?? null) : null;
+  /** C2: a lane picked by its name in Resources is answered by the step itself («Lane X · n tasks → resource»). */
+  const carrilEnRecursos = contenedor?.tipo === 'bpmn:Lane' && paso === 'resources';
 
   useEffect(() => {
     onPasoVisible?.(paso);
@@ -636,7 +646,10 @@ export function ScenarioPanel({
    */
   function nombreElemento(id: string): string | null {
     const nombre = ir?.nodes[id]?.name ?? ir?.flows[id]?.name ?? nombresExtra[id];
-    return nombre !== undefined && nombre.trim() !== '' ? nombre : null;
+    if (nombre !== undefined && nombre.trim() !== '') return nombre;
+    // C7: a pool or a lane reads its name, or «Unnamed pool», never its id.
+    const caja = contenedores?.find((c) => c.id === id);
+    return caja === undefined ? null : (caja.nombre ?? S.c7.sinNombre[caja.tipo]);
   }
 
   /** #447: the name, or the id without one; with «Advanced», the id as well. */
@@ -821,7 +834,7 @@ export function ScenarioPanel({
   const pista = `${etiqueta(atajoPorId('paso:arrivals'), MAC).replace(/1$/, '1…6')} · ${atajoSimular}`;
 
   /* --- What the step shows for the selected element (Lote M: only this step's parameters). --- */
-  const visibles = idSeleccionado === null ? [] : fieldsForStep(paso, clase);
+  const visibles = idSeleccionado === null || contenedor !== null ? [] : fieldsForStep(paso, clase);
   const definidos = idSeleccionado === null ? [] : CAMPOS_DE_PASO[paso].filter((campo) => leer(resuelto, ['elements', idSeleccionado, campo]) !== undefined);
   const esCompuerta = clase === 'xor' || clase === 'or';
   /** Whether the selected element has anything to set in this step; if not, the panel says where. */
@@ -833,7 +846,7 @@ export function ScenarioPanel({
       definidos.length > 0);
   const nombreSeleccion = idSeleccionado === null ? '' : rotulo(idSeleccionado).principal;
   const tipoSeleccion =
-    clase === null ? '' : (S.propiedades.tipos[TIPO_BPMN[clase] ?? ''] ?? TIPO_BPMN[clase]?.replace('bpmn:', '') ?? clase);
+    clase === null ? (contenedor === null ? '' : (S.propiedades.tipos[contenedor.tipo] ?? '')) : (S.propiedades.tipos[TIPO_BPMN[clase] ?? ''] ?? TIPO_BPMN[clase]?.replace('bpmn:', '') ?? clase);
   const consejo = consejoDe(clase);
   /**
    * Lote M, C4: in Routes a gateway (or a flow out of a splitting one) is edited in `PasoRutas` —
@@ -1035,7 +1048,7 @@ export function ScenarioPanel({
               </details>
             )}
           </div>
-        ) : idSeleccionado !== null && paso !== 'run' ? (
+        ) : idSeleccionado !== null && paso !== 'run' && !carrilEnRecursos ? (
           <details open className="sim-elemento">
             <summary>{S.escenario.seccionElemento}</summary>
             <p className="vacio">
@@ -1058,10 +1071,10 @@ export function ScenarioPanel({
             {vistaSeleccion(idSeleccionado)}
           </details>
         ) : (
-          // Nothing selected (or Run, which has no element fields): the step's overview, without
-          // the «Selected element» heading around it.
+          // Nothing selected (or Run, which has no element fields, or a lane in Resources): the
+          // step's overview, without the «Selected element» heading around it.
           <div className="sim-elemento sim-general">
-            {idSeleccionado === null ? vistaGeneral() : vistaSeleccion(idSeleccionado)}
+            {idSeleccionado === null || carrilEnRecursos ? vistaGeneral() : vistaSeleccion(idSeleccionado)}
             {/* Every entry the scenario already has, whatever the step: a flow or an element that
                 is hard to click on the canvas is still one click away (#447 rows). */}
             {idSeleccionado === null && Object.keys(elementos).length > 0 && (

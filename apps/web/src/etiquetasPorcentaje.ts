@@ -137,6 +137,12 @@ export function posicionDe(
   const W = ANCHO_PX * escala;
   const H = ALTO_PX * escala;
   const candidatos: Caja2D[] = [];
+  /**
+   * C7: a flow shorter than the box (980 → 1030 into the timer of Sample order) left every candidate
+   * on top of the gateway or the event it enters. These stand further off the segment, beside it,
+   * and are tried last: they win only when they cover strictly less than every candidate on it.
+   */
+  const apartados: Caja2D[] = [];
   // The first segment first (the box reads as the gateway's exit); the second as a fallback, for a
   // flow that leaves the gateway and turns right away (C6, QA of #605: «Rejected 22 %» sat on the
   // flow's own label beside a short first segment).
@@ -145,18 +151,28 @@ export function posicionDe(
     const ux = (b.x - a.x) / largo;
     const uy = (b.y - a.y) / largo;
     const horizontal = Math.abs(ux) >= Math.abs(uy);
+    const primero = a === wps[0];
     for (const d of [6, largo / 2, Math.max(6, largo - 6 - (horizontal ? W : H))]) {
       const px = a.x + ux * Math.min(d, largo);
       const py = a.y + uy * Math.min(d, largo);
       if (horizontal) {
         const x = ux >= 0 ? px : px - W;
         candidatos.push({ x, y: py + 5, width: W, height: H }, { x, y: py - 5 - H, width: W, height: H });
+        if (primero) for (const k of [1, 2, 3, 4]) {
+          const aparte = 5 + (k * H) / 2;
+          apartados.push({ x, y: py - aparte - H, width: W, height: H }, { x, y: py + aparte, width: W, height: H });
+        }
       } else {
         const y = uy >= 0 ? py : py - H;
         candidatos.push({ x: px + 5, y, width: W, height: H }, { x: px - 5 - W, y, width: W, height: H });
+        if (primero) for (const k of [1, 2, 3, 4]) {
+          const aparte = 5 + (k * W) / 2;
+          apartados.push({ x: px + aparte, y, width: W, height: H }, { x: px - aparte - W, y, width: W, height: H });
+        }
       }
     }
   }
+  candidatos.push(...apartados);
   let mejor = candidatos[0]!;
   let menor = Infinity;
   for (const c of candidatos) {
@@ -184,6 +200,8 @@ function obstaculosDe(registro: ElementRegistry, inicio: Punto, puestos: readonl
     if (contiene && caja.width * caja.height > 4 * ANCHO_PX * ALTO_PX) continue;
     const toca = inicio.x >= caja.x - 1 && inicio.x <= caja.x + caja.width + 1 && inicio.y >= caja.y - 1 && inicio.y <= caja.y + caja.height + 1;
     // The gateway the flow leaves: its warning marker and selection outline stick out.
+    // C7: an event's step label («≈ 10 min», `etiquetasPaso.ts`) sits past its right edge, 20 px up.
+    if (e.type?.endsWith('Event') === true) salida.push({ x: caja.x + caja.width + 12, y: caja.y - 20, width: 72, height: 18 });
     salida.push(toca && e.type !== 'label'
       ? { x: caja.x - MARGEN_FORMA, y: caja.y - MARGEN_FORMA, width: caja.width + 2 * MARGEN_FORMA, height: caja.height + 2 * MARGEN_FORMA }
       // A label keeps a few pixels of air too: a box flush against «Rejected» reads as covering it.

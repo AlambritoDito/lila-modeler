@@ -177,6 +177,35 @@ describe('canvas percentage fields', () => {
     expect(posicionDe(flujo, [{ x: 104, y: 104, width: 40, height: 40 }], 0.5)).toEqual({ left: 6, top: -69 });
   });
 
+  it('C7: a flow shorter than the box puts it beside the segment, clear of the gateway and the timer', () => {
+    // Sample order: «Approved» goes 980 → 1030 into the timer, 50 units for a 64 px box.
+    const flujo = { waypoints: [{ x: 980, y: 220 }, { x: 1030, y: 220 }] };
+    const obstaculos = [
+      { x: 920, y: 185, width: 70, height: 70 }, // the gateway with its marker
+      { x: 926, y: 248, width: 58, height: 22 }, // «Approved?»
+      { x: 1030, y: 202, width: 36, height: 36 }, // the timer
+      { x: 1031, y: 241, width: 34, height: 22 }, // «Rest»
+      { x: 1078, y: 182, width: 72, height: 18 }, // its step label «≈ 10 min»
+      { x: 1120, y: 202, width: 36, height: 36 }, // Order delivered
+    ];
+    for (const zoom of [1, 0.67]) {
+      const p = posicionDe(flujo, obstaculos, zoom)!;
+      const escala = zoom < 1 ? 1 / zoom : 1;
+      const caja = { x: 980 + p.left, y: 220 + p.top, width: 64 * escala, height: 32 * escala };
+      for (const o of obstaculos) {
+        const w = Math.min(caja.x + caja.width, o.x + o.width) - Math.max(caja.x, o.x);
+        const h = Math.min(caja.y + caja.height, o.y + o.height) - Math.max(caja.y, o.y);
+        expect(w > 0 && h > 0, `${zoom}: ${JSON.stringify(caja)} on ${JSON.stringify(o)}`).toBe(false);
+      }
+      // Still beside its own flow: it starts on the segment's span and stays within two box heights.
+      expect(caja.x).toBeGreaterThanOrEqual(980);
+      expect(caja.x).toBeLessThanOrEqual(1030);
+      expect(Math.min(Math.abs(caja.y + caja.height - 220), Math.abs(caja.y - 220))).toBeLessThanOrEqual(5 + 2 * caja.height);
+    }
+    // A flow with room keeps the box right on it (the far candidates only win when they cover less).
+    expect(posicionDe({ waypoints: [{ x: 100, y: 100 }, { x: 160, y: 100 }] })).toEqual({ left: 6, top: 5 });
+  });
+
   it('out of range or not a number: invalid, nothing written', () => {
     const { modeler } = falsoModeler();
     const onCambiar = vi.fn();
