@@ -1,5 +1,12 @@
 appId: com.perferprocess.lila-modeler
 productName: Lila Modeler
+# The one-click NSIS installer names the per-user install folder after the package's npm name, not
+# productName (electron-builder uses productName only for per-machine or assisted installs), so
+# `@lila-modeler/desktop` installed into %LOCALAPPDATA%\Programs\@lila-modelerdesktop (#566). This
+# only renames the copy of package.json packed into the app: Electron names the app, and its
+# userData folder, after productName, which stays "Lila Modeler" on every platform.
+extraMetadata:
+  name: Lila Modeler
 directories:
   output: release
 files:
@@ -21,9 +28,13 @@ mac:
         - arm64
   category: public.app-category.productivity
   identity: null  # no Developer ID; scripts/adhoc-sign.cjs seals the bundle ad hoc after packing
+# `name` is the ProgId on Windows (and the macOS type name): kept as it was, since the registry and
+# Launch Services already know these. `description` is the type Explorer shows; without one it
+# read «Archivo LILA» (#566). The installer writes it once, in English, whatever the app language.
 fileAssociations:
   - ext: bpmn
     name: BPMN Diagram
+    description: BPMN diagram
     role: Editor
     # electron-builder cambia la extensión según la plataforma (getPlatformIconFileName
     # en builder-util): icon.icns en mac, icon.ico en Windows a partir del mismo valor.
@@ -31,12 +42,17 @@ fileAssociations:
   # El contenedor de proyecto (ADR-027): la carpeta ADR-018 zipeada en un solo archivo.
   - ext: lila
     name: Lila Modeler Project
+    description: Lila Modeler project
     role: Editor
     icon: resources/icons/icon.icns
 artifactName: "Lila-Modeler-${version}-${os}-${arch}.${ext}"  # no spaces: GitHub renames them in release assets
 win:
   icon: resources/icons/icon.ico
   target: nsis
+nsis:
+  # Quotes the open command electron-builder registers and, on uninstall, stops `.lila`/`.bpmn`
+  # naming the ProgIds it deletes (#566). The ProgIds there are the `name`s above.
+  include: scripts/installer.nsh
 # ponytail: solo AppImage. El target "deb" usa fpm, que exige "homepage" y
 # "author.email" en package.json (fallan el build con "Please specify
 # project homepage" / "Please specify author 'email'") — son datos de

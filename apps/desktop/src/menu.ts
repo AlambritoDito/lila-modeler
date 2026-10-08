@@ -14,8 +14,10 @@ import type { Strings } from './strings/index.js';
 /**
  * The texts come in as an argument (LILA-213) instead of being written here: the catalog is
  * chosen in `main.ts` from the language setting, and the menu is rebuilt with a different one
- * when that setting changes. Only the labels this app owns are translated — `appMenu`,
- * `editMenu` and `windowMenu` are roles, and the OS localises them itself.
+ * when that setting changes. On macOS `appMenu`, `editMenu` and `windowMenu` stay bare roles: the
+ * OS localises them itself. Outside macOS nothing does — Electron labels a bare role in English
+ * («Edit · Window», «Exit», #566) — so there every role item carries a label from the catalog,
+ * and Edit and Window are spelled out with the same items Electron's roles bring.
  *
  * View and Simulation are this app's own (#413): Electron's `viewMenu` role brought reload (⌘R)
  * and page zoom (⌘+/⌘−/⌘0), which fought the canvas zoom of the shortcut map. Their items send
@@ -49,6 +51,31 @@ export function menuTemplate(
     : [{ label: S.ninguno, enabled: false }];
   const atajo = (label: string, accelerator: string, id: string): MenuItemConstructorOptions =>
     ({ label, accelerator, click: () => send({ atajo: id }) });
+  // A role item, labelled outside macOS (#566). The role still brings its action and its
+  // accelerator; only Electron's English default label is replaced.
+  const rol = (role: NonNullable<MenuItemConstructorOptions['role']>, label: string): MenuItemConstructorOptions =>
+    (mac ? { role } : { role, label });
+  // Electron's `editMenu` and `windowMenu` outside macOS, item for item, with labels. Window
+  // leaves out the `zoom` role, which Electron documents as macOS-only.
+  const edicion: MenuItemConstructorOptions = mac
+    ? { role: 'editMenu' }
+    : {
+        label: S.editar,
+        submenu: [
+          rol('undo', S.deshacer),
+          rol('redo', S.rehacer),
+          { type: 'separator' },
+          rol('cut', S.cortar),
+          rol('copy', S.copiar),
+          rol('paste', S.pegar),
+          rol('delete', S.eliminar),
+          { type: 'separator' },
+          rol('selectAll', S.seleccionarTodo),
+        ],
+      };
+  const ventana: MenuItemConstructorOptions = mac
+    ? { role: 'windowMenu' }
+    : { label: S.ventana, submenu: [rol('minimize', S.minimizar), rol('close', S.cerrarVentana)] };
 
   return [
     ...(mac
@@ -96,7 +123,7 @@ export function menuTemplate(
         { label: S.exportarHtml, click: () => send('exportarHtml') },
         atajo(S.imprimir, 'CmdOrCtrl+P', 'imprimir'),
         // ⌘W (owner request, 2026-09-25): on macOS the `windowMenu` role brings Minimize, Zoom and
-        // Bring All to Front but not Close, so the key did nothing; on Windows/Linux that same role
+        // Bring All to Front but not Close, so the key did nothing; on Windows/Linux the Window menu
         // already carries Close (Ctrl+W), so adding it here would list it twice. The role closes
         // the focused window (main, About, the detached scenario or Results) through the same
         // `close` guard as the red button; closing the main window quits, like the red button does.
@@ -105,11 +132,11 @@ export function menuTemplate(
           : [
               { type: 'separator' as const }, preferencias,
               { type: 'separator' as const }, acercaDe,
-              { type: 'separator' as const }, { role: 'quit' as const },
+              { type: 'separator' as const }, rol('quit', S.salir),
             ]),
       ],
     },
-    { role: 'editMenu' },
+    edicion,
     {
       label: S.vista,
       submenu: [
@@ -119,12 +146,12 @@ export function menuTemplate(
         atajo(S.modoSimular, 'CmdOrCtrl+2', 'modo:simular'),
         atajo(S.modoResultados, 'CmdOrCtrl+3', 'modo:resultados'),
         { type: 'separator' },
-        { role: 'togglefullscreen' },
-        ...(dev ? [{ role: 'toggleDevTools' as const }] : []),
+        rol('togglefullscreen', S.pantallaCompleta),
+        ...(dev ? [rol('toggleDevTools', S.herramientasDesarrollo)] : []),
       ],
     },
     { label: S.simulacion, submenu: [atajo(S.ejecutar, 'CmdOrCtrl+Enter', 'ejecutar')] },
-    { role: 'windowMenu' },
+    ventana,
     // `role: 'help'` makes it the macOS Help menu, which brings the system's menu search (⇧⌘/).
     { label: S.ayuda, role: 'help', submenu: [{ label: S.documentacion, click: abrirDocs }] },
   ];
