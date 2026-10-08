@@ -16,7 +16,7 @@ import type { RunResult } from '../core/result.js';
 import { messages, type Locale } from '../messages/index.js';
 import { isCurrentRun, storedRun, withStoredRun, type StoredRun } from '../project/index.js';
 import type { ResolvedScenario } from '../scenario.js';
-import { openLilaProcess, writeLilaProject, type LilaProcess } from './input.js';
+import { lilaWritten, openLilaProcess, writeLilaProject, type LilaProcess } from './input.js';
 
 /** How many times a save re-reads the file after another writer got there first, or held it. */
 const ATTEMPTS = 8;
@@ -83,6 +83,7 @@ export async function saveSimulationRun(
     modelRevision: lila.process.model.revision,
     scenarioRevision: lila.process.scenarioRevisions[source.label] ?? 0,
   });
-  await saveLilaRun(lila, run, locale);
-  return { id: run.id, file: lila.file, process: lila.process.slug, scenario: source.label };
+  const saved = await saveLilaRun(lila, run, locale);
+  // The slug the process has in the file now (#613): a one-process version 2 archive is version 1 after the write.
+  return { id: run.id, file: lila.file, process: lilaWritten(saved, saved.document).slug, scenario: source.label };
 }

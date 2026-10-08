@@ -28,6 +28,7 @@ export {
   lilaScenarioEntryName,
   lilaScenarioPath,
   lilaScenarioReader,
+  lilaWritten,
   openLilaProcess,
   writeLilaProject,
   writeLilaScenario,
