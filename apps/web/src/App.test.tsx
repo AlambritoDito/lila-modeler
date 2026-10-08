@@ -1682,6 +1682,38 @@ it('a tab switch while the process document is being exported waits: the documen
   expect(pestanasProceso()[0]!.getAttribute('aria-current')).toBe('true');
 });
 
+it('a tab switch, a save and an export started in the same JS task: only the export takes the file lock (#535)', async () => {
+  const lienzo = lienzoQueRecuerda();
+  await nuevoProcesoConNombre('Facturación');
+  mocks.exportarSvg.mockResolvedValue('<svg id="papel"/>');
+  mocks.aPng.mockResolvedValue(new Blob(['png'], { type: 'image/png' }));
+  const abiertos = mocks.abrir.mock.calls.length;
+  let soltar!: () => void;
+  const retenido = new Promise<void>((r) => { soltar = r; });
+  await act(async () => {
+    mocks.exportXml.mockImplementationOnce(async () => { const xml = lienzo.xml(); await retenido; return xml; });
+    // QA of #533: three clicks dispatched in one task. The switch and the save await the loss
+    // check before they lock; the export locks at once, in between.
+    pestanasProceso()[0]!.click();
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...mod('s') }));
+    ejecutarArchivo(T.app.exportarHtml);
+  });
+  // Neither the switch nor the save ran next to the export: the canvas is still the second process.
+  expect(mocks.abrir.mock.calls.length).toBe(abiertos);
+  expect(pestanasProceso()[1]!.getAttribute('aria-current')).toBe('true');
+  expect(session.saveProject).not.toHaveBeenCalled();
+  expect(container.querySelector('footer.estado [role="alert"].error')?.textContent).toBe(T.app.guardadoOcupado);
+  // The lock is still the export's, not released by an operation that finished first.
+  await pulsar(document.body, mod('s'));
+  expect(session.saveProject).not.toHaveBeenCalled();
+  await act(async () => soltar());
+  await vi.waitFor(() => expect(mocks.descargar).toHaveBeenCalledOnce());
+  expect(mocks.descargar.mock.calls[0]![1]).toBe('Facturación.html');
+  // Once the export is done, the switch goes through.
+  await act(async () => pestanasProceso()[0]!.click());
+  expect(pestanasProceso()[0]!.getAttribute('aria-current')).toBe('true');
+});
+
 it('a second process document export while one is running is refused with a notice (#522)', async () => {
   mocks.exportarSvg.mockResolvedValue('<svg id="papel"/>');
   let soltar!: () => void;
@@ -4317,6 +4349,7 @@ it('an automatic reload selects the same element again in the new import (QA of 
   reload.mockImplementation(async () => vi.mocked(session.saveProject).mock.calls.at(-1)?.[0] ?? null);
   await click(T.app.guardar);
   // The canvas reported `Task_TomarPedido` selected (the properties panel shows it).
+  mocks.seleccionados = [{ id: 'Task_TomarPedido' }];
   await act(async () => { mocks.onSeleccion('Task_TomarPedido'); });
   mocks.abrir.mockClear();
   mocks.seleccionar.mockClear();
@@ -4324,23 +4357,61 @@ it('an automatic reload selects the same element again in the new import (QA of 
   await avisar();
   await vi.waitFor(async () => {
     await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
-    expect(mocks.seleccionar).toHaveBeenCalledWith('Task_TomarPedido');
+    expect(mocks.seleccionar).toHaveBeenCalledWith(['Task_TomarPedido']);
   });
   expect(reload).toHaveBeenCalledOnce();
   // After the import, against its new elements: `Modeler.abrir` cleared the old selection, and
   // `seleccionar` finds the id in the reloaded diagram (or does nothing when it is gone).
   expect(mocks.abrir.mock.invocationCallOrder[0]!).toBeLessThan(mocks.seleccionar.mock.invocationCallOrder[0]!);
 
-  // Nothing selected before: nothing is selected after.
+  // Several selected (`onSeleccion` says none, #568): all of them, in one selection.
+  mocks.seleccionados = [{ id: 'Task_TomarPedido' }, { id: 'Task_Preparar' }];
   await act(async () => { mocks.onSeleccion(null); });
   mocks.seleccionar.mockClear();
   await avisar();
   await vi.waitFor(async () => {
     await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
-    expect(reload).toHaveBeenCalledTimes(2);
+    expect(mocks.seleccionar).toHaveBeenCalledWith(['Task_TomarPedido', 'Task_Preparar']);
+  });
+  expect(mocks.seleccionar).toHaveBeenCalledOnce();
+
+  // Nothing selected before: nothing is selected after.
+  mocks.seleccionados = [];
+  await act(async () => { mocks.onSeleccion(null); });
+  mocks.seleccionar.mockClear();
+  await avisar();
+  await vi.waitFor(async () => {
+    await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+    expect(reload).toHaveBeenCalledTimes(3);
   });
   await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
   expect(mocks.seleccionar).not.toHaveBeenCalled();
+});
+
+it('after «Keep mine», a save refused with E-CAMBIO-EXTERNO offers «Reload» next to the error (#568)', async () => {
+  const { avisar, reload } = await montarConVigilancia();
+  reload.mockResolvedValue(null);
+  await act(async () => mocks.scenarioChange({ version: 1, name: 'AS-IS editado' }));
+  await avisar();
+  await click(T.app.mantenerMios);
+  expect(avisoCambioExterno()).toBeUndefined();
+  // The next save meets the disk's guard, as before there was a watcher.
+  vi.mocked(session.saveProject).mockRejectedValueOnce(new Error(T.almacen.errorCambioExterno('pedido.lila')));
+  await click(T.app.guardar);
+  const error = [...container.querySelectorAll('footer.estado [role="alert"].error')].find((n) => n.textContent?.startsWith('E-CAMBIO-EXTERNO'));
+  expect(error).toBeDefined();
+  const recargar = [...error!.querySelectorAll('button')];
+  expect(recargar.map((b) => [b.textContent, b.type])).toEqual([[T.app.recargarCambioExterno, 'button']]);
+  expect(reload).not.toHaveBeenCalled();
+  await act(async () => recargar[0]!.click());
+  expect(reload).toHaveBeenCalledOnce();
+  // The reload took the error's place (here the file is gone from disk).
+  expect(container.textContent).not.toContain('E-CAMBIO-EXTERNO');
+  expect(container.textContent).toContain(T.app.errorRecienteAusente);
+  // Another error has no such button.
+  vi.mocked(session.saveProject).mockRejectedValueOnce(new Error('E-ARCHIVO-OCUPADO: boom'));
+  await click(T.app.guardar);
+  expect(container.querySelector('footer.estado [role="alert"].error button')).toBeNull();
 });
 
 it('the status bar shows the seed of the run on screen, not only the scenario\'s (QA of #539)', async () => {
