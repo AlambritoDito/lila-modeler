@@ -58,9 +58,6 @@ export const en = {
       modelar: 'Model',
       simular: 'Simulate',
       resultados: 'Results',
-      comparar: 'Compare',
-      animar: 'Animate',
-      rutas: 'Validate paths',
     },
     /** Label of each tab of the right panel; the id comes from `ids.ts` (`PESTANA_IDS`). */
     pestanas: {
@@ -208,9 +205,6 @@ export const en = {
     /** Results mode and Compare mode with nothing to show yet. */
     sinResultados: 'Simulate the current revision to see results.',
     sinCorridaActual: 'There is no current run for the selected scenario.',
-    escenarioBase: 'Base scenario',
-    sinComparacion:
-      'Simulate the base scenario and at least one other scenario of the current revision to compare.',
     corridaResumen: (
       escenario: string,
       modelRevision: number,
@@ -223,9 +217,6 @@ export const en = {
     /** «Simulation» tab of the right panel. */
     escenario: 'Scenario',
     errorSimular: (mensaje: string): string => `Could not simulate: ${mensaje}`,
-    verCuellos: 'Bottlenecks',
-    cuellosSinCorrida: 'Simulate to see the bottlenecks over the diagram.',
-    cuellosSinEspera: 'No element waited for a resource in this run.',
     /** Name of the main bottleneck: the id is added only when it adds something (#226). */
     nombreDeCuello: (nombre: string, id: string): string => `${nombre} (${id})`,
 
@@ -248,14 +239,14 @@ export const en = {
       derecha: 'Right panel',
       diagramas: 'Diagram tabs',
       estado: 'Status bar',
-      dock: 'Simulation dock',
+      dock: 'Results table',
     },
     tituloRegiones: {
       izquierda: 'Show or hide the left column',
       derecha: 'Show or hide the right panel',
       diagramas: 'Show or hide the diagram tabs',
       estado: 'Show or hide the status bar',
-      dock: 'Show or hide the simulation dock',
+      dock: 'Show or hide the results table',
     },
     /** The status bar toggle while an error keeps the bar on screen (#412). */
     tituloEstadoForzado: 'Show or hide the status bar — it stays while it shows an error',
@@ -672,7 +663,7 @@ export const en = {
     vistaEsperaP95: 'Resource wait p95',
     vistaEsperaMedia: 'Resource wait (mean)',
     vistaSinCorrida: 'no run',
-    editarEnParametros: 'Edit in Parameters',
+    editarEnTiempos: 'Edit in Times',
     editarEnRecursos: 'Edit in Resources',
 
     sinSeleccion: 'Select an element of the canvas to see its properties.',
@@ -806,14 +797,8 @@ export const en = {
    * Scenario rail of Simulate (`RailEscenarios.tsx`, design 2a)
    * ------------------------------------------------------------------ */
   rail: {
-    titulo: 'Scenarios',
-    nuevo: 'Duplicate the active scenario',
+    /** The BASE badge of «Scenario ▾» and of the panel header. */
     base: 'BASE',
-    sinCorrer: 'not run',
-    corrida: (semilla: string, repl: string): string => `seed ${semilla} · ${repl} reps`,
-    hereda: (padre: string): string => `inherits ${padre}`,
-    enVentana: 'in its own window ↗',
-    validacion: 'Validation',
   },
 
   /* ------------------------------------------------------------------ *
@@ -835,24 +820,31 @@ export const en = {
       `${archivo} · inherits from ${padre ?? '—'}`,
 
     /**
-     * #333/#396 — the four steps of the Simulate panel, named after what each one edits (the
+     * #333/#396, Lote M — the six steps of the Simulate panel, named after what each one edits (the
      * design's labels). `docs/COMING-FROM-BIZAGI.md` maps them to Bizagi's four levels.
      */
     pasos: 'Steps',
     paso: {
-      parameters: 'Parameters',
+      arrivals: 'Arrivals',
+      times: 'Times',
+      routes: 'Routes',
       resources: 'Resources',
       calendars: 'Calendars',
-      arrivals: 'Arrivals',
+      run: 'Run',
     } as Record<string, string>,
     pasoAyuda: {
-      parameters:
-        'How the model runs: the run window and replications, how the gateways branch and how long each activity takes.',
+      arrivals: 'How cases come in: how often each start event fires and how many cases it creates.',
+      times: 'How long each activity takes, and what it costs each time it runs.',
+      routes: 'Which share of the cases follows each path out of a gateway.',
       resources:
         'Who does the work: pools, how many units, when each pool works (its calendar and capacity per shift), and which task takes which pool.',
       calendars: 'When the work is possible: calendars and holidays, and which element follows which calendar.',
-      arrivals: 'How cases come in: how often each start event fires and how many cases it creates.',
+      run: 'How long the simulation runs, from when, and how many replications.',
     } as Record<string, string>,
+    /** Lote M: the «! n» of a step, read out with the step's name. */
+    pasoProblemas: (n: number): string => `${n} ${n === 1 ? 'problem' : 'problems'}`,
+    /** Lote M: a task the scenario gives no `processingTime` (the engine would run it in zero time). */
+    sinDuracion: (tarea: string): string => `${tarea}: no duration, so it would take no time.`,
 
     /** Element lists of the steps: what is already parameterised and what is still missing. */
     listaTiempos: 'Times by element',
@@ -862,7 +854,6 @@ export const en = {
     resumenLlegada: (cada: string, casos: number | null): string =>
       casos === null ? cada : `${cada} · ${casos} ${casos === 1 ? 'case' : 'cases'}`,
     /** #396: Calendars no longer repeats the pools; this says where a pool's calendar went. */
-    calendariosDePools: "A pool's calendar and its capacity per shift are edited on the pool, in Resources.",
     irARecursos: 'Go to Resources',
     /** #430: entries for ids the diagram no longer has (a configured shape was deleted). */
     huerfanas: 'Entries for elements that are no longer in the diagram',
@@ -894,7 +885,7 @@ export const en = {
     /** #579: the create control, on top of Calendars and Resources. */
     nuevoCalendario: 'New calendar',
     ejemploCalendario: 'night-shift',
-    crearCalendario: '+ Create calendar',
+    crearCalendario: '+ Blank',
     nuevoRecurso: 'New resource',
     ejemploRecurso: 'analyst',
     crearRecurso: '+ Create resource',
@@ -1039,15 +1030,8 @@ export const en = {
     fechaHora: 'Date and time',
     desfase: 'UTC offset',
 
-    /** Gateway view (#332): the probabilities of its outgoing flows, together. */
-    seccionCompuerta: 'Outgoing flows',
+    /** Routes step (#332, Lote M C4): a gateway without exits. */
     compuertaSinSalientes: 'This gateway has no outgoing flows.',
-    compuertaPorDefecto: 'default flow: takes the remainder',
-    /** #332: what a flow with no `probability` contributes to the XOR total (R-XOR-1…3). */
-    compuertaImplicita: (parte: number): string => `(implied: ${parte})`,
-    compuertaSuma: (suma: number): string => `Total: ${suma}`,
-    compuertaSumaAviso: 'The probabilities of an XOR gateway are normalised to 1 with a warning.',
-    compuertaIndependiente: 'On an inclusive gateway each path is independent: they need not add up to 1.',
 
     /** Advanced view: the raw delta of the file being edited (§ 6), for when the form is not enough. */
     seccionJson: 'Advanced: scenario JSON',
@@ -1093,10 +1077,10 @@ export const en = {
 
     /** «Assign lane to pool» (LILA-334): a bulk edit of `elements[task].resources`. */
     carrilCarril: 'Lane',
-    carrilPool: 'Pool',
-    carrilAsignar: 'Assign lane',
+    carrilPool: 'Resource',
+    carrilAsignar: 'Assign lane → resource',
     carrilAyuda: (tareas: number): string =>
-      `Fills resources for every task in the lane (${tareas}); the lane itself is never stored.`,
+      `Every task of the lane (${tareas}) gets this resource; the lane itself is never stored.`,
     carrilYaAsignadas: (tareas: number): string =>
       `${tareas} ${tareas === 1 ? 'task already has' : 'tasks already have'} resources; assigning replaces them:`,
     carrilSobrescribir: 'Overwrite',
@@ -1112,11 +1096,21 @@ export const en = {
    * ------------------------------------------------------------------ */
   calendario: {
     rejilla: 'Weekly schedule: days by hours',
-    celda: (dia: (typeof DIAS_SEMANA)[number], hhmm: string): string => `${dia} ${hhmm}`,
+    /** A grid cell's accessible name: the translated day (`diasLargos`) and the hour. */
+    celda: (dia: string, hhmm: string): string => `${dia} ${hhmm}`,
     /** Range picker above the grid (#448). */
     nuevaFranja: 'New time range',
     presets: { laborables: 'Mon–Fri', todos: 'Every day', finDeSemana: 'Weekend' },
     dias: { MON: 'Mon', TUE: 'Tue', WED: 'Wed', THU: 'Thu', FRI: 'Fri', SAT: 'Sat', SUN: 'Sun' },
+    diasLargos: {
+      MON: 'Monday',
+      TUE: 'Tuesday',
+      WED: 'Wednesday',
+      THU: 'Thursday',
+      FRI: 'Friday',
+      SAT: 'Saturday',
+      SUN: 'Sunday',
+    } satisfies Record<(typeof DIAS_SEMANA)[number], string>,
     desde: 'From',
     hasta: 'To',
     formatoHora: 'HH:MM',
@@ -1160,6 +1154,132 @@ export const en = {
     festivoAnual: (mmdd: string): string => `${mmdd} (every year)`,
     quitarFestivo: (festivo: string): string => `Remove ${festivo}`,
     ayudaFestivos: 'Closed all day, whatever the ranges above say.',
+  },
+  /** Lote M (C3): the calendar manager of the Calendars step (`GestorCalendarios.tsx`). */
+  gcal: {
+    vacioTitulo: 'No calendars yet',
+    vacioTexto: 'Without a calendar, resources work 24 hours every day. Start from a template:',
+    desdePlantilla: 'Or from a template',
+    /** Template buttons; the same text is the new calendar's name. */
+    plantillas: { laborable: 'Mon–Fri 9–18', continuo: '24/7', extendido: 'Mon–Sat 6–22' },
+    /** Name of a blank calendar created without typing one. */
+    nombreEnBlanco: 'calendar',
+    enBlancoAviso: 'A blank calendar has no hours until you paint them in Week.',
+    lista: 'Calendars of the scenario',
+    horasSemana: (horas: string): string => `${horas} h/wk`,
+    horasPorSemana: (horas: string): string => `${horas} h per week`,
+    usadoPorN: (n: number): string => `Used by ${n}`,
+    sinUso: 'Not used',
+    conProblemas: 'Has problems',
+    nombre: 'Calendar name',
+    nombreRepetido: (nombre: string): string => `A calendar named «${nombre}» already exists`,
+    nombreVacio: 'The name cannot be empty',
+    eliminar: 'Delete calendar',
+    eliminarBloqueado: 'It cannot be deleted while something uses it (see «Used by»).',
+    pestanasRotulo: 'Calendar sections',
+    pestanas: { semana: 'Week', festivos: 'Holidays', repeticiones: 'Repetitions', uso: 'Used by' },
+    ayudaSemana: 'Drag to paint working hours; drag over a painted hour to clear it. Keyboard: arrows, Space, and Shift+arrow to paint.',
+    sinHoras: 'This calendar has no hours: whoever uses it will never work.',
+    copiarLunes: 'Copy Monday to Mon–Fri',
+    vaciar: 'Clear',
+    ayudaRepeticiones:
+      'Hours added on dates that repeat: a day of the month (or the last one), the nth weekday of the month, or a date every year.',
+    nadieLoUsa: 'Nothing uses this calendar yet.',
+    tiposUso: { recurso: 'Resource', turno: 'Shift', tarea: 'Task', llegada: 'Arrivals', elemento: 'Element' },
+    turnoCapacidad: (n: number): string => `${n} on the shift`,
+    irA: (nombre: string): string => `Go to ${nombre} in Resources`,
+    asignarA: 'Assign to a resource',
+    nombreEnDerivado: (nombre: string, archivo: string): string => `${archivo} already has a calendar named «${nombre}»`,
+    usadoEnDerivados: (archivos: string): string => `Also named in scenarios that extend this one: ${archivos}.`,
+    ahoraUsa: (nombre: string, calendario: string): string => `${nombre} (now: ${calendario})`,
+    asignar: 'Assign',
+    asignado: (nombre: string): string => `Assigned to ${nombre}.`,
+    sinRecursos: 'There are no resources yet: create them in Resources.',
+    todosAsignados: 'Every resource already uses it or has per-shift capacity (those choose a calendar per shift, in Resources).',
+  },
+
+  /* ------------------------------------------------------------------ *
+   * Lote M, C2: the Resources step, master-detail (`PasoRecursos.tsx`, `FichaRecurso.tsx`)
+   * ------------------------------------------------------------------ */
+  recursos: {
+    nuevo: '+ New resource',
+    /** Prefix of the key a new resource gets: `resource-1`, `resource-2`… */
+    prefijoClave: 'resource',
+    vacioTitulo: 'No resources yet',
+    vacioTexto:
+      'Without resources every task starts as soon as a case arrives and nobody ever waits. Create one per role or piece of equipment.',
+    lista: 'Resources',
+    colRecurso: 'Resource · calendar',
+    colCapacidad: 'Cap.',
+    colCosto: (moneda: string): string => `${moneda}/h`,
+    capacidadFija: (n: string): string => `×${n}`,
+    turnos: (n: number): string => (n === 1 ? '1 shift' : `${n} shifts`),
+    siempre: '24/7',
+    porTurnos: 'by shifts',
+    conErrores: (n: number): string => (n === 1 ? '1 error' : `${n} errors`),
+    volver: '← Resources',
+    ficha: 'Resource',
+    nombre: 'Name',
+    ejemploNombre: 'e.g. Supervisor',
+    /** Settings → «Advanced» (#447): the key the scenario file uses, renamed with its references. */
+    clave: 'Id in the scenario',
+    claveMotivo: {
+      vacia: 'The id cannot be empty.',
+      repetida: 'Another resource already has this id.',
+      heredada: 'This resource comes from the parent scenario: its id is renamed there.',
+      enDerivado: 'A scenario derived from this one already has a resource with this id.',
+    } as Record<string, string>,
+    apartados: 'Resource sections',
+    apartado: { cap: 'Capacity', cost: 'Costs', uso: 'Calendar and use' },
+    capacidad: 'Capacity',
+    fija: 'Fixed',
+    porTurno: 'By shifts',
+    unidades: 'Units available',
+    capacidadCero: 'Capacity 0: the tasks of this resource will never start.',
+    restar: 'Remove one unit',
+    sumar: 'Add one unit',
+    turnoN: (i: number): string => `Shift ${i}`,
+    turnoCalendario: 'Calendar',
+    turnoCapacidad: 'Units',
+    quitarTurno: (i: number): string => `Remove shift ${i}`,
+    anadirTurno: '+ Shift',
+    ayudaTurnos: 'Each shift is a calendar with its own number of units; its hours are edited in Calendars.',
+    sinCalendarios: 'There are no calendars yet: create one in Calendars to work by shifts.',
+    porHora: (moneda: string): string => `Per hour (${moneda})`,
+    fijoPorUso: (moneda: string): string => `Fixed per use (${moneda})`,
+    costoEjemplo: (importe: string, moneda: string): string =>
+      `One use of one hour with one unit costs ${importe} ${moneda}.`,
+    calendario: 'Calendar',
+    calendarioSiempre: 'Always available (24/7)',
+    calendarioPorTurnos: 'By shifts: each shift’s calendar says when it works.',
+    horasSemana: (horas: string, resumen: string): string => (resumen === '' ? `${horas} h a week` : `${horas} h a week · ${resumen}`),
+    sinCalendario: 'No calendar: works 24 hours a day.',
+    tipo: 'Type',
+    tipos: { role: 'Person or role', equipment: 'Equipment' } as Record<string, string>,
+    tareas: 'Tasks it performs',
+    ningunaTarea: 'None yet.',
+    cantidad: (n: number): string => `×${n}`,
+    eliminar: 'Delete resource',
+    eliminarUsado: (tareas: number): string =>
+      `${tareas} ${tareas === 1 ? 'task uses' : 'tasks use'} this resource: ${tareas === 1 ? 'it' : 'they'} will be left pointing at nothing.`,
+    eliminarConfirmar: 'Delete anyway',
+    eliminarCancelar: 'Cancel',
+    eliminarBloqueado: (escenarios: string): string => `It cannot be deleted: the derived scenarios ${escenarios} use it.`,
+    descartarTurnos: (n: number): string =>
+      `Fixed keeps only shift 1; ${n === 1 ? 'the other shift is' : `the other ${n} shifts are`} discarded.`,
+    descartarConfirmar: 'Switch to fixed',
+    descartarCancelar: 'Cancel',
+    carrilEntero: 'Assign a whole lane',
+    carrilEnteroAyuda: 'Or click a lane’s name on the canvas.',
+    carrilTitulo: (carril: string, tareas: number): string =>
+      `Lane «${carril}» · ${tareas} ${tareas === 1 ? 'task' : 'tasks'}`,
+    carrilTituloAyuda: 'Assign all its tasks to one resource.',
+    carrilSinNombre: (n: number): string => `Unnamed lane ${n}`,
+    recurso: 'Resource',
+    asignar: 'Assign',
+    cerrarCarril: 'Close',
+    carrilHecho: (tareas: number, carril: string, recurso: string): string =>
+      `${tareas} ${tareas === 1 ? 'task' : 'tasks'} of «${carril}» now ${tareas === 1 ? 'uses' : 'use'} «${recurso}».`,
   },
 
   /* ------------------------------------------------------------------ *
@@ -1263,46 +1383,14 @@ export const en = {
   },
 
   /* ------------------------------------------------------------------ *
-   * Simulate dock under the canvas (#394, `DockSimular.tsx`)
+   * Results table under the Results map (the Simulate dock before, #394; `DockSimular.tsx`)
    * ------------------------------------------------------------------ */
   dock: {
-    region: 'Simulation dock',
-    /** The tablist's own name, so it is not read as the region twice. */
-    vistas: 'Simulation dock views',
-    /** Announced (role=status) when a run lands in the dock. */
+    /** Announced (role=status) when a run lands in Results. */
     corridaTerminada: (casos: string): string => `Run finished: ${casos} completed cases.`,
-    pestanas: { rapidos: 'Quick results', cuellos: 'Bottlenecks', log: 'Run log', avisos: 'Warnings' },
-    abrirResultados: 'Open in Results',
-    exportarCsv: 'Export CSV',
-    tituloExportar: 'Download the process elements table (elements.csv)',
-    vacio: 'Run the scenario to see its quick results, bottlenecks and run log here.',
-    ejecutar: 'Run simulation',
-    redimensionar: 'Resize the simulation dock',
-    kpis: {
-      completados: 'Completed cases',
-      cicloMedio: 'Average cycle time',
-      throughput: 'Throughput per hour',
-      costoTotal: 'Total cost',
-      cuello: 'Main bottleneck',
-    },
-    columnas: {
-      actividad: 'Activity',
-      casos: 'Cases',
-      esperaMedia: (unidad: string): string => `Resource wait, mean (${unidad})`,
-      esperaP95: (unidad: string): string => `Resource wait p95 (${unidad})`,
-      utilizacion: 'Utilization (%)',
-      utilizacionTitulo: 'Utilization of the busiest pool the activity used',
-      costo: 'Total fixed cost',
-    },
-    total: 'Total',
-    /** Under the quick results table: where the per-task percentiles come from. */
-    /** Under the quick results table (QA of #394): the two wait columns cover different populations. */
-    notaPercentiles: (filas: number): string =>
-      `Mean: every replication. p95: replication 1 of the event log sample (${filas} rows), cases started after the warm-up.`,
-    muestraParcial: (filas: number): string => `The wait is the mean over every replication. There is no p95: the run’s log sample stopped at ${filas} rows and would only cover its first cases.`,
+    vacio: 'Simulate the scenario to see its results by task and its run log here.',
     /** «Warnings» grouped by code: the disclosure with the other occurrences. */
     ocurrencias: (n: number): string => `${n} occurrences`,
-    notaSinLog: 'The wait is the mean over every replication. There is no p95: this run has no event log in memory (run it again to see it).',
     sinLog: 'This run has no event log in memory (it was reopened from a file): run it again to see it.',
     logTruncado: (n: number): string => `The log sample stopped at ${n} rows: later events are not in it.`,
     logMostrando: (mostradas: number, total: number): string => `Showing the first ${mostradas} of ${total} rows.`,
@@ -1454,6 +1542,42 @@ export const en = {
     marcadorAcciones: (renombrar: string, panel: string): string => `${renombrar} rename · ${panel} properties`,
     marcadorTitulo: (mensajes: readonly string[], acciones: string): string =>
       `${mensajes.join('\n')}\n${acciones}`,
+  },
+
+  /* ------------------------------------------------------------------ *
+   * Routes step and the canvas percentage fields (Lote M, C4: `PasoRutas.tsx`,
+   * `etiquetasPorcentaje.ts`, the gateway block of the properties panel)
+   * ------------------------------------------------------------------ */
+  rutas: {
+    cajaTitulo: (flujo: string, destino: string): string => `${flujo} → ${destino}`,
+    campoLienzo: (flujo: string, compuerta: string): string => `Percentage of flow «${flujo}» of «${compuerta}»`,
+    porciento: (n: number): string => `${n} %`,
+    resto: (n: number): string => `rest ${n} %`,
+    listaTitulo: 'Gateways',
+    listaVacia: 'This process has no gateway that splits cases between two or more exits. Add an exclusive or inclusive gateway in Model to give it percentages.',
+    listaAyuda: 'Percentages are also edited on the canvas, on the label of each flow.',
+    volver: '← Gateways',
+    flujosSalientes: 'Outgoing flows',
+    tipoXor: 'Exclusive: each case takes a single exit',
+    tipoOr: 'Inclusive: each exit is taken on its own',
+    barraAria: (reparto: string, suma: number): string => `Split: ${reparto}. Adds up to ${suma} %`,
+    porcentajeDe: (flujo: string): string => `Percentage of «${flujo}»`,
+    haciaDestino: (destino: string): string => `→ ${destino}`,
+    porDefecto: 'Default flow: takes the rest',
+    suma100: 'Adds up to 100 %',
+    listo: 'Ready to simulate.',
+    sumaMal: (suma: number, diferencia: number): string =>
+      `Adds up to ${suma} %: ${diferencia > 0 ? `${diferencia} points missing` : `${-diferencia} points over`}`,
+    sumaMalCuerpo: 'The simulation will scale the split to 100 % and warn about it.',
+    sumaCero: 'Every exit is at 0 %: no case can leave this gateway.',
+    arreglo: (flujo: string, porcentaje: number): string => `Set «${flujo}» to ${porcentaje} %`,
+    repartirIgual: 'Split evenly',
+    notaTeclas: '↑/↓ adds or takes 5 %. On an inclusive gateway each exit has its own probability and they do not need to add up to 100 %.',
+    union: 'Join gateway: it merges paths and does not split cases. It takes no parameters.',
+    sumaPildora: (suma: number): string => `${suma} %`,
+    propiedadesTitulo: 'Route split',
+    invalido: 'Write a number from 0 to 100.',
+    editarReparto: 'Edit the route split',
   },
 
   /* ------------------------------------------------------------------ *
@@ -1620,6 +1744,81 @@ export const en = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Lote M, C1: the guided Simulate panel — numbered steps, «▶ Simulate», the step banner,
+   * the selection header and the canvas labels of the step (`etiquetasPaso.ts`).
+   * ------------------------------------------------------------------ */
+  pasosSim: {
+    simular: 'Simulate',
+    /** Badge of «▶ Simulate»: problems that hold the run back. */
+    insignia: (n: number): string => `${n} ${n === 1 ? 'problem' : 'problems'} to fix`,
+    noSePuede: (n: number): string =>
+      `Cannot simulate: ${n} ${n === 1 ? 'problem' : 'problems'} to fix. Taking you to the first one.`,
+    pasoDe: (n: number, total: number, escenario: string): string => `Step ${n} of ${total} · ${escenario}`,
+    /** The question each step answers: its heading, and the tab's tooltip. */
+    titulos: {
+      arrivals: 'When cases come in',
+      times: 'How long each task takes',
+      routes: 'Which share follows each path',
+      resources: 'Who does each task',
+      calendars: 'When each resource works',
+      run: 'Horizon and replications',
+    } as Record<string, string>,
+    tabTitulo: (titulo: string, tecla: string): string => `${titulo} (${tecla})`,
+    sinProblemas: 'no problems',
+    bannerUno: 'One problem in this step',
+    bannerVarios: (n: number): string => `${n} problems in this step`,
+    sinPaso: 'Problems outside the steps',
+    ir: 'Go',
+    /** Selection header: the element, its kind, and that only this step's fields are shown. */
+    soloEstePaso: (tipo: string): string => `${tipo} · only this step`,
+    verTodo: 'Show all',
+    verTodoTitulo: 'Clear the selection (Esc)',
+    nada: (tipo: string, paso: string): string => `${tipo} without parameters in ${paso}.`,
+    consejos: {
+      task: 'A task is set in Times, Resources and Calendars.',
+      start: 'A start event is set in Arrivals.',
+      gateway: 'Its percentages are edited in Routes.',
+      flow: 'A flow is edited in Routes, from its gateway.',
+      end: 'End events have no parameters: they only count the cases that finish.',
+      otro: 'Nothing to set here.',
+    } as Record<string, string>,
+    irA: (paso: string): string => `Go to ${paso}`,
+    anterior: (paso: string): string => `← ${paso}`,
+    siguiente: (paso: string): string => `${paso} →`,
+    /** Arrivals */
+    inicioDe: (nombre: string): string => `Start event · ${nombre}`,
+    patron: 'Arrival pattern',
+    limites: 'Limits',
+    tasaHora: (porHora: string): string => `≈ ${porHora} per hour · around the clock`,
+    tasaSemana: (porHora: string, porSemana: string, calendario: string): string =>
+      `≈ ${porHora} per hour · ≈ ${porSemana} per week within «${calendario}»`,
+    tasaSinMedia: 'Enter a mean above 0 to see the arrival rate.',
+    soloDentro: 'Only arrive within',
+    siempre: 'Always (24/7)',
+    limitesAyuda: 'Leave the maximum empty for cases to keep arriving for the whole horizon.',
+    /** Times */
+    duracionMedia: 'Mean duration',
+    sinDuracion: 'No duration',
+    faltaDuracion: 'Missing duration: without one this task takes no time.',
+    /** Run */
+    horizonte: 'Horizon',
+    replicas: 'Replications',
+    avanzado: 'Advanced',
+    calentamientoAyuda: 'Cases of the warmup do not count, so the process is measured once it is running.',
+    replicasAyuda: '30 replications are usually enough. With the same seed, the same scenario always gives the same result.',
+    confianza: 'Results report a 95 % confidence interval.',
+    /** Canvas labels under each element (`etiquetasPaso.ts`). */
+    etiquetas: {
+      sinDuracion: 'No duration',
+      sinRecurso: 'No resource',
+      siempre: '24 h',
+      cada: (tiempo: string): string => `every ${tiempo}`,
+    },
+    entradas: (n: number): string => `Entries of this scenario (${n})`,
+    masAcciones: 'More',
+  },
+
+  /* ------------------------------------------------------------------ *
    * Shortcut map (`atajos.ts`, #413): one label per entry id, and one title per group. The keys
    * themselves are not text: `etiqueta()` formats them per platform.
    * ------------------------------------------------------------------ */
@@ -1642,11 +1841,15 @@ export const en = {
     'modo:modelar': 'Model',
     'modo:simular': 'Simulate',
     'modo:resultados': 'Results',
-    'modo:comparar': 'Compare',
-    'modo:animar': 'Animate',
-    'modo:rutas': 'Validate paths',
     ejecutar: 'Run simulation',
     cancelar: 'Cancel the run',
+    'paso:arrivals': 'Step 1: Arrivals',
+    'paso:times': 'Step 2: Times',
+    'paso:routes': 'Step 3: Routes',
+    'paso:resources': 'Step 4: Resources',
+    'paso:calendars': 'Step 5: Calendars',
+    'paso:run': 'Step 6: Run',
+    reproducir: 'Play or pause the tokens (Results)',
     zoomMas: 'Zoom in',
     zoomMenos: 'Zoom out',
     ajustarVista: 'Fit the diagram',
@@ -1676,7 +1879,7 @@ export const en = {
     estado: 'Show or hide the status bar',
     irModos: 'Move the focus to the modes',
     irPanel: 'Move the focus to the right panel',
-    dock: 'Show or hide the simulation dock',
+    dock: 'Show or hide the results table',
   },
 
   /* ------------------------------------------------------------------ *
@@ -1751,5 +1954,192 @@ export const en = {
     cargando: 'Loading examples/pedido…',
     tituloResultados: 'Lila Modeler · Results (LILA-062 demo)',
     tituloComparar: 'Lila Modeler · Compare (LILA-063 demo)',
+  },
+  /* ------------------------------------------------------------------ *
+   * Lote M, workstream C5: results on the map, compare inside Results, the scenario dropdown that
+   * replaced the rail, and the results table that replaced the dock.
+   * ------------------------------------------------------------------ */
+  c5: {
+    escenario: {
+      rotulo: 'Scenario',
+      base: 'Base',
+      titulo: 'Choose, duplicate, rename or save the scenario',
+      lista: 'Scenarios of the process',
+      simulado: 'Simulated',
+      sinSimular: 'Not simulated',
+      enVentana: 'In the detached window',
+      hereda: (padre: string): string => `Extends ${padre}`,
+      heredaDe: 'Extends',
+      ninguno: 'Nothing (base scenario)',
+      guardar: 'Save project',
+      duplicar: 'Duplicate',
+      duplicarTitulo: 'Duplicate the active scenario; the copy extends it and can be renamed right away',
+      renombrar: 'Rename',
+      nombre: 'Scenario name',
+      nombreAyuda: 'Enter keeps the name, Esc leaves it as it was',
+      problemas: 'Problems of the scenario',
+    },
+    resultados: {
+      barra: 'Results toolbar',
+      meta: (replicas: number, semilla: string, unidad: string): string => `${replicas} ${replicas === 1 ? 'replication' : 'replications'} · seed ${semilla} · unit ${unidad}`,
+      capas: 'Layers on the map',
+      mapaCalor: 'Heat map',
+      tokens: 'Tokens',
+      compararCon: 'Compare with…',
+      compararTitulo: 'Compare this scenario with another one; a scenario without results is simulated when you pick it',
+      seSimulara: 'Not simulated · simulated when picked',
+      sinOtros: 'There is no other scenario: duplicate this one first.',
+      vacioKicker: 'No results',
+      vacioTitulo: (nombre: string): string => `You have not simulated «${nombre}» yet`,
+      vacioTexto: 'Press Simulate: the diagram stays here and shows the waits, the bottlenecks and the cases moving over it.',
+      simularAhora: 'Simulate now',
+      corriendo: 'Simulating…',
+      errorKicker: 'The simulation stopped',
+      errorTitulo: (n: number): string => (n === 1 ? '1 problem to fix' : `${n} problems to fix`),
+      irAlPrimero: 'Go to the first one',
+      reintentar: 'Retry',
+      resumen: 'Summary',
+      kpis: {
+        ciclo: 'Cycle time',
+        espera: 'Wait per case',
+        completados: 'Completed cases',
+        costoCaso: 'Cost per case',
+        utilMax: 'Max. utilization',
+        enCurso: 'In progress at the end',
+      },
+      kpiTitulos: {
+        ciclo: 'Mean time from arrival to end, over every replication',
+        espera: 'Mean time a case spent waiting for resources',
+        completados: 'Cases that reached an end event, mean over the replications',
+        costoCaso: 'Total cost divided by completed cases',
+        utilMax: 'Utilization of the busiest resource',
+        enCurso: 'Cases still in the process when the run ended (in a queue or being worked on)',
+      },
+      ic95: (desde: string, hasta: string): string => `95 % confidence interval ${desde} – ${hasta}`,
+      cuellos: 'Bottlenecks',
+      cuellosNota: 'The engine’s ranking: total wait for resources, then utilization.',
+      tarea: 'Selected task',
+      sinSeleccion: 'Pick a task on the map or in the table to see its detail.',
+      casos: 'Cases',
+      proceso: 'Mean processing',
+      espera: 'Mean wait',
+      utilizacion: 'Utilization',
+      consejoCuello: 'It is in the engine’s bottleneck ranking: more capacity for its resource, or less work routed to it, shortens the wait.',
+      consejoSinEspera: 'It barely waits: its resource is not what holds the cases back.',
+      enVentana: 'The results are in another window.',
+    },
+    tabla: {
+      region: 'Results table',
+      vistas: 'Results table views',
+      titulo: 'Results by task',
+      sub: (replicas: number): string => `mean of ${replicas} ${replicas === 1 ? 'replication' : 'replications'} · durations in hours (minutes)`,
+      plegar: 'Collapse the results table',
+      desplegar: 'Expand the results table',
+      redimensionar: 'Resize the results table',
+      pestanas: { tareas: 'Tasks', detalle: 'Full results', log: 'Run log', avisos: 'Warnings' },
+      columnas: {
+        tarea: 'Task',
+        recurso: 'Resource',
+        casos: 'Cases',
+        proceso: 'Mean processing',
+        espera: 'Mean wait',
+        esperaP95: 'Wait p95',
+        utilizacion: 'Utilization',
+        costo: 'Total cost',
+      },
+      utilizacionTitulo: 'Utilization of the busiest resource the task uses',
+      costoTitulo: 'The task’s fixed cost over the run; resource costs are in Full results → Resources',
+      p95Titulo: '95th percentile of the resource wait, from the run log sample',
+      total: 'Total',
+      notaPercentiles: (filas: number): string => `Mean: every replication. p95: replication 1 of the event log sample (${filas} rows), cases started after the warm-up.`,
+      muestraParcial: (filas: number): string => `The wait is the mean over every replication. There is no p95: the run’s log sample stopped at ${filas} rows and would only cover its first cases.`,
+      notaSinLog: 'The wait is the mean over every replication. There is no p95: this run has no event log in memory (run it again to see it).',
+      nadie: 'Nobody',
+      notaCosto: 'Total cost per task is the task’s own fixed cost. What the resources cost is in Full results → Resources.',
+      exportarCsv: 'CSV',
+      exportarCsvTitulo: 'Download the elements table (elements.csv)',
+      exportarXlsx: 'XLSX',
+      exportarXlsxTitulo: 'Download the workbook with every table',
+    },
+    tiempo: {
+      barra: 'Token replay',
+      reproducir: 'Play the tokens (Space)',
+      pausar: 'Pause the tokens (Space)',
+      reiniciar: 'Back to the start',
+      velocidad: 'Speed',
+      posicion: 'Simulated time',
+      leyenda: 'Tint: wait compared with the task’s own processing time',
+      niveles: { low: 'little wait', mid: 'comparable', high: 'waits longer than it works' },
+      truncadoCorto: (filas: number): string => `Partial replay: first ${filas} log rows`,
+      ocupacion: (recurso: string, ocupados: number, capacidad: number): string => `${recurso} ${ocupados}/${capacidad}`,
+    },
+    mapa: {
+      espera: (t: string): string => `Wait ${t}`,
+      esperaTitulo: (t: string): string => `Mean resource wait ${t}`,
+      cuello: 'BOTTLENECK',
+    },
+    comparar: {
+      comparando: 'Comparing',
+      intercambiar: 'Swap sides',
+      elegir: 'Choose scenario',
+      leyenda: 'green = better · red = worse · ▲▼ up or down',
+      cerrar: 'Close comparison',
+      referencia: 'Reference',
+      mapaDe: (nombre: string): string => `Map of ${nombre}`,
+      mapaSub: 'heat by wait',
+      mapaDeltaSub: 'difference in wait per task',
+      valorRef: (nombre: string, valor: string): string => `${nombre}: ${valor}`,
+      mejora: 'better',
+      empeora: 'worse',
+      igual: 'no change',
+      deltaTitulo: (t: string): string => `Mean wait ${t} against the reference`,
+      simulandoKicker: 'Simulating',
+      simulando: (nombre: string): string => `Simulating «${nombre}»…`,
+      simulandoTexto: 'It had no results yet; it runs with its own seed and replications.',
+      canceladaKicker: 'Cancelled',
+      cancelada: (nombre: string): string => `The run of «${nombre}» was cancelled`,
+      canceladaTexto: 'The comparison waits until you run it again.',
+      errorKicker: 'Could not simulate',
+      errorTitulo: (nombre: string): string => `«${nombre}» has problems`,
+      corregir: 'Fix it in Simulate',
+      elegirOtro: 'Choose another scenario',
+      vacioKicker: 'Compare',
+      vacioTitulo: 'You need a second scenario',
+      vacioTexto: 'Duplicate this one, change what you want to try and compare both.',
+      duplicarComo: (nombre: string): string => `Duplicate ${nombre}`,
+      detalle: 'Comparison tables and charts',
+      sinMapa: 'The maps could not be drawn here. The tables below have every number.',
+    },
+    validarRutas: 'Validate paths',
+    validarRutasTitulo: 'Walk tokens through the routes (Model only; not the simulation)',
+    problemasPendientes: (n: number): string => (n === 1 ? '1 problem holds the run back' : `${n} problems hold the run back`),
+    compararConEscenario: (nombre: string): string => `Compare with ${nombre}`,
+  },
+  /** Lote M, C6: the Simulate sub-bar's steps and the Results summary's two extra figures. */
+  c6: {
+    pasosBarra: 'Simulation steps',
+    throughput: 'Throughput',
+    throughputValor: (porHora: string): string => `${porHora} / h`,
+    throughputTitulo: 'Completed cases per simulated hour, mean over the replications',
+    costoTotal: 'Total cost',
+    costoTotalTitulo: 'What the whole run cost: resources and fixed costs of every case, finished or not',
+    pasoLienzo: (n: number): string => `Step ${n}`,
+    pistasLienzo: {
+      arrivals: 'Pick the start event',
+      times: 'Pick a task to give it a duration',
+      routes: 'Edit the % on the flow labels',
+      resources: 'Pick a task',
+      calendars: 'Pick a task to see its schedule',
+      run: 'The run settings apply to the whole scenario',
+    },
+  },
+  /** Lote M, C7: final polish. */
+  c7: {
+    /** The Resources hint when the diagram has lanes (C2: a click on a lane's name assigns it). Never the pool. */
+    pistaRecursosCarril: 'Pick a task or the name of a lane',
+    /** A selected pool or lane without a name: what the Simulate panel shows instead of its raw id. */
+    sinNombre: { 'bpmn:Participant': 'Unnamed pool', 'bpmn:Lane': 'Unnamed lane' },
+    /** The end of the replay on the time bar: one word, with the whole sentence in its title. */
+    finCorto: 'End',
   },
 } as const;

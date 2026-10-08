@@ -44,9 +44,6 @@ export const es: Strings = {
       modelar: 'Modelar',
       simular: 'Simular',
       resultados: 'Resultados',
-      comparar: 'Comparar',
-      animar: 'Animar',
-      rutas: 'Validar rutas',
     },
     /** Rótulo de cada pestaña del panel derecho; el id lo fija `ids.ts` (`PESTANA_IDS`). */
     pestanas: {
@@ -189,9 +186,6 @@ export const es: Strings = {
     /** Modo Resultados y modo Comparar sin nada que enseñar todavía. */
     sinResultados: 'Simula la revisión actual para ver resultados.',
     sinCorridaActual: 'No hay corrida actual para el escenario seleccionado.',
-    escenarioBase: 'Escenario base',
-    sinComparacion:
-      'Simula el escenario base y al menos otro escenario de la revisión actual para comparar.',
     corridaResumen: (
       escenario: string,
       modelRevision: number,
@@ -204,9 +198,6 @@ export const es: Strings = {
     /** Pestaña «Simulación» del panel derecho. */
     escenario: 'Escenario',
     errorSimular: (mensaje: string): string => `No se pudo simular: ${mensaje}`,
-    verCuellos: 'Cuellos de botella',
-    cuellosSinCorrida: 'Simula para ver los cuellos de botella sobre el diagrama.',
-    cuellosSinEspera: 'Ningún elemento esperó por un recurso en esta corrida.',
     /** Nombre del cuello principal: el id solo se añade cuando aporta algo (#226). */
     nombreDeCuello: (nombre: string, id: string): string => `${nombre} (${id})`,
 
@@ -226,14 +217,14 @@ export const es: Strings = {
       derecha: 'Panel derecho',
       diagramas: 'Pestañas de diagramas',
       estado: 'Barra de estado',
-      dock: 'Dock de simulación',
+      dock: 'Tabla de resultados',
     },
     tituloRegiones: {
       izquierda: 'Mostrar u ocultar la columna izquierda',
       derecha: 'Mostrar u ocultar el panel derecho',
       diagramas: 'Mostrar u ocultar las pestañas de diagramas',
       estado: 'Mostrar u ocultar la barra de estado',
-      dock: 'Mostrar u ocultar el dock de simulación',
+      dock: 'Mostrar u ocultar la tabla de resultados',
     },
     /** El botón de la barra de estado mientras un error la mantiene en pantalla (#412). */
     tituloEstadoForzado: 'Mostrar u ocultar la barra de estado — sigue mientras muestre un error',
@@ -646,7 +637,7 @@ export const es: Strings = {
     vistaEsperaP95: 'Espera por recurso p95',
     vistaEsperaMedia: 'Espera por recurso (media)',
     vistaSinCorrida: 'sin corrida',
-    editarEnParametros: 'Editar en Parámetros',
+    editarEnTiempos: 'Editar en Tiempos',
     editarEnRecursos: 'Editar en Recursos',
 
     sinSeleccion: 'Selecciona un elemento del lienzo para ver sus propiedades.',
@@ -780,14 +771,8 @@ export const es: Strings = {
    * Raíl de escenarios de Simular (`RailEscenarios.tsx`, diseño 2a)
    * ------------------------------------------------------------------ */
   rail: {
-    titulo: 'Escenarios',
-    nuevo: 'Duplicar el escenario activo',
+    /** La insignia BASE de «Escenario ▾» y de la cabecera del panel. */
     base: 'BASE',
-    sinCorrer: 'sin correr',
-    corrida: (semilla: string, repl: string): string => `semilla ${semilla} · ${repl} repl.`,
-    hereda: (padre: string): string => `hereda ${padre}`,
-    enVentana: 'en ventana aparte ↗',
-    validacion: 'Validación',
   },
 
   /* ------------------------------------------------------------------ *
@@ -809,25 +794,32 @@ export const es: Strings = {
       `${archivo} · hereda de ${padre ?? '—'}`,
 
     /**
-     * #333/#396 — los cuatro pasos del panel de simulación, nombrados por lo que edita cada uno
+     * #333/#396, Lote M — los seis pasos del panel de simulación, nombrados por lo que edita cada uno
      * (los rótulos del diseño). `docs/es/COMING-FROM-BIZAGI.md` los relaciona con los cuatro
      * niveles de Bizagi.
      */
     pasos: 'Pasos',
     paso: {
-      parameters: 'Parámetros',
+      arrivals: 'Llegadas',
+      times: 'Tiempos',
+      routes: 'Rutas',
       resources: 'Recursos',
       calendars: 'Calendarios',
-      arrivals: 'Llegadas',
+      run: 'Ejecución',
     } as Record<string, string>,
     pasoAyuda: {
-      parameters:
-        'Cómo corre el modelo: la ventana de corrida y las réplicas, cómo ramifican las compuertas y cuánto tarda cada actividad.',
+      arrivals: 'Cómo entran los casos: cada cuánto dispara cada evento de inicio y cuántos casos crea.',
+      times: 'Cuánto tarda cada actividad y cuánto cuesta cada vez que se hace.',
+      routes: 'Qué parte de los casos sigue cada camino al salir de una compuerta.',
       resources:
         'Quién hace el trabajo: pools, cuántas unidades, cuándo trabaja cada pool (su calendario y su capacidad por turno) y qué tarea toma cuál.',
       calendars: 'Cuándo se puede trabajar: calendarios y festivos, y qué calendario sigue cada elemento.',
-      arrivals: 'Cómo entran los casos: cada cuánto dispara cada evento de inicio y cuántos casos crea.',
+      run: 'Cuánto dura la simulación, desde cuándo y cuántas réplicas.',
     } as Record<string, string>,
+    /** Lote M: el «! n» de un paso, leído junto al nombre del paso. */
+    pasoProblemas: (n: number): string => `${n} ${n === 1 ? 'problema' : 'problemas'}`,
+    /** Lote M: una tarea sin `processingTime` en el escenario (el motor la correría en tiempo cero). */
+    sinDuracion: (tarea: string): string => `${tarea}: sin duración, así que no tardaría nada.`,
 
     /** Listas de elementos de los pasos: qué está parametrizado y qué falta. */
     listaTiempos: 'Tiempos por elemento',
@@ -835,7 +827,6 @@ export const es: Strings = {
     listaLlegadas: 'Llegadas por evento de inicio',
     resumenLlegada: (cada: string, casos: number | null): string =>
       casos === null ? cada : `${cada} · ${casos} ${casos === 1 ? 'caso' : 'casos'}`,
-    calendariosDePools: 'El calendario de un pool y su capacidad por turno se editan en el pool, en Recursos.',
     irARecursos: 'Ir a Recursos',
     /** #430: entradas de ids que el diagrama ya no tiene (se borró una forma configurada). */
     huerfanas: 'Entradas de elementos que ya no están en el diagrama',
@@ -867,7 +858,7 @@ export const es: Strings = {
     /** #579: el control para crear, arriba de Calendarios y de Recursos. */
     nuevoCalendario: 'Nuevo calendario',
     ejemploCalendario: 'turno-noche',
-    crearCalendario: '+ Crear calendario',
+    crearCalendario: '+ En blanco',
     nuevoRecurso: 'Nuevo recurso',
     ejemploRecurso: 'analista',
     crearRecurso: '+ Crear recurso',
@@ -1011,15 +1002,8 @@ export const es: Strings = {
     fechaHora: 'Fecha y hora',
     desfase: 'Desfase UTC',
 
-    /** Vista de compuerta (#332): las probabilidades de sus flujos salientes, juntas. */
-    seccionCompuerta: 'Flujos salientes',
+    /** Paso Rutas (#332, Lote M C4): una compuerta sin salidas. */
     compuertaSinSalientes: 'Esta compuerta no tiene flujos salientes.',
-    compuertaPorDefecto: 'flujo por defecto: se lleva el resto',
-    /** #332: lo que aporta a la suma de la XOR un flujo sin `probability` (R-XOR-1…3). */
-    compuertaImplicita: (parte: number): string => `(implícito: ${parte})`,
-    compuertaSuma: (suma: number): string => `Total: ${suma}`,
-    compuertaSumaAviso: 'Las probabilidades de una compuerta XOR se normalizan a 1 con un aviso.',
-    compuertaIndependiente: 'En una compuerta inclusiva cada camino es independiente: no tienen por qué sumar 1.',
 
     /** Vista avanzada: el delta crudo del archivo en edición (§ 6), para lo que el formulario no da. */
     seccionJson: 'Avanzado: JSON del escenario',
@@ -1066,10 +1050,10 @@ export const es: Strings = {
 
     /** «Asignar carril a pool» (LILA-334): una edición en bloque de `elements[task].resources`. */
     carrilCarril: 'Carril',
-    carrilPool: 'Pool',
-    carrilAsignar: 'Asignar carril',
+    carrilPool: 'Recurso',
+    carrilAsignar: 'Asignar carril → recurso',
     carrilAyuda: (tareas: number): string =>
-      `Rellena resources en cada tarea del carril (${tareas}); el carril no se guarda en ninguna parte.`,
+      `Cada tarea del carril (${tareas}) pasa a usar este recurso; el carril no se guarda en ninguna parte.`,
     carrilYaAsignadas: (tareas: number): string =>
       `${tareas} ${tareas === 1 ? 'tarea ya tiene' : 'tareas ya tienen'} recursos; asignar los reemplaza:`,
     carrilSobrescribir: 'Sobrescribir',
@@ -1085,11 +1069,21 @@ export const es: Strings = {
    * ------------------------------------------------------------------ */
   calendario: {
     rejilla: 'Horario semanal: días por horas',
-    celda: (dia: (typeof DIAS_SEMANA)[number], hhmm: string): string => `${dia} ${hhmm}`,
+    /** Nombre accesible de una celda: el día traducido (`diasLargos`) y la hora. */
+    celda: (dia: string, hhmm: string): string => `${dia} ${hhmm}`,
     /** Selector de franjas encima de la rejilla (#448). */
     nuevaFranja: 'Nueva franja horaria',
     presets: { laborables: 'Lun–Vie', todos: 'Todos', finDeSemana: 'Fin de semana' },
     dias: { MON: 'Lun', TUE: 'Mar', WED: 'Mié', THU: 'Jue', FRI: 'Vie', SAT: 'Sáb', SUN: 'Dom' },
+    diasLargos: {
+      MON: 'lunes',
+      TUE: 'martes',
+      WED: 'miércoles',
+      THU: 'jueves',
+      FRI: 'viernes',
+      SAT: 'sábado',
+      SUN: 'domingo',
+    } satisfies Record<(typeof DIAS_SEMANA)[number], string>,
     desde: 'Desde',
     hasta: 'Hasta',
     formatoHora: 'HH:MM',
@@ -1133,6 +1127,130 @@ export const es: Strings = {
     festivoAnual: (mmdd: string): string => `${mmdd} (cada año)`,
     quitarFestivo: (festivo: string): string => `Quitar ${festivo}`,
     ayudaFestivos: 'Cerrado todo el día, digan lo que digan las franjas de arriba.',
+  },
+  /** Lote M (C3): el gestor de calendarios del paso Calendarios (`GestorCalendarios.tsx`). */
+  gcal: {
+    vacioTitulo: 'Aún no hay calendarios',
+    vacioTexto: 'Sin calendario, los recursos trabajan las 24 h todos los días. Empieza con una plantilla:',
+    desdePlantilla: 'O desde plantilla',
+    plantillas: { laborable: 'L–V 9–18', continuo: '24/7', extendido: 'L–S 6–22' },
+    nombreEnBlanco: 'calendario',
+    enBlancoAviso: 'Un calendario en blanco no tiene horas hasta que las pintes en Semana.',
+    lista: 'Calendarios del escenario',
+    horasSemana: (horas: string): string => `${horas} h/sem`,
+    horasPorSemana: (horas: string): string => `${horas} h por semana`,
+    usadoPorN: (n: number): string => `Usado por ${n}`,
+    sinUso: 'Sin uso',
+    conProblemas: 'Tiene problemas',
+    nombre: 'Nombre del calendario',
+    nombreRepetido: (nombre: string): string => `Ya existe un calendario «${nombre}»`,
+    nombreVacio: 'El nombre no puede quedar vacío',
+    eliminar: 'Eliminar calendario',
+    eliminarBloqueado: 'No se puede eliminar mientras alguien lo use (mira «Usado por»).',
+    pestanasRotulo: 'Apartados del calendario',
+    pestanas: { semana: 'Semana', festivos: 'Festivos', repeticiones: 'Repeticiones', uso: 'Usado por' },
+    ayudaSemana: 'Arrastra para pintar las horas de trabajo; arrastra sobre una hora pintada para borrarla. Con teclado: flechas, Espacio y Mayús+flecha para pintar.',
+    sinHoras: 'Este calendario no tiene horas: quien lo use nunca trabajará.',
+    copiarLunes: 'Copiar lunes a L–V',
+    vaciar: 'Vaciar',
+    ayudaRepeticiones:
+      'Horas que se añaden en fechas que se repiten: un día del mes (o el último), el n-ésimo día de la semana del mes o una fecha cada año.',
+    nadieLoUsa: 'Nadie usa este calendario todavía.',
+    tiposUso: { recurso: 'Recurso', turno: 'Turno', tarea: 'Tarea', llegada: 'Llegadas', elemento: 'Elemento' },
+    turnoCapacidad: (n: number): string => `${n} en el turno`,
+    irA: (nombre: string): string => `Ir a ${nombre} en Recursos`,
+    asignarA: 'Asignar a un recurso',
+    nombreEnDerivado: (nombre: string, archivo: string): string => `${archivo} ya tiene un calendario «${nombre}»`,
+    usadoEnDerivados: (archivos: string): string => `También lo nombran escenarios que heredan de este: ${archivos}.`,
+    ahoraUsa: (nombre: string, calendario: string): string => `${nombre} (ahora: ${calendario})`,
+    asignar: 'Asignar',
+    asignado: (nombre: string): string => `Asignado a ${nombre}.`,
+    sinRecursos: 'Aún no hay recursos: créalos en Recursos.',
+    todosAsignados: 'Todos los recursos ya lo usan o tienen capacidad por turnos (esos eligen calendario en cada turno, en Recursos).',
+  },
+
+  /* ------------------------------------------------------------------ *
+   * Lote M, C2: el paso Recursos, maestro-detalle (`PasoRecursos.tsx`, `FichaRecurso.tsx`)
+   * ------------------------------------------------------------------ */
+  recursos: {
+    nuevo: '+ Nuevo recurso',
+    /** Prefijo de la clave de un recurso nuevo: `recurso-1`, `recurso-2`… */
+    prefijoClave: 'recurso',
+    vacioTitulo: 'Aún no hay recursos',
+    vacioTexto:
+      'Sin recursos, cada tarea empieza en cuanto llega un caso y nunca hay espera. Crea uno por cada rol o equipo.',
+    lista: 'Recursos',
+    colRecurso: 'Recurso · calendario',
+    colCapacidad: 'Cap.',
+    colCosto: (moneda: string): string => `${moneda}/h`,
+    capacidadFija: (n: string): string => `×${n}`,
+    turnos: (n: number): string => (n === 1 ? '1 turno' : `${n} turnos`),
+    siempre: '24/7',
+    porTurnos: 'por turnos',
+    conErrores: (n: number): string => (n === 1 ? '1 error' : `${n} errores`),
+    volver: '← Recursos',
+    ficha: 'Recurso',
+    nombre: 'Nombre',
+    ejemploNombre: 'p. ej. Supervisor',
+    /** Ajustes → «Avanzado» (#447): la clave del archivo de escenario, renombrada con sus referencias. */
+    clave: 'Id en el escenario',
+    claveMotivo: {
+      vacia: 'El id no puede quedar vacío.',
+      repetida: 'Otro recurso ya tiene este id.',
+      heredada: 'Este recurso viene del escenario padre: su id se cambia allí.',
+      enDerivado: 'Un escenario derivado de este ya tiene un recurso con este id.',
+    } as Record<string, string>,
+    apartados: 'Apartados del recurso',
+    apartado: { cap: 'Capacidad', cost: 'Costos', uso: 'Calendario y uso' },
+    capacidad: 'Capacidad',
+    fija: 'Fija',
+    porTurno: 'Por turnos',
+    unidades: 'Unidades disponibles',
+    capacidadCero: 'Capacidad 0: las tareas de este recurso nunca empezarán.',
+    restar: 'Restar una unidad',
+    sumar: 'Sumar una unidad',
+    turnoN: (i: number): string => `Turno ${i}`,
+    turnoCalendario: 'Calendario',
+    turnoCapacidad: 'Unidades',
+    quitarTurno: (i: number): string => `Quitar turno ${i}`,
+    anadirTurno: '+ Turno',
+    ayudaTurnos: 'Cada turno es un calendario con su propio número de unidades; sus horas se editan en Calendarios.',
+    sinCalendarios: 'Aún no hay calendarios: crea uno en Calendarios para trabajar por turnos.',
+    porHora: (moneda: string): string => `Por hora (${moneda})`,
+    fijoPorUso: (moneda: string): string => `Fijo por uso (${moneda})`,
+    costoEjemplo: (importe: string, moneda: string): string =>
+      `Un uso de una hora con una unidad cuesta ${importe} ${moneda}.`,
+    calendario: 'Calendario',
+    calendarioSiempre: 'Siempre disponible (24/7)',
+    calendarioPorTurnos: 'Por turnos: el calendario de cada turno dice cuándo trabaja.',
+    horasSemana: (horas: string, resumen: string): string => (resumen === '' ? `${horas} h por semana` : `${horas} h por semana · ${resumen}`),
+    sinCalendario: 'Sin calendario: trabaja las 24 h.',
+    tipo: 'Tipo',
+    tipos: { role: 'Persona o rol', equipment: 'Equipo' } as Record<string, string>,
+    tareas: 'Tareas que realiza',
+    ningunaTarea: 'Ninguna todavía.',
+    cantidad: (n: number): string => `×${n}`,
+    eliminar: 'Eliminar recurso',
+    eliminarUsado: (tareas: number): string =>
+      `${tareas} ${tareas === 1 ? 'tarea usa' : 'tareas usan'} este recurso: ${tareas === 1 ? 'quedará' : 'quedarán'} apuntando a nada.`,
+    eliminarConfirmar: 'Eliminar igualmente',
+    eliminarCancelar: 'Cancelar',
+    eliminarBloqueado: (escenarios: string): string => `No se puede eliminar: lo usan los escenarios derivados ${escenarios}.`,
+    descartarTurnos: (n: number): string =>
+      `Fija conserva solo el turno 1; ${n === 1 ? 'se descarta el otro turno' : `se descartan los otros ${n} turnos`}.`,
+    descartarConfirmar: 'Pasar a fija',
+    descartarCancelar: 'Cancelar',
+    carrilEntero: 'Asignar un carril entero',
+    carrilEnteroAyuda: 'O haz clic en el nombre de un carril en el lienzo.',
+    carrilTitulo: (carril: string, tareas: number): string =>
+      `Carril «${carril}» · ${tareas} ${tareas === 1 ? 'tarea' : 'tareas'}`,
+    carrilTituloAyuda: 'Asigna todas sus tareas a un mismo recurso.',
+    carrilSinNombre: (n: number): string => `Carril sin nombre ${n}`,
+    recurso: 'Recurso',
+    asignar: 'Asignar',
+    cerrarCarril: 'Cerrar',
+    carrilHecho: (tareas: number, carril: string, recurso: string): string =>
+      `${tareas} ${tareas === 1 ? 'tarea' : 'tareas'} de «${carril}» ${tareas === 1 ? 'usa' : 'usan'} ahora «${recurso}».`,
   },
 
   /* ------------------------------------------------------------------ *
@@ -1218,41 +1336,12 @@ export const es: Strings = {
   },
 
   /* ------------------------------------------------------------------ *
-   * Dock de Simular bajo el lienzo (#394, `DockSimular.tsx`)
+   * Tabla de resultados bajo el mapa de Resultados (antes el dock de Simular, #394; `DockSimular.tsx`)
    * ------------------------------------------------------------------ */
   dock: {
-    region: 'Dock de simulación',
-    vistas: 'Vistas del dock de simulación',
     corridaTerminada: (casos: string): string => `Corrida terminada: ${casos} casos completados.`,
-    pestanas: { rapidos: 'Resultados rápidos', cuellos: 'Cuellos de botella', log: 'Log de la corrida', avisos: 'Avisos' },
-    abrirResultados: 'Abrir en Resultados',
-    exportarCsv: 'Exportar CSV',
-    tituloExportar: 'Descargar la tabla de elementos del proceso (elements.csv)',
-    vacio: 'Corre el escenario para ver aquí sus resultados rápidos, cuellos de botella y log.',
-    ejecutar: 'Ejecutar simulación',
-    redimensionar: 'Redimensionar el dock de simulación',
-    kpis: {
-      completados: 'Casos completados',
-      cicloMedio: 'Ciclo medio',
-      throughput: 'Throughput por hora',
-      costoTotal: 'Costo total',
-      cuello: 'Cuello principal',
-    },
-    columnas: {
-      actividad: 'Actividad',
-      casos: 'Casos',
-      esperaMedia: (unidad: string): string => `Espera por recurso, media (${unidad})`,
-      esperaP95: (unidad: string): string => `Espera por recurso p95 (${unidad})`,
-      utilizacion: 'Utilización (%)',
-      utilizacionTitulo: 'Utilización del pool más ocupado que usó la actividad',
-      costo: 'Costo fijo total',
-    },
-    total: 'Total',
-    notaPercentiles: (filas: number): string =>
-      `Media: todas las réplicas. p95: réplica 1 de la muestra del log (${filas} filas), casos iniciados tras el calentamiento.`,
-    muestraParcial: (filas: number): string => `La espera es la media de todas las réplicas. No hay p95: la muestra del log de la corrida se detuvo en ${filas} filas y solo cubriría sus primeros casos.`,
+    vacio: 'Simula el escenario para ver aquí sus resultados por tarea y su registro.',
     ocurrencias: (n: number): string => `${n} ocurrencias`,
-    notaSinLog: 'La espera es la media de todas las réplicas. No hay p95: esta corrida no tiene log en memoria (córrela otra vez para verlo).',
     sinLog: 'Esta corrida no tiene log en memoria (se reabrió de un archivo): córrela otra vez para verlo.',
     logTruncado: (n: number): string => `La muestra del log se detuvo en ${n} filas: los eventos posteriores no están.`,
     logMostrando: (mostradas: number, total: number): string => `Se muestran las primeras ${mostradas} de ${total} filas.`,
@@ -1385,6 +1474,42 @@ export const es: Strings = {
     marcadorAcciones: (renombrar: string, panel: string): string => `${renombrar} renombrar · ${panel} propiedades`,
     marcadorTitulo: (mensajes: readonly string[], acciones: string): string =>
       `${mensajes.join('\n')}\n${acciones}`,
+  },
+
+  /* ------------------------------------------------------------------ *
+   * Paso Rutas y campos de porcentaje del lienzo (Lote M, C4: `PasoRutas.tsx`,
+   * `etiquetasPorcentaje.ts`, el bloque de compuerta del panel de propiedades)
+   * ------------------------------------------------------------------ */
+  rutas: {
+    cajaTitulo: (flujo: string, destino: string): string => `${flujo} → ${destino}`,
+    campoLienzo: (flujo: string, compuerta: string): string => `Porcentaje del flujo «${flujo}» de «${compuerta}»`,
+    porciento: (n: number): string => `${n} %`,
+    resto: (n: number): string => `resto ${n} %`,
+    listaTitulo: 'Compuertas',
+    listaVacia: 'Este proceso no tiene ninguna compuerta que reparta casos entre dos o más salidas. Añade una compuerta exclusiva o inclusiva en Modelar para darle porcentajes.',
+    listaAyuda: 'Los porcentajes también se editan sobre el lienzo, en la etiqueta de cada flujo.',
+    volver: '← Compuertas',
+    flujosSalientes: 'Flujos salientes',
+    tipoXor: 'Exclusiva: cada caso toma una sola salida',
+    tipoOr: 'Inclusiva: cada salida se toma por su cuenta',
+    barraAria: (reparto: string, suma: number): string => `Reparto: ${reparto}. Suma ${suma} %`,
+    porcentajeDe: (flujo: string): string => `Porcentaje de «${flujo}»`,
+    haciaDestino: (destino: string): string => `→ ${destino}`,
+    porDefecto: 'Flujo por defecto: se lleva el resto',
+    suma100: 'Suma 100 %',
+    listo: 'Listo para simular.',
+    sumaMal: (suma: number, diferencia: number): string =>
+      `Suma ${suma} %: ${diferencia > 0 ? `faltan ${diferencia} puntos` : `sobran ${-diferencia} puntos`}`,
+    sumaMalCuerpo: 'La simulación ajustará el reparto a 100 % y lo avisará.',
+    sumaCero: 'Todas las salidas están en 0 %: ningún caso puede salir de esta compuerta.',
+    arreglo: (flujo: string, porcentaje: number): string => `Poner «${flujo}» en ${porcentaje} %`,
+    repartirIgual: 'Repartir a partes iguales',
+    notaTeclas: '↑/↓ suma o resta 5 %. En una compuerta inclusiva cada salida tiene su propia probabilidad y no hace falta que sumen 100 %.',
+    union: 'Compuerta de unión: junta caminos y no reparte casos. No necesita parámetros.',
+    sumaPildora: (suma: number): string => `${suma} %`,
+    propiedadesTitulo: 'Reparto de rutas',
+    invalido: 'Escribe un número de 0 a 100.',
+    editarReparto: 'Editar el reparto de rutas',
   },
 
   /* ------------------------------------------------------------------ *
@@ -1584,6 +1709,74 @@ export const es: Strings = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Lote M, C1: el panel guiado de Simular — pasos numerados, «▶ Simular», el aviso del paso,
+   * la cabecera de la selección y las etiquetas del paso en el lienzo (`etiquetasPaso.ts`).
+   * ------------------------------------------------------------------ */
+  pasosSim: {
+    simular: 'Simular',
+    insignia: (n: number): string => `${n} ${n === 1 ? 'problema' : 'problemas'} por resolver`,
+    noSePuede: (n: number): string =>
+      `No se puede simular: ${n} ${n === 1 ? 'problema' : 'problemas'} por resolver. Te llevo al primero.`,
+    pasoDe: (n: number, total: number, escenario: string): string => `Paso ${n} de ${total} · ${escenario}`,
+    titulos: {
+      arrivals: 'Cuándo entran los casos',
+      times: 'Cuánto dura cada tarea',
+      routes: 'Qué parte sigue cada camino',
+      resources: 'Quién hace cada tarea',
+      calendars: 'Cuándo trabaja cada recurso',
+      run: 'Horizonte y réplicas',
+    } as Record<string, string>,
+    tabTitulo: (titulo: string, tecla: string): string => `${titulo} (${tecla})`,
+    sinProblemas: 'sin problemas',
+    bannerUno: 'Un problema en este paso',
+    bannerVarios: (n: number): string => `${n} problemas en este paso`,
+    sinPaso: 'Problemas fuera de los pasos',
+    ir: 'Ir',
+    soloEstePaso: (tipo: string): string => `${tipo} · solo lo de este paso`,
+    verTodo: 'Ver todo',
+    verTodoTitulo: 'Quitar la selección (Esc)',
+    nada: (tipo: string, paso: string): string => `${tipo} sin parámetros en ${paso}.`,
+    consejos: {
+      task: 'Una tarea se configura en Tiempos, Recursos y Calendarios.',
+      start: 'El evento de inicio se configura en Llegadas.',
+      gateway: 'Sus porcentajes se editan en Rutas.',
+      flow: 'Un flujo se edita en Rutas, desde su compuerta.',
+      end: 'Los eventos de fin no tienen parámetros: solo cuentan los casos que terminan.',
+      otro: 'Aquí no hay nada que configurar.',
+    } as Record<string, string>,
+    irA: (paso: string): string => `Ir a ${paso}`,
+    anterior: (paso: string): string => `← ${paso}`,
+    siguiente: (paso: string): string => `${paso} →`,
+    inicioDe: (nombre: string): string => `Evento de inicio · ${nombre}`,
+    patron: 'Patrón de llegada',
+    limites: 'Límites',
+    tasaHora: (porHora: string): string => `≈ ${porHora} por hora · las 24 h`,
+    tasaSemana: (porHora: string, porSemana: string, calendario: string): string =>
+      `≈ ${porHora} por hora · ≈ ${porSemana} por semana dentro de «${calendario}»`,
+    tasaSinMedia: 'Indica una media mayor que 0 para ver la tasa de llegada.',
+    soloDentro: 'Solo llegan dentro de',
+    siempre: 'Siempre (24/7)',
+    limitesAyuda: 'Deja el máximo vacío para que lleguen casos durante todo el horizonte.',
+    duracionMedia: 'Duración media',
+    sinDuracion: 'Sin duración',
+    faltaDuracion: 'Falta la duración: sin ella esta tarea no tarda nada.',
+    horizonte: 'Horizonte',
+    replicas: 'Réplicas',
+    avanzado: 'Avanzado',
+    calentamientoAyuda: 'Los casos del calentamiento no cuentan: así el proceso se mide ya en marcha.',
+    replicasAyuda: '30 réplicas suelen bastar. Con la misma semilla, el mismo escenario da siempre el mismo resultado.',
+    confianza: 'Los resultados dan un intervalo de confianza del 95 %.',
+    etiquetas: {
+      sinDuracion: 'Sin duración',
+      sinRecurso: 'Sin recurso',
+      siempre: '24 h',
+      cada: (tiempo: string): string => `cada ${tiempo}`,
+    },
+    entradas: (n: number): string => `Entradas de este escenario (${n})`,
+    masAcciones: 'Más',
+  },
+
+  /* ------------------------------------------------------------------ *
    * Mapa de atajos (`atajos.ts`, #413): un rótulo por id de entrada y un título por grupo.
    * ------------------------------------------------------------------ */
   atajos: {
@@ -1605,11 +1798,15 @@ export const es: Strings = {
     'modo:modelar': 'Modelar',
     'modo:simular': 'Simular',
     'modo:resultados': 'Resultados',
-    'modo:comparar': 'Comparar',
-    'modo:animar': 'Animar',
-    'modo:rutas': 'Validar rutas',
     ejecutar: 'Ejecutar la simulación',
     cancelar: 'Cancelar la corrida',
+    'paso:arrivals': 'Paso 1: Llegadas',
+    'paso:times': 'Paso 2: Tiempos',
+    'paso:routes': 'Paso 3: Rutas',
+    'paso:resources': 'Paso 4: Recursos',
+    'paso:calendars': 'Paso 5: Calendarios',
+    'paso:run': 'Paso 6: Ejecución',
+    reproducir: 'Reproducir o pausar los tokens (Resultados)',
     zoomMas: 'Acercar',
     zoomMenos: 'Alejar',
     ajustarVista: 'Ajustar el diagrama',
@@ -1639,7 +1836,7 @@ export const es: Strings = {
     estado: 'Mostrar u ocultar la barra de estado',
     irModos: 'Llevar el foco a los modos',
     irPanel: 'Llevar el foco al panel derecho',
-    dock: 'Mostrar u ocultar el dock de simulación',
+    dock: 'Mostrar u ocultar la tabla de resultados',
   },
 
   /* ------------------------------------------------------------------ *
@@ -1714,5 +1911,188 @@ export const es: Strings = {
     cargando: 'Cargando examples/pedido…',
     tituloResultados: 'Lila Modeler · Resultados (demo LILA-062)',
     tituloComparar: 'Lila Modeler · Comparar (demo LILA-063)',
+  },
+  /* ------------------------------------------------------------------ *
+   * Lote M, workstream C5: resultados sobre el mapa, comparar dentro de Resultados, el desplegable
+   * de escenario que sustituye al raíl y la tabla de resultados que sustituye al dock.
+   * ------------------------------------------------------------------ */
+  c5: {
+    escenario: {
+      rotulo: 'Escenario',
+      base: 'Base',
+      titulo: 'Elegir, duplicar, renombrar o guardar el escenario',
+      lista: 'Escenarios del proceso',
+      simulado: 'Simulado',
+      sinSimular: 'Sin simular',
+      enVentana: 'En la ventana aparte',
+      hereda: (padre: string): string => `Hereda de ${padre}`,
+      heredaDe: 'Hereda de',
+      ninguno: 'Nada (escenario base)',
+      guardar: 'Guardar proyecto',
+      duplicar: 'Duplicar',
+      duplicarTitulo: 'Duplicar el escenario activo; la copia hereda de él y se puede renombrar al momento',
+      renombrar: 'Renombrar',
+      nombre: 'Nombre del escenario',
+      nombreAyuda: 'Enter conserva el nombre, Esc lo deja como estaba',
+      problemas: 'Problemas del escenario',
+    },
+    resultados: {
+      barra: 'Barra de resultados',
+      meta: (replicas: number, semilla: string, unidad: string): string => `${replicas} ${replicas === 1 ? 'réplica' : 'réplicas'} · semilla ${semilla} · unidad ${unidad}`,
+      capas: 'Capas sobre el mapa',
+      mapaCalor: 'Mapa de calor',
+      tokens: 'Tokens',
+      compararCon: 'Comparar con…',
+      compararTitulo: 'Comparar este escenario con otro; uno sin resultados se simula al elegirlo',
+      seSimulara: 'Sin simular · se simulará al elegirlo',
+      sinOtros: 'No hay otro escenario: duplica este primero.',
+      vacioKicker: 'Sin resultados',
+      vacioTitulo: (nombre: string): string => `Aún no has simulado «${nombre}»`,
+      vacioTexto: 'Pulsa Simular: el diagrama seguirá aquí y verás sobre él las esperas, los cuellos de botella y los casos moviéndose.',
+      simularAhora: 'Simular ahora',
+      corriendo: 'Simulando…',
+      errorKicker: 'La simulación se detuvo',
+      errorTitulo: (n: number): string => (n === 1 ? '1 problema por resolver' : `${n} problemas por resolver`),
+      irAlPrimero: 'Ir al primero',
+      reintentar: 'Reintentar',
+      resumen: 'Resumen',
+      kpis: {
+        ciclo: 'Tiempo de ciclo',
+        espera: 'Espera por caso',
+        completados: 'Casos completados',
+        costoCaso: 'Costo por caso',
+        utilMax: 'Utilización máx.',
+        enCurso: 'En curso al cierre',
+      },
+      kpiTitulos: {
+        ciclo: 'Tiempo medio desde la llegada hasta el fin, sobre todas las réplicas',
+        espera: 'Tiempo medio que un caso pasó esperando recursos',
+        completados: 'Casos que llegaron a un evento de fin, media de las réplicas',
+        costoCaso: 'Costo total dividido entre los casos completados',
+        utilMax: 'Utilización del recurso más ocupado',
+        enCurso: 'Casos que seguían en el proceso al terminar la corrida (en cola o en trabajo)',
+      },
+      ic95: (desde: string, hasta: string): string => `Intervalo de confianza del 95 % ${desde} – ${hasta}`,
+      cuellos: 'Cuellos de botella',
+      cuellosNota: 'El ranking del motor: espera total por recursos y, a igualdad, utilización.',
+      tarea: 'Tarea seleccionada',
+      sinSeleccion: 'Elige una tarea en el mapa o en la tabla para ver su detalle.',
+      casos: 'Casos',
+      proceso: 'Proceso medio',
+      espera: 'Espera media',
+      utilizacion: 'Utilización',
+      consejoCuello: 'Está en el ranking de cuellos del motor: más capacidad para su recurso, o menos trabajo dirigido a él, acorta la espera.',
+      consejoSinEspera: 'Apenas espera: su recurso no es lo que frena los casos.',
+      enVentana: 'Los resultados están en otra ventana.',
+    },
+    tabla: {
+      region: 'Tabla de resultados',
+      vistas: 'Vistas de la tabla de resultados',
+      titulo: 'Resultados por tarea',
+      sub: (replicas: number): string => `media de ${replicas} ${replicas === 1 ? 'réplica' : 'réplicas'} · duraciones en horas (minutos)`,
+      plegar: 'Plegar la tabla de resultados',
+      desplegar: 'Desplegar la tabla de resultados',
+      redimensionar: 'Cambiar el alto de la tabla de resultados',
+      pestanas: { tareas: 'Tareas', detalle: 'Resultados completos', log: 'Registro de la corrida', avisos: 'Avisos' },
+      columnas: {
+        tarea: 'Tarea',
+        recurso: 'Recurso',
+        casos: 'Casos',
+        proceso: 'Proceso medio',
+        espera: 'Espera media',
+        esperaP95: 'Espera p95',
+        utilizacion: 'Utilización',
+        costo: 'Costo total',
+      },
+      utilizacionTitulo: 'Utilización del recurso más ocupado que usa la tarea',
+      costoTitulo: 'El costo fijo de la tarea en la corrida; el de los recursos está en Resultados completos → Recursos',
+      p95Titulo: 'Percentil 95 de la espera por recurso, de la muestra del log de la corrida',
+      total: 'Total',
+      notaPercentiles: (filas: number): string => `Media: todas las réplicas. p95: réplica 1 de la muestra del log (${filas} filas), casos iniciados tras el calentamiento.`,
+      muestraParcial: (filas: number): string => `La espera es la media de todas las réplicas. No hay p95: la muestra del log se detuvo en ${filas} filas y solo cubriría los primeros casos.`,
+      notaSinLog: 'La espera es la media de todas las réplicas. No hay p95: esta corrida no tiene log en memoria (córrela otra vez para verlo).',
+      nadie: 'Nadie',
+      notaCosto: 'El costo total por tarea es el costo fijo de la propia tarea. Lo que cuestan los recursos está en Resultados completos → Recursos.',
+      exportarCsv: 'CSV',
+      exportarCsvTitulo: 'Descargar la tabla de elementos (elements.csv)',
+      exportarXlsx: 'XLSX',
+      exportarXlsxTitulo: 'Descargar el libro con todas las tablas',
+    },
+    tiempo: {
+      barra: 'Reproducción de tokens',
+      reproducir: 'Reproducir los tokens (Espacio)',
+      pausar: 'Pausar los tokens (Espacio)',
+      reiniciar: 'Volver al inicio',
+      velocidad: 'Velocidad',
+      posicion: 'Tiempo simulado',
+      leyenda: 'Color: la espera frente al tiempo de proceso de la propia tarea',
+      niveles: { low: 'poca espera', mid: 'comparable', high: 'espera más de lo que trabaja' },
+      truncadoCorto: (filas: number): string => `Reproducción parcial: primeras ${filas} filas del log`,
+      ocupacion: (recurso: string, ocupados: number, capacidad: number): string => `${recurso} ${ocupados}/${capacidad}`,
+    },
+    mapa: {
+      espera: (t: string): string => `Espera ${t}`,
+      esperaTitulo: (t: string): string => `Espera media por recurso ${t}`,
+      cuello: 'CUELLO',
+    },
+    comparar: {
+      comparando: 'Comparando',
+      intercambiar: 'Intercambiar lados',
+      elegir: 'Elegir escenario',
+      leyenda: 'verde = mejora · rojo = empeora · ▲▼ sube o baja',
+      cerrar: 'Cerrar comparación',
+      referencia: 'Referencia',
+      mapaDe: (nombre: string): string => `Mapa de ${nombre}`,
+      mapaSub: 'calor por espera',
+      mapaDeltaSub: 'diferencia de espera por tarea',
+      valorRef: (nombre: string, valor: string): string => `${nombre}: ${valor}`,
+      mejora: 'mejora',
+      empeora: 'empeora',
+      igual: 'sin cambio',
+      deltaTitulo: (t: string): string => `Espera media ${t} frente a la referencia`,
+      simulandoKicker: 'Simulando',
+      simulando: (nombre: string): string => `Simulando «${nombre}»…`,
+      simulandoTexto: 'Aún no tenía resultados; corre con su propia semilla y sus réplicas.',
+      canceladaKicker: 'Cancelada',
+      cancelada: (nombre: string): string => `Se canceló la corrida de «${nombre}»`,
+      canceladaTexto: 'La comparación espera a que la vuelvas a correr.',
+      errorKicker: 'No se pudo simular',
+      errorTitulo: (nombre: string): string => `«${nombre}» tiene problemas`,
+      corregir: 'Corregir en Simular',
+      elegirOtro: 'Elegir otro escenario',
+      vacioKicker: 'Comparar',
+      vacioTitulo: 'Necesitas un segundo escenario',
+      vacioTexto: 'Duplica este, cambia lo que quieras probar y compara los dos.',
+      duplicarComo: (nombre: string): string => `Duplicar ${nombre}`,
+      detalle: 'Tablas y gráficas de la comparación',
+      sinMapa: 'Los mapas no se pudieron dibujar aquí. Las tablas de abajo tienen todas las cifras.',
+    },
+    validarRutas: 'Validar rutas',
+    validarRutasTitulo: 'Recorrer las rutas con tokens (solo en Modelar; no es la simulación)',
+    problemasPendientes: (n: number): string => (n === 1 ? '1 problema impide simular' : `${n} problemas impiden simular`),
+    compararConEscenario: (nombre: string): string => `Comparar con ${nombre}`,
+  },
+  /** Lote M, C6: the Simulate sub-bar's steps and the Results summary's two extra figures. */
+  c6: {
+    pasosBarra: 'Pasos de la simulación',
+    throughput: 'Throughput',
+    throughputValor: (porHora: string): string => `${porHora} / h`,
+    throughputTitulo: 'Casos completados por hora simulada, media de las réplicas',
+    costoTotal: 'Costo total',
+    costoTotalTitulo: 'Lo que costó toda la corrida: recursos y costos fijos de cada caso, terminado o no',
+    pasoLienzo: (n: number): string => `Paso ${n}`,
+    pistasLienzo: {
+      arrivals: 'Elige el evento de inicio',
+      times: 'Elige una tarea para darle duración',
+      routes: 'Edita los % en las etiquetas de los flujos',
+      resources: 'Elige una tarea',
+      calendars: 'Elige una tarea para ver su horario',
+      run: 'Los parámetros de ejecución afectan a todo el escenario',
+    },
+  },
+  c7: {
+    pistaRecursosCarril: 'Elige una tarea o el nombre de un carril',
+    sinNombre: { 'bpmn:Participant': 'Pool sin nombre', 'bpmn:Lane': 'Carril sin nombre' },
+    finCorto: 'Fin',
   },
 };

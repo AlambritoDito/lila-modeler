@@ -247,4 +247,25 @@ describe('the palette Lane tool with nothing selected (#580)', () => {
     expect(lanesOf(m, 'Pool')).toHaveLength(3);
     expect(hecho).toHaveBeenCalledTimes(2);
   });
+
+  it('an Escape inside an open dialog (⌘K) is the dialog\'s, not the pick\'s (#581)', async () => {
+    const m = await montar(DOS_POOLS);
+    const hecho = vi.fn();
+    insertar(servicios(m), carril(), null, hecho);
+    const dialogo = document.createElement('dialog');
+    dialogo.setAttribute('open', '');
+    const campo = document.createElement('input');
+    dialogo.append(campo);
+    document.body.append(dialogo);
+    const oido = vi.fn();
+    dialogo.addEventListener('keydown', oido);
+    const e = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    campo.dispatchEvent(e);
+    expect(oido).toHaveBeenCalledOnce();
+    expect(e.defaultPrevented).toBe(false);
+    expect(m.carriles.eligiendo()).toBe(true);
+    dialogo.remove();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(m.carriles.eligiendo()).toBe(false);
+  });
 });

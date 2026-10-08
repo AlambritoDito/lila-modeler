@@ -172,6 +172,9 @@ export type Repeticion =
   | { tipo: 'anual'; mes: number; dia: number };
 
 export const TIPOS_REPETICION = ['semanal', 'diaDelMes', 'diaSemanaDelMes', 'anual'] as const;
+export type TipoRepeticion = (typeof TIPOS_REPETICION)[number];
+/** The repetitions that are not weekly: the «Repetitions» tab of the calendar manager. */
+export const TIPOS_REPETICION_FECHA = ['diaDelMes', 'diaSemanaDelMes', 'anual'] as const satisfies readonly TipoRepeticion[];
 
 /** Days of each month in a leap year: the yearly date `02-29` exists, `02-30` does not (§ 2.3). */
 const DIAS_POR_MES = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const;
@@ -299,12 +302,16 @@ export function resumenDias(days: readonly string[], nombres: Readonly<Record<Di
 function Franjas({
   intervals,
   onCambio,
+  tipos = TIPOS_REPETICION,
 }: {
   intervals: readonly Intervalo[];
   onCambio: (intervals: Intervalo[]) => void;
+  /** The repetitions offered (Lote M: weekly in «Week», the rest in «Repetitions»). */
+  tipos?: readonly TipoRepeticion[];
 }): React.JSX.Element {
   const S = useStrings();
-  const [tipo, setTipo] = useState<(typeof TIPOS_REPETICION)[number]>('semanal');
+  const [tipoElegido, setTipo] = useState<TipoRepeticion>(tipos[0] ?? 'semanal');
+  const tipo = tipos.includes(tipoElegido) ? tipoElegido : (tipos[0] ?? 'semanal');
   const [dias, setDias] = useState<ReadonlySet<Dia>>(new Set(PRESETS.laborables));
   const [diaDelMes, setDiaDelMes] = useState(1);
   const [nth, setNth] = useState(1);
@@ -352,21 +359,23 @@ function Franjas({
   return (
     <div className="franjas" role="group" aria-label={S.calendario.nuevaFranja}>
       <div className="franjas-repeticion">
-        <label>
-          {S.calendario.repeticion}
-          <select
-            value={tipo}
-            onChange={(e) => {
-              setTipo(e.target.value as (typeof TIPOS_REPETICION)[number]);
-            }}
-          >
-            {TIPOS_REPETICION.map((t) => (
-              <option key={t} value={t}>
-                {S.calendario.repeticiones[t]}
-              </option>
-            ))}
-          </select>
-        </label>
+        {tipos.length > 1 && (
+          <label>
+            {S.calendario.repeticion}
+            <select
+              value={tipo}
+              onChange={(e) => {
+                setTipo(e.target.value as TipoRepeticion);
+              }}
+            >
+              {tipos.map((t) => (
+                <option key={t} value={t}>
+                  {S.calendario.repeticiones[t]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {tipo === 'diaDelMes' &&
           numeros(S.calendario.diaDelMes, diaDelMes, [...unoA(31), [-1, S.calendario.ultimoDia]], setDiaDelMes)}
         {tipo === 'diaSemanaDelMes' && (
@@ -492,17 +501,21 @@ function Franjas({
 function ListaFranjas({
   intervals,
   onCambio,
+  filtro,
 }: {
   intervals: readonly Intervalo[];
   onCambio: (intervals: Intervalo[]) => void;
+  /** Only the entries this keeps are listed; removing still splices the whole array by index. */
+  filtro?: ((intervalo: Intervalo) => boolean) | undefined;
 }): React.JSX.Element | null {
   const S = useStrings();
-  if (intervals.length === 0) return null;
+  const visibles = intervals.map((intervalo, k) => [intervalo, k] as const).filter(([iv]) => filtro?.(iv) ?? true);
+  if (visibles.length === 0) return null;
   const rotulo = (intervalo: Intervalo): string =>
     S.calendario.franja(resumenSelector(intervalo, S.calendario), String(intervalo.from), String(intervalo.to));
   return (
     <ul className="franjas-lista" aria-label={S.calendario.lista}>
-      {intervals.map((intervalo, k) => (
+      {visibles.map(([intervalo, k]) => (
         // ponytail: index keys. The list is re-derived from the file on every change and has no
         // per-row state; stable ids would need a field the format does not have.
         <li key={k}>
@@ -535,14 +548,34 @@ export function CalendarEditor({
   intervals,
   onCambio,
   rejilla = true,
+  vista = 'todo',
 }: {
   intervals: readonly Intervalo[];
   onCambio: (intervals: Intervalo[]) => void;
   /** `false` hides the grid (the panel's «Edit as list»); minute slots hide it regardless. */
   rejilla?: boolean;
+  /**
+   * Lote M (C3): `semana` is the weekly picker, the grid and the weekly entries; `repeticiones`
+   * the monthly/yearly picker and those entries, without grid. `todo` is the editor as it was.
+   */
+  vista?: 'todo' | 'semana' | 'repeticiones';
 }): React.JSX.Element {
   const S = useStrings();
   const celdas = aCeldas(intervals);
+  /**
+   * Roving focus of the grid (Lote M): one cell is in the tab order and the arrows move it, so the
+   * grid is one Tab stop instead of 168. `null` until the person moves: then the first open hour,
+   * or Monday 09:00 in an empty week.
+   */
+  const [foco, setFoco] = useState<number | null>(null);
+  const primeraAbierta = [...celdas].sort((a, b) => a - b)[0];
+  const activa = foco ?? primeraAbierta ?? celda(0, 9);
+  const caja = useRef<HTMLDivElement>(null);
+  const tipos = vista === 'semana' ? (['semanal'] as const) : vista === 'repeticiones' ? TIPOS_REPETICION_FECHA : TIPOS_REPETICION;
+  const filtro =
+    vista === 'todo'
+      ? undefined
+      : (iv: Intervalo): boolean => (vista === 'semana') === (iv.monthDays === undefined && iv.monthWeekdays === undefined && iv.dates === undefined);
   /** Sentido del trazo en curso: `true` abre, `false` cierra, `null` no hay trazo. */
   const sentido = useRef<boolean | null>(null);
   /**
@@ -569,9 +602,10 @@ export function CalendarEditor({
 
   return (
     <div className="editor-calendario">
-      <Franjas intervals={intervals} onCambio={onCambio} />
-      {rejilla && !tieneMinutos(intervals) && (
+      <Franjas intervals={intervals} onCambio={onCambio} tipos={tipos} />
+      {rejilla && vista !== 'repeticiones' && !tieneMinutos(intervals) && (
         <div
+          ref={caja}
           className="calendario"
           role="group"
           aria-label={S.calendario.rejilla}
@@ -583,13 +617,17 @@ export function CalendarEditor({
           onPointerLeave={() => {
             sentido.current = null;
             trazo.current = null;
-            origen.current = null;
+            // A keyboard session (focus inside the grid) keeps its origin when the mouse leaves.
+            if (!(caja.current?.contains(document.activeElement) ?? false)) origen.current = null;
+          }}
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) origen.current = null;
           }}
         >
           <span />
           {HORAS.filter((hora) => hora % 3 === 0).map((hora) => (
-            // Un rótulo cada tres horas, ocupando las tres columnas: con 24 columnas de 8 px una cifra
-            // de dos dígitos no cabe en la suya y se pisaría con la siguiente.
+            // Un rótulo cada tres horas, ocupando tres filas (C6: las horas son filas, los días
+            // columnas, como en el diseño): una cifra por hora no cabría en filas de 9 px.
             <span key={hora} className="rotulo tramo">
               {hora}
             </span>
@@ -606,7 +644,9 @@ export function CalendarEditor({
                     type="button"
                     className={abierta ? 'hora abierta' : 'hora'}
                     aria-pressed={abierta}
-                    aria-label={S.calendario.celda(nombre, hhmm(hora))}
+                    data-celda={id}
+                    tabIndex={id === activa ? 0 : -1}
+                    aria-label={S.calendario.celda(S.calendario.diasLargos[nombre], hhmm(hora))}
                     onPointerDown={() => {
                       sentido.current = !abierta;
                       trazo.current = new Set(celdas);
@@ -616,13 +656,28 @@ export function CalendarEditor({
                     onPointerEnter={(e) => {
                       if (e.buttons === 1 && sentido.current !== null) aplicar(id, sentido.current);
                     }}
+                    onFocus={() => {
+                      if (foco !== id) setFoco(id);
+                    }}
                     onKeyDown={(e) => {
                       // El teclado no dispara `pointerdown`; sin esto la rejilla solo sería usable
                       // con ratón. `click` no vale: ya lo emite el `pointerdown` de arriba.
+                      // A keyboard session is one stroke while the focus stays in the grid, so
+                      // Space then Shift+→→ writes «Sat 09–12», not three one-hour entries.
+                      origen.current ??= intervals;
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
                         aplicar(id, !abierta);
+                        return;
                       }
+                      const destino = celdaVecina(dia, hora, e.key);
+                      if (destino === null) return;
+                      e.preventDefault();
+                      // Shift+arrow paints: the next cell takes this cell's state, so holding
+                      // Shift drags an open (or closed) stretch along the row or the column.
+                      if (e.shiftKey) aplicar(destino, abierta);
+                      setFoco(destino);
+                      caja.current?.querySelector<HTMLButtonElement>(`[data-celda="${destino}"]`)?.focus();
                     }}
                   />
                 );
@@ -631,9 +686,33 @@ export function CalendarEditor({
           ))}
         </div>
       )}
-      <ListaFranjas intervals={intervals} onCambio={onCambio} />
+      <ListaFranjas intervals={intervals} onCambio={onCambio} filtro={filtro} />
     </div>
   );
+}
+
+/**
+ * The cell an arrow key moves to, or `null` for any other key. The grid is a week with the days
+ * as columns and the hours as rows (design 1a/1b, C6): ↑/↓ by hour, ←/→ by day, Home/End to the
+ * ends of the day. It stops at the edges instead of wrapping, as a spreadsheet does.
+ */
+export function celdaVecina(dia: number, hora: number, tecla: string): number | null {
+  switch (tecla) {
+    case 'ArrowUp':
+      return celda(dia, Math.max(0, hora - 1));
+    case 'ArrowDown':
+      return celda(dia, Math.min(23, hora + 1));
+    case 'ArrowLeft':
+      return celda(Math.max(0, dia - 1), hora);
+    case 'ArrowRight':
+      return celda(Math.min(DIAS.length - 1, dia + 1), hora);
+    case 'Home':
+      return celda(dia, 0);
+    case 'End':
+      return celda(dia, 23);
+    default:
+      return null;
+  }
 }
 
 /* ------------------------------------------------------------------ *

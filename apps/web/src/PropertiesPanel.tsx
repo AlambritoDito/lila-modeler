@@ -316,7 +316,7 @@ interface Props {
    */
   simulacion?: {
     datos: (id: string) => VistaRapidaDatos | null;
-    onEditar: (paso: 'parameters' | 'resources') => void;
+    onEditar: (paso: 'times' | 'resources' | 'routes') => void;
   };
 }
 
@@ -502,10 +502,22 @@ function CabeceraElemento({ elemento, avanzado, simulacion }: {
  */
 function VistaRapida({ datos, onEditar }: {
   datos: VistaRapidaDatos;
-  onEditar: (paso: 'parameters' | 'resources') => void;
+  onEditar: (paso: 'times' | 'resources' | 'routes') => void;
 }): React.JSX.Element {
   const S = useStrings();
   const P = S.propiedades;
+  if (datos.rutas !== undefined) {
+    const R = S.rutas;
+    return (
+      <section className="propiedades-seccion vista-rapida" aria-label={R.propiedadesTitulo}>
+        <h3>{R.propiedadesTitulo}</h3>
+        <p className={datos.rutas.cuadra ? 'vista-rapida-rutas' : 'vista-rapida-rutas error'}>{datos.rutas.resumen}</p>
+        <div className="vista-rapida-enlaces">
+          <button type="button" className="enlace" onClick={() => { onEditar('routes'); }}>{R.editarReparto}</button>
+        </div>
+      </section>
+    );
+  }
   return (
     <section className="propiedades-seccion vista-rapida" aria-label={P.vistaRapida}>
       <h3>{P.vistaRapida}</h3>
@@ -516,7 +528,7 @@ function VistaRapida({ datos, onEditar }: {
         valor={datos.espera === null ? P.vistaSinCorrida : datos.espera.texto}
       />
       <div className="vista-rapida-enlaces">
-        <button type="button" className="enlace" onClick={() => { onEditar('parameters'); }}>{P.editarEnParametros}</button>
+        <button type="button" className="enlace" onClick={() => { onEditar('times'); }}>{P.editarEnTiempos}</button>
         {datos.recurso !== null && (
           <button type="button" className="enlace" onClick={() => { onEditar('resources'); }}>{P.editarEnRecursos}</button>
         )}

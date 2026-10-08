@@ -13,16 +13,16 @@ processes, but there is no shared multi-user repository. Bizagi Modeler is cited
 reference and inspiration this project learned the workflow from, and as the source of the public
 examples the engine is validated against.
 
-## The four levels, as four steps
+## The four levels, as six steps
 
 Bizagi teaches simulation as four levels, each adding one kind of parameter. Lila's **Simulate**
-view has four steps too, named after what each one edits: **Parameters**, **Resources**,
-**Calendars** and **Arrivals**. Every Bizagi level maps onto them like this:
+view has six steps, named after what each one edits: **Arrivals**, **Times**, **Routes**,
+**Resources**, **Calendars** and **Run**. Every Bizagi level maps onto them like this:
 
 | Bizagi level | Lila step | What you fill in |
 |---|---|---|
-| Process validation | Parameters (run window, gateway percentages) and Arrivals (max arrival count) | Run start, duration, replications, seed; gateway percentages; max arrival count; model validation |
-| Time analysis | Parameters (processing time) and Arrivals (interval between arrivals) | Processing time per task and timer; interval between arrivals per start event; constant or distribution |
+| Process validation | Run (run window), Routes (gateway percentages) and Arrivals (max arrival count) | Run start, duration, replications, seed; gateway percentages; max arrival count; model validation |
+| Time analysis | Times (processing time) and Arrivals (interval between arrivals) | Processing time per task and timer; interval between arrivals per start event; constant or distribution |
 | Resource analysis | Resources | Resource pools, availability, costs, and which task uses which pool |
 | Calendar analysis | Calendars (the calendars and which element follows which) and Resources (a pool's calendar and capacity per shift, on the pool) | Calendars as day presets + from–to ranges and a weekly grid, resource × calendar, capacity per shift |
 
@@ -33,27 +33,28 @@ Two things work differently from Bizagi, and both in your favour:
   a pool with no calendar is available 24×7. You can fill in Resources and leave Calendars empty
   forever.
 - **Steps are a reading order, not a wizard.** Everything is one scenario document; you can go
-  back to Parameters after Calendars without redoing anything, and the validation list at the
+  back to Times after Calendars without redoing anything, and the validation list at the
   bottom of the panel is live in every step.
 
-The four steps are a bar at the top of the Simulate panel. It opens on **Parameters**, the step
+The six steps are a bar across the window, right under the top bar, next to **Scenario ▾** (in the
+detached panel window, a compact bar at its top). It opens on **Times**, the step
 you are on survives picking elements on the canvas and running the simulation, and two things are
 there in every step: the validation list and **Advanced: scenario JSON**, which is where the
 scenario `name`, its `description` and anything the form does not draw are edited.
 
-Parameters, Resources and Arrivals also list the elements they are about — every task and timer
-with its time, every task with the pool it takes, every start event with how often and how many
-cases it creates — so “what is still missing” is one look and not a tour of the diagram; clicking a
+Arrivals, Times, Routes and Resources also list the elements they are about — every start event
+with how often and how many cases it creates, every task and timer with its time, every gateway
+with its split, every task with the pool it takes — so “what is still missing” is one look and not a tour of the diagram; clicking a
 row selects that element on the canvas. Every control lives in exactly one step: the resource pools
 (their calendar and capacity per shift included) are edited in Resources, and Calendars says so.
 
 With an activity selected in **Model**, the properties panel shows a **Quick view · simulation**
 block: its time distribution and resource in the active scenario, and its wait in the last run (or
-*no run*). The wait is the wait for a resource — the same measure as the canvas labels, the Simulate
-dock and the Results «waiting for resource» columns. It is the **p95** of the cases measured after the warmup in the first replication,
+*no run*). The wait is the wait for a resource — the same measure as the canvas labels, the Results
+table and its «waiting for resource» columns. It is the **p95** of the cases measured after the warmup in the first replication,
 when that run's event-log sample is complete; a longer run (more than 10,000 log rows in its first
 replication) shows the **mean** resource wait over every replication instead, and says so. Its **Edit in
-Parameters** / **Edit in Resources** links open that step in Simulate.
+Times** / **Edit in Resources** links open that step in Simulate.
 
 ## Screen by screen
 
@@ -66,10 +67,10 @@ this section is the screen-level version of it.
 | Bizagi | Lila |
 |---|---|
 | Scenario name, Description | `name` / `description`, in **Advanced: scenario JSON** (the name is the panel's heading) |
-| Start date | Parameters, `run.start` (ISO 8601 **with offset**) |
-| Duration | Parameters, `run.duration`; may be left empty, then the run ends when the last case drains |
-| Base time unit, Currency | Parameters, `run.baseTimeUnit`, `run.currency` |
-| Replications (what-if only) | Parameters, `run.replications` — available in every run, not only in a comparison |
+| Start date | Run, `run.start` (ISO 8601 **with offset**) |
+| Duration | Run, `run.duration`; may be left empty, then the run ends when the last case drains |
+| Base time unit, Currency | Run, `run.baseTimeUnit`, `run.currency` |
+| Replications (what-if only) | Run, `run.replications` — available in every run, not only in a comparison |
 | — | `run.seed` and `run.warmup`, which Bizagi does not expose |
 
 ### Arrivals
@@ -161,16 +162,16 @@ the table stays the reference.
 
 | Bizagi | Lila |
 |---|---|
-| What-if analysis *(Bizagi's name may differ by version)* | **Compare** mode, or `lila compare`: scenarios side by side, differences marked, 95 % confidence intervals when replications ≥ 2, and bar charts of average cycle time, cost per case and utilization with each scenario's delta against the base |
+| What-if analysis *(Bizagi's name may differ by version)* | **Compare with…** in Results, or `lila compare`: scenarios side by side, differences marked, 95 % confidence intervals when replications ≥ 2, and bar charts of average cycle time, cost per case and utilization with each scenario's delta against the base |
 | Export results to Excel *(Bizagi's name may differ by version)* | CSV per table and a single `.xlsx` (`--csv`, `--xlsx`, or the export buttons in Results) |
 | Publish to Word / Web | File → Export process document (Word or HTML): cover, diagram, process description, one section per element in flow order grouped by lane, then the scenario and the results tables, with the charts of the run. No templates or table of contents field; Word's navigation pane lists the headings |
-| Watch the tokens move | **Animate**: Play from Results replays replication 1 of the stored run over the diagram, with per-element counters coming from the engine's own event log — not from a toy walker. The separate **Validate paths** mode is the didactic bpmn-js animation and reads no scenario at all |
+| Watch the tokens move | **Tokens** on the Results map (`Space` or ▶) replay replication 1 of the stored run over the diagram, with per-element counters coming from the engine's own event log — not from a toy walker. **Validate paths**, a Model tool, is the didactic bpmn-js animation and reads no scenario at all |
 
 ## Three differences you will feel
 
 **1. Your Bizagi `.bpmn` brings the drawing, not the numbers.** Bizagi Modeler does not export
 simulation parameters: verified on five real files, only colours travel in the `bizagi:` namespace.
-So importing works, and then the four steps are re-entered here once. Budget a few minutes for
+So importing works, and then the Simulate steps are re-entered here once. Budget a few minutes for
 it, and use the lane-to-pool action to make Resources nearly free.
 
 **2. Shared paths are duplicated, because branching is probabilistic.** There is no routing on case
@@ -211,9 +212,9 @@ app) the example is opened as a diagram plus a pasted scenario, because a `.lila
 needs a manifest that the repository does not ship for this example:
 
 1. File → **Import BPMN…**, pick `examples/bizagi-levels/level-3/model.bpmn`.
-2. Go to **Simulate**, open **Advanced: scenario JSON** at the bottom of Parameters, replace its text
+2. Go to **Simulate**, open **Advanced: scenario JSON** at the bottom of the panel, replace its text
    with the contents of `examples/bizagi-levels/level-3/scenario.json`, and press **Apply**.
-3. Set Replications to 30 in Parameters and press **Run simulation**.
+3. Set Replications to 30 in Run and press **Run simulation**.
 
 The same run from the CLI, from the repository root:
 

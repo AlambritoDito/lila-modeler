@@ -1,5 +1,7 @@
 /**
- * Controls of the replay (#331): the right panel of the «Animate» mode. It owns the clock — a
+ * Controls of the replay (#331): since Lote M the time bar over the Results map — the tokens play
+ * on the same canvas as the heat map, and Space plays or pauses them (`reproduciendo` is then held
+ * by the shell). It owns the clock — a
  * `requestAnimationFrame` loop over a `useRef`, not React state — and hands every frame to
  * `Modelador.replay(...)`, which is what paints the counters and the dots on the diagram.
  *
@@ -27,6 +29,11 @@ export interface ReplayProps {
   originalIds: Readonly<Record<string, string>>;
   /** Why there is nothing to animate, already translated; ignored when `replay` is not `null`. */
   motivo: string;
+  /** Held by the shell (Space in Results); without it the bar keeps its own. */
+  reproduciendo?: boolean | undefined;
+  onReproducir?: ((reproduciendo: boolean) => void) | undefined;
+  /** Shown at the end of the bar: the heat map's legend. */
+  leyenda?: React.ReactNode;
 }
 
 /** `hh:mm:ss` of a duration in seconds, plus the 1-based day it falls on. */
@@ -38,10 +45,13 @@ function reloj(segundos: number): { dia: number; hora: string } {
   return { dia, hora: `${dos(Math.floor(resto / 3_600))}:${dos(Math.floor((resto % 3_600) / 60))}:${dos(resto % 60)}` };
 }
 
-export function Replay({ modelador, replay, originalIds, motivo }: ReplayProps): React.JSX.Element {
+export function Replay({ modelador, replay, originalIds, motivo, leyenda, ...control }: ReplayProps): React.JSX.Element {
   const S = useStrings();
-  const [reproduciendo, setReproduciendo] = useState(false);
-  const [velocidad, setVelocidad] = useState<Velocidad>('60');
+  const [propio, setPropio] = useState(false);
+  const reproduciendo = control.reproduciendo ?? propio;
+  const onReproducir = control.onReproducir;
+  const setReproduciendo = (valor: boolean): void => { setPropio(valor); onReproducir?.(valor); };
+  const [velocidad, setVelocidad] = useState<Velocidad>('600');
   // Forces a render of the panel at ~10 Hz; the clock itself lives in `t`, not in React state.
   const [, setTick] = useState(0);
   const t = useRef(0);
@@ -53,7 +63,12 @@ export function Replay({ modelador, replay, originalIds, motivo }: ReplayProps):
   useEffect(() => {
     t.current = 0;
     setReproduciendo(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [replay]);
+  // Played from outside (Space) at the end: start over instead of doing nothing.
+  useEffect(() => {
+    if (replay !== null && reproduciendo && t.current >= replay.horizon) t.current = 0;
+  }, [reproduciendo, replay]);
 
   /**
    * One frame, painted from `t` as it is right now. It runs after EVERY render — which covers
@@ -80,8 +95,11 @@ export function Replay({ modelador, replay, originalIds, motivo }: ReplayProps):
     const paso = (ahora: number): void => {
       const dt = (ahora - anterior) / 1000;
       anterior = ahora;
-      const factor = velocidadRef.current === 'instantanea' ? Infinity : Number(velocidadRef.current);
-      t.current = Math.min(replay.horizon, t.current + dt * factor);
+      // «Instant» while playing jumps to the end. It used to be `dt * Infinity`: NaN on a frame with
+      // dt 0 and -Infinity when the frame's timestamp precedes the `performance.now()` above, which
+      // left «Invalid Date» on the clock and the bar stuck on Pause (QA of #615). Never backwards.
+      const avance = velocidadRef.current === 'instantanea' ? replay.horizon : Math.max(0, dt) * Number(velocidadRef.current);
+      t.current = Math.min(replay.horizon, t.current + avance);
       pintarRef.current();
       if (ahora - ultimoRender >= 100) { ultimoRender = ahora; setTick((n) => n + 1); }
       if (t.current >= replay.horizon) { setReproduciendo(false); return; }
@@ -96,12 +114,10 @@ export function Replay({ modelador, replay, originalIds, motivo }: ReplayProps):
 
   if (replay === null) {
     return (
-      <div className="replay">
-        <h3>{S.animacion.titulo}</h3>
+      <div className="replay c5-tiempo" role="group" aria-label={S.c5.tiempo.barra}>
+        <button type="button" className="boton primario c5-play" disabled title={motivo}>{S.animacion.reproducir}</button>
         <p className="vacio">{motivo}</p>
-        <div className="acciones">
-          <button type="button" className="boton primario" disabled>{S.animacion.reproducir}</button>
-        </div>
+        {leyenda}
       </div>
     );
   }
@@ -115,28 +131,27 @@ export function Replay({ modelador, replay, originalIds, motivo }: ReplayProps):
     : new Date(replay.startMs + ahora * 1000).toLocaleString(getLocale(), {
         day: '2-digit', hour: '2-digit', minute: '2-digit', month: '2-digit', year: 'numeric',
       });
+  const textoReloj = fecha === null ? S.animacion.relojSinFecha(dia, hora) : S.animacion.reloj(fecha);
 
   return (
-    <div className="replay" data-replay-progress={porcentaje}>
-      <h3>{S.animacion.titulo}</h3>
-      <div className="acciones">
-        <button
-          type="button"
-          className="boton primario"
-          onClick={() => {
-            // Replaying from the end starts over instead of doing nothing.
-            if (!reproduciendo && t.current >= replay.horizon) t.current = 0;
-            setReproduciendo(!reproduciendo);
-          }}
-        >
-          {reproduciendo ? S.animacion.pausar : S.animacion.reproducir}
-        </button>
-        <button type="button" className="boton" onClick={() => { t.current = 0; setReproduciendo(false); setTick((n) => n + 1); }}>
-          {S.animacion.reiniciar}
-        </button>
-      </div>
-      <label className="campo">
-        {S.animacion.velocidad}
+    <div className="replay c5-tiempo" role="group" aria-label={S.c5.tiempo.barra} data-replay-progress={porcentaje}>
+      <button
+        type="button"
+        className={reproduciendo ? 'boton primario c5-play pausa' : 'boton primario c5-play'}
+        title={reproduciendo ? S.c5.tiempo.pausar : S.c5.tiempo.reproducir}
+        onClick={() => {
+          // Replaying from the end starts over instead of doing nothing.
+          if (!reproduciendo && t.current >= replay.horizon) t.current = 0;
+          setReproduciendo(!reproduciendo);
+        }}
+      >
+        {reproduciendo ? S.animacion.pausar : S.animacion.reproducir}
+      </button>
+      <button type="button" className="boton" title={S.c5.tiempo.reiniciar} onClick={() => { t.current = 0; setReproduciendo(false); setTick((n) => n + 1); }}>
+        {S.animacion.reiniciar}
+      </button>
+      <label className="c5-velocidad">
+        <span className="c5-rotulo">{S.animacion.velocidad}</span>
         <select
           value={velocidad}
           onChange={(e) => {
@@ -149,34 +164,28 @@ export function Replay({ modelador, replay, originalIds, motivo }: ReplayProps):
           {VELOCIDADES.map((v) => <option key={v} value={v}>{S.animacion.velocidades[v]}</option>)}
         </select>
       </label>
-      <p className="vacio">
-        {fecha === null ? S.animacion.relojSinFecha(dia, hora) : S.animacion.reloj(fecha)}
-      </p>
-      <p className="vacio">{S.animacion.progreso(porcentaje)}</p>
-      {ahora >= replay.horizon && <p className="vacio">{S.animacion.fin}</p>}
-      {Object.keys(estado.pools).length > 0 && <>
-        <h3>{S.animacion.recursos}</h3>
-        <table className="replay-recursos">
-          <thead>
-            <tr>
-              <th>{S.animacion.columnaRecurso}</th>
-              <th>{S.animacion.columnaOcupados}</th>
-              <th>{S.animacion.columnaCapacidad}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {Object.entries(estado.pools).map(([id, pool]) => (
-              <tr key={id} data-pool={id}>
-                <td>{id}</td>
-                <td data-busy={pool.busy}>{pool.busy}</td>
-                <td>{pool.capacity}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </>}
-      {replay.replications > 1 && <p className="vacio">{S.animacion.replicacion(replay.replications)}</p>}
-      {replay.truncated && <p role="alert" className="aviso">{S.animacion.truncado(replay.rows)}</p>}
+      <input type="range" className="c5-deslizador" min={0} max={1000} step={1} aria-label={S.c5.tiempo.posicion}
+        aria-valuetext={textoReloj} value={replay.horizon === 0 ? 1000 : Math.round((ahora / replay.horizon) * 1000)}
+        onChange={(e) => { t.current = (Number(e.target.value) / 1000) * replay.horizon; setTick((n) => n + 1); }} />
+      <span className="c5-reloj mono" title={S.animacion.progreso(porcentaje)}>{textoReloj}</span>
+      {/* C7 (QA of #615): one word on the bar, so the clock keeps its room at 1280 px; the sentence
+          stays in the title and for screen readers. */}
+      {ahora >= replay.horizon && (
+        <span className="vacio c5-fin" title={S.animacion.fin}>
+          <span aria-hidden="true">{S.c7.finCorto}</span>
+          <span className="rec-oculto">{S.animacion.fin}</span>
+        </span>
+      )}
+      {Object.keys(estado.pools).length > 0 && (
+        <span className="c5-ocupacion" title={S.animacion.recursos}>
+          {Object.entries(estado.pools).map(([id, pool]) => (
+            <span key={id} data-pool={id} data-busy={pool.busy} className="c5-pool">{S.c5.tiempo.ocupacion(id, pool.busy, pool.capacity)}</span>
+          ))}
+        </span>
+      )}
+      {replay.replications > 1 && <span className="vacio c5-replica" title={S.animacion.replicacion(replay.replications)}>{`1/${replay.replications}`}</span>}
+      {replay.truncated && <span role="note" className="aviso" title={S.animacion.truncado(replay.rows)}>{S.c5.tiempo.truncadoCorto(replay.rows)}</span>}
+      {leyenda}
     </div>
   );
 }

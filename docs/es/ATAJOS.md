@@ -33,14 +33,16 @@ hay un diálogo abierto (Ajustes, una confirmación).
 | Modelar ¹ | `⌘1` | `Ctrl+1` |
 | Simular ¹ | `⌘2` | `Ctrl+2` |
 | Resultados ¹ | `⌘3` | `Ctrl+3` |
-| Comparar ¹ | `⌘4` | `Ctrl+4` |
-| Animar ¹ | `⌘5` | `Ctrl+5` |
-| Validar rutas ¹ | `⌘6` | `Ctrl+6` |
 
 Las teclas numéricas se leen por posición, así que funcionan con cualquier distribución de teclado.
 Cambiar de modo con el teclado es cosa de la app de escritorio: en un navegador estas teclas cambian
 de pestaña del navegador, así que la app web no las toca; haz clic en la pestaña del modo o usa la
 paleta de comandos (`⌘K`).
+
+Hay tres modos. Comparar escenarios y reproducir los tokens viven en Resultados: «Comparar con…» en
+su barra, y los tokens se mueven sobre el mismo mapa que el mapa de calor. Validar rutas (el
+recorrido de tokens que comprueba las rutas, no la simulación) es una herramienta de Modelar: el
+botón sobre el lienzo, o «Validar rutas» en `⌘K`.
 
 ## Simulación
 
@@ -48,6 +50,16 @@ paleta de comandos (`⌘K`).
 | --- | --- | --- |
 | Ejecutar la simulación | `⌘↩` | `Ctrl+Enter` |
 | Cancelar la corrida (solo mientras corre) | `Esc` | `Esc` |
+| Panel de Simular: abrir el paso 1–6 (Llegadas, Tiempos, Rutas, Recursos, Calendarios, Ejecución) | `⌥1` `⌥2` `⌥3` `⌥4` `⌥5` `⌥6` | `Alt+1` `Alt+2` `Alt+3` `Alt+4` `Alt+5` `Alt+6` |
+| Panel de Simular: quitar la selección (sin corrida en curso) | `Esc` | `Esc` |
+| Reproducir o pausar los tokens (solo en Resultados) | `Space` | `Space` |
+
+En Simular, `←`/`→` recorren las pestañas de los pasos de la barra bajo la barra superior cuando una de ellas tiene el
+foco (`Inicio`/`Fin` saltan a la primera y a la última), y `Alt+1…6` funcionan también en la ventana desacoplada, y desde Modelar o Resultados —o desde la ventana principal con el panel desacoplado— pasan a Simular en ese paso; ni ellos ni `Esc` actúan mientras escribes en un campo. «▶ Simular» (el de la barra superior, el de la ventana desacoplada del panel, el del último paso y `⌘↩`) te lleva al
+primer error en vez de correr mientras el escenario tenga alguno —el botón de la barra dice cuántos—; los avisos («! n» en un paso) no lo detienen.
+
+`Space` (la barra espaciadora) no hace nada mientras escribes en un campo ni cuando un botón tiene
+el foco (ahí pulsa el botón).
 
 ## Lienzo
 
@@ -96,7 +108,7 @@ La paleta de figuras de la izquierda filtra al teclear e inserta la figura resal
 | Mostrar u ocultar el panel derecho | `⇧⌘P` | `Ctrl+Shift+P` |
 | Mostrar u ocultar las pestañas de diagramas | `⇧⌘D` | `Ctrl+Shift+D` |
 | Mostrar u ocultar la barra de estado | `⇧⌘B` | `Ctrl+Shift+B` |
-| Mostrar u ocultar el dock de simulación (Simular) | `⌘J` | `Ctrl+J` |
+| Mostrar u ocultar la tabla de resultados (Resultados) | `⌘J` | `Ctrl+J` |
 | Llevar el foco a los modos | `F6` | `F6` |
 | Llevar el foco al panel derecho | `⇧F6` | `Shift+F6` |
 
@@ -106,7 +118,7 @@ La paleta de figuras de la izquierda filtra al teclear e inserta la figura resal
 
 ¹ Solo en la app de escritorio. En un navegador, `⌘N`/`Ctrl+N` (ventana nueva) y `⌘,` (ajustes del
 navegador) se los queda el navegador antes de que la página los vea, y la app web no escucha
-`⌘1`…`⌘6`/`Ctrl+1`…`Ctrl+6` para que sigan cambiando de pestaña del navegador: usa los botones de
+`⌘1`…`⌘3`/`Ctrl+1`…`Ctrl+3` para que sigan cambiando de pestaña del navegador: usa los botones de
 la barra, las pestañas de modo o `⌘K`. En la app de escritorio,
 los menús Archivo, Vista y Simulación enseñan estos atajos junto a cada entrada.
 

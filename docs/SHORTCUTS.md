@@ -32,13 +32,15 @@ and, apart from the desktop app's File menu, no shortcut reaches the app while a
 | Model ¹ | `⌘1` | `Ctrl+1` |
 | Simulate ¹ | `⌘2` | `Ctrl+2` |
 | Results ¹ | `⌘3` | `Ctrl+3` |
-| Compare ¹ | `⌘4` | `Ctrl+4` |
-| Animate ¹ | `⌘5` | `Ctrl+5` |
-| Validate paths ¹ | `⌘6` | `Ctrl+6` |
 
 The number keys are read by position, so they work on any keyboard layout. Switching modes
 from the keyboard is a desktop-app feature: in a browser these keys switch the browser's tabs, so
 the web app leaves them alone — click a mode tab or use the command palette (`⌘K`) instead.
+
+There are three modes. Comparing scenarios and replaying the tokens live in Results: «Compare
+with…» in its bar, and the tokens play on the same map as the heat map. Validate paths (the token
+walk that checks the routes, not the simulation) is a Model tool: the button over the canvas, or
+«Validate paths» in `⌘K`.
 
 ## Simulation
 
@@ -46,6 +48,16 @@ the web app leaves them alone — click a mode tab or use the command palette (`
 | --- | --- | --- |
 | Run simulation | `⌘↩` | `Ctrl+Enter` |
 | Cancel the run (only while it runs) | `Esc` | `Esc` |
+| Simulate panel: open step 1–6 (Arrivals, Times, Routes, Resources, Calendars, Run) | `⌥1` `⌥2` `⌥3` `⌥4` `⌥5` `⌥6` | `Alt+1` `Alt+2` `Alt+3` `Alt+4` `Alt+5` `Alt+6` |
+| Simulate panel: clear the selection (when no run is in flight) | `Esc` | `Esc` |
+| Play or pause the tokens (Results only) | `Space` | `Space` |
+
+In Simulate, `←`/`→` move between the step tabs of the bar under the top bar when one of them has the focus (`Home`/`End` jump to the first and last), and
+`Alt+1…6` work in the detached window too, and from Model or Results — or from the main window while the panel is detached — they switch to Simulate on that step; neither they nor `Esc` act while you type in a field. «▶ Simulate» (the top bar's, the one of the detached panel window, the last step's and `⌘↩`) takes you to the first
+error instead of running while the scenario has one — the top bar's button shows how many; warnings («! n» on a step) do not stop it.
+
+`Space` does nothing while you type in a field or when a button has the focus (there it presses
+the button).
 
 ## Canvas
 
@@ -93,7 +105,7 @@ left filters as you type and inserts the highlighted shape with `Enter`.
 | Show or hide the right panel | `⇧⌘P` | `Ctrl+Shift+P` |
 | Show or hide the diagram tabs | `⇧⌘D` | `Ctrl+Shift+D` |
 | Show or hide the status bar | `⇧⌘B` | `Ctrl+Shift+B` |
-| Show or hide the simulation dock (Simulate) | `⌘J` | `Ctrl+J` |
+| Show or hide the results table (Results) | `⌘J` | `Ctrl+J` |
 | Move the focus to the modes | `F6` | `F6` |
 | Move the focus to the right panel | `⇧F6` | `Shift+F6` |
 
@@ -103,7 +115,7 @@ left filters as you type and inserts the highlighted shape with `Enter`.
 
 ¹ Only in the desktop app. In a browser, `⌘N`/`Ctrl+N` (new window) and `⌘,` (browser settings)
 are taken by the browser before the page sees them, and the web app does not listen to
-`⌘1`…`⌘6`/`Ctrl+1`…`Ctrl+6` so they keep switching the browser's tabs: use the bar's buttons, the
+`⌘1`…`⌘3`/`Ctrl+1`…`Ctrl+3` so they keep switching the browser's tabs: use the bar's buttons, the
 mode tabs or `⌘K` instead. In the desktop app the File, View and Simulation menus
 list these shortcuts next to each item.
 

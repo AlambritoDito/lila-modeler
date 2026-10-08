@@ -49,7 +49,7 @@ export interface ResultsViewProps {
   scenario: ResolvedScenario;
   result: RunResult;
   /**
-   * Switches the shell to the «Animate» mode (#331). Optional because the demo page
+   * Optional replay button (#331; the shell no longer passes it: the tokens play on the Results map). Optional because the demo page
    * (`results-demo.tsx`) has no shell to switch: without it the button is not painted.
    */
   onAnimar?: (() => void) | undefined;

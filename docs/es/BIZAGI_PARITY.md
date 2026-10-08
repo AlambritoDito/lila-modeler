@@ -59,7 +59,7 @@ citan; no implica una promesa pública de paridad con Bizagi Modeler.
 | macOS / Windows / Linux / navegador | ✗ (4.3 sigue Windows-only, sin editor web) | parcial: web y macOS probados; Windows y Linux construidos por CI, sin probar | M5 | Implementado: app web (probada en Chrome; Safari pendiente) y beta de macOS (probada). El instalador de Windows se adjunta a la beta pero está sin firmar y no se ha probado en una máquina Windows real; el AppImage de Linux lo construye CI, sin probar y no adjunto ([estado por plataforma](../../README.es.md#beta-de-escritorio)) |
 | Importar parámetros del escenario desde Excel/CSV, revisados antes de aplicar nada | ✗ (el Modeler exporta la grilla de resultados a Excel; no se encontró en la documentación pública un camino de vuelta hacia los parámetros de simulación) | ✓ descarga una plantilla ya rellena, importa un Excel/CSV equivalente, revisa el reporte campo por campo (filas sin coincidencia/ambiguas y valores inválidos señalados), y luego aplica o deshace | M5 | Implementado (#514, #449) |
 | **Después** | | | | |
-| Animación con contadores en vivo | ✓ | ✓ el modo Animar reproduce el log de eventos con contadores por elemento; token-simulation (MIT) conserva la parte didáctica | — | Implementado (#331) |
+| Animación con contadores en vivo | ✓ | ✓ los tokens sobre el mapa de Resultados reproducen el log de eventos con contadores por elemento; token-simulation (MIT) conserva la parte didáctica | — | Implementado (#331) |
 | Start quantity / completion quantity | ✓ | reservado | — | No planificado (v1) |
 | Temporizador de borde interruptor sobre una tarea | ✓ | ✓ | — | Implementado (#81, primera tajada: `SEMANTICS.md` R-BND-1…9) |
 | Temporizador de borde no interruptor sobre una tarea | ✓ | ✓ | — | Implementado (#81, segunda tajada: `SEMANTICS.md` R-BND-10…14) |
@@ -306,7 +306,7 @@ con los costos publicados, y los dos costos pasan a −2,08 % y +3,96 %.
 ---
 
 Ver también: [`docs/es/COMING-FROM-BIZAGI.md`](COMING-FROM-BIZAGI.md) (la guía de usuario para
-quien llega desde Bizagi Modeler: los cuatro niveles como cuatro pasos, el mapa pantalla por
+quien llega desde Bizagi Modeler: los cuatro niveles como pasos de Simular, el mapa pantalla por
 pantalla y estas diferencias en lenguaje llano).
 
 Ver también: `docs/RESULTS_FORMAT.md` (definición de las columnas de salida mencionadas en "Salidas por elemento"/"Salidas por recurso"), `docs/BPMN_EXTENSION.md` (namespace `lila:` e ids), `docs/DECISIONS.md` (ADR que sustentan estas decisiones) y `BACKLOG.md` (desglose en tickets por hito).

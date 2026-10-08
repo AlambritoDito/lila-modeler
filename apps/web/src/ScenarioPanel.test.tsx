@@ -37,8 +37,8 @@ import {
   type EsquemaJson,
   ScenarioPanel,
 } from './ScenarioPanel.js';
-import { DIAS, aCeldas, aIntervals, celda, type Intervalo } from './CalendarEditor.js';
-import { setLocale } from './i18n';
+import { DIAS, aCeldas, aIntervals, celda, type Dia, type Intervalo } from './CalendarEditor.js';
+import { setLocale, strings } from './i18n';
 import { en } from './strings.en';
 import { es } from './strings.es';
 
@@ -135,19 +135,37 @@ function pulsar(texto: string): void {
   });
 }
 
+/** Lote M (C2): resources are a list; a resource's fields live in its sheet, one tab at a time. */
+function abrirRecurso(clave: string, apartado: 'cap' | 'cost' | 'uso' = 'cap'): void {
+  const fila = document.querySelector<HTMLButtonElement>(`button.rec-fila[data-clave="${clave}"]`);
+  if (fila === null) throw new Error(`no hay fila de recurso ${clave}`);
+  act(() => {
+    fila.click();
+  });
+  act(() => {
+    document.getElementById(`rec-tab-${apartado}`)!.click();
+  });
+}
+
+function marcar(id: string): void {
+  const control = document.getElementById(id);
+  if (!(control instanceof HTMLInputElement)) throw new Error(`no hay input con id ${id}`);
+  act(() => {
+    control.click();
+  });
+}
+
 /**
- * #333: el panel abre en el primer paso (Parámetros), así que una sección de otro paso hay que pedirla antes. El
+ * #333: el panel abre en Tiempos (Lote M), así que una sección de otro paso hay que pedirla antes. El
  * rótulo va escrito a mano —es un test— y es el del catálogo español que fija `setLocale`.
  */
-function irAPaso(paso: 'parameters' | 'resources' | 'calendars' | 'arrivals'): void {
-  pulsar(
-    {
-      parameters: 'Parámetros',
-      resources: 'Recursos',
-      calendars: 'Calendarios',
-      arrivals: 'Llegadas',
-    }[paso],
-  );
+function irAPaso(paso: 'arrivals' | 'times' | 'routes' | 'resources' | 'calendars' | 'run'): void {
+  // By `data-paso`: the button's text also carries the step's «! n» (Lote M).
+  const destino = document.querySelector<HTMLButtonElement>(`.pasos button[data-paso="${paso}"]`);
+  if (destino === null) throw new Error(`no step ${paso}`);
+  act(() => {
+    destino.click();
+  });
 }
 
 /**
@@ -156,10 +174,19 @@ function irAPaso(paso: 'parameters' | 'resources' | 'calendars' | 'arrivals'): v
  * sintetiza `onPointerEnter`: su plugin de enter/leave se desentiende del `pointerover` cuando el
  * `relatedTarget` también está dentro del árbol React, y deja el trabajo al `pointerout`.
  */
+/**
+ * `'SAT 09:00'` → the cell's accessible name in the active language (Lote M: «sábado 09:00»; it
+ * used to be the format's day code, untranslated).
+ */
+function etiquetaCelda(etiqueta: string): string {
+  const [dia, hora] = etiqueta.split(' ') as [Dia, string];
+  return strings().calendario.celda(strings().calendario.diasLargos[dia], hora);
+}
+
 function arrastrar(etiquetas: readonly string[]): void {
   const celdas = etiquetas.map((etiqueta) => {
     const encontrada = [...document.querySelectorAll('button')].find(
-      (b) => b.getAttribute('aria-label') === etiqueta,
+      (b) => b.getAttribute('aria-label') === etiquetaCelda(etiqueta),
     );
     if (encontrada === undefined) throw new Error(`no hay celda «${etiqueta}»`);
     return encontrada;
@@ -188,7 +215,7 @@ function arrastrar(etiquetas: readonly string[]): void {
 function arrastrarRapido(etiquetas: readonly string[]): void {
   const celdas = etiquetas.map((etiqueta) => {
     const encontrada = [...document.querySelectorAll('button')].find(
-      (b) => b.getAttribute('aria-label') === etiqueta,
+      (b) => b.getAttribute('aria-label') === etiquetaCelda(etiqueta),
     );
     if (encontrada === undefined) throw new Error(`no hay celda «${etiqueta}»`);
     return encontrada;
@@ -227,16 +254,18 @@ function Anfitrion({
   const [escenarios, setEscenarios] = useState<Readonly<Record<string, Json>>>(inicial);
   const [archivo, setArchivo] = useState(archivoInicial);
   const [seleccion, setSeleccion] = useState<string | null>(null);
+  // Lote M: «Save» lives in «Scenario ▾» (the shell); the harness keeps its own button.
+  const guardar = (): void => { guardados.push({ archivo, escenario: escenarios[archivo] ?? {} }); };
   return (
+    <>
+    <button type="button" onClick={guardar}>Guardar</button>
     <ScenarioPanel
       archivo={archivo}
       escenarios={escenarios}
       onCambio={(a, e) => {
         setEscenarios((previos) => ({ ...previos, [a]: e }));
       }}
-      onGuardar={() => {
-        guardados.push({ archivo, escenario: escenarios[archivo] ?? {} });
-      }}
+      onGuardar={guardar}
       onDuplicar={(a, e) => {
         setEscenarios((previos) => ({ ...previos, [a]: e }));
         setArchivo(a);
@@ -245,6 +274,7 @@ function Anfitrion({
       seleccion={seleccion}
       onSeleccionar={setSeleccion}
     />
+    </>
   );
 }
 
@@ -276,6 +306,7 @@ describe('aceptación de LILA-061', () => {
     );
 
     irAPaso('resources');
+    abrirRecurso('cajero');
     teclear('campo-resources.cajero.capacity', '3');
     pulsar('Guardar');
 
@@ -302,16 +333,18 @@ describe('validación en vivo', () => {
     const guardados: Guardado[] = [];
     montar(
       <Anfitrion
-        inicial={{ 'as-is.scenario.json': asIsCorto() }}
+        inicial={{ 'as-is.scenario.json': escribir(asIsCorto(), ['elements', 'Flow_Aprobado', 'probability'], 1.5) }}
         archivoInicial="as-is.scenario.json"
         guardados={guardados}
         irActual={ir}
       />,
     );
 
-    // Sin selección, el panel lista los ids con parámetros; se elige el flujo desde ahí.
+    // Lote M, C4: Routes types percentages and does not write a value outside 0–100 (the field
+    // shows itself invalid). A 1.5 that arrives in the file (the JSON view, an Excel import) is still
+    // marked on its flow with the validator's text, and nothing blocks saving it.
     pulsar('Flow_Aprobado');
-    teclear('campo-elements.Flow_Aprobado.probability', '1.5');
+    irAPaso('routes');
 
     // El texto es el del validador, no uno inventado por el panel. Desde LILA-198 el rango de
     // `probability` lo comprueba el lint (`E-PROB-RANGO`, § 17 de SEMANTICS) y no el esquema.
@@ -329,6 +362,7 @@ describe('validación en vivo', () => {
       ruta: 'elements.Flow_Aprobado.probability',
       mensaje: esperado.message,
       severidad: 'error',
+      codigo: 'E-PROB-RANGO',
     });
 
     // La escritura no se bloquea: el valor inválido está en el archivo y «Guardar» lo publica.
@@ -422,7 +456,7 @@ describe('uniones del esquema', () => {
       />,
     );
     pulsar('Task_TomarPedido');
-    irAPaso('parameters');
+    irAPaso('times');
     const selector = document.getElementById(
       'campo-elements.Task_TomarPedido.processingTime',
     ) as HTMLSelectElement;
@@ -481,6 +515,7 @@ describe('extends', () => {
     );
 
     // `run` entero viene del padre: el panel lo enseña resuelto.
+    irAPaso('run');
     expect((document.getElementById('campo-run.seed') as HTMLInputElement).value).toBe('42');
 
     teclear('campo-run.seed', '7');
@@ -549,6 +584,7 @@ describe('extends', () => {
       />,
     );
 
+    irAPaso('run');
     teclear('campo-run.currency', '');
     pulsar('Guardar');
 
@@ -585,6 +621,7 @@ describe('duplicar', () => {
       escenario: { version: 1, name: 'AS-IS (copia)', extends: 'as-is.scenario.json' },
     });
     // La copia hereda todo: el panel la enseña ya resuelta.
+    irAPaso('run');
     expect((document.getElementById('campo-run.seed') as HTMLInputElement).value).toBe('42');
   });
 
@@ -634,9 +671,9 @@ describe('capacidad de recursos: Fija y Por turno', () => {
 
     irAPaso('resources');
     // `horno` no trae `calendar` de pool (R16 los hace excluyentes): es el candidato limpio.
-    const variante = 'campo-resources.horno.capacity-variante';
-    elegir(variante, 'turno');
-    pulsar('Añadir tramo');
+    // Lote M (C2): «Por turnos» is a radio, and switching starts with one shift already there.
+    abrirRecurso('horno');
+    marcar('campo-resources.horno.capacity-turno');
     elegir('campo-resources.horno.capacity[0].calendar', 'oficina');
     teclear('campo-resources.horno.capacity[0].capacity', '2');
     pulsar('Guardar');
@@ -658,14 +695,16 @@ describe('capacidad de recursos: Fija y Por turno', () => {
     }
 
     // Volver a «Fija»: el id original reaparece y no queda el array de tramos escondido detrás.
-    elegir(variante, 'fija');
+    // Lote M (C2): the first shift becomes the fixed capacity and the resource's calendar (R16).
+    marcar('campo-resources.horno.capacity-fija');
     pulsar('Guardar');
     const fija = guardados.at(-1)!.escenario;
     const horno = (fija['resources'] as Json)['horno'] as Json;
     expect(typeof horno['capacity']).toBe('number');
     expect(Array.isArray(horno['capacity'])).toBe(false);
+    expect(horno['calendar']).toBe('oficina');
     expect((document.getElementById('campo-resources.horno.capacity') as HTMLInputElement).value).toBe(
-      '1',
+      '2',
     );
   });
 });
@@ -726,6 +765,7 @@ describe('campos reservados: quitar heredado', () => {
     // Estado visible antes de tocar nada: heredado del padre, con su valor. `priority` es de un
     // pool, y los pools viven en Recursos desde #333.
     irAPaso('resources');
+    abrirRecurso('cajero', 'uso');
     expect(document.body.textContent).toContain('heredado: 1');
 
     pulsar('Quitar heredado');
@@ -1022,6 +1062,10 @@ describe('editor semanal de calendarios (LILA-203)', () => {
       />,
     );
     irAPaso('calendars');
+    // Lote M (C3): holidays are their own tab of the calendar editor.
+    act(() => {
+      (document.getElementById('gcal-tab-festivos') as HTMLButtonElement).click();
+    });
     const campo = document.querySelector<HTMLInputElement>('.festivos input[type="date"]')!;
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
     act(() => {
@@ -1148,7 +1192,7 @@ describe('resto de LILA-203', () => {
     expect(scenarioErrors(validateScenario(resuelto, ir))).toEqual([]);
   });
 
-  it('el selector de capacity dice «Fija» y «Por turno», no «número entero» y «lista»', () => {
+  it('el selector de capacity dice «Fija» y «Por turnos», no «número entero» y «lista», ni «capacity» (Lote M)', () => {
     montar(
       <Anfitrion
         inicial={{ 'as-is.scenario.json': asIsCorto() }}
@@ -1158,17 +1202,16 @@ describe('resto de LILA-203', () => {
       />,
     );
     irAPaso('resources');
-    const selector = document.getElementById('campo-resources.horno.capacity-variante');
-    expect(selector).toBeInstanceOf(HTMLSelectElement);
-    expect([...(selector as HTMLSelectElement).options].map((o) => o.text)).toEqual([
-      'Fija',
-      'Por turno',
-    ]);
+    abrirRecurso('horno');
+    const grupo = document.querySelector('.rec-modo');
+    expect(grupo?.querySelector('legend')?.textContent).toBe('Capacidad');
+    expect([...grupo!.querySelectorAll('label')].map((l) => l.textContent)).toEqual(['Fija', 'Por turnos']);
+    expect(document.querySelector('.rec-ficha')?.textContent).not.toContain('capacity');
   });
 });
 
 describe('ventana desacoplada (diseño 2c)', () => {
-  it('Duplicar y Guardar pasan de la cabecera al pie, con Guardar como acción primaria', () => {
+  it('Duplicar se queda a un clic, en la cabecera o en el pie de la ventana; Guardar vive en «Escenario ▾» (Lote M)', () => {
     const guardados: Guardado[] = [];
     const panel = (enVentana: boolean): React.JSX.Element => (
       <ScenarioPanel
@@ -1184,17 +1227,14 @@ describe('ventana desacoplada (diseño 2c)', () => {
       />
     );
     montar(panel(false));
-    expect(document.querySelector('.escenario-cabecera')!.textContent).toContain(es.escenario.guardar);
+    expect(document.querySelector('.escenario-cabecera')!.textContent).toContain(es.escenario.duplicar);
+    expect(document.querySelector('.escenario-cabecera')!.textContent).not.toContain(es.escenario.guardar);
     expect(document.querySelector('.escenario-pie')).toBeNull();
     act(() => raiz!.render(panel(true)));
     const pie = document.querySelector('.escenario-pie')!;
     expect(pie.textContent).toContain(es.escenario.pieVentana);
-    expect(pie.querySelector('.boton.primario')!.textContent).toBe(es.escenario.guardar);
-    // Duplicate, then Save: DOM order is the order Tab visits and the order on screen.
-    expect([...pie.querySelectorAll('button')].map((b) => b.textContent)).toEqual([es.escenario.duplicar, es.escenario.guardar]);
-    expect(document.querySelector('.escenario-cabecera')!.textContent).not.toContain(es.escenario.guardar);
-    pulsar(es.escenario.guardar);
-    expect(guardados).toHaveLength(1);
+    expect([...pie.querySelectorAll('button')].map((b) => b.textContent)).toEqual([es.escenario.duplicar]);
+    expect(guardados).toHaveLength(0);
   });
 });
 

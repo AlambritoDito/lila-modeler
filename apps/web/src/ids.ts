@@ -13,8 +13,12 @@
  * id is not a text a person reads.
  */
 
-/** Modes of the top bar, in the order they are painted. */
-export const MODO_IDS = ['modelar', 'simular', 'resultados', 'comparar', 'animar', 'rutas'] as const;
+/**
+ * Modes of the top bar, in the order they are painted. Lote M (owner's decision 2, 2026-10-05) left
+ * three: Results absorbed Compare («Compare with…») and Animate (tokens on the same map), and
+ * Validate paths became a Model tool (the canvas button and ⌘K).
+ */
+export const MODO_IDS = ['modelar', 'simular', 'resultados'] as const;
 export type ModoId = (typeof MODO_IDS)[number];
 
 /** Tabs of the right panel, in the order they are painted. */
@@ -32,15 +36,28 @@ export const DENSIDAD_IDS = ['compacta', 'normal', 'comoda'] as const;
 export type Densidad = (typeof DENSIDAD_IDS)[number];
 
 /**
- * Steps of the Simulate panel (#333, renamed in #396), in the order they are painted.
+ * Steps of the Simulate panel (#333, renamed in #396, split in six for Lote M), in the order they
+ * are painted.
  *
- * Parameters (the run window, gateway branches and activity times), Resources, Calendars and
- * Arrivals (start events: how many cases and how often). They started as Bizagi's four levels of
- * simulation; the owner relabelled them after the design (Turno 2) so each step is named after
- * what it edits, and `docs/COMING-FROM-BIZAGI.md` maps them back to the levels. They are a
- * reading order, not a wizard: there is no "enable level N" switch anywhere, every step writes
- * into the same scenario document, and going back to Parameters after Calendars costs nothing. The id
- * lives only in the panel's state (nothing persists it), so the rename needs no migration.
+ * Arrivals (start events: how many cases and how often), Times (how long each activity takes),
+ * Routes (how the gateways branch), Resources, Calendars and Run (the run window, replications
+ * and seed). Until Lote M a single «Parameters» step held times, routes and the run together; the
+ * owner's design splits it so each step answers one question, and `scenarioFields.ts` gives every
+ * element field to exactly one of them. They are a reading order, not a wizard: every step writes
+ * into the same scenario document and going back costs nothing. The id lives only in the panel's
+ * state (nothing persists it), so the rename needs no migration.
  */
-export const PASO_IDS = ['parameters', 'resources', 'calendars', 'arrivals'] as const;
+export const PASO_IDS = ['arrivals', 'times', 'routes', 'resources', 'calendars', 'run'] as const;
 export type PasoId = (typeof PASO_IDS)[number];
+
+/**
+ * The id the shell keeps as «the selection» for what bpmn-js selected: one element, or `null`. A
+ * click on an external label («Approved», «Order received») selects the label shape, whose id
+ * (`Flow_Aprobado_label`) neither the IR nor the scenario knows; the selection is its owner (C7, QA
+ * of #615: Simulate showed the label's id and its form wrote `elements.Flow_Aprobado_label`).
+ */
+export function idDeSeleccion(elegidos: readonly { id: string; labelTarget?: { id: string } | null }[]): string | null {
+  if (elegidos.length !== 1) return null;
+  const [unico] = elegidos;
+  return unico?.labelTarget?.id ?? unico?.id ?? null;
+}

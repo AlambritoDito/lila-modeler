@@ -105,8 +105,9 @@ Eva-01 como pintura previa a cualquier tema.
 
 ## Recorrido de uso
 
-La barra superior tiene seis modos: **Modelar**, **Simular**, **Resultados**, **Comparar**,
-**Animar** y **Validar rutas**. Los textos de abajo son literales de la interfaz (desde LILA-066 todos viven en
+La barra superior tiene tres modos: **Modelar**, **Simular** y **Resultados** (desde 1.0.0-beta.23).
+Comparar escenarios («Comparar con…») y la reproducción de tokens viven en Resultados; **Validar
+rutas** es una herramienta de Modelar (el botón sobre el lienzo, o `⌘K`). Los textos de abajo son literales de la interfaz (desde LILA-066 todos viven en
 `apps/web/src/strings.es.ts`), no paráfrasis.
 
 ### Modelar
@@ -122,15 +123,19 @@ La barra superior tiene seis modos: **Modelar**, **Simular**, **Resultados**, **
 
 ### Simular (pestaña "Simulación" del panel derecho)
 
-- La lista **Escenarios** a la izquierda de Simular muestra los escenarios cargados (el proyecto
-  trae `as-is` y `to-be-3-cajeros` de ejemplo); elige uno para activarlo, o duplica el activo
-  desde la lista.
-- El panel de escenario tiene cuatro pasos, en este orden: **Parámetros** (la ventana de corrida y
-  las réplicas, cómo ramifican las compuertas y el tiempo de cada tarea y temporizador),
+- **Escenario ▾** (sobre el lienzo, en Simular y en Resultados) lista los escenarios cargados (el
+  proyecto trae `as-is` y `to-be-3-cajeros` de ejemplo), cada uno con su insignia BASE, «Simulado» o
+  «Sin simular» y el escenario del que hereda; elige uno para activarlo. Al lado, **Duplicar** copia el
+  escenario activo con un clic (la copia hereda de él con `extends`) y deja el nombre de la copia
+  listo para editar: escribe TO-BE y Enter. El desplegable trae además **Renombrar**, **Guardar
+  proyecto**, **Descargar plantilla** / **Importar Excel/CSV…** y el escenario en JSON. Los chips de
+  validación de al lado saltan al primer problema.
+- El panel de escenario tiene seis pasos, en este orden: **Llegadas** (cada cuánto dispara cada
+  evento de inicio y cuántos casos crea; la lista **Llegadas por evento de inicio** las resume),
+  **Tiempos** (el tiempo de cada tarea y temporizador), **Rutas** (cómo ramifican las compuertas),
   **Recursos** (pools, unidades, el calendario y la capacidad por turno de un pool, y qué tarea
   toma cuál), **Calendarios** (calendarios y festivos, y qué calendario sigue cada elemento) y
-  **Llegadas** (cada cuánto dispara cada evento de inicio y cuántos casos crea; la lista **Llegadas
-  por evento de inicio** las resume). Cada control vive en un solo paso. El panel permite editar `run`, `calendars`, `resources` y las propiedades por
+  **Ejecución** (la ventana de corrida y las réplicas). Cada control vive en un solo paso. El panel permite editar `run`, `calendars`, `resources` y las propiedades por
   elemento del proceso. Los campos con forma de unión —hoy solo `resources.<id>.capacity`— tienen
   un selector explícito **Fija** (un número) / **Por turno** (una lista de tramos
   `{ calendar, capacity }`, con `calendar` como desplegable de los calendarios ya declarados).
@@ -138,26 +143,17 @@ La barra superior tiene seis modos: **Modelar**, **Simular**, **Resultados**, **
   si es propio del archivo, no heredado): al pulsarlo se escribe `null` en el delta, que es la
   forma de "borrar" un valor heredado (§ 6 del formato de escenario). Si ya está borrado, el botón
   cambia a **Restaurar heredado**, que quita ese `null` y vuelve a heredar del padre.
-- **Guardar** (dentro del panel de escenario) y **Duplicar** (crea una copia con `extends` sobre el
-  archivo actual — el "qué pasaría si" de la casa) son botones aparte de "Guardar proyecto" de la
-  barra superior; no se deshabilitan nunca.
+- **Duplicar** está también en la cabecera del panel de escenario. **Guardar proyecto** está en el
+  menú Archivo, en «Escenario ▾» o con `⌘S`.
 - **Ejecutar simulación**: corre la simulación sobre lo que hay en el lienzo ahora mismo. Mientras corre,
-  aparece **Cancelar** y un progreso (`% · replicación N`). El interruptor **Cuellos de botella**
-  pinta o apaga el overlay sobre el diagrama sin volver a simular.
-- **Dock de simulación** (bajo el lienzo): al terminar una corrida te quedas en Simular y el dock
-  se abre en **Resultados rápidos** — una fila por tarea con casos, espera media (todas las
-  réplicas), espera p95 (de la muestra del log, como dice la nota bajo la tabla), utilización del
-  pool más ocupado y costo fijo total, más una fila total — con los KPI del escenario y el cuello
-  principal arriba (un clic lo selecciona en el lienzo). Las otras pestañas son **Cuellos de
-  botella**, **Log de la corrida** y **Avisos** (agrupados por código). **Abrir en Resultados** lleva a las tablas completas y **Exportar CSV** descarga
-  `elements.csv`. Arrastra su borde superior o usa las flechas sobre él para cambiar su altura (nunca
-  ocupa más de lo que deja la ventana tras un lienzo usable); `⌘J`, el menú Vista, un doble clic o
-  `Enter` sobre ese borde lo ocultan y lo muestran.
+  aparece **Cancelar** y un progreso (`% · replicación N`); con problemas que impiden simular, el botón
+  lleva su número y te lleva al primero en vez de correr. Al terminar, la app pasa sola a
+  **Resultados**.
 
 - **Vista rápida · simulación**: selecciona un elemento en el lienzo y el panel Propiedades muestra
   bajo la cabecera sus datos de simulación: **Tiempo**, **Recurso** (solo tareas) y la espera por
   recurso (p95 si la muestra del log de la corrida está en memoria, la media si no; **sin
-  corrida** antes de la primera). **Editar en Parámetros** y **Editar en Recursos** saltan al paso
+  corrida** antes de la primera). **Editar en Tiempos** y **Editar en Recursos** saltan al paso
   correspondiente.
 - El panel de escenario se puede separar en su propia ventana con el interruptor de la barra
   superior (**Escenario acoplado ↗** / **En ventana aparte**); **Acoplar** en el sustituto, o
@@ -166,25 +162,43 @@ La barra superior tiene seis modos: **Modelar**, **Simular**, **Resultados**, **
 
 ### Resultados
 
-Se abre con **Abrir en Resultados** del dock (o con el modo Resultados): una corrida terminada ya
-no cambia sola a este modo. Los resultados se pueden separar en su propia ventana con el
-interruptor de la barra superior (**Resultados acoplados ↗** / **Resultados en ventana aparte**,
-visible mientras estás en Resultados o la ventana está abierta). Mientras está separada, la vista
-Resultados muestra **Resultados en otra ventana ↗** con los botones **Mostrar** y **Acoplar**; la
-ventana siempre muestra la corrida actual, cerrarla acopla Resultados de nuevo y se recuerdan su
-tamaño y posición. Cada tabla (elementos, flujos,
-recursos, proceso) tiene su propio botón **Exportar CSV**, que descarga exactamente el mismo
-contenido, byte a byte, que `npx lila run --csv` escribe en disco (`elements.csv`, `flows.csv`,
-`resources.csv`, `process.csv`).
+Una corrida terminada llega aquí, sobre el mismo diagrama:
 
-### Comparar
+- **Mapa de calor**: cada tarea se tiñe según su espera media por recurso frente a su propio tiempo de
+  proceso y lleva una insignia «Espera …»; los cuellos de botella del motor llevan la marca
+  **CUELLO**. El botón «Mapa de calor» de la barra lo apaga y lo enciende sin volver a simular.
+- **Tokens**: el log de eventos de la corrida se reproduce sobre el mismo mapa, con una barra de tiempo
+  abajo (reproducir / pausar, reiniciar, velocidad, un deslizador, el reloj simulado y las unidades
+  ocupadas de cada pool). `Espacio` reproduce y pausa (no mientras escribes ni con un botón
+  enfocado). El botón «Tokens» oculta la barra.
+- **Resumen** (panel derecho): los seis KPI —tiempo de ciclo, espera por caso, casos completados,
+  costo por caso, utilización máxima y casos en curso al cierre— con el valor exacto y el intervalo de
+  confianza del 95 % en su ayuda, el ranking de cuellos del motor (un clic lo selecciona) y el detalle
+  de la tarea que elijas en el mapa o en la tabla.
+- **Tabla de resultados** bajo el mapa (se pliega con ▾, `⌘J`, el menú Vista o un doble clic en su
+  borde; arrastra el borde para cambiar su alto): **Tareas** (tarea, recurso, casos, proceso medio,
+  espera media, utilización, costo total), **Resultados completos** (las tablas de elementos,
+  recursos, proceso y flujos con sus gráficas, cada una con **Exportar CSV** —byte a byte lo que
+  escribe `npx lila run --csv`— y **Exportar XLSX**), **Registro de la corrida** y **Avisos**
+  (agrupados por código). CSV y XLSX están también en la cabecera de la tabla.
+- Los resultados se pueden separar en su propia ventana con el interruptor de la barra superior
+  (**Resultados acoplados ↗** / **Resultados en ventana aparte**). Mientras está separada, el resumen
+  muestra **Mostrar** y **Acoplar**; la ventana siempre muestra la corrida actual, cerrarla acopla
+  Resultados de nuevo y se recuerdan su tamaño y posición.
 
-- Selector **Escenario base**: cualquier escenario ya simulado puede ser la base de la
-  comparación.
-- Casilla **Mostrar todos los KPI**: por defecto la tabla de flujos queda oculta; esta casilla la
-  muestra.
-- Sección **Avisos**: solo aparece cuando hay algo que decir, y agrupa hasta cinco tipos, en este
-  orden:
+### Comparar (en Resultados)
+
+- **Comparar con…** en la barra de Resultados lista los demás escenarios; uno que aún no tiene
+  resultados se simula al elegirlo (con su propia semilla y réplicas; **Cancelar** en su tarjeta lo
+  detiene y **Reintentar** lo vuelve a correr). La primera corrida de un duplicado se abre comparada
+  con el escenario del que salió.
+- La comparación muestra los seis KPI del otro escenario con su cambio frente a la referencia (verde =
+  mejora, rojo = empeora, ▲▼ sube o baja), los avisos de la comparación y dos mapas lado a lado: el
+  mapa de calor de la referencia y el del otro, con el cambio de espera media de cada tarea. ⇄
+  intercambia los lados, **Elegir escenario** cambia el otro y **Cerrar comparación ✕** vuelve al mapa.
+- **Tablas y gráficas de la comparación** (bajo los mapas): todos los escenarios con corrida vigente,
+  la referencia primero. **Mostrar todos los KPI** muestra la tabla de flujos. La sección **Avisos**
+  solo aparece cuando hay algo que decir, y agrupa hasta cinco tipos, en este orden:
   1. *Costos en monedas distintas*: si las corridas comparadas no usan la misma moneda
      (`run.currency`), ningún delta de costo se marca como comparable — el aviso lo dice
      explícitamente y las celdas de costo no llevan el asterisco de significancia.
@@ -195,19 +209,19 @@ contenido, byte a byte, que `npx lila run --csv` escribe en disco (`elements.csv
   4. *Semillas distintas*: aviso informativo, no bloquea nada.
   5. *Número de réplicas distinto*: igual, informativo.
 - Sección **Significancia**: el asterisco (`*`) en una celda significa "diferencia significativa
-  (IC95 sin solapamiento) contra la base"; las celdas resaltadas son las que cambiaron respecto a
-  la base. Si el aviso 3 de arriba aplica, esta sección lo repite y no se pinta ningún asterisco.
+  (IC95 sin solapamiento) contra la referencia"; las celdas resaltadas son las que cambiaron respecto
+  a ella. Si el aviso 3 de arriba aplica, esta sección lo repite y no se pinta ningún asterisco.
 
 ### Validar rutas
 
-- La animación se entra solo desde este modo: pulsar `T` a secas sobre el lienzo no la activa (antes
+- Es una herramienta de Modelar: el botón «Validar rutas» sobre el lienzo, o `⌘K`. La animación se entra solo desde ahí: pulsar `T` a secas sobre el lienzo no la activa (antes
   encendía y apagaba la simulación de tokens en cualquier modo).
 - **No es la simulación DES del motor**: anima los tokens de `bpmn-js-token-simulation` sobre el
   diagrama abierto. No lee el escenario activo ni produce resultados, y la propia pestaña lo dice:
   «Animación de tokens de bpmn-js: no es simulación de eventos discretos; no usa el escenario ni
   produce resultados.» Sirve para ver a ojo por dónde pasan las rutas, no para medir.
-- Mientras el modo está activo no se pintan el overlay de cuellos de botella ni los marcadores de
-  validación, y el diagrama no se puede editar; al volver a **Modelar** todo vuelve a su sitio.
+- Mientras está encendido no se pintan los marcadores de validación y el diagrama no se puede
+  editar; al apagarlo (o salir de Modelar) todo vuelve a su sitio.
 - Los controles son los del propio módulo de bpmn.io, y desde LILA-205 (#264) **salen en español**:
   la paleta de la izquierda del lienzo («Reproducir o pausar la simulación», «Reiniciar
   simulación», «Registro de la simulación»), los botones que aparecen sobre las figuras («Disparar
@@ -316,7 +330,7 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
   estado. El menú nativo trae además Nuevo (`⌘N`), Abrir (`⌘O`), **Importar BPMN…** (un
   `.bpmn` o `.xml` de otra herramienta), Guardar (`⌘S`), Guardar como
   (`⇧⌘S`) y **Preferencias… (`⌘,`)** en el menú de la app; **Vista** trae la paleta de comandos
-  (`⌘K`) y los seis modos (`⌘1`…`⌘6`), y **Simulación** ejecuta la simulación (`⌘↩`). Todos los
+  (`⌘K`) y los tres modos (`⌘1`…`⌘3`), y **Simulación** ejecuta la simulación (`⌘↩`). Todos los
   atajos están en [Atajos de teclado](ATAJOS.md).
 
 ### Ajustes
@@ -332,7 +346,7 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
 
 ## Limitaciones de esta beta
 
-*(a fecha 1.0.0-beta.22, tag `v1.0.0-beta.22`; las notas de verificación de macOS de abajo se
+*(a fecha 1.0.0-beta.23, tag `v1.0.0-beta.23`; las notas de verificación de macOS de abajo se
 registraron para la Beta 1. Revisar si alguna de estas ya se resolvió antes de creer esta lista a
 ciegas en una fecha posterior)*
 
@@ -375,10 +389,10 @@ npm run dist:mac -w @lila-modeler/desktop   # tsc + copia dist/web + electron-bu
 
 El último comando encadena: `tsc --build` de `apps/desktop`, copia de `apps/web/dist` a
 `apps/desktop/dist/web`, y `electron-builder --mac --arm64`. El resultado queda en
-`apps/desktop/release/` (la versión en `apps/desktop/package.json`: `1.0.0-beta.22` para la Beta 22):
+`apps/desktop/release/` (la versión en `apps/desktop/package.json`: `1.0.0-beta.23` para la Beta 23):
 
-- `apps/desktop/release/Lila-Modeler-1.0.0-beta.22-mac-arm64.dmg` — el instalador.
-- `apps/desktop/release/Lila-Modeler-1.0.0-beta.22-mac-arm64.dmg.blockmap`.
+- `apps/desktop/release/Lila-Modeler-1.0.0-beta.23-mac-arm64.dmg` — el instalador.
+- `apps/desktop/release/Lila-Modeler-1.0.0-beta.23-mac-arm64.dmg.blockmap`.
 - `apps/desktop/release/mac-arm64/Lila Modeler.app` — la app sin empaquetar en DMG, útil para
   probar rápido.
 - `apps/desktop/release/ORIGEN.txt` — `sha`, `fecha` (ISO) y `arch` (`uname -m`) del build,

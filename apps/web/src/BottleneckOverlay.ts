@@ -43,6 +43,7 @@ import { strings } from './i18n';
 
 const PRIORITY = 1500;
 const OVERLAY_TYPE = 'lila-bottleneck';
+const OVERLAY_CALOR = 'lila-calor';
 const MARKER_PRINCIPAL = 'lila-bottleneck-principal';
 const STYLE_ID = 'lila-bottleneck-overlay-styles';
 
@@ -77,6 +78,42 @@ export interface Corrida {
    * claves de `RunResult` pueden no ser las que conoce el lienzo — ver `idEnLienzo`.
    */
   originalIds: Readonly<Record<string, string>>;
+  /**
+   * Lote M: the Results heat map. With it every task of `tareas` is tinted by its own wait (same
+   * `nivelDeRatio` as the ranking) and carries a «Wait …» badge, and the ranking's cut keeps its
+   * label with a BOTTLENECK mark. Without it (and outside Results) only the cut is painted, as
+   * before. `tareas` are the task ids of the IR: the result has no node types.
+   */
+  calor?: { readonly tareas: readonly string[] } | undefined;
+}
+
+/** One task of the heat map: its level and its wait badge (short text, full detail as title). */
+export interface EntradaCalor {
+  nivel: NivelEspera;
+  etiqueta: string;
+  titulo: string;
+}
+
+/**
+ * Pure: the heat map of `tareas` — every task the result measured, tinted by the ratio of its own
+ * mean resource wait to its own processing time (`nivelDeRatio`, the rule documented above; no
+ * new threshold). A task that never started is left out: it has nothing to say.
+ */
+export function modeloCalor(result: RunResult, scenario: ResolvedScenario, tareas: readonly string[]): Readonly<Record<string, EntradaCalor>> {
+  const S = strings();
+  const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
+  const salida: Record<string, EntradaCalor> = {};
+  for (const id of tareas) {
+    const m = result.elements[id];
+    if (m === undefined || m.started === 0) continue;
+    const ratio = m.processing.mean > 0 ? m.resourceWait.mean / m.processing.mean : m.resourceWait.mean > 0 ? Infinity : 0;
+    salida[id] = {
+      nivel: nivelDeRatio(ratio),
+      etiqueta: S.c5.mapa.espera(esperaCorta(m.resourceWait.mean)),
+      titulo: S.c5.mapa.esperaTitulo(formatDisplayDurationWithUnit(m.resourceWait.mean, unit)),
+    };
+  }
+  return salida;
 }
 
 /**
@@ -241,6 +278,23 @@ function inyectarEstilos(): void {
 .djs-element.${MARKER_PRINCIPAL} .djs-visual > :first-child {
   filter: drop-shadow(0 0 4px var(--accent-secondary));
 }
+.lila-delta {
+  border: 1px solid currentColor;
+  background: var(--bg-elevated);
+  font: 700 11px var(--font-ui, system-ui);
+  padding: 1px 4px;
+  white-space: nowrap;
+}
+.lila-delta.mejora { color: var(--status-success); }
+.lila-delta.empeora { color: var(--status-error); }
+.lila-bottleneck-label .lila-cuello {
+  background: var(--status-error);
+  color: var(--fg-onAccent);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  margin-right: 4px;
+  padding: 0 3px;
+}
 .lila-bottleneck-label {
   background: var(--bg-elevated);
   border: 1px solid var(--border-strong);
@@ -252,10 +306,16 @@ function inyectarEstilos(): void {
   document.head.appendChild(style);
 }
 
-function etiquetaHtml(entry: OverlayEntry): HTMLElement {
+function etiquetaHtml(entry: { etiqueta: string; titulo: string }, cuello = false): HTMLElement {
   const div = document.createElement('div');
   div.className = 'lila-bottleneck-label';
-  div.textContent = entry.etiqueta;
+  if (cuello) {
+    const marca = document.createElement('span');
+    marca.className = 'lila-cuello';
+    marca.textContent = strings().c5.mapa.cuello;
+    div.append(marca);
+  }
+  div.append(entry.etiqueta);
   // La etiqueta es un `div` de `overlays`, no un `<text>` del SVG: el equivalente a `<title>`
   // aquí es el atributo `title`, que da el texto sin recortar al pasar el ratón (#226).
   div.title = entry.titulo;
@@ -302,6 +362,7 @@ export function clearOverlay(modeler: Modeler): void {
   if (estado === undefined) return;
 
   modeler.get<Overlays>('overlays').remove({ type: OVERLAY_TYPE });
+  modeler.get<Overlays>('overlays').remove({ type: OVERLAY_CALOR });
   const canvas = modeler.get<Canvas>('canvas');
   const elementRegistry = modeler.get<ElementRegistry>('elementRegistry');
   for (const id of estado.marcados) {
@@ -354,6 +415,17 @@ export function applyOverlay(modeler: Modeler, corrida: Corrida): void {
   const canvas = modeler.get<Canvas>('canvas');
   const overlays = modeler.get<Overlays>('overlays');
   const presentes: string[] = [];
+  const calor = corrida.calor === undefined ? {} : modeloCalor(corrida.result, corrida.scenario, corrida.calor.tareas);
+
+  // The heat map first: the ranking's cut below paints over its own tasks (same level rule).
+  for (const [idResultado, entry] of Object.entries(calor)) {
+    if (idResultado in modelo) continue;
+    const id = idEnLienzo(idResultado, corrida.originalIds, elementRegistry);
+    if (id === null) continue;
+    presentes.push(id);
+    estado.niveles.set(id, entry.nivel);
+    overlays.add(id, OVERLAY_CALOR, { html: etiquetaHtml(entry), position: { bottom: -4, right: -4 } });
+  }
 
   for (const [idResultado, entry] of Object.entries(modelo)) {
     // Un `result` de otro modelo (u otro `.bpmn` abierto mientras tanto) no revienta: los ids que
@@ -366,7 +438,9 @@ export function applyOverlay(modeler: Modeler, corrida: Corrida): void {
       canvas.addMarker(id, MARKER_PRINCIPAL);
       estado.marcados.add(id);
     }
-    overlays.add(id, OVERLAY_TYPE, { html: etiquetaHtml(entry), position: { bottom: -4, right: -4 } });
+    // With the heat map the badge says what the map says (the wait) plus the engine's verdict.
+    const badge = corrida.calor === undefined ? entry : { etiqueta: calor[idResultado]?.etiqueta ?? entry.etiqueta, titulo: entry.titulo };
+    overlays.add(id, OVERLAY_TYPE, { html: etiquetaHtml(badge, corrida.calor !== undefined), position: { bottom: -4, right: -4 } });
   }
 
   redibujar(modeler, presentes);
@@ -381,4 +455,59 @@ export function applyOverlay(modeler: Modeler, corrida: Corrida): void {
 export function sincronizarOverlay(modeler: Modeler, corrida: Corrida | null, visible: boolean): void {
   if (corrida === null || !visible) clearOverlay(modeler);
   else applyOverlay(modeler, corrida);
+}
+
+/* ------------------------------------------------------------------ *
+ * Compare (Lote M): the wait difference of each task, on the right-hand map.
+ * ------------------------------------------------------------------ */
+
+const OVERLAY_DELTA = 'lila-delta';
+
+/** The wait change of one task between the two runs, already formatted. */
+export interface DeltaEspera {
+  texto: string;
+  titulo: string;
+  /** Less wait than the reference: green; more: red. */
+  mejora: boolean;
+}
+
+/**
+ * Pure: per task, the mean resource wait of `otro` minus that of `ref`, for the tasks both runs
+ * measured. A difference that rounds to zero at two decimals in hours is left out: there is nothing
+ * to read on the map.
+ */
+export function deltasDeEspera(ref: RunResult, otro: RunResult, tareas: readonly string[], unit: BaseTimeUnit): Readonly<Record<string, DeltaEspera>> {
+  const S = strings();
+  const salida: Record<string, DeltaEspera> = {};
+  for (const id of tareas) {
+    const a = ref.elements[id];
+    const b = otro.elements[id];
+    if (a === undefined || b === undefined || (a.started === 0 && b.started === 0)) continue;
+    const delta = b.resourceWait.mean - a.resourceWait.mean;
+    if (formatDisplay(Math.abs(delta) / SECONDS_PER_UNIT.h) === '0' && formatDisplay(Math.abs(delta) / SECONDS_PER_UNIT[unit]) === '0') continue;
+    const signo = delta < 0 ? '−' : '+';
+    salida[id] = {
+      texto: `${signo}${esperaCorta(Math.abs(delta))}`,
+      titulo: S.c5.comparar.deltaTitulo(`${signo}${formatDisplayDurationWithUnit(Math.abs(delta), unit)}`),
+      mejora: delta < 0,
+    };
+  }
+  return salida;
+}
+
+/** Paints `deltas` as badges over the tasks of a (read-only) viewer; replaces the previous ones. */
+export function aplicarDeltas(modeler: Modeler, deltas: Readonly<Record<string, DeltaEspera>>, originalIds: Readonly<Record<string, string>>): void {
+  inyectarEstilos();
+  const overlays = modeler.get<Overlays>('overlays');
+  overlays.remove({ type: OVERLAY_DELTA });
+  const elementRegistry = modeler.get<ElementRegistry>('elementRegistry');
+  for (const [idResultado, d] of Object.entries(deltas)) {
+    const id = idEnLienzo(idResultado, originalIds, elementRegistry);
+    if (id === null) continue;
+    const div = document.createElement('div');
+    div.className = `lila-delta ${d.mejora ? 'mejora' : 'empeora'}`;
+    div.textContent = d.texto;
+    div.title = d.titulo;
+    overlays.add(id, OVERLAY_DELTA, { html: div, position: { top: -10, right: -4 } });
+  }
 }

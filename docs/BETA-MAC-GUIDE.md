@@ -103,8 +103,9 @@ before any theme loads.
 
 ## Usage walkthrough
 
-The top bar has six modes: **Model**, **Simulate**, **Results**, **Compare**, **Animate**, and
-**Validate paths**.
+The top bar has three modes: **Model**, **Simulate** and **Results** (since 1.0.0-beta.23).
+Comparing scenarios («Compare with…») and the token replay live in Results; **Validate paths** is a
+Model tool (the button over the canvas, or `⌘K`).
 English is the base language and Spanish is available as a translation. The app follows the system
 language unless you select English or Spanish in Settings. The native File menu and close dialogs
 follow that same setting. This walkthrough uses the English labels.
@@ -121,15 +122,19 @@ follow that same setting. This walkthrough uses the English labels.
 
 ### Simulate (the "Simulación" tab in the right-hand panel)
 
-- The **Scenarios** list on the left of Simulate shows the loaded scenarios (the project ships with
-  `as-is` and `to-be-3-cajeros` as examples); pick one to make it the active scenario, or
-  duplicate the active one from the list.
-- The scenario panel has four steps, in this order: **Parameters** (the run window and
-  replications, gateway branching and the time of each task and timer), **Resources** (pools,
-  units, a pool's calendar and capacity per shift, and which task takes which pool),
-  **Calendars** (calendars and holidays, and which element follows which calendar) and
-  **Arrivals** (how often each start event fires and how many cases it creates; the **Arrivals by
-  start event** list summarizes them). Each control lives in exactly one step. The panel lets you
+- **Scenario ▾** (over the canvas, in Simulate and Results) lists the loaded scenarios (the project
+  ships with `as-is` and `to-be-3-cajeros` as examples), each with its BASE badge, «Simulated» or
+  «Not simulated» and the scenario it extends; pick one to make it the active scenario. Next to it,
+  **Duplicate** copies the active scenario in one click (the copy `extends` it) and leaves the copy's
+  name ready to edit: type TO-BE and Enter. The dropdown also has **Rename**, **Save project**,
+  **Download template** / **Import Excel/CSV…** and the scenario as JSON. The validation chips next
+  to it jump to the first problem.
+- The scenario panel has six steps, in this order: **Arrivals** (how often each start event fires
+  and how many cases it creates; the **Arrivals by start event** list summarizes them), **Times**
+  (the time of each task and timer), **Routes** (gateway branching), **Resources** (pools, units, a
+  pool's calendar and capacity per shift, and which task takes which pool), **Calendars**
+  (calendars and holidays, and which element follows which calendar) and **Run** (the run window
+  and replications). Each control lives in exactly one step. The panel lets you
   edit `run`, `calendars`, `resources`, and the process's per-element properties. Union-shaped fields — today only `resources.<id>.capacity` — have an explicit
   **Fija** (Fixed, a number) / **Por turno** (Per shift, a list of `{ calendar, capacity }`
   segments, with `calendar` as a dropdown of already-declared calendars) selector.
@@ -138,27 +143,17 @@ follow that same setting. This walkthrough uses the English labels.
   `null` into the delta, which is how you "delete" an inherited value (§ 6 of the scenario format).
   If it is already deleted, the button switches to **Restaurar heredado** (Restore inherited),
   which removes that `null` and goes back to inheriting from the parent.
-- **Guardar** (Save, inside the scenario panel) and **Duplicar** (Duplicate — creates a copy with
-  `extends` on top of the current file, the app's own "what-if") are separate from the top bar's
-  "Guardar proyecto" (Save project); they are never disabled.
+- **Duplicate** is also in the scenario panel's header. **Save project** is the top bar's File
+  menu, «Scenario ▾» or `⌘S`.
 - **Run simulation**: runs the simulation on whatever is on the canvas right now. While it
-  runs, a **Cancel** button and a progress indicator (`% · replication N`) appear. The
-  **Bottlenecks** toggle turns the diagram overlay on or off without
-  re-simulating.
-- **Simulation dock** (under the canvas): when a run finishes you stay in Simulate and the dock
-  opens on **Quick results** — one row per task with cases, average wait (every replication), wait
-  p95 (from the event log sample, as the note under the table says), utilization of the busiest
-  pool and total fixed cost, plus a total row — with the scenario's KPIs and the main bottleneck
-  on top (click it to select it on the canvas). The other tabs are **Bottlenecks**, **Run log** and
-  **Warnings** (grouped by code). **Open in Results** goes to
-  the full tables and **Export CSV** downloads `elements.csv`. Drag its top edge or use the arrow
-  keys on it to resize it (it never takes more than the window leaves after a usable canvas); `⌘J`,
-  the View menu, a double-click or `Enter` on that edge hides and shows it.
+  runs, a **Cancel** button and a progress indicator (`% · replication N`) appear; with problems
+  that hold the run back, the button carries their count and takes you to the first one instead.
+  When the run finishes the app moves to **Results** by itself.
 
 - **Quick view · simulation**: select an element on the canvas and the Properties panel shows
   its simulation data under the header: **Time**, **Resource** (tasks only) and the resource wait
   (p95 when the run's log sample is in memory, the mean otherwise; **no run** before the first
-  run). **Edit in Parameters** and **Edit in Resources** jump to the matching step.
+  run). **Edit in Times** and **Edit in Resources** jump to the matching step.
 - The scenario panel can be detached into its own window with the toggle in the top bar
   (**Scenario docked ↗** / **In its own window**); **Dock** in the stand-in, or closing the
   window, brings it back. While it is detached the right panel hides, so the stand-in only shows
@@ -166,24 +161,41 @@ follow that same setting. This walkthrough uses the English labels.
 
 ### Results («Resultados»)
 
-Open it from the dock's **Open in Results** (or the Results mode): a finished run no longer
-switches here on its own. Results can be detached into their own window with the top-bar toggle
-(**Results docked ↗** / **Results in their own window**, shown while you are in Results or the
-window is open). While detached, the Results view shows **Results in another window ↗** with
-**Show** and **Dock** buttons; the window always shows the current run, closing it docks Results
-again, and its size and position are remembered. Each table (elements, flows,
-resources, process) has its own **Export CSV** button, which downloads exactly the
-same content, byte for byte, that `npx lila run --csv` writes to disk (`elements.csv`, `flows.csv`,
-`resources.csv`, `process.csv`).
+A finished run lands here, on the same diagram:
 
-### Compare («Comparar»)
+- **Heat map**: every task is tinted by its mean resource wait against its own processing time and
+  carries a «Wait …» badge; the engine's bottlenecks get a **BOTTLENECK** mark. The «Heat map»
+  button in the bar turns it off and on without re-simulating.
+- **Tokens**: the run's event log replays on the same map, with a time bar at the bottom (play /
+  pause, reset, speed, a slider, the simulated clock and the pools' busy units). `Space` plays and
+  pauses (not while you type or with a button focused). The «Tokens» button hides the bar.
+- **Summary** (right panel): the six KPIs — cycle time, wait per case, completed cases, cost per
+  case, max utilization and cases in progress at the end — with the exact value and the 95 %
+  confidence interval in their tooltip, the engine's bottleneck ranking (click one to select it) and
+  the detail of the task you select on the map or in the table.
+- **Results table** under the map (collapse it with ▾, `⌘J`, the View menu or a double-click on its
+  edge; drag the edge to resize): **Tasks** (task, resource, cases, mean processing, mean wait,
+  utilization, total cost), **Full results** (the elements, resources, process and flows tables with
+  their charts, each with **Export CSV** — byte for byte what `npx lila run --csv` writes — and
+  **Export XLSX**), **Run log** and **Warnings** (grouped by code). CSV and XLSX are also in the
+  table's header.
+- Results can be detached into their own window with the top-bar toggle (**Results docked ↗** /
+  **Results in their own window**). While detached the summary shows **Show** and **Dock**; the
+  window always shows the current run, closing it docks Results again, and its size and position
+  are remembered.
 
-- **Base scenario** selector: any scenario that has already been simulated can be
-  the comparison's baseline.
-- **Show all KPIs** checkbox: by default the flows table is hidden; this
-  checkbox reveals it.
-- **Warnings** section: it only appears when there is something to say, and groups up to
-  five kinds, in this order:
+### Compare (in Results)
+
+- **Compare with…** in the Results bar lists the other scenarios; one that has no results yet is
+  simulated when you pick it (with its own seed and replications; **Cancel** on its card stops it and
+  **Retry** runs it again). A duplicate's first run opens compared with the scenario it came from.
+- The comparison shows the six KPIs of the other scenario with their change against the reference
+  (green = better, red = worse, ▲▼ up or down), the comparison warnings, and two maps side by side:
+  the reference's heat map and the other's, with the change in mean wait of each task. ⇄ swaps the
+  sides, **Choose scenario** picks another one, **Close comparison ✕** goes back to the map.
+- **Comparison tables and charts** (below the maps): every scenario with a current run, the
+  reference first. **Show every KPI** reveals the flows table. The **Warnings** section only appears
+  when there is something to say, and groups up to five kinds, in this order:
   1. *Costs in different currencies*: if the compared runs do not use the same currency
      (`run.currency`), no cost delta is marked as comparable — the warning says so explicitly, and
      cost cells carry no significance asterisk.
@@ -194,13 +206,13 @@ same content, byte for byte, that `npx lila run --csv` writes to disk (`elements
   4. *Different seeds*: an informational warning; it blocks nothing.
   5. *Different replication count*: same, informational.
 - **Significance** section: an asterisk (`*`) in a cell means "significant
-  difference (non-overlapping 95% CIs) against the baseline"; highlighted cells are the ones that
-  changed relative to the baseline. If warning 3 above applies, this section repeats it and no
-  asterisk is drawn at all.
+  difference (non-overlapping 95% CIs) against the reference"; highlighted cells are the ones that
+  changed relative to it. If warning 3 above applies, this section repeats it and no asterisk is
+  drawn at all.
 
 ### Validate paths («Validar rutas»)
 
-- Animation is entered only from this mode: pressing plain `T` on the canvas does not toggle it
+- A Model tool: the «Validate paths» button over the canvas, or `⌘K`. Animation is entered only from there: pressing plain `T` on the canvas does not toggle it
   (it used to switch the token simulation on and off in any mode).
 - **This is not the engine's DES simulation**: it animates `bpmn-js-token-simulation` tokens on top
   of the open diagram. It does not read the active scenario or produce results, and the tab itself
@@ -208,8 +220,8 @@ same content, byte for byte, that `npx lila run --csv` writes to disk (`elements
   escenario ni produce resultados.» (bpmn-js token animation: this is not discrete-event simulation;
   it does not use the scenario or produce results.) It is there to eyeball which routes get taken,
   not to measure anything.
-- While this mode is active, neither the bottleneck overlay nor the validation markers are drawn,
-  and the diagram cannot be edited; going back to **Modelar** (Model) restores everything.
+- While it is on, the validation markers are not drawn and the diagram cannot be edited; turning it
+  off (or leaving Model) restores everything.
 - The controls are the bpmn.io module's own, and since LILA-205 (#264) **they appear in Spanish**:
   the canvas's left-hand palette («Reproducir o pausar la simulación» — Play or pause the
   simulation, «Reiniciar simulación» — Restart simulation, «Registro de la simulación» — Simulation
@@ -319,7 +331,7 @@ This is real, working functionality: `DesktopStore` is wired up in `main.tsx` an
   the status bar. The native menu also carries **New project** (`⌘N`), **Open project…** (`⌘O`), **Import BPMN…** (a
   `.bpmn` or `.xml` from another tool), **Save project**
   (`⌘S`), **Save as…** (`⇧⌘S`), and **Preferences…** (`⌘,`) in the app
-  menu; **View** carries the command palette (`⌘K`) and the six modes (`⌘1`…`⌘6`), and
+  menu; **View** carries the command palette (`⌘K`) and the three modes (`⌘1`…`⌘3`), and
   **Simulation** runs the simulation (`⌘↩`). Every shortcut is listed in
   [Keyboard shortcuts](SHORTCUTS.md).
 
@@ -336,7 +348,7 @@ This is real, working functionality: `DesktopStore` is wired up in `main.tsx` an
 
 ## Limitations of this beta
 
-*(as of 1.0.0-beta.22, tag `v1.0.0-beta.22`; the macOS verification notes below were recorded for
+*(as of 1.0.0-beta.23, tag `v1.0.0-beta.23`; the macOS verification notes below were recorded for
 Beta 1. Check whether any of these has already been resolved before trusting this list blindly at a
 later date)*
 
@@ -378,10 +390,10 @@ npm run dist:mac -w @lila-modeler/desktop   # tsc + copia dist/web + electron-bu
 
 The last command chains together: `apps/desktop`'s `tsc --build`, copying `apps/web/dist` to
 `apps/desktop/dist/web`, and `electron-builder --mac --arm64`. The result lands in
-`apps/desktop/release/` (the version in `apps/desktop/package.json`: `1.0.0-beta.22` for Beta 22):
+`apps/desktop/release/` (the version in `apps/desktop/package.json`: `1.0.0-beta.23` for Beta 23):
 
-- `apps/desktop/release/Lila-Modeler-1.0.0-beta.22-mac-arm64.dmg` — the installer.
-- `apps/desktop/release/Lila-Modeler-1.0.0-beta.22-mac-arm64.dmg.blockmap`.
+- `apps/desktop/release/Lila-Modeler-1.0.0-beta.23-mac-arm64.dmg` — the installer.
+- `apps/desktop/release/Lila-Modeler-1.0.0-beta.23-mac-arm64.dmg.blockmap`.
 - `apps/desktop/release/mac-arm64/Lila Modeler.app` — the app unpackaged from the DMG, useful for
   quick testing.
 - `apps/desktop/release/ORIGEN.txt` — the build's `sha`, `fecha` (date, ISO), and `arch`

@@ -98,6 +98,15 @@ function pulsar(texto: string): void {
   });
 }
 
+/** A step of the Simulate panel, by `data-paso`: its tab also carries its number and «✓»/«! n» (Lote M). */
+function irAPaso(paso: 'resources' | 'calendars'): void {
+  const destino = document.querySelector<HTMLButtonElement>(`.pasos button[data-paso="${paso}"]`);
+  if (destino === null) throw new Error(`no step ${paso}`);
+  act(() => {
+    destino.click();
+  });
+}
+
 /** El equivalente de `getByLabelText`: el control al que apunta un `<label>` visible. */
 function porRotulo(texto: string): HTMLInputElement {
   const etiqueta = [...document.querySelectorAll('label')].find((l) => l.textContent?.trim() === texto);
@@ -122,11 +131,12 @@ function antes(a: Node, b: Node): boolean {
 
 it('en Calendarios el control para crear va arriba, con rótulo visible y ejemplo', () => {
   montar();
-  pulsar('Calendarios');
+  irAPaso('calendars');
   const caja = porRotulo(es.escenario.nuevoCalendario);
   expect(caja.placeholder).toBe('turno-noche');
   expect(caja.getAttribute('aria-label')).toBeNull();
-  const primero = document.querySelector('fieldset[data-clave="oficina"]');
+  // Lote M (C3): the calendars are a compact list under the creation controls.
+  const primero = document.querySelector('.gcal-fila[data-clave="oficina"]');
   expect(primero).not.toBeNull();
   expect(antes(caja, primero!)).toBe(true);
   const boton = [...document.querySelectorAll('button')].find(
@@ -138,61 +148,69 @@ it('en Calendarios el control para crear va arriba, con rótulo visible y ejempl
 
 it('crear «turno-noche» lo añade, le da el foco y queda elegible en resources.<x>.calendar', () => {
   montar();
-  pulsar('Calendarios');
+  irAPaso('calendars');
   teclear(porRotulo(es.escenario.nuevoCalendario), 'turno-noche');
   pulsar(es.escenario.crearCalendario);
 
   expect(Object.keys(actual['calendars'] as Json)).toEqual(['oficina', 'turno-noche']);
-  const nuevo = document.querySelector('fieldset[data-clave="turno-noche"]');
+  const nuevo = document.querySelector('.gcal-editor[data-clave="turno-noche"]');
   expect(nuevo).not.toBeNull();
   expect(nuevo!.contains(document.activeElement)).toBe(true);
   expect(porRotulo(es.escenario.nuevoCalendario).value).toBe('');
 
-  pulsar('Recursos');
+  irAPaso('resources');
+  // Lote M (C2): the calendar is in the resource sheet, tab «Calendario y uso».
+  act(() => {
+    document.querySelector<HTMLButtonElement>('button.rec-fila[data-clave="analyst"]')!.click();
+  });
+  act(() => {
+    document.getElementById('rec-tab-uso')!.click();
+  });
   const select = document.getElementById('campo-resources.analyst.calendar');
   expect(select).toBeInstanceOf(HTMLSelectElement);
   const opciones = [...(select as HTMLSelectElement).options].map((o) => o.value);
   expect(opciones).toContain('turno-noche');
 });
 
-it('en Recursos el control para crear va arriba y el recurso nuevo recibe el foco', () => {
+it('en Recursos «+ Nuevo recurso» va arriba de la lista y el recurso nuevo abre su ficha con el foco en el nombre (Lote M)', () => {
   montar();
-  pulsar('Recursos');
-  const caja = porRotulo(es.escenario.nuevoRecurso);
-  expect(caja.placeholder).toBe('analista');
-  expect(antes(caja, document.querySelector('fieldset[data-clave="analyst"]')!)).toBe(true);
-  teclear(caja, 'operador');
-  pulsar(es.escenario.crearRecurso);
-  expect(Object.keys(actual['resources'] as Json)).toEqual(['analyst', 'operador']);
-  expect(document.querySelector('fieldset[data-clave="operador"]')!.contains(document.activeElement)).toBe(true);
+  irAPaso('resources');
+  const boton = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === es.recursos.nuevo)!;
+  expect(antes(boton, document.querySelector('button.rec-fila[data-clave="analyst"]')!)).toBe(true);
+  pulsar(es.recursos.nuevo);
+  expect(Object.keys(actual['resources'] as Json)).toEqual(['analyst', 'recurso-1']);
+  expect(document.activeElement?.id).toBe('campo-resources.recurso-1.name');
 });
 
-it('Enter en la caja crea igual que el botón', () => {
+it('Enter en la caja crea desde la primera plantilla, con horas (Lote M)', () => {
   montar();
-  pulsar('Calendarios');
+  irAPaso('calendars');
   const caja = porRotulo(es.escenario.nuevoCalendario);
   teclear(caja, 'sabado');
   act(() => {
     caja.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   });
   expect(Object.keys(actual['calendars'] as Json)).toEqual(['oficina', 'sabado']);
+  expect((actual['calendars'] as Json)['sabado']).toEqual({
+    intervals: [{ days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], from: '09:00', to: '18:00' }],
+  });
 });
 
 it('una clave repetida no se crea y se avisa', () => {
   montar();
-  pulsar('Calendarios');
+  irAPaso('calendars');
   teclear(porRotulo(es.escenario.nuevoCalendario), 'oficina');
   expect(document.querySelector('[role="alert"]')?.textContent).toBe(es.escenario.claveRepetida('oficina'));
   pulsar(es.escenario.crearCalendario);
   expect(Object.keys(actual['calendars'] as Json)).toEqual(['oficina']);
 });
 
-it('en inglés: «New calendar» y «+ Create calendar»; la franja dice «Add range»', () => {
+it('en inglés: «New calendar» y «+ Blank»; la franja dice «Add range»', () => {
   setLocale('en');
   montar();
-  pulsar('Calendars');
+  irAPaso('calendars');
   expect(porRotulo(en.escenario.nuevoCalendario).placeholder).toBe('night-shift');
-  expect(en.escenario.crearCalendario).toBe('+ Create calendar');
+  expect(en.escenario.crearCalendario).toBe('+ Blank');
   expect(en.escenario.nuevoRecurso).toBe('New resource');
   expect(en.calendario.anadir).toBe('Add range');
   expect(es.calendario.anadir).toBe('Añadir franja');

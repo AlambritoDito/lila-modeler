@@ -25,8 +25,11 @@ import { en as T } from './strings.en';
 import { es as ES } from './strings.es';
 import { version } from '../package.json';
 import { atajoPorId, etiqueta, type AtajoId } from './atajos';
+import { publicarCarriles } from './carrilClic';
 
 const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.fn(), zoom: vi.fn(), ajustar: vi.fn(), changed: () => {}, scenarioChange: (_raw?: object) => {},
+  // The panel header's Duplicate (C1): what App wires as the panel's `onDuplicar`.
+  duplicarPanel: (_archivo: string, _escenario: Record<string, unknown>) => {},
   // #420: the scenario map the panel last received, to see what the seeding wrote.
   escenarios: {} as Record<string, { elements?: Record<string, unknown>; extends?: string }>,
   // #226: abrir y el overlay son mocks propios para poder fallar una apertura y mirar con qué
@@ -61,11 +64,19 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   alineable: vi.fn(), alinear: vi.fn(), seleccionCambio: () => {},
   // #461: the canvas double-click listener, to play a double-click on a call activity.
   dobleClic: ((_evento: unknown) => undefined) as (evento: unknown) => unknown,
-  // #394: the last props the Simulate dock received (its real rendering is `DockSimular.test.tsx`).
-  dock: null as null | { pestana: string; corrida: { result: { warnings: string[]; bottlenecks: { elementId: string }[] } } | null;
+  // The last props the results table received (its real rendering is `DockSimular.test.tsx`).
+  dock: null as null | { pestana: string; plegada: boolean; corrida: { result: { warnings: string[]; bottlenecks: { elementId: string }[] } } | null;
     onPestana: (p: string) => void; onSeleccionar: (id: string) => void },
   // QA of #539: the canvas's `onSeleccion`, to play bpmn-js reporting a selection.
-  onSeleccion: (_id: string | null) => {} }));
+  onSeleccion: (_id: string | null) => {},
+  // Lote M: the last props of the time bar over the Results map.
+  replay: null as null | { reproduciendo?: boolean },
+  // Lote M, C1: the props the shell wires into the Simulate panel.
+  panel: {} as { seleccion?: string | null; onConteoProblemas?: (n: number) => void; onSimular?: () => void; irAlProblema?: number | null; onProblemaAtendido?: () => void; onPasoVisible?: (paso: string) => void; barraPasos?: HTMLElement | null; onElegirPaso?: () => void; pasoPedido?: string | null; enVentana?: boolean; pasoInicial?: string | null; cuerpoOculto?: boolean },
+  // Lote M, C4 and C1: the Simulate layers of the canvas the shell feeds.
+  porcentajes: vi.fn(), etiquetasPaso: vi.fn(),
+  // Lote M, C5b: bpmn-js's `selection.select`, called with `[]` when the shell drops the selection.
+  soltar: vi.fn() }));
 /**
  * The canvas elements the command palette lists (#410), with no box, so the shape palette's
  * drop-target search (which wants a width and a height) still ignores them. Three named shapes,
@@ -90,25 +101,35 @@ vi.mock('./exportarDiagrama', async (real) => ({ ...(await real<object>()), impr
 // `App.tsx` lo usa para borrar las variables del tema anterior (QA de #277).
 vi.mock('./theme/applyTheme', async (real) => ({ ...(await real<object>()), applyTheme: vi.fn() }));
 vi.mock('./ResultsView', () => ({ ResultsView: ({ result }: { result: { warnings: string[] } }) => <div>Resultado actual {result.warnings.join(' ')}</div> }));
-// The dock reads a full `RunResult`; this suite's runs are stubs, so it is a marker with its two
-// callbacks the shell wires (open Results, pick a bottleneck).
-vi.mock('./DockSimular', () => ({ DockSimular: (props: NonNullable<typeof mocks.dock> & { id: string; onAbrirResultados: () => void }) => {
+// The results table reads a full `RunResult`; this suite's runs are stubs, so it is a marker with
+// the callbacks the shell wires (its real rendering is `DockSimular.test.tsx`).
+vi.mock('./DockSimular', () => ({ TablaResultados: (props: NonNullable<typeof mocks.dock> & { id: string; plegada: boolean; onPlegar: () => void; detalle: React.ReactNode }) => {
   mocks.dock = props;
   return (
-    <section id={props.id} data-mock="dock" data-pestana={props.pestana}>
+    <section id={props.id} data-mock="dock" data-pestana={props.pestana} data-plegada={String(props.plegada)}>
       Dock {props.corrida === null ? 'vacío' : `con corrida ${props.corrida.result.warnings.join(' ')}`}
-      <button type="button" onClick={props.onAbrirResultados}>{T.dock.abrirResultados}</button>
+      <button type="button" onClick={props.onPlegar}>plegar</button>
+      {props.pestana === 'detalle' && props.detalle}
     </section>
   );
 } }));
+// The Results summary and the compare maps read full runs and draw bpmn-js: markers here.
+vi.mock('./PanelResumen', async (real) => ({ ...(await real<object>()), PanelResumen: ({ result }: { result: { bottlenecks: { elementId: string }[] } }) =>
+  <div data-mock="resumen">Resumen {result.bottlenecks.map((b) => b.elementId).join(' ')}</div> }));
+vi.mock('./VistaComparar', async (real) => ({ ...(await real<object>()), VistaComparar: ({ nombreRef, nombreOtro, onCerrar }: { nombreRef: string; nombreOtro: string; onCerrar: () => void }) =>
+  <div><span data-mock="comparar">{nombreRef} vs {nombreOtro}</span><button type="button" onClick={onCerrar}>{`${T.c5.comparar.cerrar} ✕`}</button></div> }));
+vi.mock('./MapasComparados', () => ({ MapasComparados: ({ nombreRef, nombreOtro }: { nombreRef: string; nombreOtro: string }) => <div data-mock="mapas">{nombreRef} vs {nombreOtro}</div> }));
 vi.mock('./PropertiesPanel', async (real) => ({ ...(await real<object>()), PanelPropiedades: () => null }));
 // Animate (#419 test) mounts the replay controls, which drive a real bpmn-js; not this suite's business.
-vi.mock('./replay/Replay', () => ({ Replay: () => null }));
+vi.mock('./replay/Replay', () => ({ Replay: (props: { reproduciendo?: boolean }) => { mocks.replay = props; return <div data-mock="tiempo" data-reproduciendo={String(props.reproduciendo)} />; } }));
 vi.mock('./ScenarioPanel', async (importOriginal) => ({ problemasEscenario: () => mocks.problemas,
   // The rail «+» (#397) goes through the real naming, which is pure.
   duplicarEscenario: (await importOriginal<typeof import('./ScenarioPanel')>()).duplicarEscenario,
-  ScenarioPanel: ({ onCambio, escenarios }: { onCambio: (file: string, raw: object) => void; escenarios: typeof mocks.escenarios }) => {
+  VistaJson: (await importOriginal<typeof import('./ScenarioPanel')>()).VistaJson,
+  ScenarioPanel: ({ onCambio, onDuplicar, escenarios, ...resto }: { onCambio: (file: string, raw: object) => void; onDuplicar: typeof mocks.duplicarPanel; escenarios: typeof mocks.escenarios } & typeof mocks.panel) => {
+    mocks.panel = resto;
     mocks.scenarioChange = (raw = {}) => onCambio('as-is.scenario.json', raw);
+    mocks.duplicarPanel = onDuplicar;
     mocks.escenarios = escenarios;
     // A marker, so the detached-window tests (design 2c) can tell which document it landed in.
     return <div data-mock="escenario" />;
@@ -119,7 +140,10 @@ vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado, onSeleccion }: { onL
     exportar: mocks.exportXml, abrir: mocks.abrir, cuellos: mocks.cuellos, ajustar: mocks.ajustar, zoom: mocks.zoom,
     repintar: mocks.repintar, exportarSvg: mocks.exportarSvg,
     validacion: mocks.validacion, seleccionar: mocks.seleccionar, simulacionTokens: mocks.simulacionTokens, enfocar: mocks.enfocar,
+    porcentajes: mocks.porcentajes, etiquetasPaso: mocks.etiquetasPaso,
     suscribir: (events: string[], callback: () => void) => {
+      // The lane layer of C2 (`carrilClic.ts`) listens to several events at once: not the shell's.
+      if (events.length > 1) return () => {};
       if (events.includes('selection.changed')) mocks.seleccionCambio = callback;
       else if (events.includes('element.dblclick')) mocks.dobleClic = callback as (evento: unknown) => unknown;
       else mocks.changed = callback;
@@ -133,7 +157,7 @@ vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado, onSeleccion }: { onL
       canvas: { viewbox: () => ({ x: 100, y: 50, width: 800, height: 400 }), getRootElement: () => 'raiz', scrollToElement: vi.fn() },
       create: { start: mocks.arrastrar },
       directEditing: { activate: mocks.editarNombre, isActive: () => mocks.edicionActiva(), complete: () => mocks.completarEdicion() },
-      selection: { get: () => mocks.seleccionados },
+      selection: { get: () => mocks.seleccionados, select: mocks.soltar },
       // Sin elementos con caja, la figura cuelga de la raíz visible, que es lo que aquí permiten
       // las reglas; el reparto entre pools y carriles es de bpmn-js y se prueba en el navegador.
       elementRegistry: { filter: (prueba: (el: object) => boolean) => ELEMENTOS.filter(prueba) },
@@ -200,26 +224,24 @@ beforeEach(async () => {
   await click(T.app.modos.simular);
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals(); localStorage.clear(); });
-/** The Simulate dock marker (#394), or `null` when it is not drawn. */
+/** The results table marker (Lote M; the Simulate dock of #394), or `null` when it is not drawn. */
 const dock = () => container.querySelector<HTMLElement>('[data-mock="dock"]');
-it('valida antes del Worker; la corrida se queda en Simular con el dock en Resultados rápidos y los avisos preservados (#394)', async () => {
+it('valida antes del Worker; la corrida salta sola a Resultados, sobre el mapa, con la tabla y los avisos preservados (Lote M)', async () => {
   // The startup reparse (150 ms) settles and rewrites `ir`/`noSoportados` on its own timer; wait
   // it out before running, same fix as «abrir un .bpmn inválido...» below (#494): under CI load
   // it could land mid-assertion instead of before the click and fail only there.
   await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
   await click(T.app.ejecutar);
   expect(mocks.worker).toHaveBeenCalledOnce();
-  // #394, the owner's decision: no jump to Results any more.
-  expect(container.querySelector('.modo.activo')!.textContent).toBe(T.app.modos.simular);
-  expect(dock()!.dataset['pestana']).toBe('rapidos');
+  // Lote M (design 01): a finished run lands in Results by itself, on the same map.
+  expect(container.querySelector('.modo.activo')!.textContent).toContain(T.app.modos.resultados);
+  expect(dock()!.dataset['pestana']).toBe('tareas');
   expect(dock()!.textContent).toContain('con corrida W-FRONTERA W-MOTOR');
   expect(container.textContent).toContain('Modelo montado');
-  // «Open in Results» shows the same run, warnings included.
-  await click(T.dock.abrirResultados);
-  expect(container.querySelector('.modo.activo')!.textContent).toBe(T.app.modos.resultados);
+  expect((container.querySelector('.zona-modelo') as HTMLElement).style.visibility).toBe('visible');
+  // «Full results» holds the Results view of before, warnings included.
+  await act(async () => mocks.dock!.onPestana('detalle'));
   expect(container.textContent).toContain('Resultado actual W-FRONTERA W-MOTOR');
-  // The pressed button went away with Simulate: the focus lands on the Results view, not <body>.
-  expect(document.activeElement).toBe(container.querySelector('section.zona-resultados'));
 });
 it('un error de validación impide iniciar Worker', async () => {
   mocks.gate.mockRejectedValueOnce(new Error('E-NOSOP: Task_1'));
@@ -245,7 +267,9 @@ it.each(['modelo', 'escenario'])('editar %s aborta y descarta resultado y progre
   expect(options.signal.aborted).toBe(true);
   await act(async () => { options.onProgress({ fraction: 1, replication: 1 }); run.resolve(done); });
   expect(container.textContent).not.toContain('Resultado actual');
-  expect(dock()!.textContent).toContain('Dock vacío');
+  // The late result is dropped: no jump to Results, no table.
+  expect(container.querySelector('.modo.activo')!.textContent).toBe(T.app.modos.simular);
+  expect(dock()).toBeNull();
   expect(container.querySelector('.progreso')).toBeNull();
 });
 it('desmontar termina la corrida activa', async () => {
@@ -264,27 +288,32 @@ it.each([['Task_Preparar', 'Prepare food'], ['Task_Anonima', 'Task_Anonima']])(
     // so the run would still be pending when the panel is read. Same wait as «valida antes…».
     await act(async () => { await new Promise((listo) => setTimeout(listo, 200)); });
     await click(T.app.ejecutar);
-    expect(container.querySelector('.simulacion > p.vacio')?.textContent).toBe(texto);
+    // The run lands in Results; back in Simulate the panel still names the main bottleneck.
+    await click(T.app.modos.simular);
+    expect(container.querySelector('.simulacion > p.vacio')?.textContent).toBe(`${T.c5.resultados.cuellos}: ${texto}`);
   },
 );
 
-// #226 punto 6: el interruptor «Cuellos de botella» no tenía prueba.
-it('el interruptor «Cuellos de botella» limpia el overlay y lo vuelve a pintar', async () => {
+// #226 punto 6, Lote M: the «Bottlenecks» switch became Results' «Heat map» layer.
+it('la capa «Mapa de calor» de Resultados limpia el overlay y lo vuelve a pintar; fuera de Resultados no se pinta', async () => {
   mocks.worker.mockResolvedValue(conCuello('Task_Preparar'));
   await click(T.app.ejecutar);
   expect(ultimoOverlay()[0]?.result.bottlenecks[0]?.elementId).toBe('Task_Preparar');
   expect(ultimoOverlay()[1]).toBe(true);
 
-  // Scoped to the Simulation tab: Settings → Appearance has its own toggle since #472.
-  const interruptor = container.querySelector<HTMLInputElement>('.simulacion .campo.interruptor input')!;
-  await act(async () => interruptor.click());
+  const capa = [...container.querySelectorAll<HTMLButtonElement>('.c5-capas button')].find((b) => b.textContent === T.c5.resultados.mapaCalor)!;
+  expect(capa.getAttribute('aria-pressed')).toBe('true');
+  await act(async () => capa.click());
   // Apagar no descarta la corrida: `sincronizarOverlay` limpia el lienzo por `visible = false`.
   expect(ultimoOverlay()[0]).not.toBeNull();
   expect(ultimoOverlay()[1]).toBe(false);
 
-  await act(async () => interruptor.click());
+  await act(async () => capa.click());
   expect(ultimoOverlay()[1]).toBe(true);
-  expect(interruptor.checked).toBe(true);
+  expect(capa.getAttribute('aria-pressed')).toBe('true');
+  // The modelling canvas stays clean: Simulate and Model do not paint it.
+  await click(T.app.modos.simular);
+  expect(ultimoOverlay()[1]).toBe(false);
 });
 
 /**
@@ -312,10 +341,10 @@ it('abrir un .bpmn inválido conserva el proyecto, la corrida y su overlay', asy
 
   expect(mocks.abrir).toHaveBeenCalledOnce();
   expect(container.textContent).toContain(T.app.proyectoDemo);
-  expect(container.querySelector('.simulacion > p.vacio')?.textContent).toBe('Prepare food');
+  expect(container.querySelector('[data-mock="resumen"]')?.textContent).toContain('Task_Preparar');
   // Ni una sola limpieza del overlay: nadie llamó `cuellos(null, …)` ni apagó el interruptor.
   expect(mocks.cuellos.mock.calls.slice(pintadas).filter((c) => c[0] === null || c[1] === false)).toEqual([]);
-  expect(container.querySelector<HTMLInputElement>('.campo.interruptor input')!.checked).toBe(true);
+  expect(container.querySelector('.c5-capas button')!.getAttribute('aria-pressed')).toBe('true');
 });
 
 // ---------- File → Import BPMN… (#591) ----------
@@ -923,7 +952,7 @@ it('sin nada guardado arranca en el idioma del sistema (LILA-210)', async () => 
     root = createRoot(container);
     await act(async () => root.render(<App store={session} />));
     expect(container.textContent).toContain(ES.app.modos.simular);
-    expect(container.textContent).not.toContain(T.app.modos.rutas);
+    expect(container.textContent).not.toContain(T.app.modos.simular);
     expect(document.documentElement.lang).toBe('es');
     // Y sin escribir nada: seguir al sistema es la preferencia de fábrica, no una elección.
     expect(localStorage.getItem('lila.idioma')).toBeNull();
@@ -937,12 +966,12 @@ it('cambiar de idioma repinta SIN remontar el lienzo y lo recuerda (LILA-210)', 
   const montajesAntes = mocks.montajes;
   const validacionesAntes = mocks.validacion.mock.calls.length;
   const cuellosAntes = mocks.cuellos.mock.calls.length;
-  expect(container.textContent).toContain(T.app.modos.rutas);
+  expect(container.textContent).toContain(T.app.modos.simular);
   const select = selectIdioma();
   await act(async () => { select.value = 'es'; select.dispatchEvent(new Event('change', { bubbles: true })); });
   // El árbol entero se repinta con el catálogo nuevo…
-  expect(container.textContent).toContain(ES.app.modos.rutas);
-  expect(container.textContent).not.toContain(T.app.modos.rutas);
+  expect(container.textContent).toContain(ES.app.modos.simular);
+  expect(container.textContent).not.toContain(T.app.modos.simular);
   expect(document.documentElement.lang).toBe('es');
   // …y el lienzo sigue siendo el mismo: la pila de deshacer y la selección no se pierden por
   // cambiar de idioma, que es justo el punto (el mismo trato que el tema en LILA-113).
@@ -960,7 +989,7 @@ it('volver a «auto» devuelve el idioma al sistema (LILA-210)', async () => {
   await act(async () => { select.value = 'es'; select.dispatchEvent(new Event('change', { bubbles: true })); });
   await act(async () => { select.value = 'auto'; select.dispatchEvent(new Event('change', { bubbles: true })); });
   // jsdom habla `en-US`, así que seguir al sistema es volver al catálogo base.
-  expect(container.textContent).toContain(T.app.modos.rutas);
+  expect(container.textContent).toContain(T.app.modos.simular);
   expect(localStorage.getItem('lila.idioma')).toBe('auto');
 });
 
@@ -971,7 +1000,7 @@ it('un idioma guardado que no existe cae en «auto» sin romper nada (LILA-210)'
   await act(async () => root.unmount());
   root = createRoot(container);
   await act(async () => root.render(<App store={session} />));
-  expect(container.textContent).toContain(T.app.modos.rutas);
+  expect(container.textContent).toContain(T.app.modos.simular);
   expect(document.documentElement.lang).toBe('en');
   expect(selectIdioma().value).toBe('auto');
 });
@@ -981,7 +1010,7 @@ it('el idioma guardado manda sobre el del sistema (LILA-210)', async () => {
   await act(async () => root.unmount());
   root = createRoot(container);
   await act(async () => root.render(<App store={session} />));
-  expect(container.textContent).toContain(ES.app.modos.rutas);
+  expect(container.textContent).toContain(ES.app.modos.simular);
   expect(selectIdioma().value).toBe('es');
 });
 
@@ -1845,9 +1874,12 @@ it('los chips cuentan errores y avisos y llevan al primer elemento con problemas
     ];
     mocks.scenarioChange();
   });
-  // The canvas chips; the rail of Simulate repeats them in its footer (design 2a).
-  const chips = [...container.querySelectorAll('.zona-modelo .chips-validacion .chip')].map((c) => c.textContent);
-  expect(chips).toEqual([T.app.errores(1), T.app.avisos(1)]);
+  // In Simulate the chips sit next to «Scenario ▾», once (QA of #603); in Model, over the canvas.
+  const chips = (donde: string) => [...container.querySelectorAll(`${donde} .chips-validacion .chip`)].map((c) => c.textContent);
+  expect(chips('.c5-subbarra')).toEqual([T.app.errores(1), T.app.avisos(1)]);
+  expect(chips('.zona-modelo')).toEqual([]);
+  await click(T.app.modos.modelar);
+  expect(chips('.zona-modelo')).toEqual([T.app.errores(1), T.app.avisos(1)]);
   // El disco se pinta por el modelador, no por React: el shell no importa bpmn-js.
   const validacion = mocks.validacion.mock.calls.at(-1)![0] as { marcadores: Map<string, unknown> };
   expect([...validacion.marcadores.keys()]).toEqual(['Task_1']);
@@ -1861,24 +1893,39 @@ it('sin problemas no hay chips', () => {
   expect(container.querySelector('.zona-modelo .chips-validacion')).toBeNull();
 });
 
-// --- «Validar rutas» (LILA-065) ---
+// --- «Validar rutas» (LILA-065), a Model tool since Lote M ---
 
-it('«Validar rutas» aparece junto a los demás modos y avisa de que no es la simulación DES', async () => {
+/** Model, then the «Validate paths» toggle over the canvas. */
+async function entrarRutas(): Promise<void> {
+  await click(T.app.modos.modelar);
+  await click(T.c5.validarRutas);
+}
+
+it('three modes; «Validar rutas» is a Model tool and says it is not the DES simulation (Lote M)', async () => {
   const modos = [...container.querySelectorAll('.modos .modo')].map((b) => b.textContent);
-  expect(modos).toEqual(Object.values(T.app.modos));
-  await click(T.app.modos.rutas);
+  expect(modos).toEqual([T.app.modos.modelar, T.app.modos.simular, T.app.modos.resultados]);
+  // Not over the Simulate canvas: it is Model's.
+  expect([...container.querySelectorAll('button')].some((b) => b.textContent === T.c5.validarRutas)).toBe(false);
+  await entrarRutas();
+  expect(container.querySelector('.c5-validar-rutas')!.getAttribute('aria-pressed')).toBe('true');
   expect(container.textContent).toContain(T.tokenSim.aviso);
 });
 
-it('entrar en «Validar rutas» activa la animación de tokens y salir la desactiva', async () => {
-  await click(T.app.modos.rutas);
+it('the «Validate paths» toggle starts and stops the token walk, and leaving Model stops it', async () => {
+  await entrarRutas();
   expect(mocks.simulacionTokens).toHaveBeenLastCalledWith(true);
-  await click(T.app.modos.modelar);
+  await click(T.c5.validarRutas);
   expect(mocks.simulacionTokens).toHaveBeenLastCalledWith(false);
+  await click(T.c5.validarRutas);
+  expect(mocks.simulacionTokens).toHaveBeenLastCalledWith(true);
+  await click(T.app.modos.simular);
+  expect(mocks.simulacionTokens).toHaveBeenLastCalledWith(false);
+  await click(T.app.modos.modelar);
+  expect(container.querySelector('.c5-validar-rutas')!.getAttribute('aria-pressed')).toBe('false');
 });
 
 it.each([
-  ['Validar rutas', () => click(T.app.modos.rutas)],
+  ['Validar rutas', entrarRutas],
   ['Modelar', () => click(T.app.modos.modelar)],
 ] as const)('a T with any modifier never reaches bpmn-js-token-simulation, in %s (#492, QA of #504 M1)', async (_modo, entrar) => {
   // `alinearArriba` is Alt+Shift+T (#453) and matches Lila's own `ATAJOS` map, so its
@@ -1917,7 +1964,7 @@ it('cambiar de tema con «Validar rutas» encendido reinicia el modo (QA #275)',
   // Los colores neutros del modo se escriben en el DI y el DI gana a lo que repinte `repintar()`:
   // sin apagar y volver a encender, el diagrama se queda con el relleno del tema anterior y la
   // etiqueta con el color del nuevo (medido: `#1F1A36` bajo texto `#201E1D`, contraste 1,0:1).
-  await click(T.app.modos.rutas);
+  await entrarRutas();
   mocks.simulacionTokens.mockClear();
   vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => ({ name: 'Papel', tokens: {} }) } as Response);
   const select = selectTema();
@@ -1936,7 +1983,7 @@ it('editar un token de diagrama con «Validar rutas» encendido reinicia el modo
   await act(async () => root.unmount());
   root = createRoot(container);
   await act(async () => root.render(<App store={session} />));
-  await click(T.app.modos.rutas);
+  await entrarRutas();
   mocks.simulacionTokens.mockClear();
   // Un token que el modo no congela en el DI no reinicia nada: no hay por qué cortar la animación.
   teclear(hexDe('accent.primary'), '#00FFAA');
@@ -1952,10 +1999,10 @@ it('en «Validar rutas» no se pintan el overlay de cuellos ni los marcadores de
   });
   mocks.validacion.mockClear();
   mocks.cuellos.mockClear();
-  await click(T.app.modos.rutas);
+  await entrarRutas();
   expect(mocks.validacion).toHaveBeenLastCalledWith(null);
   expect(mocks.cuellos).toHaveBeenLastCalledWith(null, false);
-  await click(T.app.modos.modelar);
+  await click(T.c5.validarRutas);
   expect(mocks.validacion).toHaveBeenLastCalledWith(expect.objectContaining({ marcadores: expect.anything() }));
 });
 
@@ -1968,8 +2015,8 @@ it('la barra tiene una sola acción primaria y corre el escenario desde cualquie
   expect(container.querySelectorAll('.barra .boton.primario')).toHaveLength(1);
   await click(T.app.ejecutar);
   expect(mocks.worker).toHaveBeenCalledOnce();
-  // From Model the run lands in Simulate, where the dock shows it (#394).
-  expect(container.querySelector('.modo.activo')!.textContent).toBe(T.app.modos.simular);
+  // From Model too the run lands in Results, on the map, with its table (Lote M).
+  expect(container.querySelector('.modo.activo')!.textContent).toBe(T.app.modos.resultados);
   expect(dock()!.textContent).toContain('con corrida');
 });
 it('mientras simula, la barra enseña la replicación, el porcentaje y CANCELAR', async () => {
@@ -2005,7 +2052,8 @@ it('el pie lleva errores, avisos, escenario y semilla heredada del escenario act
   expect(pie.textContent).toContain(T.app.escenario);
   expect(pie.textContent).toContain('AS-IS');
   expect(pie.textContent).toContain(T.app.semilla('42'));
-  // The scenario is picked in the rail of Simulate now (design 2a), not in a `<select>`.
+  // The scenario is picked in «Scenario ▾» (Lote M), not in a `<select>`.
+  await abrirEscenarios();
   await act(async () => { filaRail('TO-BE 3 cashiers').click(); });
   expect(pie.textContent).toContain('TO-BE 3 cashiers');
   expect(pie.textContent).toContain(T.app.semilla('42'));
@@ -2020,9 +2068,14 @@ function teclear(campo: HTMLInputElement, texto: string): void {
   });
 }
 
-/** A row of the scenario rail (design 2a), by the scenario's name. */
+/** A row of «Scenario ▾» (Lote M, the rail before), by the scenario's name; open it first. */
 const filaRail = (nombre: string): HTMLButtonElement =>
-  [...container.querySelectorAll<HTMLButtonElement>('.rail-fila')].find((b) => b.querySelector('.rail-nombre')!.firstChild!.textContent === nombre)!;
+  [...container.querySelectorAll<HTMLButtonElement>('.c5-escenario-fila')].find((b) => b.querySelector('.c5-escenario-nombre')!.firstChild!.textContent === nombre)!;
+/** Opens «Scenario ▾» when it is closed. */
+async function abrirEscenarios(): Promise<void> {
+  const boton = container.querySelector<HTMLButtonElement>('.c5-escenario-boton')!;
+  if (boton.getAttribute('aria-expanded') !== 'true') await act(async () => boton.click());
+}
 
 const figuras = (): HTMLButtonElement[] => [...container.querySelectorAll<HTMLButtonElement>('.paleta .figura')];
 
@@ -2075,7 +2128,8 @@ it('the «Advanced» switch is off by default, persists as lila.avanzado and sur
   // The bottleneck line is one of the places the id returns to.
   mocks.worker.mockResolvedValue(conCuello('Task_Preparar'));
   await click(T.app.ejecutar);
-  expect(container.querySelector('.simulacion > p.vacio')?.textContent).toBe(T.app.nombreDeCuello('Prepare food', 'Task_Preparar'));
+  await click(T.app.modos.simular);
+  expect(container.querySelector('.simulacion > p.vacio')?.textContent).toBe(`${T.c5.resultados.cuellos}: ${T.app.nombreDeCuello('Prepare food', 'Task_Preparar')}`);
 
   await act(async () => root.unmount());
   root = createRoot(container);
@@ -2086,34 +2140,68 @@ it('the «Advanced» switch is off by default, persists as lila.avanzado and sur
   expect(localStorage.getItem('lila.avanzado')).toBeNull();
 });
 
-// --- Design 2a: scenario rail and resizable right panel ---
+// --- «Scenario ▾» (Lote M; the Simulate rail of design 2a before) and the right panel ---
 
-it('in Simulate the rail replaces the palette; a row picks the scenario and clears the result', async () => {
-  expect(container.querySelector('.rail-escenarios')).not.toBeNull();
+it('in Simulate «Scenario ▾» sits over the canvas with no left column; a row picks the scenario and clears the result', async () => {
+  expect(container.querySelector('.c5-subbarra .c5-escenario-boton')).not.toBeNull();
   expect(container.querySelector('.paleta')).toBeNull();
-  expect(container.querySelector('.simulacion select')).toBeNull();
+  expect(container.querySelector('.divisor-izquierdo')).toBeNull();
   mocks.worker.mockResolvedValue(conCuello('Task_Preparar'));
   await click(T.app.ejecutar);
-  await click(T.app.modos.simular);
   expect(ultimoOverlay()[0]).not.toBeNull();
+  await click(T.app.modos.simular);
+  await abrirEscenarios();
+  expect(filaRail('AS-IS').querySelector('.c5-escenario-sub')!.textContent).toContain(T.c5.escenario.simulado);
+  expect(filaRail('TO-BE 3 cashiers').querySelector('.c5-escenario-sub')!.textContent).toContain(T.c5.escenario.sinSimular);
   await act(async () => { filaRail('TO-BE 3 cashiers').click(); });
+  // Picking closes the dropdown and gives the focus back to its button.
+  expect(container.querySelector('.c5-escenario-menu')).toBeNull();
+  expect(document.activeElement).toBe(container.querySelector('.c5-escenario-boton'));
+  expect(container.querySelector('.c5-escenario-boton')!.textContent).toContain('TO-BE 3 cashiers');
+  await abrirEscenarios();
   expect(filaRail('TO-BE 3 cashiers').getAttribute('aria-current')).toBe('true');
   expect(filaRail('AS-IS').hasAttribute('aria-current')).toBe(false);
   expect(ultimoOverlay()[0]).toBeNull();
-  expect(container.textContent).toContain(T.app.cuellosSinCorrida);
-  // Back in Model the palette returns.
+  // Esc closes it too.
+  await act(async () => { container.querySelector('.c5-escenario-menu')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+  expect(container.querySelector('.c5-escenario-menu')).toBeNull();
+  // Back in Model the palette returns, and «Scenario ▾» goes.
   await click(T.app.modos.modelar);
   expect(container.querySelector('.paleta')).not.toBeNull();
-  expect(container.querySelector('.rail-escenarios')).toBeNull();
+  expect(container.querySelector('.c5-escenario-boton')).toBeNull();
 });
 
-it('the rail «+» twice on the same scenario numbers the copies instead of overwriting (#397)', async () => {
+it('the visible Duplicate next to «Scenario ▾» is one click and opens the copy\'s name to edit (step 7)', async () => {
+  const boton = container.querySelector<HTMLButtonElement>('.c5-subbarra .c5-duplicar')!;
+  expect(boton.textContent).toContain(T.c5.escenario.duplicar);
+  await act(async () => boton.click());
+  const campo = container.querySelector<HTMLInputElement>('.c5-escenario-campo')!;
+  expect(campo.value).toBe('AS-IS (copy)');
+  expect(document.activeElement).toBe(campo);
+  expect(container.querySelector('.c5-escenario-boton')!.textContent).toContain('AS-IS (copy)');
+});
+
+it('Duplicate twice numbers the copies, and the copy can be renamed right away (#397, #581)', async () => {
+  const duplicar = async (): Promise<void> => {
+    await abrirEscenarios();
+    await act(async () => { [...container.querySelectorAll<HTMLButtonElement>('.c5-escenario-acciones button')].find((b) => b.textContent === T.c5.escenario.duplicar)!.click(); });
+  };
+  await duplicar();
+  // The copy's name is ready to edit: type TO-BE and Enter.
+  const campo = container.querySelector<HTMLInputElement>('.c5-escenario-campo')!;
+  expect(campo.value).toBe('AS-IS (copy)');
+  expect(document.activeElement).toBe(campo);
+  teclear(campo, 'TO-BE');
+  await act(async () => { campo.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+  expect(container.querySelector('.c5-escenario-boton')!.textContent).toContain('TO-BE');
+  expect(mocks.escenarios['as-is (copy).scenario.json']).toMatchObject({ name: 'TO-BE', extends: 'as-is.scenario.json' });
+  // A second copy of AS-IS does not overwrite the first.
+  await abrirEscenarios();
   await act(async () => { filaRail('AS-IS').click(); });
-  await act(async () => { porEtiqueta(T.rail.nuevo).click(); });
-  await act(async () => { filaRail('AS-IS').click(); });
-  await act(async () => { porEtiqueta(T.rail.nuevo).click(); });
-  expect(filaRail('AS-IS (copy)')).toBeDefined();
-  expect(filaRail('AS-IS (copy 2)')).toBeDefined();
+  await duplicar();
+  await act(async () => { container.querySelector('.c5-escenario-campo')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+  await abrirEscenarios();
+  expect(filaRail('TO-BE')).toBeDefined();
   expect(filaRail('AS-IS (copy 2)').getAttribute('aria-current')).toBe('true');
 });
 
@@ -2192,8 +2280,10 @@ async function pulsar(destino: EventTarget, init: KeyboardEventInit): Promise<bo
 const svgLienzo = () => container.querySelector<SVGElement>('.djs-container > svg')!;
 
 it('each panel toggle hides its region with a class, keeps it mounted and flips aria-pressed (#412)', async () => {
+  // The left column is Model's only since Lote M (the palette).
+  await click(T.app.modos.modelar);
   const casos: [RegionT, string, string][] = [
-    ['izquierda', 'sin-izquierda', '.rail-escenarios'],
+    ['izquierda', 'sin-izquierda', '.paleta'],
     ['derecha', 'sin-panel', 'aside.panel'],
     ['diagramas', 'sin-diagramas', 'nav.diagramas'],
     ['estado', 'sin-estado', 'footer.estado'],
@@ -2218,7 +2308,8 @@ it('each panel toggle hides its region with a class, keeps it mounted and flips 
 });
 
 it('hiding the region that holds the focus hands it to the toggle (#412)', async () => {
-  const fila = filaRail('AS-IS');
+  await click(T.app.modos.modelar);
+  const fila = container.querySelector<HTMLInputElement>('.paleta input[type="search"]')!;
   await act(async () => { fila.focus(); });
   await act(async () => toggleDe('izquierda').click());
   // jsdom has no layout, so the group counts as off screen and the «View» menu gets it.
@@ -2236,7 +2327,7 @@ it('panel visibility is remembered per mode in lila.paneles and restored, invali
   expect(conClase('sin-estado')).toBe(false);
   const guardado = JSON.parse(localStorage.getItem('lila.paneles')!) as Record<string, Record<string, boolean>>;
   // The whole map, every mode.
-  expect(Object.keys(guardado)).toEqual(['modelar', 'simular', 'resultados', 'comparar', 'animar', 'rutas']);
+  expect(Object.keys(guardado)).toEqual(['modelar', 'simular', 'resultados']);
   expect(guardado['simular']).toEqual({ izquierda: true, derecha: false, diagramas: true, estado: true, dock: true });
   expect(guardado['modelar']).toEqual({ izquierda: true, derecha: true, diagramas: true, estado: false, dock: true });
 
@@ -2258,18 +2349,19 @@ it('with the desktop bridge the panel map and the left widths go through Ajustes
   const escrito: Record<string, unknown>[] = [];
   vi.stubGlobal('lila', {
     pendingOpenPath: async () => null, onOpenPath: () => () => {}, onMenu: () => () => {},
-    readSettings: async () => ({ paneles: { simular: { derecha: false }, raro: { estado: false } }, paletaAncho: 300, railAncho: 9999 }),
+    readSettings: async () => ({ paneles: { simular: { derecha: false }, raro: { estado: false }, comparar: { estado: false } }, paletaAncho: 300, railAncho: 9999 }),
     writeSettings: async (a: Record<string, unknown>) => { escrito.push(a); },
   });
   await remontar();
   expect(appEl().style.getPropertyValue('--paleta-ancho')).toBe('300px');
-  expect(appEl().style.getPropertyValue('--rail-ancho')).toBe('320px');
+  // The rail is gone (Lote M): its saved width is read and ignored.
+  expect(appEl().style.getPropertyValue('--rail-ancho')).toBe('');
   await click(T.app.modos.simular);
   expect(conClase('sin-panel')).toBe(true);
   await act(async () => toggleDe('estado').click());
   const paneles = escrito.filter((a) => 'paneles' in a).at(-1)!['paneles'] as Record<string, Record<string, boolean>>;
   // Always the full map (the bridge merges shallowly), sanitised to the known modes.
-  expect(Object.keys(paneles)).toEqual(['modelar', 'simular', 'resultados', 'comparar', 'animar', 'rutas']);
+  expect(Object.keys(paneles)).toEqual(['modelar', 'simular', 'resultados']);
   expect(paneles['simular']).toEqual({ izquierda: true, derecha: false, diagramas: true, estado: false, dock: true });
   expect(localStorage.getItem('lila.paneles')).toBeNull();
 });
@@ -2278,6 +2370,7 @@ it('with the desktop bridge the panel map and the left widths go through Ajustes
 const mod = (key: string, extra: KeyboardEventInit = {}): KeyboardEventInit => ({ key, metaKey: true, ...extra });
 
 it('⌘⇧L/P/D/B toggle the four regions, from the page and from the canvas (#413)', async () => {
+  await click(T.app.modos.modelar);
   const casos: [string, string][] = [['L', 'sin-izquierda'], ['P', 'sin-panel'], ['D', 'sin-diagramas'], ['B', 'sin-estado']];
   for (const [key, clase] of casos) {
     expect(await pulsar(document.body, mod(key, { shiftKey: true })), key).toBe(true);
@@ -2429,18 +2522,27 @@ it('Esc that closes an open bar dropdown does not cancel the run (QA of #436, M2
   expect(signal.aborted).toBe(true);
 });
 
-it('in Results and Compare the hidden canvas keys go back to the browser (QA of #436, S1)', async () => {
-  for (const m of [T.app.modos.resultados, T.app.modos.comparar]) {
-    await click(m);
-    expect(await pulsar(document.body, mod('0')), m).toBe(false);
-    expect(await pulsar(document.body, mod('+')), m).toBe(false);
-  }
-  expect(mocks.ajustar).not.toHaveBeenCalled();
-  expect(mocks.zoom).not.toHaveBeenCalled();
-  await click(T.app.modos.modelar);
+it('Results keeps the canvas and its keys; comparing hides it and they go back to the browser (QA of #436, S1, Lote M)', async () => {
+  await click(T.app.modos.resultados);
   expect(await pulsar(document.body, mod('0'))).toBe(true);
   expect(mocks.ajustar).toHaveBeenCalledOnce();
+  await compararCon('TO-BE 3 cashiers');
+  expect(container.querySelector('[data-mock="comparar"]')!.textContent).toBe('AS-IS vs TO-BE 3 cashiers');
+  expect((container.querySelector('.zona-modelo') as HTMLElement).style.visibility).toBe('hidden');
+  expect(await pulsar(document.body, mod('0'))).toBe(false);
+  expect(await pulsar(document.body, mod('+'))).toBe(false);
+  expect(mocks.ajustar).toHaveBeenCalledOnce();
+  expect(mocks.zoom).not.toHaveBeenCalled();
 });
+
+/** «Compare with…» in Results, picking `nombre`; waits for the runs it starts. */
+async function compararCon(nombre: string): Promise<void> {
+  await act(async () => container.querySelector<HTMLButtonElement>('.c5-comparar-con .c5-comparar-boton')!.click());
+  const fila = [...container.querySelectorAll<HTMLButtonElement>('.c5-comparar-lista .c5-escenario-fila')].find((b) => b.querySelector('.c5-escenario-nombre')!.textContent === nombre)!;
+  await act(async () => fila.click());
+  // Each missing side is simulated in turn (the reparse first: 150 ms).
+  for (let i = 0; i < 4; i++) await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+}
 
 it('tooltips carry the key from the map; the browser-kept ones stay quiet on the web (#413)', async () => {
   const titulo = (texto: string) => [...container.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === texto)!.title;
@@ -2477,6 +2579,8 @@ it('double-click and Enter on a divider hide and show its side without saving a 
   expect(conClase('sin-panel')).toBe(false);
   expect(localStorage.getItem('lila.panelAncho')).toBeNull();
 
+  // The left column is Model's palette (Lote M).
+  await click(T.app.modos.modelar);
   const izquierdo = container.querySelector<HTMLElement>('.divisor-izquierdo[role="separator"]')!;
   expect(izquierdo.getAttribute('aria-label')).toBe(T.app.redimensionarIzquierda);
   await act(async () => { izquierdo.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); });
@@ -2484,11 +2588,11 @@ it('double-click and Enter on a divider hide and show its side without saving a 
   // The divider stays, so it can bring the column back.
   expect(container.querySelector('.divisor-izquierdo')).not.toBeNull();
   await pulsar(izquierdo, { key: 'ArrowRight' });
-  expect(appEl().style.getPropertyValue('--rail-ancho')).toBe('212px');
+  expect(appEl().style.getPropertyValue('--paleta-ancho')).toBe('236px');
   await pulsar(izquierdo, { key: 'Enter' });
   expect(conClase('sin-izquierda')).toBe(false);
-  expect(localStorage.getItem('lila.railAncho')).toBeNull();
-  expect(JSON.parse(localStorage.getItem('lila.paneles')!)['simular']['izquierda']).toBe(true);
+  expect(localStorage.getItem('lila.paletaAncho')).toBeNull();
+  expect(JSON.parse(localStorage.getItem('lila.paneles')!)['modelar']['izquierda']).toBe(true);
 });
 
 it('the detached scenario window hides the right panel; its toggle peeks without saving, docking restores (#412)', async () => {
@@ -2601,26 +2705,12 @@ it('the View menu closes on a click outside and the File and View menus close ea
   expect(vista.open).toBe(true);
 });
 
-it('the left divider sizes the rail in Simulate (160–320) and the palette in Model (180–360), each its own (#406)', async () => {
+it('the left divider sizes the palette in Model (180–360, compact below 114) (#406)', async () => {
   const izquierdo = () => container.querySelector<HTMLElement>('.divisor-izquierdo[role="separator"]')!;
   const puntero = (tipo: string, clientX: number) => act(async () => {
     izquierdo().dispatchEvent(new MouseEvent(tipo, { bubbles: true, clientX, button: 0 }));
   });
   const ancho = (v: string) => appEl().style.getPropertyValue(v);
-  // Simulate: the rail. Dragging right widens it.
-  expect(izquierdo().getAttribute('aria-valuenow')).toBe('212');
-  await puntero('pointerdown', 200); await puntero('pointermove', 600);
-  expect(ancho('--rail-ancho')).toBe('320px');
-  await puntero('pointermove', 0);
-  expect(ancho('--rail-ancho')).toBe('160px');
-  await puntero('pointerup', 250);
-  expect(ancho('--rail-ancho')).toBe('262px');
-  expect(localStorage.getItem('lila.railAncho')).toBe('262');
-  await pulsar(izquierdo(), { key: 'ArrowRight' });
-  expect(ancho('--rail-ancho')).toBe('278px');
-  expect(localStorage.getItem('lila.railAncho')).toBe('278');
-  expect(localStorage.getItem('lila.paletaAncho')).toBeNull();
-
   // Model: the palette.
   await click(T.app.modos.modelar);
   expect(ancho('--paleta-ancho')).toBe('236px');
@@ -2629,7 +2719,6 @@ it('the left divider sizes the rail in Simulate (160–320) and the palette in M
   await puntero('pointerup', 300);
   expect(ancho('--paleta-ancho')).toBe('336px');
   expect(localStorage.getItem('lila.paletaAncho')).toBe('336');
-  expect(localStorage.getItem('lila.railAncho')).toBe('278');
   // Below 114 px it snaps to the compact palette; the width is kept for later.
   await puntero('pointerdown', 300); await puntero('pointermove', 0); await puntero('pointerup', 0);
   expect(container.querySelector('.paleta.compacta')).not.toBeNull();
@@ -2658,11 +2747,9 @@ it('the left divider sizes the rail in Simulate (160–320) and the palette in M
 
 it('saved left widths are clamped, blank means never saved; no left divider without a left column (#406)', async () => {
   localStorage.setItem('lila.paletaAncho', '9999');
-  localStorage.setItem('lila.railAncho', '  ');
   await remontar();
   expect(appEl().style.getPropertyValue('--paleta-ancho')).toBe('360px');
-  expect(appEl().style.getPropertyValue('--rail-ancho')).toBe('212px');
-  for (const modo of [T.app.modos.resultados, T.app.modos.comparar]) {
+  for (const modo of [T.app.modos.simular, T.app.modos.resultados]) {
     await click(modo);
     expect(container.querySelector('.divisor-izquierdo')).toBeNull();
     expect(toggleDe('izquierda').disabled).toBe(true);
@@ -3159,23 +3246,24 @@ it('desacopla el escenario a una ventana propia y lo vuelve a acoplar (diseño 2
   }
 });
 
-it('the rail marks the detached scenario and the popup gets data-esquema (seams of #390, #391, #392)', async () => {
+it('«Scenario ▾» marks the detached scenario and the popup gets data-esquema (seams of #390, #391, #392)', async () => {
   const marco = document.createElement('iframe');
   document.body.append(marco);
   const hijo = marco.contentWindow!;
   vi.spyOn(hijo, 'close').mockImplementation(() => {});
   const abrir = vi.spyOn(window, 'open').mockReturnValue(hijo);
-  const sub = (nombre: string): string => filaRail(nombre).querySelector('.rail-sub')!.textContent!;
+  const sub = async (nombre: string): Promise<string> => { await abrirEscenarios(); return filaRail(nombre).querySelector('.c5-escenario-sub')!.textContent!; };
   try {
-    expect(sub('AS-IS')).not.toBe(T.rail.enVentana);
+    expect(await sub('AS-IS')).not.toContain(T.c5.escenario.enVentana);
     await act(async () => porEtiqueta(T.app.escenarioAcoplado).click());
     // Only the scenario that lives in the window says so.
-    expect(sub('AS-IS')).toBe(T.rail.enVentana);
-    expect(sub('TO-BE 3 cashiers')).not.toBe(T.rail.enVentana);
+    expect(await sub('AS-IS')).toContain(T.c5.escenario.enVentana);
+    expect(await sub('TO-BE 3 cashiers')).not.toContain(T.c5.escenario.enVentana);
     // The window follows the active scenario, and the subtitle follows the window.
+    await abrirEscenarios();
     await act(async () => { filaRail('TO-BE 3 cashiers').click(); });
-    expect(sub('TO-BE 3 cashiers')).toBe(T.rail.enVentana);
-    expect(sub('AS-IS')).not.toBe(T.rail.enVentana);
+    expect(await sub('TO-BE 3 cashiers')).toContain(T.c5.escenario.enVentana);
+    expect(await sub('AS-IS')).not.toContain(T.c5.escenario.enVentana);
     // Themed native controls (design 2d) key off `data-esquema`: the popup copies it like the theme.
     const esquema = container.querySelector('.app')!.getAttribute('data-esquema');
     expect(esquema).toMatch(/^(claro|oscuro)$/);
@@ -3185,8 +3273,8 @@ it('the rail marks the detached scenario and the popup gets data-esquema (seams 
     await act(async () => {
       acoplar!.dispatchEvent(new (hijo as unknown as typeof globalThis).MouseEvent('click', { bubbles: true }));
     });
-    expect(sub('TO-BE 3 cashiers')).not.toBe(T.rail.enVentana);
-    expect(container.querySelector('.rail-escenarios')!.textContent).not.toContain(T.rail.enVentana);
+    expect(await sub('TO-BE 3 cashiers')).not.toContain(T.c5.escenario.enVentana);
+    expect(container.querySelector('.c5-escenario-menu')!.textContent).not.toContain(T.c5.escenario.enVentana);
   } finally {
     abrir.mockRestore();
     marco.remove();
@@ -3199,7 +3287,8 @@ it('detaches Results to its own window that follows the current run, and docks i
   const hijo = marco.contentWindow!;
   const cerrar = vi.spyOn(hijo, 'close').mockImplementation(() => {});
   const abrir = vi.spyOn(window, 'open').mockReturnValue(hijo);
-  const zona = (): HTMLElement => container.querySelector('section.zona-resultados')!;
+  // The full Results view lives in the table's «Full results» tab now (Lote M).
+  const zona = (): HTMLElement => dock()!;
   const acoplarEnHija = async (): Promise<void> => {
     const boton = [...hijo.document.querySelectorAll('button')].find((b) => b.textContent === T.app.acoplar);
     expect(boton).toBeDefined();
@@ -3214,8 +3303,8 @@ it('detaches Results to its own window that follows the current run, and docks i
     // it out first, like «valida antes del Worker…» (#494).
     await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
     await click(T.app.ejecutar);
-    // The run stays in Simulate (#394); the dock's «Open in Results» goes there.
-    await click(T.dock.abrirResultados);
+    // The run lands in Results by itself (Lote M).
+    await act(async () => mocks.dock!.onPestana('detalle'));
     await vi.waitFor(() => expect(zona().textContent).toContain('Resultado actual W-FRONTERA W-MOTOR'));
     await act(async () => porEtiqueta(T.app.resultadosAcoplados).click());
     expect(abrir).toHaveBeenCalledWith('', 'lila-resultados', expect.stringMatching(/popup/));
@@ -3230,13 +3319,11 @@ it('detaches Results to its own window that follows the current run, and docks i
     await click(T.app.ejecutar);
     await vi.waitFor(() => expect(hijo.document.body.textContent).toContain('Resultado actual W-FRONTERA W-NUEVA'));
 
-    // While detached, the dock's «Open in Results» raises the window and leaves Simulate as it is (#394).
+    // While detached, the summary panel stands in for it and «Show window» raises it.
     const enfocar = vi.spyOn(hijo, 'focus').mockImplementation(() => {});
-    await click(T.app.modos.simular);
-    await click(T.dock.abrirResultados);
+    expect(container.querySelector('aside.panel')!.textContent).toContain(T.c5.resultados.enVentana);
+    await act(async () => [...container.querySelectorAll<HTMLButtonElement>('aside.panel button')].find((b) => b.textContent === T.app.mostrarVentana)!.click());
     expect(enfocar).toHaveBeenCalled();
-    expect(container.querySelector('.modo.activo')!.textContent).toBe(T.app.modos.simular);
-    await click(T.app.modos.resultados);
 
     // «Dock» in the stand-in brings it back and remembers where the window was.
     await click(T.app.acoplar);
@@ -3271,13 +3358,13 @@ it('reopens the Results window where it was last left (#395)', async () => {
     // it out first, like «valida antes del Worker…» (#494).
     await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
     await click(T.app.ejecutar);
-    await click(T.dock.abrirResultados);
-    await vi.waitFor(() => expect(container.querySelector('section.zona-resultados')?.textContent).toContain('Resultado actual'));
+    await act(async () => mocks.dock!.onPestana('detalle'));
+    await vi.waitFor(() => expect(dock()?.textContent).toContain('Resultado actual'));
     await act(async () => porEtiqueta(T.app.resultadosAcoplados).click());
     expect(abrir).toHaveBeenCalledWith('', 'lila-resultados', 'popup,width=640,height=480,left=12,top=34');
     // Blocked: it stays docked and says why.
     expect(container.textContent).toContain(T.app.resultadosBloqueada);
-    expect(container.querySelector('section.zona-resultados')!.textContent).toContain('Resultado actual');
+    expect(dock()!.textContent).toContain('Resultado actual');
   } finally {
     abrir.mockRestore();
   }
@@ -3549,11 +3636,20 @@ it('Run with a label being typed commits it first and waits for that edit too (Q
   expect(dock()!.textContent).toContain('con corrida');
 });
 
-it('a failed Run in Animate shows in the status bar (#419)', async () => {
+it('a failed Run in Model shows in the status bar; in Results it is the card over the map, with Retry (#419, Lote M)', async () => {
   mocks.gate.mockRejectedValue(new Error('E-SIN-START: Process_1: the process has no start event.'));
-  await click(T.app.modos.animar);
+  await click(T.app.modos.modelar);
+  await act(async () => toggleDe('derecha').click());
   await click(T.app.ejecutar);
   expect(container.querySelector('footer.estado [role="alert"].error')?.textContent).toBe(T.app.errorSimular('E-SIN-START: Process_1: the process has no start event.'));
+  await click(T.app.modos.resultados);
+  const tarjeta = container.querySelector('.c5-tarjeta.error')!;
+  expect(tarjeta.textContent).toContain(T.c5.resultados.errorKicker);
+  expect(tarjeta.textContent).toContain('E-SIN-START');
+  expect(container.querySelector('footer.estado .corrida-fallida')).toBeNull();
+  mocks.gate.mockClear();
+  await act(async () => [...tarjeta.querySelectorAll('button')].find((b) => b.textContent === T.c5.resultados.reintentar)!.click());
+  expect(mocks.gate).toHaveBeenCalledOnce();
 });
 
 it('opening a project with unconfigured tasks does not modify its scenarios (#420)', async () => {
@@ -3659,7 +3755,7 @@ async function teclaPaleta(key: string): Promise<void> {
   await act(async () => { campoPaleta().dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })); });
 }
 
-it('⌘K finds an element by name; ↓ Enter selects and centres it, focuses the canvas and leaves Results for Model (#410)', async () => {
+it('⌘K finds an element by name; ↓ Enter selects and centres it and focuses the canvas, which Results keeps on screen (#410, Lote M)', async () => {
   await click(T.app.modos.resultados);
   await abrirConTeclado();
   expect(paleta()?.open).toBe(true);
@@ -3674,22 +3770,31 @@ it('⌘K finds an element by name; ↓ Enter selects and centres it, focuses the
   expect(paleta()).toBeNull();
   expect(mocks.seleccionar).toHaveBeenCalledWith('Task_1', { centrar: true });
   expect(mocks.enfocar).toHaveBeenCalled();
-  expect(modoActivo()).toBe(T.app.modos.modelar);
+  expect(modoActivo()).toBe(T.app.modos.resultados);
 });
 
 it('the palette lists no elements with an empty query, and picks a scenario, a mode or an action (#410)', async () => {
   await abrirConTeclado({ ctrlKey: true });
   expect(opciones()).not.toContain('Revisar');
-  expect(opciones()).toEqual(expect.arrayContaining(['AS-IS', 'TO-BE 3 cashiers', T.app.modos.comparar, T.atajos.guardar]));
+  expect(opciones()).toEqual(expect.arrayContaining(['AS-IS', 'TO-BE 3 cashiers', T.app.modos.resultados, T.atajos.guardar,
+    T.c5.validarRutas, T.c5.compararConEscenario('TO-BE 3 cashiers')]));
+  expect(opciones()).not.toContain('Compare');
   await escribir('to-be');
   await teclaPaleta('Enter');
   expect(container.querySelector('footer.estado')!.textContent).toContain('TO-BE 3 cashiers');
   expect(modoActivo()).toBe(T.app.modos.simular);
 
   await abrirConTeclado();
-  await escribir(T.app.modos.comparar);
+  await escribir(T.app.modos.resultados);
   await teclaPaleta('Enter');
-  expect(modoActivo()).toBe(T.app.modos.comparar);
+  expect(modoActivo()).toBe(T.app.modos.resultados);
+
+  // Validate paths lost its mode: ⌘K takes it to Model with the toggle on.
+  await abrirConTeclado();
+  await escribir(T.c5.validarRutas);
+  await teclaPaleta('Enter');
+  expect(modoActivo()).toBe(T.app.modos.modelar);
+  expect(container.querySelector('.c5-validar-rutas')!.getAttribute('aria-pressed')).toBe('true');
 
   await abrirConTeclado();
   await escribir(T.atajos.guardar);
@@ -3808,10 +3913,10 @@ it('↑ from the first row wraps to the last and ↓ back to the first; a click 
   expect(filas().at(-1)!.getAttribute('aria-selected')).toBe('true');
   await teclaPaleta('ArrowDown');
   expect(activa()).toBe(filas()[0]!.id);
-  const comparar = filas().find((f) => f.querySelector('.nombre')!.textContent === T.app.modos.comparar)!;
-  await act(async () => { (comparar as HTMLElement).click(); });
+  const resultados = filas().find((f) => f.querySelector('.nombre')!.textContent === T.app.modos.resultados)!;
+  await act(async () => { (resultados as HTMLElement).click(); });
   expect(paleta()).toBeNull();
-  expect(modoActivo()).toBe(T.app.modos.comparar);
+  expect(modoActivo()).toBe(T.app.modos.resultados);
 });
 
 it('Enter that confirms an IME composition does not pick a row (#410)', async () => {
@@ -3842,7 +3947,8 @@ const CON_MENSAJE = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:endEvent id="End_A"><bpmn:incoming>F2</bpmn:incoming></bpmn:endEvent>
 <bpmn:sequenceFlow id="F1" sourceRef="Start_A" targetRef="Msg_1"/><bpmn:sequenceFlow id="F2" sourceRef="Msg_1" targetRef="End_A"/>
 </bpmn:process></bpmn:definitions>`;
-const chipsDelLienzo = () => [...container.querySelectorAll('.zona-modelo .chips-validacion .chip')].map((c) => c.textContent);
+// Model: over the canvas; Simulate and Results: next to «Scenario ▾» (QA of #603).
+const chipsDelLienzo = () => [...container.querySelectorAll('.zona-modelo .chips-validacion .chip, .c5-subbarra .chips-validacion .chip')].map((c) => c.textContent);
 
 it('an unsupported construct is a warning in Model, an error in Simulate, and only Run fails (#455)', async () => {
   await click(T.app.modos.modelar);
@@ -3930,34 +4036,39 @@ it('the canvas group aligns and distributes when bpmn-js would move something; k
 
 const divisorDock = () => container.querySelector<HTMLElement>('.divisor-dock[role="separator"]')!;
 
-it('a run from Simulate keeps Simulate and reopens the dock on Quick results; Results and Compare stay put (#394)', async () => {
+it('a run from Simulate lands in Results; the table keeps its tab and its collapsed state (Lote M)', async () => {
   // The startup reparse (150 ms) bumps the revision and would make a run stale mid-test: wait it
   // out first, like «valida antes del Worker…» (#494).
   await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
-  // Hide the dock and leave it on another tab: the run brings both back.
+  // No table outside Results.
+  expect(dock()).toBeNull();
+  await click(T.app.modos.resultados);
+  // Before any run: the card invites to simulate, on the map.
+  expect(container.querySelector('.c5-tarjeta')!.textContent).toContain(T.c5.resultados.vacioTitulo('AS-IS'));
   await act(async () => mocks.dock!.onPestana('log'));
   expect(await pulsar(document.body, mod('j'))).toBe(true);
   expect(conClase('sin-dock')).toBe(true);
-  await click(T.app.ejecutar);
-  expect(modoActivo()).toBe(T.app.modos.simular);
-  expect(conClase('sin-dock')).toBe(false);
-  expect(dock()!.dataset['pestana']).toBe('rapidos');
-  expect(JSON.parse(localStorage.getItem('lila.paneles')!).simular.dock).toBe(true);
-  // Running while looking at Results leaves you there, with the new run.
-  await click(T.app.modos.resultados);
+  expect(dock()!.dataset['plegada']).toBe('true');
+  await click(T.app.modos.simular);
   await click(T.app.ejecutar);
   expect(modoActivo()).toBe(T.app.modos.resultados);
-  await vi.waitFor(() => expect(container.textContent).toContain('Resultado actual'));
+  expect(container.querySelector('.c5-tarjeta')).toBeNull();
+  // A collapsed table stays collapsed: the summary and the map are what the run opens on.
+  expect(conClase('sin-dock')).toBe(true);
+  expect(dock()!.dataset['pestana']).toBe('log');
+  expect(container.querySelector('[data-mock="resumen"]')).not.toBeNull();
+  expect(JSON.parse(localStorage.getItem('lila.paneles')!).resultados.dock).toBe(false);
 });
 
-it('picking a bottleneck in the dock selects and centres it on the canvas (#394)', async () => {
+it('picking a task in the table selects and centres it on the canvas (Lote M)', async () => {
   mocks.worker.mockResolvedValue(conCuello('Task_Preparar'));
   await click(T.app.ejecutar);
   await act(async () => mocks.dock!.onSeleccionar(mocks.dock!.corrida!.result.bottlenecks[0]!.elementId));
   expect(mocks.seleccionar).toHaveBeenCalledWith('Task_Preparar', { centrar: true });
 });
 
-it('the dock divider resizes it by drag and arrows, remembers the height and hides it with Enter (#394)', async () => {
+it('the table divider resizes it by drag and arrows, remembers the height and collapses it with Enter (#394)', async () => {
+  await click(T.app.modos.resultados);
   const alto = () => appEl().style.getPropertyValue('--dock-alto');
   expect(alto()).toBe('240px');
   expect(divisorDock().getAttribute('aria-orientation')).toBe('horizontal');
@@ -3985,8 +4096,8 @@ it('the dock divider resizes it by drag and arrows, remembers the height and hid
   localStorage.setItem('lila.dockAlto', '5');
   await remontar();
   expect(alto()).toBe('120px');
-  // Enter hides it (the divider stays to bring it back) and the choice belongs to Simulate only.
-  await click(T.app.modos.simular);
+  // Enter collapses it (the divider stays to bring it back).
+  await click(T.app.modos.resultados);
   await pulsar(divisorDock(), { key: 'Enter' });
   expect(conClase('sin-dock')).toBe(true);
   expect(divisorDock()).not.toBeNull();
@@ -3994,29 +4105,31 @@ it('the dock divider resizes it by drag and arrows, remembers the height and hid
   expect(conClase('sin-dock')).toBe(false);
 });
 
-it('the dock is remembered per mode: hidden in Simulate stays hidden after a trip to Model, and its tab too (#394)', async () => {
+it('the table is remembered: collapsed in Results stays collapsed after a trip to Model, and its tab too (#394)', async () => {
+  await click(T.app.modos.resultados);
   await act(async () => mocks.dock!.onPestana('avisos'));
   await pulsar(document.body, mod('j'));
   expect(conClase('sin-dock')).toBe(true);
   await click(T.app.modos.modelar);
-  // Only Simulate draws it.
+  // Only Results draws it.
   expect(dock()).toBeNull();
   expect(container.querySelector('.divisor-dock')).toBeNull();
   expect(conClase('sin-dock')).toBe(false);
-  await click(T.app.modos.simular);
+  await click(T.app.modos.resultados);
   expect(conClase('sin-dock')).toBe(true);
   await pulsar(document.body, mod('j'));
   expect(dock()!.dataset['pestana']).toBe('avisos');
   await remontar();
-  await click(T.app.modos.simular);
+  await click(T.app.modos.resultados);
   expect(conClase('sin-dock')).toBe(false);
-  localStorage.setItem('lila.paneles', JSON.stringify({ simular: { dock: false } }));
+  localStorage.setItem('lila.paneles', JSON.stringify({ resultados: { dock: false } }));
   await remontar();
-  await click(T.app.modos.simular);
+  await click(T.app.modos.resultados);
   expect(conClase('sin-dock')).toBe(true);
 });
 
-it('⌘J toggles the dock in Simulate only, and the palette offers it there (#394)', async () => {
+it('⌘J toggles the table in Results only, and the palette offers it there (#394)', async () => {
+  await click(T.app.modos.resultados);
   expect(etiqueta(atajoPorId('dock'), false)).toBe('Ctrl+J');
   expect(await pulsar(svgLienzo(), { key: 'j', ctrlKey: true })).toBe(true);
   expect(conClase('sin-dock')).toBe(true);
@@ -4046,7 +4159,7 @@ it('the dock never takes the canvas: its height is bounded by the window, saved 
     localStorage.setItem('lila.dockAlto', '640');
     await altoDeVentana(1200);
     await remontar();
-    await click(T.app.modos.simular);
+    await click(T.app.modos.resultados);
     expect(alto()).toBe('640px');
     // 1280×800, 1024×768, 1024×600 and Electron's 360 px floor: at least ~160 px of canvas stays.
     for (const [ventana, esperado] of [[800, 440], [768, 408], [600, 240], [360, 120]] as const) {
@@ -4061,32 +4174,35 @@ it('the dock never takes the canvas: its height is bounded by the window, saved 
     // Restoring a saved 640 into a small window draws it bounded too.
     await altoDeVentana(600);
     await remontar();
-    await click(T.app.modos.simular);
+    await click(T.app.modos.resultados);
     expect(alto()).toBe('240px');
   } finally {
     await altoDeVentana(768);
   }
 });
 
-it('the View menu lists the dock in Simulate only; hiding it with the focus inside sends the focus to its divider (QA of #394)', async () => {
+it('the View menu lists the table in Results only; collapsing it with the focus inside sends the focus to its divider (QA of #394)', async () => {
+  await click(T.app.modos.resultados);
   const item = () => container.querySelector<HTMLButtonElement>('.menu-vista > div > [data-region="dock"]');
   expect(item()!.textContent).toContain(T.app.regiones.dock);
   await act(async () => item()!.click());
   expect(conClase('sin-dock')).toBe(true);
   await act(async () => item()!.click());
   expect(conClase('sin-dock')).toBe(false);
-  // Focus inside the dock, ⌘J: it lands on the divider, which brings the dock back.
-  await act(async () => dock()!.querySelector('button')!.focus());
+  // Focus on the table's header, ⌘J: collapsed, the header stays, and so does the focus.
+  const boton = dock()!.querySelector('button')!;
+  await act(async () => boton.focus());
   await pulsar(document.activeElement!, mod('j'));
   expect(conClase('sin-dock')).toBe(true);
-  expect(document.activeElement).toBe(divisorDock());
+  expect(document.activeElement).toBe(boton);
   await click(T.app.modos.modelar);
   expect(item()).toBeNull();
   // Outside Simulate ⌘J / Ctrl+J is not taken: the browser keeps it (Downloads).
   expect(await pulsar(document.body, { key: 'j', ctrlKey: true })).toBe(false);
 });
 
-it('a failed run opens the dock on Warnings (QA of #394)', async () => {
+it('a failed run opens the table on Warnings (QA of #394)', async () => {
+  await click(T.app.modos.resultados);
   await act(async () => mocks.dock!.onPestana('log'));
   mocks.gate.mockRejectedValueOnce(new Error('E-NOSOP: Task_1'));
   await click(T.app.ejecutar);
@@ -4117,6 +4233,7 @@ it('a change on disk with nothing unsaved reloads, keeping the mode, the process
   await nuevoProcesoConNombre('Cobro');
   await click(T.app.guardar);
   const guardado = vi.mocked(session.saveProject).mock.calls.at(-1)![0];
+  await abrirEscenarios();
   await act(async () => { filaRail(T.proyecto.escenarioToBe).click(); });
   // An agent renames the second process's diagram through the CLI.
   const deFuera: ProjectDocument = { ...guardado, processes: guardado.processes!.map((p) => ({ ...p, model: { ...p.model, xml: p.model.xml.replace('name="Cobro"', 'name="Cobro por agente"') } })) };
@@ -4134,7 +4251,7 @@ it('a change on disk with nothing unsaved reloads, keeping the mode, the process
   expect(pestanasProceso().map((b) => b.textContent)).toEqual([T.app.proyectoDemo, 'Cobro']);
   expect(pestanasProceso()[1]!.getAttribute('aria-current')).toBe('true');
   expect(container.querySelector('.estado')!.textContent).toContain(T.proyecto.escenarioToBe);
-  expect(filaRail(T.proyecto.escenarioToBe)).toBeDefined(); // Still in Simulate: its rail is there.
+  expect(modoActivo()).toBe(T.app.modos.simular); // Still in Simulate.
   // Reloaded is saved: nothing asks before closing.
   expect(vi.mocked(session.setDirty!).mock.calls.at(-1)).toEqual([false]);
 });
@@ -4247,6 +4364,360 @@ it('the status bar shows the seed of the run on screen, not only the scenario\'s
     expect(container.querySelector('.estado')!.textContent).toContain(T.app.semilla('7'));
   });
   expect(container.querySelector('.estado')!.textContent).not.toContain(T.app.semilla('42'));
+});
+
+// ---------- Lote M, C5: results on the map, Space, compare from a duplicate ----------
+
+it('Space plays and pauses the tokens on the Results map, never while typing, on a button, or outside Results (Lote M)', async () => {
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  // Outside Results Space is not taken.
+  expect(await pulsar(document.body, { key: ' ', code: 'Space' })).toBe(false);
+  await click(T.app.ejecutar);
+  expect(modoActivo()).toBe(T.app.modos.resultados);
+  // The time bar is on the map from the start: one key, no click.
+  const tiempo = () => container.querySelector<HTMLElement>('[data-mock="tiempo"]')!;
+  expect(tiempo().dataset['reproduciendo']).toBe('false');
+  expect(await pulsar(document.body, { key: ' ', code: 'Space' })).toBe(true);
+  expect(tiempo().dataset['reproduciendo']).toBe('true');
+  // On a focused button Space is the button's own key.
+  const capa = container.querySelector<HTMLButtonElement>('.c5-capas button')!;
+  expect(await pulsar(capa, { key: ' ', code: 'Space' })).toBe(false);
+  expect(await pulsar(selectIdioma(), { key: ' ', code: 'Space' })).toBe(false);
+  expect(tiempo().dataset['reproduciendo']).toBe('true');
+  expect(await pulsar(svgLienzo(), { key: ' ', code: 'Space' })).toBe(true);
+  expect(tiempo().dataset['reproduciendo']).toBe('false');
+  // The «Tokens» layer off takes the bar away, and Space with it.
+  await click(T.c5.resultados.tokens);
+  expect(container.querySelector('[data-mock="tiempo"]')).toBeNull();
+  expect(await pulsar(document.body, { key: ' ', code: 'Space' })).toBe(false);
+});
+
+it('Duplicate + Simulate opens the copy compared with the scenario it came from; Close comparison goes back to the map (#581, design 06)', async () => {
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await abrirEscenarios();
+  await act(async () => { [...container.querySelectorAll<HTMLButtonElement>('.c5-escenario-acciones button')].find((b) => b.textContent === T.c5.escenario.duplicar)!.click(); });
+  const campo = container.querySelector<HTMLInputElement>('.c5-escenario-campo')!;
+  teclear(campo, 'TO-BE');
+  await act(async () => { campo.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+  // Duplicate leaves Results for Simulate (the copy is made to be changed): here we are already.
+  expect(modoActivo()).toBe(T.app.modos.simular);
+  await click(T.app.ejecutar);
+  // The copy ran; AS-IS had no run, so it is simulated for the comparison (same seed: its own).
+  for (let i = 0; i < 4; i++) await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  expect(mocks.gate.mock.calls.map((c) => c[1])).toEqual(['as-is (copy).scenario.json', 'as-is.scenario.json']);
+  expect(modoActivo()).toBe(T.app.modos.resultados);
+  expect(container.querySelector('[data-mock="comparar"]')!.textContent).toBe('AS-IS vs TO-BE');
+  expect(conClase('sin-panel')).toBe(true);
+  expect(dock()).toBeNull();
+  // A second run of the copy does not reopen a comparison that was closed.
+  await click(`${T.c5.comparar.cerrar} ✕`);
+  expect(container.querySelector('[data-mock="comparar"]')).toBeNull();
+  expect(dock()).not.toBeNull();
+  await click(T.app.ejecutar);
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 50); }); });
+  expect(container.querySelector('[data-mock="comparar"]')).toBeNull();
+});
+
+it('a side that fails to run shows its card with «Fix it in Simulate» instead of looping (design 06)', async () => {
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await click(T.app.ejecutar);
+  mocks.gate.mockRejectedValue(new Error('E-SIN-RECURSO: Task_1'));
+  await compararCon('TO-BE 3 cashiers');
+  const tarjeta = container.querySelector('.c5-tarjeta.error')!;
+  expect(tarjeta.textContent).toContain(T.c5.comparar.errorTitulo('TO-BE 3 cashiers'));
+  expect(tarjeta.textContent).toContain('E-SIN-RECURSO');
+  // Tried once: no retry loop.
+  expect(mocks.gate.mock.calls.filter((c) => c[1] === 'to-be-3-cajeros.scenario.json')).toHaveLength(1);
+  await act(async () => [...tarjeta.querySelectorAll('button')].find((b) => b.textContent === T.c5.comparar.corregir)!.click());
+  expect(modoActivo()).toBe(T.app.modos.simular);
+  expect(container.querySelector('.c5-escenario-boton')!.textContent).toContain('TO-BE 3 cashiers');
+});
+
+it('reopening a project puts each base scenario before the ones that extend it, and opens on the base (#581)', async () => {
+  const xml = seedModelXml();
+  const parsed = await parseBpmn(xml);
+  // The engine stores scenarios sorted by file name: the copy first.
+  const doc: ProjectDocument = { version: 1, id: 'orden', name: 'Orden', model: { id: parsed.ir.id, name: 'model.bpmn', xml, revision: 0 },
+    scenarios: {
+      'as-is (copy).scenario.json': { version: 1, name: 'TO-BE', extends: 'as-is.scenario.json' },
+      'as-is.scenario.json': { version: 1, name: 'AS-IS', model: 'model.bpmn', run: { duration: 60 }, elements: {} },
+    }, scenarioRevisions: {}, runs: [] };
+  vi.mocked(session.openProject).mockResolvedValueOnce(doc);
+  await click(T.app.abrir);
+  await click(T.app.modos.simular);
+  expect(container.querySelector('.c5-escenario-boton')!.textContent).toContain('AS-IS');
+  await abrirEscenarios();
+  expect([...container.querySelectorAll('.c5-escenario-fila .c5-escenario-nombre')].map((n) => n.firstChild!.textContent)).toEqual(['AS-IS', 'TO-BE']);
+});
+
+it('cancelling the run of a comparison side leaves a card with Retry, not «Simulating…» forever (QA of #603)', async () => {
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await click(T.app.ejecutar);
+  const colgada = deferred<typeof done>();
+  mocks.worker.mockReturnValueOnce(colgada.promise);
+  await compararCon('TO-BE 3 cashiers');
+  expect(container.querySelector('.c5-tarjeta')!.textContent).toContain(T.c5.comparar.simulando('TO-BE 3 cashiers'));
+  await act(async () => [...container.querySelectorAll<HTMLButtonElement>('.c5-tarjeta button')].find((b) => b.textContent === T.app.cancelar)!.click());
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 50); }); });
+  const tarjeta = container.querySelector('.c5-tarjeta')!;
+  expect(tarjeta.textContent).toContain(T.c5.comparar.cancelada('TO-BE 3 cashiers'));
+  const llamadas = mocks.gate.mock.calls.length;
+  await act(async () => [...tarjeta.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === T.c5.resultados.reintentar)!.click());
+  for (let i = 0; i < 3; i++) await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  expect(mocks.gate.mock.calls.length).toBe(llamadas + 1);
+  expect(container.querySelector('[data-mock="comparar"]')!.textContent).toBe('AS-IS vs TO-BE 3 cashiers');
+});
+
+it('a comparison side that finishes while the person is in another mode leaves them there (QA of #603)', async () => {
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await click(T.app.ejecutar);
+  const lenta = deferred<typeof done>();
+  mocks.worker.mockReturnValueOnce(lenta.promise);
+  await compararCon('TO-BE 3 cashiers');
+  await click(T.app.modos.modelar);
+  await act(async () => { lenta.resolve(done); await new Promise((listo) => { setTimeout(listo, 50); }); });
+  expect(modoActivo()).toBe(T.app.modos.modelar);
+});
+
+it('the Duplicate of the panel header (C1) also records the copy\'s origin: its first run opens compared (QA of #603)', async () => {
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await act(async () => mocks.duplicarPanel('as-is (copy).scenario.json', { version: 1, name: 'AS-IS (copy)', extends: 'as-is.scenario.json' }));
+  await click(T.app.ejecutar);
+  for (let i = 0; i < 4; i++) await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  expect(mocks.gate.mock.calls.map((c) => c[1])).toEqual(['as-is (copy).scenario.json', 'as-is.scenario.json']);
+  expect(container.querySelector('[data-mock="comparar"]')!.textContent).toBe('AS-IS vs AS-IS (copy)');
+});
+
+it('«▶ Simulate» and ⌘↩ go to the first problem in the panel while the panel counts errors, and run otherwise (Lote M, C1)', async () => {
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await act(async () => mocks.panel.onConteoProblemas!(2));
+  expect(container.querySelector('.ejecutar .c5-insignia')!.textContent).toBe('2');
+  await click(T.app.modos.modelar);
+  await act(async () => container.querySelector<HTMLButtonElement>('.ejecutar')!.click());
+  expect(mocks.gate).not.toHaveBeenCalled();
+  expect(modoActivo()).toBe(T.app.modos.simular);
+  expect(mocks.panel.irAlProblema).toBe(1);
+  await pulsar(document.body, mod('Enter'));
+  expect(mocks.panel.irAlProblema).toBe(2);
+  expect(mocks.gate).not.toHaveBeenCalled();
+  // The panel's own «▶ Simulate» runs through the shell; with no problems the bar runs too.
+  await act(async () => mocks.panel.onConteoProblemas!(0));
+  expect(container.querySelector('.ejecutar .c5-insignia')).toBeNull();
+  await act(async () => { mocks.panel.onSimular!(); });
+  expect(mocks.gate).toHaveBeenCalledOnce();
+});
+
+it('the badge of «▶ Simulate» counts only the errors (E-*) while the panel is not mounted; warnings still run (Lote M, C1)', async () => {
+  await click(T.app.modos.modelar);
+  await click(T.app.pestanas.propiedades);
+  await act(async () => {
+    mocks.problemas = [
+      { ruta: 'elements.Task_1', mensaje: 'sin duración', severidad: 'warning' },
+      { ruta: 'run.duration', mensaje: 'falta parada', severidad: 'error' },
+    ];
+    mocks.scenarioChange();
+  });
+  expect(container.querySelector('.ejecutar .c5-insignia')!.textContent).toBe('1');
+  await act(async () => {
+    mocks.problemas = [{ ruta: 'elements.Task_1', mensaje: 'sin duración', severidad: 'warning' }];
+    mocks.scenarioChange();
+  });
+  expect(container.querySelector('.ejecutar .c5-insignia')).toBeNull();
+  await act(async () => container.querySelector<HTMLButtonElement>('.ejecutar')!.click());
+  expect(mocks.gate).toHaveBeenCalledOnce();
+});
+
+it('the panel acknowledging the jump clears it, and Alt+n from Model opens Simulate on step n (Lote M, C1)', async () => {
+  await act(async () => mocks.panel.onConteoProblemas!(1));
+  await pulsar(document.body, mod('Enter'));
+  expect(mocks.panel.irAlProblema).toBe(1);
+  await act(async () => mocks.panel.onProblemaAtendido!());
+  expect(mocks.panel.irAlProblema).toBeNull();
+  await click(T.app.modos.modelar);
+  await click(T.app.pestanas.propiedades);
+  expect(await pulsar(document.body, { key: '5', code: 'Digit5', altKey: true })).toBe(true);
+  expect(modoActivo()).toBe(T.app.modos.simular);
+  expect((mocks.panel as { pasoPedido?: string }).pasoPedido).toBe('calendars');
+});
+
+it('in Simulate the panel draws its steps in the full-width sub-bar; elsewhere it gets no slot (Lote M, C6)', async () => {
+  await click(T.app.modos.simular);
+  const ranura = mocks.panel.barraPasos;
+  expect(ranura).toBeInstanceOf(HTMLElement);
+  expect(ranura!.closest('.c5-subbarra')).not.toBeNull();
+  // Next to «Scenario ▾», after its separator, inside the main window.
+  expect(container.querySelector('.c5-subbarra .c6-separador')).not.toBeNull();
+  expect(container.contains(ranura!)).toBe(true);
+  await click(T.app.modos.modelar);
+  expect(mocks.panel.barraPasos).toBeNull();
+  expect(container.querySelector('.c6-ranura-pasos')).toBeNull();
+});
+
+it('in Simulate the panel stays mounted behind Properties, and picking a step brings its tab back (Lote M, C6)', async () => {
+  await click(T.app.modos.simular);
+  await click(T.app.pestanas.propiedades);
+  const simulacion = container.querySelector<HTMLElement>('aside .simulacion');
+  expect(simulacion).not.toBeNull();
+  expect(simulacion!.hidden).toBe(true);
+  expect(mocks.panel.barraPasos).toBeInstanceOf(HTMLElement);
+  await act(async () => mocks.panel.onElegirPaso!());
+  expect(container.querySelector<HTMLElement>('aside .simulacion')!.hidden).toBe(false);
+});
+
+it('Alt+n in the main window opens Simulate on step n while the panel is detached (Lote M, C6; QA of #604)', async () => {
+  const marco = document.createElement('iframe');
+  document.body.append(marco);
+  const hijo = marco.contentWindow!;
+  vi.spyOn(hijo, 'close').mockImplementation(() => {});
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(hijo);
+  try {
+    await act(async () => porEtiqueta(T.app.escenarioAcoplado).click());
+    expect(mocks.panel.enVentana).toBe(true);
+    await click(T.app.modos.modelar);
+    expect(await pulsar(document.body, { key: '3', code: 'Digit3', altKey: true })).toBe(true);
+    expect(modoActivo()).toBe(T.app.modos.simular);
+    expect(mocks.panel.pasoPedido).toBe('routes');
+    // The floating panel still draws the main window's sub-bar steps in Simulate (design 1a).
+    expect(container.contains(mocks.panel.barraPasos!)).toBe(true);
+    await act(async () => (mocks.panel as { onPasoAtendido?: () => void }).onPasoAtendido!());
+    // Already in Simulate: the shell asks again, the panel (in its window) moves.
+    expect(await pulsar(document.body, { key: '5', code: 'Digit5', altKey: true })).toBe(true);
+    expect(mocks.panel.pasoPedido).toBe('calendars');
+    // Inside a field of the main window the key is the field's (⌥2 types «@» on macOS).
+    await act(async () => (mocks.panel as { onPasoAtendido?: () => void }).onPasoAtendido!());
+    const campo = document.createElement('input');
+    container.append(campo);
+    expect(await pulsar(campo, { key: '2', code: 'Digit2', altKey: true })).toBe(false);
+    expect(mocks.panel.pasoPedido).toBeNull();
+    campo.remove();
+  } finally {
+    abrir.mockRestore();
+    marco.remove();
+  }
+});
+
+it('the panel remounts on the step it was on: detaching, docking and coming back from Results (Lote M, C6; QA of #605)', async () => {
+  const marco = document.createElement('iframe');
+  document.body.append(marco);
+  const hijo = marco.contentWindow!;
+  vi.spyOn(hijo, 'close').mockImplementation(() => {});
+  const abrir = vi.spyOn(window, 'open').mockReturnValue(hijo);
+  try {
+    await click(T.app.modos.simular);
+    await act(async () => mocks.panel.onPasoVisible!('resources'));
+    await act(async () => porEtiqueta(T.app.escenarioAcoplado).click());
+    expect(mocks.panel.enVentana).toBe(true);
+    expect(mocks.panel.pasoInicial).toBe('resources');
+    await act(async () => mocks.panel.onPasoVisible!('calendars'));
+    const acoplar = [...hijo.document.querySelectorAll('button')].find((b) => b.textContent === T.app.acoplar)!;
+    await act(async () => { acoplar.dispatchEvent(new (hijo as unknown as typeof globalThis).MouseEvent('click', { bubbles: true })); });
+    expect(mocks.panel.enVentana).toBe(false);
+    expect(mocks.panel.pasoInicial).toBe('calendars');
+    await click(T.app.modos.resultados);
+    await click(T.app.modos.simular);
+    expect(mocks.panel.pasoInicial).toBe('calendars');
+  } finally {
+    abrir.mockRestore();
+    marco.remove();
+  }
+});
+
+it('Simulate shows the step\'s hint over the canvas; Model and Results do not (Lote M, C6, design 1a)', async () => {
+  await click(T.app.modos.simular);
+  await act(async () => mocks.panel.onPasoVisible!('routes'));
+  const chip = container.querySelector('.zona-modelo .c6-chip-lienzo');
+  expect(chip?.textContent).toBe(`${T.c6.pasoLienzo(3)}${T.c6.pistasLienzo.routes}`);
+  await click(T.app.modos.modelar);
+  expect(container.querySelector('.c6-chip-lienzo')).toBeNull();
+});
+
+it('the Resources hint mentions lanes only when the diagram has some, never the pool (Lote M, C7)', async () => {
+  await click(T.app.modos.simular);
+  await act(async () => mocks.panel.onPasoVisible!('resources'));
+  // Sample order has pools and no lane (the mocked canvas may have published some earlier).
+  await act(async () => publicarCarriles([]));
+  const chip = (): string | null | undefined => container.querySelector('.zona-modelo .c6-chip-lienzo')?.textContent;
+  expect(chip()).toBe(`${T.c6.pasoLienzo(4)}${T.c6.pistasLienzo.resources}`);
+  expect(T.c6.pistasLienzo.resources).not.toMatch(/lane|pool/i);
+  try {
+    await act(async () => publicarCarriles([{ id: 'Lane_1', nombre: 'Kitchen', nodos: ['Task_A'] }]));
+    expect(chip()).toBe(`${T.c6.pasoLienzo(4)}${T.c7.pistaRecursosCarril}`);
+    expect(T.c7.pistaRecursosCarril).not.toMatch(/pool/i);
+    await act(async () => publicarCarriles([]));
+    expect(chip()).toBe(`${T.c6.pasoLienzo(4)}${T.c6.pistasLienzo.resources}`);
+  } finally {
+    await act(async () => publicarCarriles(null));
+  }
+});
+
+it('with Properties in front the sub-bar tabs control nothing; Alt+n from the main window focuses the step tab (Lote M, C6)', async () => {
+  await click(T.app.modos.simular);
+  expect(mocks.panel.cuerpoOculto).toBe(false);
+  await click(T.app.pestanas.propiedades);
+  expect(mocks.panel.cuerpoOculto).toBe(true);
+  // The shell's Alt+n (here from Model) focuses the tab the panel draws in the slot once it is the open one.
+  await click(T.app.modos.modelar);
+  expect(await pulsar(document.body, { key: '4', code: 'Digit4', altKey: true })).toBe(true);
+  const tab = document.createElement('button');
+  tab.id = 'sim-paso-resources';
+  tab.setAttribute('aria-selected', 'true');
+  mocks.panel.barraPasos!.append(tab);
+  await act(async () => { await new Promise((r) => setTimeout(r, 80)); });
+  expect(document.activeElement).toBe(tab);
+  tab.remove();
+});
+
+/** Start → XOR «Approved?» → Yes / No → end: one gateway that splits cases. */
+const conCompuerta = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="x"><bpmn:process id="Process_semilla" isExecutable="false">
+<bpmn:startEvent id="Start_A"/><bpmn:exclusiveGateway id="Gw_A"/><bpmn:task id="Task_Si"/><bpmn:task id="Task_No"/><bpmn:endEvent id="End_A"/>
+<bpmn:sequenceFlow id="F0" sourceRef="Start_A" targetRef="Gw_A"/><bpmn:sequenceFlow id="Flow_Si" name="Yes" sourceRef="Gw_A" targetRef="Task_Si"/>
+<bpmn:sequenceFlow id="Flow_No" name="No" sourceRef="Gw_A" targetRef="Task_No"/><bpmn:sequenceFlow id="F3" sourceRef="Task_Si" targetRef="End_A"/><bpmn:sequenceFlow id="F4" sourceRef="Task_No" targetRef="End_A"/>
+</bpmn:process></bpmn:definitions>`;
+
+it('Routes turns the canvas percentages into fields that write 0.7/0.3; outside Simulate they go (Lote M, C4)', async () => {
+  await reparsear(conCompuerta);
+  await act(async () => mocks.panel.onPasoVisible!('times'));
+  type Estado = { editable: boolean; repartos: { id: string }[]; onCambiar: (flujo: string, p: number | null) => void; onEnfocar: (g: string, f: string | null) => void };
+  const ultimo = () => mocks.porcentajes.mock.calls.at(-1)![0] as Estado | null;
+  expect(ultimo()!.editable).toBe(false);
+  await act(async () => mocks.panel.onPasoVisible!('routes'));
+  expect(ultimo()!.editable).toBe(true);
+  expect(ultimo()!.repartos.map((r) => r.id)).toEqual(['Gw_A']);
+  await act(async () => ultimo()!.onCambiar('Flow_Si', 70));
+  await act(async () => ultimo()!.onCambiar('Flow_No', 30));
+  expect(asIs()['Flow_Si']).toEqual({ probability: 0.7 });
+  expect(asIs()['Flow_No']).toEqual({ probability: 0.3 });
+  await act(async () => ultimo()!.onEnfocar('Gw_A', 'Flow_Si'));
+  expect(mocks.seleccionar).toHaveBeenLastCalledWith('Flow_Si');
+  await click(T.app.modos.modelar);
+  expect(ultimo()).toBeNull();
+});
+
+it('the step labels follow the panel\'s step under each element and are cleared outside Simulate (Lote M, C1)', async () => {
+  await reparsear(conCompuerta);
+  await act(async () => mocks.panel.onPasoVisible!('times'));
+  const ultima = () => mocks.etiquetasPaso.mock.calls.at(-1)![0] as { paso: string; ir: { nodes: object }; unidad: string } | null;
+  expect(ultima()!.paso).toBe('times');
+  expect(Object.keys(ultima()!.ir.nodes)).toContain('Task_Si');
+  await act(async () => mocks.panel.onPasoVisible!('resources'));
+  expect(ultima()!.paso).toBe('resources');
+  await click(T.app.modos.resultados);
+  expect(ultima()).toBeNull();
+});
+
+it('duplicating drops the selection, so the copy\'s next step is not filtered to the old element, and its first ▶ Simulate opens compared (Lote M, C5b)', async () => {
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await act(async () => mocks.onSeleccion('Flow_Si'));
+  expect(mocks.panel.seleccion).toBe('Flow_Si');
+  await act(async () => mocks.panel.onConteoProblemas!(0));
+  await act(async () => container.querySelector<HTMLButtonElement>('.c5-subbarra .c5-duplicar')!.click());
+  expect(mocks.panel.seleccion).toBeNull();
+  expect(mocks.soltar).toHaveBeenLastCalledWith([]);
+  await act(async () => container.querySelector<HTMLButtonElement>('.ejecutar')!.click());
+  for (let i = 0; i < 4; i++) await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  expect(mocks.gate.mock.calls.map((c) => c[1])).toEqual(['as-is (copy).scenario.json', 'as-is.scenario.json']);
+  expect(container.querySelector('[data-mock="comparar"]')!.textContent).toBe('AS-IS vs AS-IS (copy)');
 });
 
 // #572 (ADR-031): a `.lila` double-clicked with the installed PWA arrives through

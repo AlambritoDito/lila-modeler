@@ -105,18 +105,16 @@ function pulsar(texto: string): void {
 }
 
 /**
- * #333: el panel abre en el primer paso (Parámetros), así que una sección de otro paso hay que pedirla antes. El
+ * #333: el panel abre en Tiempos (Lote M), así que una sección de otro paso hay que pedirla antes. El
  * rótulo va escrito a mano —es un test— y es el del catálogo español que fija `setLocale`.
  */
-function irAPaso(paso: 'parameters' | 'resources' | 'calendars' | 'arrivals'): void {
-  pulsar(
-    {
-      parameters: 'Parámetros',
-      resources: 'Recursos',
-      calendars: 'Calendarios',
-      arrivals: 'Llegadas',
-    }[paso],
-  );
+function irAPaso(paso: 'arrivals' | 'times' | 'routes' | 'resources' | 'calendars' | 'run'): void {
+  // By `data-paso`: the button's text also carries the step's «! n» (Lote M).
+  const destino = document.querySelector<HTMLButtonElement>(`.pasos button[data-paso="${paso}"]`);
+  if (destino === null) throw new Error(`no step ${paso}`);
+  act(() => {
+    destino.click();
+  });
 }
 
 /** El `<details>` cuyo `<summary>` dice `titulo`: es lo que acota «Añadir» a una sección. */
@@ -145,6 +143,26 @@ function anadirClave(titulo: string, clave: string): void {
     caja.dispatchEvent(new Event('input', { bubbles: true }));
   });
   pulsarEn(donde, boton);
+}
+
+/** Lote M (C2): a new resource from «+ Nuevo recurso», renamed to `clave` with the «Avanzado» id field. */
+function crearRecurso(clave: string): void {
+  pulsar(es.recursos.nuevo);
+  const caja = document.querySelector<HTMLInputElement>('.rec-ficha input[id$=".__clave"]');
+  if (caja === null) throw new Error('la ficha no tiene el campo de id');
+  teclear(caja.id, clave);
+  act(() => {
+    caja.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  });
+}
+
+/** Lote M (C2): one of the three tabs of the resource sheet. */
+function apartado(cual: 'cap' | 'cost' | 'uso'): void {
+  const pestana = document.getElementById(`rec-tab-${cual}`);
+  if (pestana === null) throw new Error(`no hay pestaña ${cual}`);
+  act(() => {
+    pestana.click();
+  });
 }
 
 /* ------------------------------------------------------------------ *
@@ -196,6 +214,7 @@ function Anfitrion(): React.JSX.Element {
         ir={ir}
         seleccion={seleccion}
         onSeleccionar={setSeleccion}
+        avanzado
       />
     </>
   );
@@ -242,9 +261,9 @@ it('el AS-IS de la solicitud de servicio se teclea entero desde el panel, sin to
     pulsar(`${SELECCIONAR}${id}`);
   };
 
-  /* --- Parámetros: la corrida entera, y la unidad primero: a partir de ahí los tiempos se
+  /* --- Ejecución: la corrida entera, y la unidad primero: a partir de ahí los tiempos se
          teclean en minutos. --- */
-  irAPaso('parameters');
+  irAPaso('run');
   elegir('campo-run.baseTimeUnit', 'min');
   teclear('campo-run.duration', '480');
   teclear('campo-run.warmup', '0');
@@ -268,12 +287,16 @@ it('el AS-IS de la solicitud de servicio se teclea entero desde el panel, sin to
   /* --- Recursos: los tres grupos. --- */
   irAPaso('resources');
   for (const [clave, nombre, capacidad, coste] of GRUPOS) {
-    anadirClave(es.escenario.seccionRecursos, clave);
+    // Lote M (C2): «+ Nuevo recurso» opens its sheet; the file's key is set under «Avanzado».
+    crearRecurso(clave);
     teclear(`campo-resources.${clave}.name`, nombre);
-    elegir(`campo-resources.${clave}.type`, 'role');
     teclear(`campo-resources.${clave}.capacity`, capacidad);
+    apartado('cost');
     teclear(`campo-resources.${clave}.costPerHour`, coste);
+    apartado('uso');
+    elegir(`campo-resources.${clave}.type`, 'role');
     elegir(`campo-resources.${clave}.calendar`, 'tienda');
+    pulsar(es.recursos.volver);
   }
 
   /* --- Llegadas: cada cuánto llega una solicitud. --- */
@@ -285,8 +308,8 @@ it('el AS-IS de la solicitud de servicio se teclea entero desde el panel, sin to
   );
   teclear('campo-elements.StartEvent_Request.interTriggerTimer.mean', '6');
 
-  /* --- Parámetros otra vez: las trece tareas. --- */
-  irAPaso('parameters');
+  /* --- Tiempos: las trece tareas. --- */
+  irAPaso('times');
   for (const [id, minutos] of TAREAS) {
     seleccionar(id);
     elegirPorTexto(`campo-elements.${id}.processingTime`, es.escenario.distribuciones['constant']!);
@@ -306,17 +329,17 @@ it('el AS-IS de la solicitud de servicio se teclea entero desde el panel, sin to
   seleccionar('StartEvent_Request');
   elegir('campo-elements.StartEvent_Request.calendar', 'tienda');
 
-  /* --- Las dos compuertas, en Parámetros: su reparto es parte de cómo corre el modelo. --- */
-  irAPaso('parameters');
+  /* --- Las dos compuertas, en Rutas, en porcentaje: el archivo sigue guardando fracciones. --- */
+  irAPaso('routes');
   seleccionar('Gateway_Screening');
-  teclear('campo-elements.Flow_ScreeningBad.probability', '0.4');
-  teclear('campo-elements.Flow_ScreeningGood.probability', '0.6');
-  expect(document.body.textContent).toContain(es.escenario.compuertaSuma(1));
+  teclear('rutas-elements.Flow_ScreeningBad.probability', '40');
+  teclear('rutas-elements.Flow_ScreeningGood.probability', '60');
+  expect(document.body.textContent).toContain(es.rutas.suma100);
 
   seleccionar('Gateway_Eligibility');
-  teclear('campo-elements.Flow_EligibilityNotEligible.probability', '0.3');
-  teclear('campo-elements.Flow_EligibilityEligible.probability', '0.7');
-  expect(document.body.textContent).toContain(es.escenario.compuertaSuma(1));
+  teclear('rutas-elements.Flow_EligibilityNotEligible.probability', '30');
+  teclear('rutas-elements.Flow_EligibilityEligible.probability', '70');
+  expect(document.body.textContent).toContain(es.rutas.suma100);
 
   /* --- Lo tecleado es, semánticamente, el AS-IS del ejemplo. --- */
   const referencia = JSON.parse(

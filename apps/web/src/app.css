@@ -32,17 +32,18 @@ body {
   display: grid;
   grid-template-areas:
     'barra     barra     barra'
+    'paleta    subbarra  panel'
     'paleta    lienzo    panel'
     'paleta    dock      panel'
     'paleta    diagramas panel'
     'estado    estado    estado';
   /* La paleta (LILA-207) fija su propio ancho —`--paleta-ancho`, o 48 en compacto— y la columna
-     se encoge a 0 cuando no se pinta (modos Resultados y Comparar). In Simulate the column is the
-     scenario rail (`--rail-ancho`). The right panel is `--panel-ancho`. The three are set inline
-     by their dividers (#406). The `dock` row is the Simulate dock (#394, `DockSimular.css`); in
-     every other mode nothing is drawn there and the row collapses. */
+     se encoge a 0 cuando no se pinta (Simular y Resultados). The right panel is `--panel-ancho`.
+     Both are set inline by their dividers (#406). The `subbarra` row is «Scenario ▾» and Results'
+     tools over the canvas, the `dock` row the results table under the Results map (Lote M,
+     `DockSimular.css`); where nothing is drawn there the rows collapse. */
   grid-template-columns: auto 1fr var(--panel-ancho, 320px);
-  grid-template-rows: auto 1fr auto auto auto;
+  grid-template-rows: auto auto 1fr auto auto auto;
   height: 100vh;
 }
 
@@ -52,7 +53,6 @@ body {
    left `auto` column collapses by itself once its only content is gone; the right one needs the
    explicit 0. The rows of the diagram tabs and the status bar are `auto`, so they collapse too. */
 .app.sin-izquierda > .paleta,
-.app.sin-izquierda > .rail-escenarios,
 .app.sin-panel > .panel,
 .app.sin-diagramas > .diagramas,
 .app.sin-estado > .estado {
@@ -876,46 +876,11 @@ body {
   padding: 0;
 }
 
-/* Panel de la reproducción del event log (#331): misma retícula que la pestaña «Simulación»,
-   más la tabla de pools. Los colores de los contadores y de los puntos que recorren los flujos
-   viven en `ReplayOverlay.ts`, que es quien los escribe sobre el lienzo. */
-.replay {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-}
-
-.replay h3 {
-  color: var(--fg-muted);
-  font-size: var(--font-size-base);
-  margin: 0;
-}
-
+/* The replay's time bar (#331, a bar over the Results map since Lote M) is styled in the C5 block
+   at the end (`.c5-tiempo`); the colours of the counters and the dots that walk the flows live in
+   `ReplayOverlay.ts`, which writes them onto the canvas. */
 .replay .vacio {
   padding: 0;
-}
-
-.replay .acciones {
-  display: flex;
-  gap: 8px;
-}
-
-.replay-recursos {
-  border-collapse: collapse;
-  color: var(--fg-primary);
-  width: 100%;
-}
-
-.replay-recursos th, .replay-recursos td {
-  border-bottom: 1px solid var(--border);
-  padding: 4px 6px;
-  text-align: left;
-}
-
-.replay-recursos th {
-  color: var(--fg-muted);
-  font-weight: normal;
 }
 
 .campo {
@@ -1410,8 +1375,383 @@ body {
   margin-top: 6px;
 }
 
-/* #333: la barra de los cuatro pasos del panel de simulación. Horizontal y compacta, y con
-   `flex-wrap` porque el panel derecho se puede estrechar hasta que los cuatro rótulos no caben:
+/* ---------- Lote M, C2: Resources master-detail (`PasoRecursos`, `FichaRecurso`) ---------- */
+
+.rec-paso-recursos {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rec-oculto {
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.rec-nuevo {
+  align-self: stretch;
+  height: 34px;
+}
+
+.rec-vacio {
+  background: var(--bg-surface);
+  border: 1px dashed var(--border-strong);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+}
+
+.rec-vacio p {
+  color: var(--fg-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.rec-vacio .boton {
+  align-self: flex-start;
+}
+
+.rec-lista ul {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rec-fila {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 64px 72px;
+  padding: 6px 10px;
+  text-align: left;
+  width: 100%;
+}
+
+button.rec-fila {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--fg-primary);
+  cursor: pointer;
+  font: inherit;
+}
+
+button.rec-fila:hover {
+  background: var(--bg-hover);
+}
+
+button.rec-fila:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+button.rec-fila.error {
+  border-color: var(--status-error);
+  box-shadow: inset 3px 0 0 var(--status-error);
+}
+
+.rec-fila.rec-cabecera {
+  color: var(--fg-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding-bottom: 2px;
+  padding-top: 0;
+  text-transform: uppercase;
+}
+
+.rec-fila > span:not(:first-child) {
+  text-align: right;
+}
+
+.rec-celda-nombre {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rec-nombre {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rec-calendario {
+  color: var(--fg-muted);
+  font-size: 0.85em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rec-num {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.rec-ficha {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rec-ficha-cabecera {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rec-ficha-titulo {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rec-pestanas {
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 2px;
+}
+
+.rec-pestana {
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.92em;
+  margin-bottom: -1px;
+  padding: 6px 6px;
+  white-space: nowrap;
+}
+
+.rec-pestana.activa {
+  border-bottom-color: var(--accent-primary);
+  color: var(--fg-primary);
+  font-weight: 600;
+}
+
+.rec-pestana:focus-visible,
+.rec-opcion:focus-within {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.rec-insignia {
+  color: var(--status-error);
+  font-weight: 700;
+  margin-left: 3px;
+}
+
+.rec-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rec-modo {
+  border: 0;
+  display: flex;
+  margin: 0 0 6px;
+  padding: 0;
+}
+
+.rec-modo legend {
+  color: var(--fg-muted);
+  margin-bottom: 4px;
+  padding: 0;
+}
+
+.rec-opcion {
+  align-items: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  color: var(--fg-primary);
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  justify-content: center;
+  padding: 5px 8px;
+}
+
+.rec-opcion + .rec-opcion {
+  border-left: 0;
+}
+
+.rec-opcion.activa {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: var(--fg-onAccent);
+  font-weight: 600;
+}
+
+.rec-opcion input {
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+}
+
+.rec-unidades {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.rec-unidades > label {
+  flex: 1;
+}
+
+.rec-paso {
+  display: flex;
+}
+
+.rec-paso .boton {
+  height: 30px;
+  padding: 0;
+  width: 32px;
+}
+
+.campo-schema .rec-paso input[type='text'] {
+  border-left: 0;
+  border-right: 0;
+  font-family: var(--font-mono);
+  text-align: center;
+  width: 52px;
+}
+
+.rec-turnos {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rec-turno {
+  align-items: center;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: 56px minmax(0, 1fr) 56px 24px;
+}
+
+.rec-turno.rec-cabecera {
+  color: var(--fg-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rec-turno-n {
+  color: var(--fg-muted);
+  font-size: 0.9em;
+}
+
+.rec-turnos .boton {
+  align-self: flex-start;
+}
+
+.rec-quitar {
+  justify-self: center;
+}
+
+.rec-dos {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.rec-en-linea {
+  align-items: flex-end;
+  display: flex;
+  gap: 6px;
+}
+
+.rec-en-linea > .campo-schema {
+  flex: 1;
+  min-width: 0;
+}
+
+.rec-en-linea > .boton {
+  height: 30px;
+  margin: 3px 0;
+}
+
+.rec-acciones {
+  display: flex;
+  gap: 6px;
+}
+
+.rec-confirmar .aviso {
+  margin: 0 0 6px;
+}
+
+.rec-vista {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+  margin: 0;
+  padding: 8px 10px;
+}
+
+.rec-tareas .ids {
+  margin: 4px 0 0;
+}
+
+.rec-tareas .resumen {
+  color: var(--fg-muted);
+}
+
+.rec-carril-elegido {
+  background: var(--bg-surface);
+  border: 1.5px solid var(--accent-primary);
+  margin-top: 0;
+  padding: 10px 12px;
+}
+
+.rec-carril-cabecera {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.rec-hecho {
+  color: var(--accent-primary);
+  font-weight: 600;
+  margin: 4px 0 0;
+}
+
+.rec-eliminar {
+  align-self: flex-start;
+  color: var(--status-error);
+  margin-top: 4px;
+}
+
+/* A lane whose name can be clicked to assign it (`carrilClic.ts`, only in the Resources step). */
+.djs-element.lila-carril-asignable {
+  cursor: pointer;
+}
+
+.djs-element.lila-carril-asignable .djs-visual > text {
+  fill: var(--accent-primary) !important;
+  text-decoration: underline;
+}
+
+/* #333: la barra de los pasos del panel de simulación (seis desde el Lote M). Horizontal y compacta, y con
+   `flex-wrap` porque el panel derecho se puede estrechar hasta que los seis rótulos no caben:
    entonces se parten en dos filas en vez de recortarse o desbordar. */
 .escenario .pasos {
   display: flex;
@@ -1434,6 +1774,12 @@ body {
   background: var(--bg-surface);
   border-color: var(--accent-tertiary);
   color: var(--fg-primary);
+}
+
+/* Lote M: the «! n» of a step held back by problems. */
+.escenario .paso-problemas {
+  color: var(--status-error);
+  font-weight: 600;
 }
 
 /* Lista de elementos del paso (tiempos, recursos): el resumen a la derecha, alineado. */
@@ -1545,7 +1891,11 @@ body {
    porque el gesto de pintar es un arrastre y el navegador lo interpretaría como desplazamiento. */
 .calendario {
   display: grid;
-  grid-template-columns: 2.4rem repeat(24, 1fr);
+  /* C6: the week as in the design — days are columns, hours rows. The DOM stays day by day (a
+     label, then its 24 hours), so the grid flows by column: the first column is the hour labels. */
+  grid-auto-flow: column;
+  grid-template-columns: 2rem repeat(7, minmax(0, 1fr));
+  grid-template-rows: auto repeat(24, calc(9px * var(--espacio, 1)));
   gap: 1px;
   margin: 4px 0;
   touch-action: none;
@@ -1561,10 +1911,14 @@ body {
 
 .calendario .dia {
   letter-spacing: 0.04em;
+  padding-bottom: 3px;
+  text-align: center;
 }
 
 .calendario .tramo {
-  grid-column: span 3;
+  align-self: start;
+  grid-row: span 3;
+  line-height: 9px;
 }
 
 .calendario .hora {
@@ -1572,7 +1926,8 @@ body {
   border: 0;
   border-radius: 0;
   cursor: pointer;
-  height: calc(11px * var(--espacio, 1));
+  height: 100%;
+  min-height: 0;
   padding: 0;
 }
 
@@ -1672,6 +2027,243 @@ body {
   gap: 8px;
   justify-content: space-between;
   padding: calc(3px * var(--espacio, 1)) 0;
+}
+
+/* ---------- gestor de calendarios (Lote M, C3; pantalla 03) ---------- */
+
+/* Templates on top, a compact list, then one calendar's editor with four tabs. Same rules as the
+   rest of the panel: radius 0, 1 px rules, tokens only, mono for hours. Fits a 300 px panel. */
+.gcal {
+  display: flex;
+  flex-direction: column;
+  gap: calc(8px * var(--espacio, 1));
+}
+
+.gcal-vacio {
+  background: var(--bg-elevated);
+  border: 1px dashed var(--border-strong);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: calc(10px * var(--espacio, 1)) 12px;
+}
+
+.gcal-vacio span {
+  color: var(--fg-muted);
+  line-height: 1.45;
+}
+
+.gcal-crear {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gcal-rotulo {
+  color: var(--fg-muted);
+  font-size: 0.92em;
+}
+
+.gcal-plantillas,
+.gcal-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.gcal-plantillas .boton,
+.gcal-acciones .boton {
+  font-size: 0.92em;
+  padding: calc(3px * var(--espacio, 1)) 6px;
+}
+
+.gcal-plantilla {
+  border-color: var(--accent-primary);
+  font-weight: 600;
+}
+
+.gcal-plantilla.gcal-blanco {
+  border-style: dashed;
+  border-color: var(--border-strong);
+  color: var(--fg-muted);
+  font-weight: 400;
+}
+
+.gcal-lista,
+.gcal-usos {
+  border-top: 1px solid var(--border);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.gcal-fila,
+.gcal-uso-fila {
+  align-items: center;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--fg-primary);
+  display: flex;
+  font: inherit;
+  gap: 8px;
+  padding: calc(5px * var(--espacio, 1)) 8px;
+  text-align: left;
+  width: 100%;
+}
+
+button.gcal-fila,
+button.gcal-uso-fila {
+  cursor: pointer;
+}
+
+button.gcal-fila:hover,
+button.gcal-uso-fila:hover {
+  background: var(--bg-hover);
+}
+
+.gcal-fila[aria-current='true'] {
+  background: var(--bg-elevated);
+  box-shadow: inset 2px 0 0 var(--accent-primary);
+}
+
+.gcal-fila.con-error {
+  box-shadow: inset 2px 0 0 var(--status-error);
+}
+
+.gcal-fila:focus-visible,
+.gcal-uso-fila:focus-visible,
+.gcal-pestanas [role='tab']:focus-visible {
+  outline: 1px solid var(--accent-primary);
+  outline-offset: -1px;
+}
+
+.gcal-nombre,
+.gcal-quien {
+  flex: 1;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gcal-uso,
+.gcal-horas,
+.gcal-tipo,
+.gcal-detalle {
+  color: var(--fg-muted);
+  flex: none;
+  font-size: 0.92em;
+}
+
+.gcal-tipo {
+  min-width: 5.5em;
+}
+
+.gcal-marca {
+  color: var(--status-error);
+  font-weight: 700;
+  margin: 0 4px;
+}
+
+.gcal-editor {
+  border-top: 1px solid var(--border-strong);
+  display: flex;
+  flex-direction: column;
+  gap: calc(6px * var(--espacio, 1));
+  padding-top: calc(6px * var(--espacio, 1));
+}
+
+.gcal-cabecera {
+  align-items: center;
+  display: grid;
+  gap: 2px 8px;
+  grid-template-columns: 1fr auto;
+}
+
+.gcal-cabecera .error {
+  grid-column: 1 / -1;
+}
+
+.gcal-cabecera input {
+  font-weight: 600;
+  min-width: 0;
+}
+
+.gcal-pestanas {
+  border-bottom: 1px solid var(--border);
+  display: flex;
+}
+
+.gcal-pestanas [role='tab'] {
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  flex: 1 1 auto;
+  font: inherit;
+  padding: calc(5px * var(--espacio, 1)) 4px;
+  white-space: nowrap;
+}
+
+.gcal-pestanas [role='tab']:hover {
+  color: var(--fg-primary);
+}
+
+.gcal-pestanas [role='tab'][aria-selected='true'] {
+  border-bottom-color: var(--accent-primary);
+  color: var(--fg-primary);
+  font-weight: 600;
+}
+
+.gcal-cuenta {
+  background: var(--bg-elevated);
+  color: var(--fg-muted);
+  font-size: 0.85em;
+  margin-left: 4px;
+  padding: 0 4px;
+}
+
+.gcal-panel {
+  display: flex;
+  flex-direction: column;
+  gap: calc(6px * var(--espacio, 1));
+}
+
+.gcal-panel .ayuda {
+  margin: 0;
+}
+
+.gcal-sin-horas {
+  border-left: 2px solid var(--status-warning);
+  padding-left: 8px;
+}
+
+.gcal-asignar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gcal-asignar-fila {
+  display: flex;
+  gap: 4px;
+}
+
+.gcal-asignar-fila select {
+  flex: 1;
+  min-width: 0;
+}
+
+.gcal-hecho {
+  color: var(--status-success);
+  margin: 0;
+}
+
+.gcal-eliminar {
+  align-self: flex-start;
 }
 
 /* Mantener montado el modelador conserva undo/selección entre modos. */
@@ -2154,132 +2746,9 @@ body {
 .chips-validacion .punto { width: 7px; height: 7px; background: var(--diagram-marker-warning); }
 .chips-validacion .chip.error .punto { background: var(--diagram-marker-error); }
 
-/* ---------- scenario rail of Simulate (design 2a) ---------- */
-
-/* Replaces the shape palette in Simulate, in the same grid column. Measures from design 2a:
-   212 px rail, 10 px uppercase header, 20 px `+`, 12 px names, 10 px mono subtitles. */
-.rail-escenarios {
-  background: var(--bg-surface);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  grid-area: paleta;
-  min-height: 0;
-  /* 160–320 px from the left divider (#406); 212 px is design 2a's. */
-  width: var(--rail-ancho, 212px);
-}
-
-.rail-cabecera,
-.rail-rotulo {
-  color: var(--fg-muted);
-  font: 600 10px/1 var(--font-ui);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.rail-cabecera {
-  align-items: center;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  justify-content: space-between;
-  padding: calc(10px * var(--espacio, 1)) 12px;
-}
-
-.rail-nuevo {
-  background: none;
-  border: 1px solid var(--border-strong);
-  border-radius: 0;
-  color: var(--fg-primary);
-  cursor: pointer;
-  font: 400 14px/1 var(--font-ui);
-  height: 20px;
-  padding: 0;
-  width: 20px;
-}
-
-.rail-nuevo:hover { background: var(--bg-hover); }
-
-.rail-nuevo:focus-visible,
-.rail-fila:focus-visible {
-  outline: 1px solid var(--accent-primary);
-  outline-offset: -1px;
-}
-
-.rail-lista {
-  flex: 1;
-  overflow: auto;
-}
-
-.rail-fila {
-  background: none;
-  border: 0;
-  border-bottom: 1px solid var(--border);
-  border-left: 3px solid transparent;
-  color: var(--fg-primary);
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: calc(9px * var(--espacio, 1)) 12px calc(9px * var(--espacio, 1)) 9px;
-  text-align: left;
-  width: 100%;
-}
-
-.rail-fila:hover { background: var(--bg-hover); }
-
-.rail-fila[aria-current='true'] {
-  background: var(--bg-elevated);
-  border-left-color: var(--accent-primary);
-}
-
-.rail-nombre {
-  align-items: center;
-  display: flex;
-  font: 500 12px/1.2 var(--font-ui);
-  gap: 6px;
-}
-
-/* A narrow rail (#406) ellipsizes the name and the subtitle instead of spilling out. */
-.rail-nombre,
-.rail-texto,
-.rail-sub {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rail-nombre .insignia-base {
-  flex: none;
-}
-
-.rail-fila[aria-current='true'] .rail-nombre { font-weight: 600; }
-
-.rail-sub {
-  color: var(--fg-muted);
-  font: 400 10px/1.3 var(--font-mono);
-}
-
+/* The BASE badge: «Scenario ▾» and the panel header. */
 .insignia-base {
-  background: var(--accent-primary);
-  color: var(--fg-onAccent);
-  font: 700 9px/1 var(--font-mono);
-  letter-spacing: 0.08em;
-  padding: 2px 4px;
-}
-
-.rail-pie {
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: calc(10px * var(--espacio, 1)) 12px;
-}
-
-/* The canvas chips, in the flow of the rail instead of floating over the canvas. */
-.chips-validacion.en-rail {
-  align-self: flex-start;
-  position: static;
+  flex: none;
 }
 
 .chips-validacion .chip:disabled { cursor: default; }
@@ -2870,7 +3339,7 @@ body {
 .menu-vista,
 .vista-grupo,
 .paleta,
-.rail-escenarios,
+.c5-subbarra,
 .modos,
 .pestanas,
 .diagramas,
@@ -2944,3 +3413,1475 @@ body {
 .atributos-dialogo .atributos-impactos { margin: 8px 0 16px; padding-left: 20px; overflow-wrap: anywhere; }
 .atributos-dialogo .atributos-impactos fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 4px; }
 .atributos .campo [aria-invalid='true'] { border-color: var(--status-error); }
+
+/* ===================================================================== *
+ * Lote M, C1: the guided Simulate panel (`ScenarioPanel.tsx`). Every rule is prefixed `.sim-` or
+ * scoped to `.sim-panel`, so the other workstreams' blocks never meet it.
+ * ===================================================================== */
+
+/* The header stays at the top of whatever scrolls the panel (the docked `.panel` or the window's
+   body): scenario, «▶ Simulate» and the six steps are one click away at any scroll and width. */
+.sim-panel .sim-cabecera {
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: -12px -12px 0;
+  padding: 10px 12px 8px;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.sim-panel .sim-cabecera .escenario-cabecera {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+}
+
+.sim-panel .sim-escenario {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sim-panel .sim-conteo {
+  font-size: 0.85em;
+}
+
+.sim-panel .sim-simular {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.sim-panel .sim-insignia {
+  background: var(--status-error);
+  color: var(--fg-onAccent);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+}
+
+/* Six numbered tabs: three per row in the 300–520 px panel, so a name never gets clipped. */
+.sim-panel .pasos {
+  display: grid;
+  gap: 3px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+
+.sim-panel .paso {
+  align-items: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--fg-primary);
+  display: flex;
+  font-size: 12px;
+  gap: 4px;
+  min-width: 0;
+  padding: calc(3px * var(--espacio, 1)) 4px;
+  white-space: nowrap;
+}
+
+.sim-panel .paso:hover {
+  background: var(--bg-hover);
+}
+
+.sim-panel .paso:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.sim-panel .paso.activo {
+  background: var(--bg-surface);
+  border-color: var(--accent-primary);
+  font-weight: 700;
+}
+
+.sim-panel .paso.con-problemas:not(.activo) {
+  border-color: var(--status-error);
+}
+
+.sim-panel .paso-num {
+  border: 1px solid var(--border-strong);
+  color: var(--fg-muted);
+  display: grid;
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  height: 16px;
+  place-items: center;
+  width: 16px;
+}
+
+.sim-panel .paso.activo .paso-num {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: var(--fg-onAccent);
+}
+
+.sim-panel .paso-nombre {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+}
+
+.sim-panel .paso-ok {
+  color: var(--status-success);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sim-panel .paso-problemas {
+  color: var(--status-error);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* The design's compact header, one row with the open step expanded: always in the detached
+   window, and in the docked panel while it is too narrow for three named tabs per row (below
+   460 px the names get clipped). The other steps keep their name for screen readers and in the
+   tooltip, with the key. */
+.sim-panel .sim-cabecera {
+  container-type: inline-size;
+}
+
+.sim-panel.compacto .pasos {
+  display: flex;
+}
+
+.sim-panel.compacto .paso {
+  flex: 1 1 0;
+  justify-content: center;
+}
+
+.sim-panel.compacto .paso.activo {
+  flex: 3 1 0;
+}
+
+@container (max-width: 459px) {
+  .sim-panel .pasos {
+    display: flex;
+  }
+
+  .sim-panel .paso {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+
+  .sim-panel .paso.activo {
+    flex: 3 1 0;
+  }
+
+  .sim-panel .paso:not(.activo) .paso-nombre {
+    clip: rect(0 0 0 0);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+  }
+
+  .sim-panel .paso:not(.activo) .paso-ok {
+    display: none;
+  }
+}
+
+.sim-panel .sim-pista {
+  color: var(--fg-muted);
+  font-size: 10.5px;
+  margin: 0;
+}
+
+.sim-panel .sr-only {
+  clip: rect(0 0 0 0);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.sim-panel .sim-paso-cabeza {
+  margin: 10px 0 6px;
+}
+
+.sim-panel .sim-paso-n {
+  color: var(--fg-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.sim-panel .sim-paso-titulo {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 2px 0;
+}
+
+.sim-panel .sim-aviso {
+  color: var(--status-error);
+  font-weight: 600;
+}
+
+.sim-panel .sim-banner {
+  background: color-mix(in srgb, var(--status-error) 10%, transparent);
+  border: 1px solid var(--status-error);
+  margin: 6px 0;
+  padding: 8px 10px;
+}
+
+.sim-panel .sim-banner-titulo {
+  color: var(--status-error);
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.sim-panel .sim-banner ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sim-panel .sim-banner li {
+  align-items: flex-start;
+  display: flex;
+  gap: 8px;
+}
+
+.sim-panel .sim-banner li > span {
+  flex: 1;
+  line-height: 1.4;
+  /* An engine message with a long path (`elements.Task_….processingTime`) must wrap, or it pushes
+     «Go» out of a 300 px panel (QA of #600). */
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sim-panel .sim-banner .boton {
+  border-color: var(--status-error);
+  color: var(--status-error);
+  flex: none;
+  font-weight: 700;
+}
+
+.sim-panel .sim-seleccion {
+  align-items: center;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+}
+
+.sim-panel .sim-seleccion-tipo {
+  color: var(--fg-muted);
+  font-size: 11.5px;
+}
+
+.sim-panel .sim-nota {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  padding: 10px;
+}
+
+.sim-panel .sim-nota p {
+  line-height: 1.5;
+  margin: 0 0 8px;
+}
+
+.sim-panel .sim-ficha-titulo,
+.sim-panel .sim-seccion-titulo {
+  color: var(--fg-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  margin: 8px 0 4px;
+  text-transform: uppercase;
+}
+
+.sim-panel .sim-seccion {
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+  padding-top: 4px;
+}
+
+.sim-panel .sim-dato {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 6px 0;
+  padding: 6px 8px;
+}
+
+.sim-panel .sim-dato-fila {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.sim-panel .sim-dato-fila .mono {
+  font-weight: 700;
+}
+
+.sim-panel .sim-falta,
+.sim-panel .lista-paso .resumen.falta {
+  color: var(--status-error);
+  font-weight: 600;
+}
+
+.sim-panel .sim-navegacion {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  margin: 10px 0;
+  padding-top: 8px;
+}
+
+.sim-panel .sim-hueco {
+  flex: 1;
+}
+
+.sim-panel .sim-siguiente {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  font-weight: 700;
+}
+
+.sim-panel .sim-entradas > summary {
+  color: var(--fg-muted);
+  font-size: 0.9em;
+}
+
+/* Canvas labels of the step (`etiquetasPaso.ts`): under each element, the step's parameter. */
+.lila-etiqueta-paso {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--fg-primary);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  max-width: 160px;
+  overflow: hidden;
+  padding: 1px 5px;
+  pointer-events: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lila-etiqueta-paso.falta {
+  border-color: var(--status-error);
+  color: var(--status-error);
+  font-weight: 700;
+}
+
+/* ---------- Lote M · C4: Routes step (`PasoRutas.tsx`) and canvas percentage fields
+   (`etiquetasPorcentaje.ts`). Design screen 04: inline % fields, a bar that adds up to 100 and a
+   status with the one-click fix. Square corners and theme tokens only, like the rest of the panel. */
+
+.rutas {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.rutas-volver {
+  align-self: flex-start;
+}
+
+.rutas-cabecera {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  justify-content: space-between;
+}
+
+.rutas-cabecera strong {
+  white-space: nowrap;
+}
+
+.rutas-tipo,
+.rutas-destino,
+.rutas-fila-resumen {
+  color: var(--fg-muted);
+  font-size: 0.92em;
+}
+
+.rutas-barra {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  display: flex;
+  height: 14px;
+  overflow: hidden;
+}
+
+.rutas-barra.mal {
+  border-color: var(--status-error);
+}
+
+.rutas-barra span {
+  border-right: 1px solid var(--bg-base);
+  flex: none;
+}
+
+.rutas-lista,
+.rutas-flujos {
+  border: 1px solid var(--border);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rutas-lista li + li,
+.rutas-flujos li + li {
+  border-top: 1px solid var(--border);
+}
+
+.rutas-fila {
+  align-items: center;
+  background: var(--bg-base);
+  border: 0;
+  color: var(--fg-primary);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 10px;
+  padding: 10px;
+  text-align: left;
+  width: 100%;
+}
+
+/* ---------- Lote M, C5: results on the map, compare, «Scenario ▾» ---------- */
+
+/* The row over the canvas in Simulate and Results (`grid-area: subbarra`): «Scenario ▾», and in
+   Results the run's meta, the two map layers and «Compare with…» (designs 01 and 05). */
+.c5-subbarra {
+  align-items: center;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  grid-area: subbarra;
+  min-height: 44px;
+  min-width: 0;
+  padding: 4px 12px;
+  position: relative;
+  /* Its dropdowns open over the canvas, the time bar and the minimap. */
+  z-index: 30;
+}
+
+.c5-hueco { flex: 1; }
+
+.c5-rotulo {
+  color: var(--fg-muted);
+  font: 700 9.5px/1 var(--font-ui);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.c5-nota { color: var(--fg-muted); font-size: 12px; }
+
+.c5-meta { color: var(--fg-muted); font-size: 11px; white-space: nowrap; }
+
+.c5-escenario,
+.c5-comparar-menu {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  position: relative;
+}
+
+.c5-escenario-boton {
+  align-items: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 0;
+  color: var(--fg-primary);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 8px;
+  height: 34px;
+  max-width: 360px;
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.c5-escenario-boton:hover,
+.c5-escenario-boton[aria-expanded='true'] { border-color: var(--accent-primary); }
+
+.c5-escenario-nombre {
+  align-items: center;
+  display: flex;
+  font-weight: 700;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.c5-flecha { color: var(--fg-muted); }
+
+.c5-chips { position: static; }
+
+/* The dropdown: above the canvas and the table, scrolled inside itself (never the page). */
+.c5-escenario-menu {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 8px 24px var(--shadow);
+  display: flex;
+  flex-direction: column;
+  left: 0;
+  max-height: min(70vh, 560px);
+  overflow: auto;
+  position: absolute;
+  top: calc(100% + 4px);
+  width: 340px;
+  z-index: 20;
+}
+
+.c5-comparar-lista { left: auto; right: 0; }
+
+.c5-escenario-lista { list-style: none; margin: 0; padding: 0; }
+
+.c5-escenario-fila {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  color: var(--fg-primary);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  font: inherit;
+  gap: 3px;
+  padding: 8px 12px 8px 9px;
+  text-align: left;
+  width: 100%;
+}
+
+.rutas-fila:hover {
+  background: var(--bg-hover);
+}
+
+.rutas-fila:focus-visible,
+.rutas-campo input:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.rutas-rombo {
+  border: 1.5px solid var(--fg-primary);
+  flex: none;
+  height: 10px;
+  margin: 0 3px;
+  transform: rotate(45deg);
+  width: 10px;
+}
+
+.rutas-fila-texto,
+.rutas-flujo-texto {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rutas-fila-nombre,
+.rutas-flujo-nombre {
+  font-weight: 600;
+}
+
+.rutas-destino {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rutas-pildora {
+  border: 1px solid currentColor;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+}
+
+.rutas-pildora.ok {
+  color: var(--status-success);
+}
+
+.rutas-pildora.mal {
+  color: var(--status-error);
+}
+
+.rutas-flujo {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 10px minmax(0, 1fr) 92px;
+  padding: 8px 10px;
+}
+
+.rutas-flujo.activa {
+  background: var(--bg-elevated);
+}
+
+.rutas-color {
+  height: 10px;
+  width: 10px;
+}
+
+.rutas-campo {
+  display: flex;
+}
+
+.rutas-campo input {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  box-sizing: border-box;
+  color: var(--fg-primary);
+  flex: 1;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  height: 32px;
+  min-width: 0;
+  padding: 0 6px;
+  text-align: right;
+}
+
+.rutas-unidad {
+  align-items: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-left: 0;
+  color: var(--fg-muted);
+  display: flex;
+  padding: 0 7px;
+}
+
+.rutas-campo-fijo {
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  justify-content: flex-end;
+}
+
+.rutas-estado {
+  border: 1px solid var(--border-strong);
+  border-left-width: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+}
+
+.rutas-estado.ok {
+  border-color: var(--status-success);
+}
+
+.rutas-estado.ok strong {
+  color: var(--status-success);
+}
+
+.rutas-estado.mal {
+  border-color: var(--status-error);
+}
+
+.rutas-estado.mal strong {
+  color: var(--status-error);
+}
+
+.rutas-arreglos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* The boxes on the canvas: label + % field (Routes) or text (elsewhere in Simulate). */
+.lila-pct {
+  background: var(--bg-elevated);
+  border: 1.5px solid var(--border-strong);
+  color: var(--fg-primary);
+  cursor: text;
+  display: flex;
+  flex-direction: column;
+  font: 11px var(--font-ui, system-ui);
+  min-width: 52px;
+  max-width: 96px;
+}
+
+.lila-pct.lila-pct-sel {
+  border-color: var(--accent-primary);
+}
+
+.lila-pct.lila-pct-error {
+  border-color: var(--status-error);
+}
+
+.lila-pct-nombre {
+  font-size: 10px;
+  font-weight: 700;
+  overflow: hidden;
+  padding: 2px 5px 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lila-pct-campo {
+  align-items: center;
+  display: flex;
+  padding: 1px 4px 3px;
+}
+
+.lila-pct-campo input {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border-strong);
+  color: var(--fg-primary);
+  font: 700 11.5px var(--font-mono);
+  padding: 0 2px;
+  text-align: right;
+  width: 38px;
+}
+
+.lila-pct-campo input:focus-visible {
+  border-bottom-color: var(--accent-primary);
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.lila-pct-unidad,
+.lila-pct-valor {
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  margin-left: 2px;
+}
+
+.lila-pct-valor {
+  color: var(--fg-primary);
+  font-weight: 700;
+  padding: 1px 5px 3px;
+}
+
+/* While the share boxes are on the canvas (Simulate), bpmn-js's context pad would sit on top of the
+   boxes of a selected gateway: modelling actions belong to Model anyway. */
+.lila-pct-activas .djs-context-pad {
+  display: none;
+}
+
+.lila-pct.lila-pct-invalido,
+.rutas-flujo.invalido .rutas-campo input {
+  border-color: var(--status-error);
+}
+
+.lila-pct-invalido .lila-pct-campo input {
+  border-bottom-color: var(--status-error);
+  color: var(--status-error);
+}
+
+.rutas-invalido {
+  color: var(--status-error);
+  font-size: 0.92em;
+}
+.c5-escenario-fila:hover { background: var(--bg-hover); }
+
+.c5-escenario-fila[aria-current='true'] { border-left-color: var(--accent-primary); }
+
+.c5-escenario-fila:focus-visible,
+.c5-escenario-boton:focus-visible,
+.c5-escenario-campo:focus-visible {
+  outline: 1px solid var(--accent-primary);
+  outline-offset: -1px;
+}
+
+.c5-escenario-sub { color: var(--fg-muted); font: 400 10.5px/1.3 var(--font-mono); }
+
+.c5-escenario-campo {
+  background: var(--bg-base);
+  border: 1px solid var(--accent-primary);
+  border-radius: 0;
+  box-sizing: border-box;
+  color: var(--fg-primary);
+  font: inherit;
+  margin: 6px 8px;
+  padding: 6px 8px;
+  width: calc(100% - 16px);
+}
+
+.c5-escenario-acciones {
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px;
+}
+
+.c5-escenario-importar { padding: 4px 12px 10px; }
+
+.c5-capas { display: flex; }
+
+.c5-capas .boton + .boton { border-left: 0; }
+
+.c5-capas .boton[aria-pressed='true'],
+.c5-validar-rutas[aria-pressed='true'] {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: var(--fg-onAccent);
+}
+
+.c5-comparar-boton {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* «Results» has a run (design 05): the dot next to the mode's name. */
+.modo .c5-punto {
+  background: var(--status-success);
+  display: inline-block;
+  height: 6px;
+  margin-left: 6px;
+  vertical-align: middle;
+  width: 6px;
+}
+
+/* The card over the Results map: nothing simulated yet, or the run failed (design 05). */
+.c5-tarjeta-fondo {
+  display: grid;
+  inset: 0;
+  padding: 24px;
+  pointer-events: none;
+  place-items: center;
+  position: absolute;
+  z-index: 4;
+}
+
+.c5-tarjeta {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-top: 3px solid var(--accent-primary);
+  box-shadow: 0 8px 24px var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 420px;
+  padding: 20px 22px;
+  pointer-events: auto;
+}
+
+.c5-tarjeta.error { border-top-color: var(--status-error); }
+
+.c5-tarjeta p { color: var(--fg-muted); line-height: 1.5; margin: 0; }
+
+.c5-tarjeta-cabeza { align-items: center; display: flex; gap: 12px; }
+
+.c5-tarjeta-cabeza > div { display: flex; flex-direction: column; gap: 4px; }
+
+.c5-kicker {
+  color: var(--accent-primary);
+  font: 700 10px/1 var(--font-ui);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.c5-tarjeta.error .c5-kicker { color: var(--status-error); }
+
+.c5-tarjeta-titulo { font-size: 16px; line-height: 1.25; }
+
+.c5-tarjeta-acciones { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
+
+.c5-progreso { flex: 1 1 100%; }
+
+/* The time bar of the tokens, over the bottom of the Results map (left of the zoom buttons). */
+.c5-tiempo {
+  align-items: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  bottom: 12px;
+  box-shadow: 0 4px 12px var(--shadow);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  left: 12px;
+  padding: 6px 10px;
+  position: absolute;
+  right: 64px;
+  /* Over the minimap (bottom left): the bar is what Results is about; the minimap folds. */
+  z-index: 5;
+}
+
+.c5-tiempo .vacio { margin: 0; }
+
+.c5-play { min-width: 76px; }
+
+.c5-velocidad { align-items: center; display: flex; gap: 6px; }
+
+.c5-deslizador { accent-color: var(--accent-primary); flex: 1 1 140px; min-width: 100px; }
+
+.c5-reloj { color: var(--fg-primary); font-size: 11px; white-space: nowrap; }
+
+.c5-ocupacion { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.c5-pool {
+  border: 1px solid var(--border-strong);
+  font: 11px var(--font-mono);
+  padding: 1px 5px;
+}
+
+.c5-leyenda { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--fg-muted); }
+
+.c5-nivel::before {
+  content: '';
+  display: inline-block;
+  height: 9px;
+  margin-right: 4px;
+  vertical-align: -1px;
+  width: 9px;
+}
+
+.c5-nivel.low::before { background: var(--sim-bottleneck-low); }
+.c5-nivel.mid::before { background: var(--sim-bottleneck-mid); }
+.c5-nivel.high::before { background: var(--sim-bottleneck-high); }
+
+/* The Results summary in the right panel: six KPIs, the bottlenecks, the selected task. */
+.c5-resumen { display: flex; flex-direction: column; gap: 10px; overflow: auto; padding: 12px; }
+
+.c5-resumen h2 { font-size: 14px; margin: 0; }
+
+.c5-resumen h3 { font-size: 12px; margin: 0 0 6px; }
+
+.c5-kpis,
+.c5-tarea-datos {
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.c5-kpis > div,
+.c5-tarea-datos > div {
+  background: var(--bg-elevated);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.c5-kpis dt,
+.c5-tarea-datos dt,
+.c5-deltas dt {
+  color: var(--fg-muted);
+  font: 700 10px/1.2 var(--font-ui);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.c5-kpis dd,
+.c5-tarea-datos dd {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.c5-tarea-nombre { font-weight: 600; margin: 0 0 6px; }
+
+.c5-resumen-vacio { padding: 12px; }
+
+/* Compare inside Results (design 06): the whole width, the deltas, the two maps. */
+.c5-zona-comparar {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+.c5-comparar { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+
+.c5-comparar-nombre {
+  align-items: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  display: flex;
+  font-weight: 700;
+  height: 32px;
+  padding: 0 10px;
+}
+
+.c5-deltas {
+  background: var(--border);
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin: 0;
+}
+
+.c5-deltas > div {
+  background: var(--bg-base);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 8px 12px;
+}
+
+.c5-deltas dd { align-items: center; display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+
+.c5-delta-valor { font-size: 15px; font-variant-numeric: tabular-nums; font-weight: 700; }
+
+.c5-delta { font-size: 11px; font-weight: 700; padding: 2px 6px; white-space: nowrap; }
+
+.c5-delta.mejora { background: var(--status-success); color: var(--fg-onAccent); }
+.c5-delta.empeora { background: var(--status-error); color: var(--fg-onAccent); }
+.c5-delta.igual { border: 1px solid var(--border-strong); color: var(--fg-muted); }
+
+.c5-delta-ref { color: var(--fg-muted); font: 10.5px var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.c5-comparar-avisos {
+  color: var(--status-warning);
+  font-size: 12px;
+  margin: 0;
+  padding: 6px 12px 6px 28px;
+}
+
+.c5-mapas { background: var(--border); display: flex; flex: 1; gap: 1px; min-height: 260px; }
+
+.c5-mapa { flex: 1; margin: 0; min-width: 0; position: relative; }
+
+.c5-mapa-lienzo { background: var(--canvas-bg); inset: 0; position: absolute; }
+
+.c5-mapa-titulo {
+  align-items: center;
+  background: var(--bg-base);
+  border: 1px solid var(--border-strong);
+  display: flex;
+  gap: 8px;
+  left: 12px;
+  padding: 5px 10px;
+  position: absolute;
+  top: 10px;
+  z-index: 2;
+}
+
+.c5-mapa-titulo span { color: var(--fg-muted); font-size: 11.5px; }
+
+.c5-mapa-fallo { left: 12px; position: absolute; top: 52px; z-index: 2; }
+
+.c5-comparar-detalle { border-top: 1px solid var(--border); padding: 6px 12px; }
+
+.c5-comparar-detalle > summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+
+.c5-tiempo .aviso { font-size: 11px; }
+
+/* In Results the time bar takes the bottom of the canvas: the minimap moves above it. */
+.app.modo-resultados .lienzo .djs-minimap { bottom: 56px; }
+
+/* QA of #603: one row at 1280 px — the pools and the legend only where there is room. */
+.c5-tiempo { flex-wrap: nowrap; overflow: hidden; padding: 4px 8px; }
+.c5-tiempo > * { flex-shrink: 0; }
+.c5-tiempo .c5-deslizador { flex: 1 1 80px; min-width: 60px; }
+.c5-tiempo .c5-reloj { overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; }
+.c5-tiempo .c5-velocidad .c5-rotulo { display: none; }
+
+/* The number of problems on «▶ Simulate» (design 01). */
+.ejecutar .c5-insignia {
+  background: var(--status-error);
+  color: var(--fg-onAccent);
+  font: 700 10.5px/1 var(--font-ui);
+  margin-left: 6px;
+  padding: 2px 6px;
+}
+
+/* ===================================================================== *
+ * Lote M, C6: the Simulate sub-bar of design 1a/1b — the full width under the top bar, with
+ * «Scenario ▾», the six named steps and the keys' hint — and the Results summary's extras.
+ * ===================================================================== */
+
+/* Simulate and Results draw their bar across the whole window, over the canvas and the right
+   panel (the left column is empty in both modes). Comparing keeps its own bar inside its view. */
+.app.modo-simular,
+.app.modo-resultados {
+  grid-template-areas:
+    'barra     barra     barra'
+    'subbarra  subbarra  subbarra'
+    'paleta    lienzo    panel'
+    'paleta    dock      panel'
+    'paleta    diagramas panel'
+    'estado    estado    estado';
+}
+
+.app.modo-simular .c5-subbarra {
+  background: var(--bg-elevated);
+  flex-wrap: nowrap;
+  gap: 12px;
+  height: 50px;
+  min-height: 50px;
+  padding: 0 12px;
+  container-type: inline-size;
+}
+
+.app.modo-simular .c5-subbarra .c5-escenario { flex: none; }
+
+.c6-separador {
+  align-self: center;
+  background: var(--border-strong);
+  flex: none;
+  height: 26px;
+  width: 1px;
+}
+
+/* The slot takes what is left; the steps shrink into it, they never push the page sideways. */
+.c6-ranura-pasos {
+  align-items: center;
+  display: flex;
+  flex: 1 1 0;
+  gap: 12px;
+  min-width: 0;
+}
+
+.c6-pasos {
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* The design's separator between two steps. */
+.c6-pasos .paso + .paso::before {
+  background: var(--border-strong);
+  content: '';
+  flex: none;
+  height: 1px;
+  margin-left: -15px;
+  margin-right: 1px;
+  width: 10px;
+}
+
+.c6-pasos .paso {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0;
+  color: var(--fg-primary);
+  cursor: pointer;
+  display: flex;
+  flex: 0 1 auto;
+  font: inherit;
+  gap: 8px;
+  height: 34px;
+  min-width: 0;
+  padding: 0 12px 0 6px;
+  white-space: nowrap;
+}
+
+.c6-pasos .paso + .paso { margin-left: 14px; }
+
+.c6-pasos .paso:hover { background: var(--bg-hover); }
+
+.c6-pasos .paso:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.c6-pasos .paso.activo {
+  background: var(--bg-surface);
+  border-color: var(--accent-primary);
+  font-weight: 700;
+}
+
+.c6-pasos .paso.con-problemas:not(.activo) { border-color: var(--status-error); }
+
+.c6-pasos .paso-num {
+  border: 1px solid var(--border-strong);
+  color: var(--fg-muted);
+  display: grid;
+  flex: none;
+  font: 700 11px/1 var(--font-mono);
+  height: 20px;
+  place-items: center;
+  width: 20px;
+}
+
+.c6-pasos .paso.activo .paso-num {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: var(--fg-onAccent);
+}
+
+/* Narrow windows: the names give way with an ellipsis (never below a few letters), not the page. */
+.c6-pasos .paso-nombre {
+  min-width: 3ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.c6-pasos .paso-ok,
+.c6-pasos .paso-problemas {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.c6-pasos .paso-ok { color: var(--status-success); }
+
+.c6-pasos .paso-problemas { color: var(--status-error); }
+
+.c6-pista {
+  color: var(--fg-muted);
+  flex: none;
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+/* First the hint goes, then the gaps tighten; the six names stay, shortened if they must. */
+@container (max-width: 1400px) {
+  .c6-pista { display: none; }
+}
+
+@container (max-width: 1335px) {
+  .c6-pasos .paso { gap: 5px; padding: 0 6px 0 4px; }
+  .c6-pasos .paso + .paso { margin-left: 4px; }
+  .c6-pasos .paso + .paso::before { display: none; }
+  .app.modo-simular .c5-subbarra .c5-escenario .c5-rotulo { display: none; }
+}
+
+/* Narrower still (1024 px windows and below): Duplicate keeps its icon and title, the chips keep
+   their number (the words stay for screen readers); the six names and their marks stay whole. */
+@container (max-width: 1000px) {
+  .app.modo-simular .c5-subbarra .c5-duplicar { font-size: 0; padding-inline: 8px; }
+  .app.modo-simular .c5-subbarra .c5-duplicar > span { font-size: 14px; }
+  .app.modo-simular .c5-subbarra .c6-chip-largo {
+    clip: rect(0 0 0 0);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+  }
+  .app.modo-simular .c5-subbarra .c5-chips .chip::after { content: attr(data-n); }
+  .app.modo-simular .c5-subbarra .c5-chips .chip { gap: 5px; padding-inline: 6px; }
+}
+
+/* 900 px windows: the ✓ marks go (the «! n» stay), the bar's gaps close, and the open step keeps
+   its whole name; every name still reads whole in English and Spanish. */
+@container (max-width: 980px) {
+  .app.modo-simular .c5-subbarra { gap: 8px; }
+  .c6-ranura-pasos { gap: 8px; }
+  .c6-pasos { gap: 2px; }
+  .c6-pasos .paso { gap: 4px; padding: 0 5px 0 3px; }
+  .c6-pasos .paso + .paso { margin-left: 2px; }
+  .c6-pasos .paso-ok { display: none; }
+  .c6-pasos .paso.activo { flex-shrink: 0; }
+}
+
+/* Docked in Simulate the panel is only the step: its title starts at the top. */
+.sim-panel.c6-sin-cabecera .sim-paso-cabeza { margin-top: 0; }
+
+/* The Results summary's two extra figures, under the six KPIs (QA of #604). */
+.c6-kpis-extra {
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.c6-kpis-extra > div {
+  background: var(--bg-elevated);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 6px 10px;
+}
+
+.c6-kpis-extra dt {
+  color: var(--fg-muted);
+  font: 700 10px/1.2 var(--font-ui);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.c6-kpis-extra dd {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The file and its `extends` are in «Scenario ▾»; docked in Simulate the step comes first. */
+.sim-panel.c6-sin-cabecera > .sim-cuerpo > .escenario-archivo { display: none; }
+
+/* C6 (QA of #605): read-only views get no modelling handles — bpmn-js's context pad and its
+   popup menu stay in Model. */
+.app.modo-simular .lienzo .djs-context-pad,
+.app.modo-resultados .lienzo .djs-context-pad,
+.app.modo-simular .djs-popup,
+.app.modo-resultados .djs-popup {
+  display: none;
+}
+
+/* Results draws the map with its time bar and table, like design 05: no minimap over it. The time
+   bar is a row of its own under the map (C7, below), clear of the bpmn.io mark. */
+.app.modo-resultados .lienzo .djs-minimap { display: none; }
+
+/* A narrow summary reads each duration on one line: hours, with the exact value in the title. */
+.panel:not(.ancho) .c5-kpis .c6-kpi-paren,
+.panel:not(.ancho) .c5-tarea-datos .c6-kpi-paren { display: none; }
+.c5-kpis dd,
+.c5-tarea-datos dd { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* «BASE» is a filled badge, as in the design (scenario button and the compact header). */
+.c5-escenario-boton .insignia-base,
+.sim-panel .insignia-base {
+  background: var(--accent-primary);
+  color: var(--fg-onAccent);
+  font: 700 9px/1 var(--font-ui);
+  letter-spacing: 0.1em;
+  padding: 3px 5px;
+  text-transform: uppercase;
+}
+
+/* C6: a distribution's parameters side by side, as in design 01 («Media (min)  Desv. (min)»): only
+   the nested groups made of plain number fields (no select, sub-group or text area inside). */
+.sim-panel .anidado:not(:has(select, .anidado, .entrada, textarea, .editor-calendario)) {
+  display: grid;
+  gap: 0 8px;
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+}
+
+.sim-panel .anidado:not(:has(select, .anidado, .entrada, textarea, .editor-calendario)) .campo-schema {
+  align-items: center;
+  display: grid;
+  gap: 2px 4px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.sim-panel .anidado:not(:has(select, .anidado, .entrada, textarea, .editor-calendario)) .campo-schema > label {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sim-panel .anidado:not(:has(select, .anidado, .entrada, textarea, .editor-calendario)) .campo-schema > input { text-align: right; }
+
+.sim-panel .anidado:not(:has(select, .anidado, .entrada, textarea, .editor-calendario)) .campo-schema > :not(label, input) {
+  grid-column: 1 / -1;
+}
+
+.sim-panel .anidado:not(:has(select, .anidado, .entrada, textarea, .editor-calendario)) .campo-schema > .unidad {
+  color: var(--fg-muted);
+  font-size: 11px;
+  grid-column: auto;
+}
+
+/* The step's hint over the canvas, top left (design 1a). */
+.c6-chip-lienzo {
+  align-items: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  display: flex;
+  font-size: 12px;
+  gap: 8px;
+  left: 12px;
+  margin: 0;
+  max-width: calc(100% - 24px);
+  padding: 6px 10px;
+  pointer-events: none;
+  position: absolute;
+  top: 10px;
+  z-index: 6;
+}
+
+.c6-chip-lienzo > .mono {
+  color: var(--accent-primary);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* Routes: the outgoing flows of the gateway being split, in the accent colour (bpmn-js writes the
+   stroke inline, hence `!important`). */
+.djs-element.c6-saliente .djs-visual > path {
+  stroke: var(--accent-primary) !important;
+  stroke-width: 2.5px !important;
+}
+
+/* The label of a flow whose share box is on the canvas: the box carries its name (C6). */
+.djs-element.lila-pct-etiqueta { visibility: hidden; }
+
+/* Calendars (C6, QA of #605): the calendar being edited is the editor below, with its name field,
+   so its row in the list is not drawn twice; the list shows the other calendars. */
+.gcal-lista li:has(> .gcal-fila[aria-current='true']) { display: none; }
+
+/* ---------- Lote M · C7: final polish ---------- */
+
+/* Results, design 05: the time bar is a 48 px row under the map, above the collapsible table — not
+   a box over the bottom of the diagram. The canvas gives up that height (Modeler.tsx resizes
+   bpmn-js through its ResizeObserver); the zoom buttons keep their place above the bpmn.io mark,
+   which now sits at the bottom of the smaller canvas. */
+.app.modo-resultados .zona-modelo:has(> .c5-tiempo) { display: flex; flex-direction: column; }
+.app.modo-resultados .zona-modelo:has(> .c5-tiempo) > .lienzo { flex: 1 1 auto; height: auto; min-height: 0; }
+.app.modo-resultados .zona-modelo > .c5-tiempo {
+  background: var(--bg-surface);
+  border: 0;
+  border-top: 1px solid var(--border);
+  box-shadow: none;
+  box-sizing: border-box;
+  flex: none;
+  gap: 10px;
+  height: 48px;
+  order: 1;
+  padding: 0 14px;
+  position: static;
+}
+.app.modo-resultados .zona-modelo:has(> .c5-tiempo) > .zoom { bottom: calc(46px + 48px); }
+
+/* What the row shows depends on the row's own width (its content box), not on the window's: the
+   panel can be wider than 320 px. The clock is always read whole, at the end too («Fin»), and the
+   slider is what gives way (QA of #615). Thresholds, measured in Spanish (the longer catalog):
+   - 910 px: buttons, speed, a 60 px slider, the clock, «Fin», «1/30» and «Partial replay: first n
+     log rows» — read whole at 1280 px with the 320 px panel (a 932 px content box);
+   - 1170 px: plus the pools' occupancy (Sample order's three pools);
+   - 1490 px: plus the heat-map legend. */
+.c5-tiempo { container-type: inline-size; }
+@container (max-width: 909px) {
+  .c5-tiempo > .aviso { display: none; }
+}
+@container (max-width: 1169px) {
+  .c5-tiempo .c5-ocupacion { display: none; }
+}
+@container (max-width: 1489px) {
+  .c5-tiempo .c5-leyenda { display: none; }
+}
+.app.modo-resultados .zona-modelo > .c5-tiempo .c5-reloj { flex-shrink: 0; }
+.app.modo-resultados .zona-modelo > .c5-tiempo .c5-deslizador { flex: 1 1 60px; }
