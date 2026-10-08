@@ -128,6 +128,15 @@ export function coincide(atajo: Atajo, e: Pick<KeyboardEvent, 'key' | 'code' | '
   return tecla.length === 1 ? e.key.toLowerCase() === tecla.toLowerCase() : e.key === tecla;
 }
 
+/**
+ * Whether `e` is one of the File keys a browser answers itself — ⌘O «Open file», ⌘S/⇧⌘S «Save page
+ * as», ⌘P «Print» — which a modal of ours keeps from it (#442): the dispatcher stays quiet behind
+ * any open dialog, so they fell through to Chrome while the command palette or Settings was open.
+ * The `soloDesktop` ones (⌘N, ⌘,) never reach a page in a browser.
+ */
+export const teclaDeArchivo = (e: Parameters<typeof coincide>[1], mac: boolean = MAC): boolean =>
+  ATAJOS.some((a) => a.grupo === 'archivo' && a.tecla.startsWith('Mod+') && !('soloDesktop' in a) && coincide(a, e, mac));
+
 const NOMBRE_MAC: Record<string, string> = { Enter: '↩', Escape: 'Esc', Plus: '+', Minus: '−', Backspace: '⌫', Delete: '⌦', Space: 'Space' };
 const NOMBRE: Record<string, string> = { Escape: 'Esc', Plus: '+', Minus: '-', Delete: 'Del', Space: 'Space' };
 

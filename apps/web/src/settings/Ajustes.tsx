@@ -18,7 +18,7 @@ import type { Theme } from '../theme/applyTheme';
 import type { TemaGuardado } from '../theme/temas';
 import { Apariencia, type Ranuras } from './Apariencia';
 import { Atajos, type GrupoAtajos } from './Atajos';
-import { ATAJOS, etiqueta, MAC, type GrupoAtajo } from '../atajos';
+import { ATAJOS, etiqueta, MAC, teclaDeArchivo, type GrupoAtajo } from '../atajos';
 
 const GRUPOS: readonly GrupoAtajo[] = ['archivo', 'buscar', 'modos', 'simulacion', 'lienzo', 'paneles'];
 const DESKTOP = typeof window !== 'undefined' && typeof window.lila !== 'undefined';
@@ -66,6 +66,18 @@ export function Ajustes(props: AjustesProps): React.JSX.Element {
     const alCerrar = () => setSeccion('general');
     dialog.addEventListener('close', alCerrar);
     return () => dialog.removeEventListener('close', alCerrar);
+  }, []);
+
+  // #442: like the command palette, Settings keeps ⌘O/⌘S/⇧⌘S/⌘P from the browser while it is open
+  // (the dispatcher stays quiet behind a dialog, so they reached «Open file», «Save page as» and
+  // «Print»). In the desktop app the native File menu keeps answering them, as documented.
+  useEffect(() => {
+    if (DESKTOP) return undefined;
+    const retener = (e: KeyboardEvent): void => {
+      if (formRef.current?.closest('dialog')?.open === true && teclaDeArchivo(e)) e.preventDefault();
+    };
+    window.addEventListener('keydown', retener, true);
+    return () => window.removeEventListener('keydown', retener, true);
   }, []);
 
   // The Shortcuts table is the shortcut map itself (#413): every entry, grouped as the map groups
