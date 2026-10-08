@@ -6,8 +6,11 @@ inglés de esta página ([SHORTCUTS.md](../SHORTCUTS.md)) no trae alguna de sus 
 Linux, `Ctrl` ocupa el lugar de `⌘`.
 
 Los atajos sin `⌘`/`Ctrl` (F2, F6, Esc, los de alinear) no hacen nada mientras escribes en un campo o editas una
-etiqueta, y, salvo el menú Archivo de la app de escritorio, ningún atajo llega a la app mientras
-hay un diálogo abierto (Ajustes, una confirmación).
+etiqueta, y, salvo el menú Archivo de la barra de menús nativa de la app de escritorio (menos
+Imprimir), ningún atajo llega a la app mientras hay un diálogo abierto (Ajustes, la paleta de
+comandos, una confirmación). En un navegador, `⌘O`, `⌘S`, `⇧⌘S` y `⌘P` no hacen nada mientras la
+paleta de comandos o Ajustes están abiertos: ya no se cuelan a «Abrir archivo», «Guardar página
+como» e «Imprimir» del propio navegador.
 
 ## Archivo
 
@@ -25,6 +28,10 @@ hay un diálogo abierto (Ajustes, una confirmación).
 | Acción | macOS | Windows / Linux |
 | --- | --- | --- |
 | Paleta de comandos | `⌘K` | `Ctrl+K` |
+
+En la paleta `↑`/`↓` se mueven, `Enter` elige, y `Esc` la cierra y devuelve el foco a donde
+estaba —a un campo de texto, con el cursor donde lo dejaste—. `Tab` no sale de la paleta: como
+cualquier diálogo modal, deja el foco en su campo hasta que se cierra.
 
 ## Modos
 
@@ -92,6 +99,12 @@ Con el lienzo enfocado (haz clic en él primero):
 | Distribuir en vertical | `⌥⇧V` | `Alt+Shift+V` |
 
 Acercar, alejar y ajustar funcionan desde cualquier parte de la ventana, no solo desde el lienzo.
+Hacen zoom sobre el diagrama, no sobre la página: la app de escritorio **no tiene zoom de página**,
+por decisión (#442). Su menú Vista sustituyó al de Electron, que traía Acercar, Alejar y Tamaño
+real, y no se añadió un zoom de página con `⌘⌥+`/`⌘⌥−` en su lugar; la interfaz se ajusta con
+Ajustes → General → Densidad y con el tamaño base de letra del tema (Ajustes → Apariencia →
+Tipografía). En un navegador, el zoom de la página sigue en el menú del propio navegador.
+
 Los atajos de alinear solo funcionan en Modelar y actúan sobre las figuras seleccionadas (dos o
 más; tres o más para distribuir), igual que los botones de alinear de la esquina superior derecha
 del lienzo y la paleta de comandos. Los carriles no se alinean. Distribuir deja la primera y la
@@ -120,7 +133,8 @@ La paleta de figuras de la izquierda filtra al teclear e inserta la figura resal
 navegador) se los queda el navegador antes de que la página los vea, y la app web no escucha
 `⌘1`…`⌘3`/`Ctrl+1`…`Ctrl+3` para que sigan cambiando de pestaña del navegador: usa los botones de
 la barra, las pestañas de modo o `⌘K`. En la app de escritorio,
-los menús Archivo, Vista y Simulación enseñan estos atajos junto a cada entrada.
+los menús Archivo, Vista y Simulación enseñan estos atajos junto a cada entrada, y cada pestaña de
+modo dice su tecla en su tooltip.
 
 ² Imprime solo el diagrama, en negro sobre blanco, en una hoja. En el navegador ese diálogo de
 imprimir es también la forma de sacar un PDF (elige «Guardar como PDF»); la app de escritorio tiene

@@ -65,3 +65,84 @@ it.each([false, true])('typing an id finds the element whether or not ids are sh
   await act(async () => raiz.unmount());
   contenedor.remove();
 });
+
+// ---------- #442: the palette is a proper modal ----------
+
+/** Mounts the palette the way `App.tsx` does: on whatever has the focus at that moment. */
+async function montar(): Promise<{ contenedor: HTMLDivElement; raiz: ReturnType<typeof createRoot>; campo: HTMLInputElement; cerrada: { n: number } }> {
+  (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  const contenedor = document.createElement('div');
+  document.body.append(contenedor);
+  const raiz = createRoot(contenedor);
+  const cerrada = { n: 0 };
+  await act(async () => raiz.render(<PaletaComandos comandos={fuentes} onCerrar={() => { cerrada.n += 1; }} />));
+  return { contenedor, raiz, campo: contenedor.querySelector<HTMLInputElement>('input[role="combobox"]')!, cerrada };
+}
+function pulsar(el: Element, init: KeyboardEventInit): KeyboardEvent {
+  const e = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
+  act(() => { el.dispatchEvent(e); });
+  return e;
+}
+
+it('with the palette open, ⌘O/⌘S/⇧⌘S/⌘P never reach the browser, from the field or from the body (#442)', async () => {
+  HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  HTMLDialogElement.prototype.close = function () { this.open = false; };
+  const { contenedor, raiz, campo } = await montar();
+  // The app's dispatcher stays quiet behind a dialog: without this, Chrome's «Save page as» and
+  // file dialog answered (QA of #439).
+  expect(pulsar(campo, { key: 's', metaKey: true }).defaultPrevented).toBe(true);
+  expect(pulsar(campo, { key: 'o', ctrlKey: true }).defaultPrevented).toBe(true);
+  expect(pulsar(document.body, { key: 'S', shiftKey: true, metaKey: true }).defaultPrevented).toBe(true);
+  expect(pulsar(document.body, { key: 'p', metaKey: true }).defaultPrevented).toBe(true);
+  // Typing is typing.
+  expect(pulsar(campo, { key: 's' }).defaultPrevented).toBe(false);
+  await act(async () => raiz.unmount());
+  contenedor.remove();
+  // Closed, the keys are the dispatcher's again.
+  expect(pulsar(document.body, { key: 's', metaKey: true }).defaultPrevented).toBe(false);
+});
+
+it('Tab and ⇧Tab keep the focus in the palette\'s field, as in a modal (#442)', async () => {
+  HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  HTMLDialogElement.prototype.close = function () { this.open = false; };
+  const { contenedor, raiz, campo } = await montar();
+  expect(document.activeElement).toBe(campo);
+  expect(pulsar(campo, { key: 'Tab' }).defaultPrevented).toBe(true);
+  expect(pulsar(campo, { key: 'Tab', shiftKey: true }).defaultPrevented).toBe(true);
+  expect(document.activeElement).toBe(campo);
+  // Chrome makes the scrollable list focusable; from there Tab comes back to the field too.
+  const lista = contenedor.querySelector<HTMLElement>('[role="listbox"]')!;
+  lista.tabIndex = -1;
+  lista.focus();
+  expect(pulsar(lista, { key: 'Tab' }).defaultPrevented).toBe(true);
+  expect(document.activeElement).toBe(campo);
+  await act(async () => raiz.unmount());
+  contenedor.remove();
+});
+
+it('Esc back to a text field puts the caret where it was, not at the start (#442)', async () => {
+  // What Chrome does (measured by CDP, «Filter shapes»: 3 → 0): `close()` gives the focus back to
+  // the element that had it before `showModal`, with the caret at the start, and the palette's own
+  // `focus()` after it is then a no-op.
+  let antes: HTMLElement | null = null;
+  HTMLDialogElement.prototype.showModal = function () { antes = document.activeElement as HTMLElement; this.open = true; };
+  HTMLDialogElement.prototype.close = function () {
+    this.open = false;
+    antes?.focus();
+    if (antes instanceof HTMLInputElement) antes.setSelectionRange(0, 0);
+  };
+  const filtro = document.createElement('input');
+  document.body.append(filtro);
+  filtro.value = 'abcdef';
+  filtro.focus();
+  filtro.setSelectionRange(3, 5, 'backward');
+  const { contenedor, raiz, campo, cerrada } = await montar();
+  expect(document.activeElement).toBe(campo);
+  pulsar(campo, { key: 'Escape' });
+  expect(cerrada.n).toBe(1);
+  expect(document.activeElement).toBe(filtro);
+  expect([filtro.selectionStart, filtro.selectionEnd, filtro.selectionDirection]).toEqual([3, 5, 'backward']);
+  await act(async () => raiz.unmount());
+  contenedor.remove();
+  filtro.remove();
+});

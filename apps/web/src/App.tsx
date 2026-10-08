@@ -2864,6 +2864,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               key={m}
               type="button"
               className={m === modo ? 'modo activo' : 'modo'}
+              title={DESKTOP ? `${S.app.modos[m]}${atajo(`modo:${m}`)}` : undefined}
               onClick={() => elegirModo(m)}
             >
               {S.app.modos[m]}
