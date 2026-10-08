@@ -82,6 +82,16 @@ export const en = {
   dialogos: {
     proyectoLila: 'Lila Modeler project',
     diagramaBpmn: 'BPMN diagram',
+    /** The export save dialog (`exportacion.ts`, #564): its title and one filter per file type. */
+    exportar: 'Export',
+    tipoSvg: 'SVG image',
+    tipoPng: 'PNG image',
+    tipoPdf: 'PDF document',
+    tipoDocx: 'Word document',
+    tipoHtml: 'Web page',
+    tipoXlsx: 'Excel workbook',
+    tipoCsv: 'CSV file',
+    tipoJson: 'JSON file',
   },
   /** Close-with-unsaved-changes dialogs (`closeGuard.ts`, shown by `main.ts`). */
   cierre: {

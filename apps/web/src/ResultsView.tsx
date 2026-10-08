@@ -21,7 +21,7 @@ import {
   processCsv,
   resourcesCsv,
 } from '@lila-modeler/engine/csv';
-import { XLSX_MIME_TYPE, resourceNamesOf, scenarioWorkbook } from '@lila-modeler/engine/xlsx-report';
+import { resourceNamesOf, scenarioWorkbook } from '@lila-modeler/engine/xlsx-report';
 import {
   columnLabel,
   formatNumber,
@@ -42,6 +42,7 @@ import { hasLegacyReplications } from './compareWarnings.js';
 import { agruparAvisos, AvisoAgrupado } from './avisos';
 import { GraficaDeInstancias, GraficaDeUtilizacion, GraficasDelProceso, type LogDeCorrida } from './GraficasResultados';
 import { exactDuration, formatDisplay, formatDisplayDuration, formatDisplayDurationWithUnit } from './formatDisplay';
+import { guardarDesdeBoton } from './guardarArchivo';
 import { getLocale, strings, useStrings } from './i18n';
 
 export interface ResultsViewProps {
@@ -208,31 +209,22 @@ function ariaSort(sort: SortState | null, key: string): 'ascending' | 'descendin
   return sort.dir === 'asc' ? 'ascending' : 'descending';
 }
 
-/** Descarga `contents` como si el navegador hubiera guardado el archivo del enlace. */
-export function downloadCsv(filename: string, contents: string): void {
-  descargar(filename, new Blob([contents], { type: 'text/csv;charset=utf-8' }));
+/**
+ * Guarda `contents` como `filename`: en el escritorio con el diálogo de guardar de la app, en la web
+ * como descarga del navegador (#564, `guardarArchivo.ts`).
+ */
+export function downloadCsv(filename: string, contents: string): Promise<void> {
+  return guardarDesdeBoton(filename, { tipo: 'csv', datos: contents });
 }
 
 /**
- * Descarga el libro `.xlsx` que produce `@lila-modeler/engine/xlsx-report` (issue #80). Los bytes se
- * generan **al pulsar** y no en cada render: construir el zip de una corrida grande en cada
- * repintado de la tabla se notaría en la interfaz y casi siempre se tiraría sin usar.
+ * Guarda el libro `.xlsx` que produce `@lila-modeler/engine/xlsx-report` (issue #80), por el mismo
+ * camino que `downloadCsv`. Los bytes se generan **al pulsar** y no en cada render: construir el
+ * zip de una corrida grande en cada repintado de la tabla se notaría en la interfaz y casi siempre
+ * se tiraría sin usar.
  */
-export function downloadXlsx(filename: string, bytes: Uint8Array): void {
-  // `new Blob([bytes])` sobre la vista exacta: `bytes.buffer` podría llevar relleno de más.
-  descargar(filename, new Blob([bytes.slice()], { type: XLSX_MIME_TYPE }));
-}
-
-function descargar(filename: string, blob: Blob): void {
-  const url = URL.createObjectURL(blob);
-  try {
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.click();
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+export function downloadXlsx(filename: string, bytes: Uint8Array): Promise<void> {
+  return guardarDesdeBoton(filename, { tipo: 'xlsx', datos: bytes });
 }
 
 export interface DataTableProps<Row> {

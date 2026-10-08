@@ -58,6 +58,15 @@ export const es: Strings = {
   dialogos: {
     proyectoLila: 'Proyecto de Lila Modeler',
     diagramaBpmn: 'Diagrama BPMN',
+    exportar: 'Exportar',
+    tipoSvg: 'Imagen SVG',
+    tipoPng: 'Imagen PNG',
+    tipoPdf: 'Documento PDF',
+    tipoDocx: 'Documento de Word',
+    tipoHtml: 'Página web',
+    tipoXlsx: 'Libro de Excel',
+    tipoCsv: 'Archivo CSV',
+    tipoJson: 'Archivo JSON',
   },
   cierre: {
     guardar: 'Guardar',

@@ -17,6 +17,7 @@
  * llama a `applyTheme` y no hay dos fuentes de verdad del tema vivo.
  */
 import { useRef, useState } from 'react';
+import { guardarDesdeBoton } from '../guardarArchivo';
 import { useStrings } from '../i18n';
 import type { Theme } from '../theme/applyTheme';
 import type { TokenName } from '../theme/tokens';
@@ -210,15 +211,8 @@ export function Apariencia(props: AparienciaProps): React.JSX.Element {
     // Exactamente `{ name, tokens }` y nada más: es el formato de `docs/THEMES.md`, y lo que
     // vuelve a entrar por «Importar» reproduce este mismo archivo.
     const json = `${JSON.stringify({ name: tema.name, tokens: tema.tokens }, null, 2)}\n`;
-    const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
-    try {
-      const enlace = document.createElement('a');
-      enlace.href = url;
-      enlace.download = archivoDe(tema.name);
-      enlace.click();
-    } finally {
-      URL.revokeObjectURL(url);
-    }
+    // En el escritorio, con el diálogo de guardar de la app y no como descarga (#564).
+    void guardarDesdeBoton(archivoDe(tema.name), { tipo: 'json', datos: json });
   }
 
   async function importar(fichero: File): Promise<void> {

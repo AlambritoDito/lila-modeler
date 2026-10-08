@@ -224,6 +224,20 @@ it('exportar e importar reproduce byte a byte un tema del usuario editado', asyn
   expect(await blobs[1]!.text()).toBe(exportado);
 });
 
+it('en el escritorio exportar va por el diálogo de guardar de la app, no por una descarga (#564)', async () => {
+  const exportar = vi.fn(async () => '/Users/x/eva-01.json');
+  vi.stubGlobal('lila', { exportar });
+  const crear = vi.fn(() => 'blob:tema');
+  vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: crear, revokeObjectURL: () => {} }));
+
+  await act(async () => boton('Exportar').click());
+  expect(exportar).toHaveBeenCalledOnce();
+  const [{ nombre, tipo, datos }] = exportar.mock.calls[0] as unknown as [{ nombre: string; tipo: string; datos: string }];
+  expect([nombre, tipo]).toEqual(['eva-01', 'json']);
+  expect(JSON.parse(datos)).toEqual({ name: EVA.name, tokens: EVA.tokens });
+  expect(crear).not.toHaveBeenCalled();
+});
+
 it('un JSON inválido se rechaza con mensaje y sin aplicar nada', async () => {
   const antes = variable('--accent-primary');
   await importar('{ "name": "Malo", "tokens": { "accent.primary": "azul" } }');
