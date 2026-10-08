@@ -9,9 +9,11 @@
  *    `apps/web/src/strings.en.ts`; this one only covers what lives outside it. The two follow the
  *    same convention — base language `as const`, translation annotated with `Strings` — but they
  *    are separate files because `apps/desktop` cannot import `apps/web` sources (see `types.ts`).
- * 2. **Electron's role menus are not here.** `appMenu`, `editMenu` and `windowMenu`
- *    are localised by the OS from its own language, so translating them here would only make them
- *    disagree with the rest of the menu bar.
+ * 2. **On macOS, Electron's role menus are not here.** `appMenu`, `editMenu` and `windowMenu`
+ *    are localised by the OS from its own language, so translating them there would only make them
+ *    disagree with the rest of the menu bar. Outside macOS nothing localises them — Electron hands
+ *    out its English defaults («Edit», «Window», «Exit», #566) — so `menu.ts` labels those items
+ *    from the `menu` group below.
  * 3. **The `E-*` messages are not here either.** `projectIO.ts` and the IPC guards in `main.ts`
  *    throw codes that the renderer maps to text; they are a contract between processes, not a
  *    label, and they stay as they are.
@@ -19,7 +21,7 @@
  * Keys stay in Spanish, like the web catalog's: they are identifiers, not text anybody reads.
  */
 export const en = {
-  /** Native menu (`menu.ts`). The role submenus are localised by the OS and not listed here. */
+  /** Native menu (`menu.ts`). On macOS the role submenus are the OS's and use none of these. */
   menu: {
     preferencias: 'Preferences…',
     /** Every product this owner ships has an About dialog (LILA-381). On macOS it replaces the
@@ -57,6 +59,29 @@ export const en = {
     /** The Help menu: on macOS it also carries the system's menu search (⇧⌘/). */
     ayuda: 'Help',
     documentacion: 'Documentation',
+    /**
+     * Windows and Linux only (#566): the items macOS builds from a role and localises itself, and
+     * that Electron would otherwise label in English there. Same words as Electron's, sentence case.
+     */
+    editar: 'Edit',
+    deshacer: 'Undo',
+    rehacer: 'Redo',
+    cortar: 'Cut',
+    copiar: 'Copy',
+    pegar: 'Paste',
+    eliminar: 'Delete',
+    seleccionarTodo: 'Select all',
+    ventana: 'Window',
+    minimizar: 'Minimize',
+    cerrarVentana: 'Close',
+    pantallaCompleta: 'Toggle full screen',
+    herramientasDesarrollo: 'Toggle developer tools',
+    salir: 'Exit',
+  },
+  /** The names of the file-type filters in the native Open and Save dialogs (`main.ts`, #566). */
+  dialogos: {
+    proyectoLila: 'Lila Modeler project',
+    diagramaBpmn: 'BPMN diagram',
   },
   /** Close-with-unsaved-changes dialogs (`closeGuard.ts`, shown by `main.ts`). */
   cierre: {
