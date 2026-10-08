@@ -60,7 +60,9 @@ import {
   type Ruta,
 } from './escenarioModelo.js';
 import { atajoPorId, etiqueta, MAC } from './atajos.js';
-import { useContenedores } from './carrilClic.js';
+import { carrilElegido, elegirCarril, useCarriles, useContenedores, usePasoRecursos } from './carrilClic.js';
+import { nombreDeCarril } from './LaneAssign.js';
+import { carrilesDelPanel } from './laneToPool.js';
 import { PASO_IDS, type PasoId } from './ids.js';
 import { BotonElemento, type Rotulo } from './ListaElementos.js';
 import { PasoCalendarios } from './PasoCalendarios.js';
@@ -617,6 +619,20 @@ export function ScenarioPanel({
   const contenedor = clase === null && idSeleccionado !== null ? (contenedores?.find((c) => c.id === idSeleccionado) ?? null) : null;
   /** C2: a lane picked by its name in Resources is answered by the step itself («Lane X · n tasks → resource»). */
   const carrilEnRecursos = contenedor?.tipo === 'bpmn:Lane' && paso === 'resources';
+  // QA of #615: the step itself keeps the lanes clickable, not only its overview. With a task or a
+  // pool selected the panel shows that element, and the first click on a lane's name has to pick
+  // the lane all the same.
+  usePasoRecursos(paso === 'resources');
+  // The lane picked belongs to that click: selecting another element drops it. Not an empty
+  // selection: a second click on the lane's name deselects the lane (diagram-js toggles) and picks
+  // it again.
+  useEffect(() => {
+    const elegido = carrilElegido();
+    if (elegido !== null && idSeleccionado !== null && elegido !== idSeleccionado) elegirCarril(null);
+  }, [idSeleccionado]);
+  /** The lanes as the Resources list names them, so an unnamed one reads «Unnamed lane n» in both. */
+  const carrilesVisuales = useCarriles();
+  const carrilesPanel = useMemo(() => carrilesDelPanel(ir, carrilesVisuales), [ir, carrilesVisuales]);
 
   useEffect(() => {
     onPasoVisible?.(paso);
@@ -649,7 +665,10 @@ export function ScenarioPanel({
     if (nombre !== undefined && nombre.trim() !== '') return nombre;
     // C7: a pool or a lane reads its name, or «Unnamed pool», never its id.
     const caja = contenedores?.find((c) => c.id === id);
-    return caja === undefined ? null : (caja.nombre ?? S.c7.sinNombre[caja.tipo]);
+    if (caja === undefined) return null;
+    if (caja.nombre !== null) return caja.nombre;
+    const enLista = carrilesPanel.find((c) => c.clave === id);
+    return enLista === undefined ? S.c7.sinNombre[caja.tipo] : nombreDeCarril(carrilesPanel, enLista, S.recursos.carrilSinNombre);
   }
 
   /** #447: the name, or the id without one; with «Advanced», the id as well. */

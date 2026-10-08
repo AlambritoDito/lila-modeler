@@ -192,9 +192,15 @@ export function useCarrilElegido(): string | null {
   return useSyncExternalStore(suscribirse, () => elegido);
 }
 
-/** Mounted by the Resources step: while it is, lanes on the canvas are clickable. */
-export function usePasoRecursos(): void {
+/**
+ * Mounted by the Resources step: while it is, lanes on the canvas are clickable. The Simulate panel
+ * calls it too, with `activo` while its step is Resources (C7, QA of #615): with a task or a pool
+ * selected the panel shows that element instead of the step, and the first click on a lane's name
+ * must still pick the lane.
+ */
+export function usePasoRecursos(activo = true): void {
   useEffect(() => {
+    if (!activo) return undefined;
     pasosMontados++;
     avisar();
     return () => {
@@ -202,7 +208,7 @@ export function usePasoRecursos(): void {
       if (pasosMontados === 0) elegido = null;
       avisar();
     };
-  }, []);
+  }, [activo]);
 }
 
 /* ------------------------------------------------------------------ *

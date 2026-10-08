@@ -2139,5 +2139,7 @@ export const en = {
     pistaRecursosCarril: 'Pick a task or the name of a lane',
     /** A selected pool or lane without a name: what the Simulate panel shows instead of its raw id. */
     sinNombre: { 'bpmn:Participant': 'Unnamed pool', 'bpmn:Lane': 'Unnamed lane' },
+    /** The end of the replay on the time bar: one word, with the whole sentence in its title. */
+    finCorto: 'End',
   },
 } as const;

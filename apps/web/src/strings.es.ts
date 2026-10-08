@@ -2093,5 +2093,6 @@ export const es: Strings = {
   c7: {
     pistaRecursosCarril: 'Elige una tarea o el nombre de un carril',
     sinNombre: { 'bpmn:Participant': 'Pool sin nombre', 'bpmn:Lane': 'Carril sin nombre' },
+    finCorto: 'Fin',
   },
 };

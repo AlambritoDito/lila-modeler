@@ -16,7 +16,17 @@ import type { ProcessIR, RunResult } from '@lila-modeler/engine';
 import { parseBpmn } from '@lila-modeler/engine/bpmn';
 import type { ResolvedScenario } from '@lila-modeler/engine/schema';
 
-import { elegirCarril, publicarCarriles, publicarContenedores, type ContenedorVisual } from './carrilClic';
+import {
+  apply,
+  elegirCarril,
+  publicarCarriles,
+  publicarContenedores,
+  type ContenedorVisual,
+  type EventoCarril,
+  type FormaCarril,
+  type LienzoCarriles,
+} from './carrilClic';
+import { idDeSeleccion } from './ids';
 import { kpisDe, PanelResumen, tituloKpi } from './PanelResumen';
 import { ScenarioPanel } from './ScenarioPanel';
 import { exactDuration } from './formatDisplay';
@@ -110,11 +120,16 @@ describe('Results summary polish (Lote M, C7)', () => {
     // The zoom buttons move up by the row, so they keep their distance from the bpmn.io mark.
     expect(css()).toContain('.app.modo-resultados .zona-modelo:has(> .c5-tiempo) > .zoom { bottom: calc(46px + 48px); }');
     // The note folds by the row's own width, not the window's: at 1280 px with the 320 px panel the
-    // row is 960 px wide and the note is read whole (it used to hide below a 1400 px window).
+    // row's content box is 932 px and the note is read whole (it used to hide below a 1400 px window).
     expect(css()).toMatch(/\.c5-tiempo \{ container-type: inline-size; \}/);
     const pliegue = /@container \(max-width: (\d+)px\) \{\s*\.c5-tiempo > \.aviso \{ display: none; \}/.exec(css());
-    expect(Number(pliegue?.[1])).toBeLessThan(960);
+    expect(Number(pliegue?.[1])).toBeLessThan(932);
     expect(css()).not.toMatch(/@media \(max-width: 1399px\) \{\s*\.c5-tiempo > \.aviso/);
+    // QA of #615: the clock never ellipsizes, at the end of the replay either; the slider gives way.
+    expect(css()).toContain('.app.modo-resultados .zona-modelo > .c5-tiempo .c5-reloj { flex-shrink: 0; }');
+    // The pools and the legend fold by the row too, so nothing is cut off at 1600 px.
+    expect(css()).not.toMatch(/@media \(max-width: 1599px\) \{\s*\.c5-tiempo \.c5-ocupacion/);
+    expect(css()).toMatch(/@container \(max-width: \d+px\) \{\s*\.c5-tiempo \.c5-leyenda \{ display: none; \}/);
   });
 });
 
@@ -176,5 +191,84 @@ describe('a pool or a lane selected in Simulate (Lote M, C7)', () => {
     // In another step the lane is just named, like the pool.
     irAPaso('times');
     expect(encabezado()).toBe('Kitchen');
+  });
+  it('an unnamed lane reads «Unnamed lane n» in the heading, numbered as in the Resources list (QA of #615)', () => {
+    act(() => {
+      publicarContenedores([{ id: 'Lane_A', tipo: 'bpmn:Lane', nombre: null }, { id: 'Lane_B', tipo: 'bpmn:Lane', nombre: null }]);
+      publicarCarriles([
+        { id: 'Lane_A', nombre: null, nodos: ['Task_TomarPedido'] },
+        { id: 'Lane_B', nombre: null, nodos: ['Task_Preparar'] },
+      ]);
+    });
+    montar('Lane_B');
+    irAPaso('times');
+    expect(encabezado()).toBe(en.recursos.carrilSinNombre(2));
+    // The Resources list says the same of it.
+    act(() => { raiz!.render(panel(null)); });
+    irAPaso('resources');
+    expect([...contenedor!.querySelectorAll('option')].map((o) => o.textContent)).toContain(en.recursos.carrilSinNombre(2));
+  });
+
+  it('the first click on a lane\'s name picks it even with a task selected, through the canvas click (QA of #615)', () => {
+    // The canvas as `carrilClic.apply` reads it: the pool and a lane holding «Prepare food».
+    const formas: FormaCarril[] = [
+      { id: 'Participant_Restaurante', type: 'bpmn:Participant', x: 0, y: 0, width: 800, height: 300, businessObject: { name: 'Restaurant' } },
+      { id: 'Lane_Cocina', type: 'bpmn:Lane', x: 30, y: 0, width: 770, height: 300, businessObject: { name: 'Kitchen', flowNodeRef: [{ id: 'Task_Preparar' }] } },
+    ];
+    const oyentes = new Map<string, ((e: EventoCarril) => unknown)[]>();
+    const caja = document.createElement('div');
+    caja.getBoundingClientRect = () => ({ left: 0, top: 0, right: 1000, bottom: 800, width: 1000, height: 800, x: 0, y: 0, toJSON: () => ({}) });
+    const lienzo: LienzoCarriles = {
+      servicios: {
+        elementRegistry: { filter: (prueba) => formas.filter(prueba) },
+        canvas: { viewbox: () => ({ x: 0, y: 0, scale: 1 }), getContainer: () => caja },
+      },
+      suscribir(eventos, escuchar) {
+        for (const e of eventos) oyentes.set(e, [...(oyentes.get(e) ?? []), escuchar]);
+        return () => { for (const e of eventos) oyentes.set(e, (oyentes.get(e) ?? []).filter((o) => o !== escuchar)); };
+      },
+    };
+    const clic = (forma: FormaCarril, clientX: number): void => {
+      act(() => { for (const o of oyentes.get('element.click') ?? []) o({ element: forma, originalEvent: { clientX, clientY: 100 } }); });
+    };
+    let quitar = (): void => {};
+    act(() => { quitar = apply(lienzo); });
+    try {
+      montar('Task_Preparar');
+      irAPaso('resources');
+      // The selected task's own Resources fields are on screen, not the step's list.
+      expect(encabezado()).toBe('Prepare food');
+      // One click on the lane's name band (30–60 px): carrilClic picks it, then bpmn-js selects it.
+      clic(formas[1]!, 40);
+      act(() => { raiz!.render(panel('Lane_Cocina')); });
+      expect(contenedor!.textContent).toContain(en.recursos.carrilTitulo('Kitchen', 1));
+      // A second click on the name deselects the lane (diagram-js toggles) and picks it again.
+      clic(formas[1]!, 40);
+      act(() => { raiz!.render(panel(null)); });
+      expect(contenedor!.textContent).toContain(en.recursos.carrilTitulo('Kitchen', 1));
+      // Selecting another element drops the pick: it does not come back with the list.
+      act(() => { raiz!.render(panel('Task_Preparar')); });
+      act(() => { raiz!.render(panel(null)); });
+      expect(contenedor!.textContent).not.toContain(en.recursos.carrilTitulo('Kitchen', 1));
+      // The same with the pool selected first.
+      act(() => { raiz!.render(panel('Participant_Restaurante')); });
+      clic(formas[1]!, 40);
+      act(() => { raiz!.render(panel('Lane_Cocina')); });
+      expect(contenedor!.textContent).toContain(en.recursos.carrilTitulo('Kitchen', 1));
+    } finally {
+      act(() => { quitar(); });
+    }
+  });
+});
+
+describe('the selection is never a label (Lote M, C7, QA of #615)', () => {
+  it('a click on «Approved» or «Order received» selects the flow or the event it belongs to', () => {
+    expect(idDeSeleccion([{ id: 'Flow_Aprobado_label', labelTarget: { id: 'Flow_Aprobado' } }])).toBe('Flow_Aprobado');
+    expect(idDeSeleccion([{ id: 'StartEvent_Pedido_label', labelTarget: { id: 'StartEvent_Pedido' } }])).toBe('StartEvent_Pedido');
+    expect(idDeSeleccion([{ id: 'Task_Preparar' }])).toBe('Task_Preparar');
+    expect(idDeSeleccion([{ id: 'Task_Preparar', labelTarget: null }])).toBe('Task_Preparar');
+    // Nothing, or several at once, is no single selection.
+    expect(idDeSeleccion([])).toBeNull();
+    expect(idDeSeleccion([{ id: 'A' }, { id: 'B' }])).toBeNull();
   });
 });
