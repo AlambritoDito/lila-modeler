@@ -573,6 +573,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [runs, setRuns] = useState<StoredRun[]>([]);
   const [scenarioRevisions, setScenarioRevisions] = useState<Record<string, number>>({});
   const [archivo, setArchivo] = useState('model.bpmn');
+  /** What a scenario's `model` may name (#610): the project's `model.bpmn`, or the loose file on the canvas. */
+  const modelosDeEscenarios = suelto && archivo !== 'model.bpmn' ? ['model.bpmn', archivo] : 'model.bpmn';
   const [pestana, setPestana] = useState<PestanaId>('propiedades');
   // El lienzo no se monta hasta que el tema está resuelto: bpmn-js lee los colores de las
   // figuras de los tokens al montar (ver Modeler.tsx). `tema === undefined` es "todavía no se
@@ -2020,8 +2022,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // The language is decided when the run starts and travels with it: a run already stored
       // keeps the language it was produced in (its warnings are data, not text that is repainted).
       // A scenario lives (or will after «Save As») next to the project's `model.bpmn`, also for a
-      // loose `ventas.bpmn` (#610): that, not the opened file's name, is what its `model` names.
-      const { ir, scenario, warnings } = await prepareSimulation(xml, escenarioId, escenarios, 'model.bpmn', { locale });
+      // loose `ventas.bpmn` (#610); one that names the loose file itself (a CLI-style folder) runs too.
+      const { ir, scenario, warnings } = await prepareSimulation(xml, escenarioId, escenarios, modelosDeEscenarios, { locale });
       if (control.signal.aborted || enVuelo.current !== control) return;
       const { result: rawResult, logSample, cycleTimes } = await runInWorker(ir, scenario, {
         locale,
@@ -2130,7 +2132,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       ]);
       const escenario = run !== undefined
         ? { scenario: run.inputs.scenario as unknown as ResolvedScenario, result: run.result }
-        : await prepareSimulation(xml, escenarioId, escenarios, 'model.bpmn', { locale }).then(({ scenario }) => ({ scenario }), () => ({}));
+        : await prepareSimulation(xml, escenarioId, escenarios, modelosDeEscenarios, { locale }).then(({ scenario }) => ({ scenario }), () => ({}));
       const hoy = new Date();
       const date = [hoy.getFullYear(), hoy.getMonth() + 1, hoy.getDate()].map((n) => String(n).padStart(2, '0')).join('-');
       // #460: the run's charts, rasterised like the diagram; no run, no charts.

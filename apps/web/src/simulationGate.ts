@@ -29,7 +29,7 @@ export function sinRepetir(code: string, where: string, message: string): string
  * and «in the user's language» are finally the same thing. The warnings returned here are copied
  * into the run that is starting: a run already stored keeps the language it was produced in.
  */
-export async function prepareSimulation(xml: string, file: string, scenarios: Readonly<Record<string, Record<string, unknown>>>, expectedModel = 'model.bpmn', options: PrepareSimulationOptions = {}) {
+export async function prepareSimulation(xml: string, file: string, scenarios: Readonly<Record<string, Record<string, unknown>>>, expectedModel: string | readonly string[] = 'model.bpmn', options: PrepareSimulationOptions = {}) {
   const S = strings();
   const locale = options.locale ?? getLocale();
   // `parseScenario` en vez de `ScenarioSchema.parse`: un `ZodError` sin capturar llega a la barra
@@ -45,7 +45,8 @@ export async function prepareSimulation(xml: string, file: string, scenarios: Re
   // all of them, as the editor's panel and seeding count them, not only the one that runs.
   const model = await validateBpmnModel(xml, { locale, scenarios: Object.values(scenarios) });
   if (scenario.model === undefined || scenario.run === undefined) throw new Error(S.simulacion.errorFaltaModelORun);
-  if (scenario.model !== expectedModel) throw new Error(S.simulacion.errorModeloDistinto(scenario.model, expectedModel));
+  const accepted = typeof expectedModel === 'string' ? [expectedModel] : expectedModel;
+  if (!accepted.includes(scenario.model)) throw new Error(S.simulacion.errorModeloDistinto(scenario.model, accepted[accepted.length - 1] ?? 'model.bpmn'));
   const problems = validateScenario(scenario, model.ir, { locale, elsewhere: model.elsewhere });
   const errors = [
     ...model.errors.map((p) => sinRepetir(p.code, p.id, p.message)),

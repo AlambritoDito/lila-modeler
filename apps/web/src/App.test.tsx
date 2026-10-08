@@ -1432,7 +1432,7 @@ it('Run on a loose ventas.bpmn checks its default scenarios against model.bpmn (
   const [, file, escenarios, modelo] = mocks.gate.mock.calls.at(-1)!;
   expect(file).toBe('as-is.scenario.json');
   expect((escenarios as Record<string, { model?: string }>)[file]?.model).toBe('model.bpmn');
-  expect(modelo).toBe('model.bpmn');
+  expect(modelo).toEqual(['model.bpmn', 'ventas.bpmn']);
 });
 
 it.each([

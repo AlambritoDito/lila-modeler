@@ -227,3 +227,14 @@ it('a loose diagram with any file name simulates its default scenarios, before a
     rmSync(saved, { recursive: true, force: true });
   }
 });
+
+// QA of #612: a CLI-style folder, `ventas.bpmn` with a scenario whose `model` is `ventas.bpmn`
+// (docs/SCENARIO_FORMAT.md: a path relative to the scenario), opened loose. It still runs, and a
+// scenario that names another file is refused against the file on the canvas.
+it('a loose diagram also runs a scenario that names it, and refuses one that names another file (#610)', async () => {
+  const scenarios = { 'ventas.scenario.json': { ...defaultScenarios((await parseBpmn(xml)).ir)['as-is.scenario.json'], model: 'ventas.bpmn' } };
+  const loose = ['model.bpmn', 'ventas.bpmn'];
+  expect((await prepareSimulation(xml, 'ventas.scenario.json', scenarios, loose)).scenario.model).toBe('ventas.bpmn');
+  const other = { 'otro.scenario.json': { ...scenarios['ventas.scenario.json'], model: 'other.bpmn' } };
+  await expect(prepareSimulation(xml, 'otro.scenario.json', other, loose)).rejects.toThrow(/other\.bpmn.*ventas\.bpmn/);
+});
