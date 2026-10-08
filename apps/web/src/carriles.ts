@@ -13,6 +13,11 @@
  * The pick mode (`elegirPool`) is what the palette's Lane tool does with nothing fitting selected:
  * the next click on a pool or a lane adds the lane there (at the bottom, as with a selection),
  * a click elsewhere or Escape cancels.
+ *
+ * #596 adds what the canvas controls (`controlesCarriles.ts`) and the lane list of Properties
+ * need: `insertar` adds a lane at a given position of a pool, `moverA` takes a lane any number of
+ * places up or down as one undo step (a chain of the swaps above), and `quitar` deletes one the
+ * way bpmn-js does (its neighbours take its room; its elements stay in the pool).
  */
 import { isHorizontal } from 'bpmn-js/lib/util/DiUtil';
 import { strings } from './i18n';
@@ -59,6 +64,8 @@ interface Inyectados {
     moveElements(formas: Forma[], delta: { x: number; y: number }): void;
     updateLaneRefs(nodos: Forma[], carriles: Forma[]): void;
     addLane(destino: Forma, lugar: 'top' | 'bottom'): Forma;
+    removeShape(forma: Forma): void;
+    resizeLane(carril: Forma, caja: { x: number; y: number; width: number; height: number }, equilibrado?: boolean): void;
   };
   eventBus: { on(evento: string, prioridad: number, escuchar: (e: { element?: Forma }) => unknown): void };
   contextPad: { registerProvider(prioridad: number, proveedor: object): void; open?(el: Forma, forzar?: boolean): void; isOpen?(el?: Forma): boolean };
@@ -70,15 +77,39 @@ interface Inyectados {
 const esCarril = (el: Forma | undefined): boolean => el?.type === 'bpmn:Lane';
 const esPool = (el: Forma | undefined): boolean => el?.type === 'bpmn:Participant';
 
+/** Whether `forma` (a pool or a lane) belongs to a vertical pool: lanes side by side. */
+export const vertical = (forma: Forma): boolean => isHorizontal(forma as never) === false;
+
 /** The axis lanes stack on: `y` in a horizontal pool, `x` in a vertical one. */
-function eje(carril: Forma): { pos: 'x' | 'y'; tam: 'width' | 'height' } {
-  return isHorizontal(carril as never) === false ? { pos: 'x', tam: 'width' } : { pos: 'y', tam: 'height' };
+export function eje(carril: Forma): { pos: 'x' | 'y'; tam: 'width' | 'height' } {
+  return vertical(carril) ? { pos: 'x', tam: 'width' } : { pos: 'y', tam: 'height' };
 }
 
 /** The sibling lanes of `carril` (itself included), in drawing order along their axis. */
 export function hermanos(carril: Forma): Forma[] {
   const { pos } = eje(carril);
   return (carril.parent?.children ?? []).filter(esCarril).sort((a, b) => a[pos] - b[pos]);
+}
+
+/**
+ * The lanes directly under `contenedor` (a pool, or a lane with nested lanes), in drawing order:
+ * top to bottom in a horizontal pool, left to right in a vertical one.
+ */
+export function carrilesDe(contenedor: Forma): Forma[] {
+  const lista = (contenedor.children ?? []).filter(esCarril);
+  return lista.length === 0 ? [] : hermanos(lista[0]!);
+}
+
+/** What a lane is called where it is listed: its name, or «Unnamed lane n» by its position. */
+export function nombreCarril(carril: Forma): string {
+  const nombre = carril.businessObject.get?.('name');
+  return typeof nombre === 'string' && nombre.trim() !== '' ? nombre.trim() : strings().carriles.sinNombre(hermanos(carril).indexOf(carril) + 1);
+}
+
+/** How many flow nodes `carril` holds (its `flowNodeRef`): what deleting it would leave behind. */
+export function elementosDe(carril: Forma): number {
+  const refs = carril.businessObject.get?.('flowNodeRef');
+  return Array.isArray(refs) ? refs.length : 0;
 }
 
 /** The adjacent sibling `carril` would swap places with, or `undefined` at the edge. */
@@ -107,6 +138,25 @@ function contenido(carril: Forma): Forma[] {
   return (raiz(carril).children ?? []).filter((el) =>
     !esCarril(el) && el.labelTarget === undefined && el.waypoints === undefined && el.host === undefined &&
     el[tam] !== undefined && el[pos] + el[tam] / 2 > desde && el[pos] + el[tam] / 2 < hasta);
+}
+
+/** The smallest a lane is drawn by bpmn-js (`LANE_MIN_DIMENSIONS`), and the largest one typed. */
+export const TAMANO_MINIMO = 60;
+export const TAMANO_MAXIMO = 5000;
+
+/** Room kept between a lane's last element and its edge, as bpmn-js's `LANE_PADDING` does. */
+const MARGEN = 20;
+
+/**
+ * The smallest size `carril` (a lane of a horizontal pool) can be given from Properties: nothing
+ * below `TAMANO_MINIMO`, and nothing that would leave one of its elements past its bottom edge.
+ * Never more than the size it has: an element already drawn close to (or over) the edge only
+ * means the lane cannot shrink.
+ */
+export function tamanoMinimo(carril: Forma): number {
+  const { pos, tam } = eje(carril);
+  const fondo = Math.max(...contenido(carril).map((el) => el[pos] + el[tam] - carril[pos] + MARGEN), 0);
+  return Math.max(TAMANO_MINIMO, Math.min(carril[tam], Math.ceil(fondo)));
 }
 
 /** Every lane under `el`, at any depth. */
@@ -169,6 +219,17 @@ export class LilaCarriles {
       },
     });
 
+    // #596: a lane taken several places at once is a chain of swaps, undone in one step.
+    commandStack.register('lila.carril.moverA', {
+      postExecute: ({ carril, indice }: { carril: Forma; indice: number }) => {
+        let i = hermanos(carril).indexOf(carril);
+        while (i !== indice) {
+          this.commandStack.execute('lila.carril.mover', { carril, direccion: i < indice ? 'abajo' : 'arriba' });
+          i += i < indice ? 1 : -1;
+        }
+      },
+    });
+
     // A destroyed or replaced diagram drops the pick (and its document listener).
     eventBus.on('diagram.destroy', 1000, () => this.cancelar());
 
@@ -214,6 +275,48 @@ export class LilaCarriles {
     if (vecino(carril, direccion) === undefined) return false;
     this.commandStack.execute('lila.carril.mover', { carril, direccion });
     return true;
+  }
+
+  /**
+   * Takes `carril` to `indice` among its sibling lanes (the others shift by one), as one undo
+   * step; `false` when it is already there or the index is out of range.
+   */
+  moverA(carril: Forma, indice: number): boolean {
+    const lista = hermanos(carril);
+    if (!esCarril(carril) || indice < 0 || indice >= lista.length || lista[indice] === carril) return false;
+    this.commandStack.execute('lila.carril.moverA', { carril, indice });
+    return true;
+  }
+
+  /**
+   * Adds a lane to `pool` at `indice`: 0 above (or left of) the first lane, `n` after the last,
+   * anything between right after lane `indice - 1`. Everything past the new lane makes room, so
+   * the pool grows downwards except at 0, where it grows upwards as bpmn-js's «Add lane above»
+   * does. A pool without lanes gets bpmn-js's two (one for what it had, one new). One undo step.
+   */
+  insertar(pool: Forma, indice: number): Forma {
+    const lista = carrilesDe(pool);
+    if (lista.length === 0) return this.modeling.addLane(pool, 'bottom');
+    return indice <= 0
+      ? this.modeling.addLane(lista[0]!, 'top')
+      : this.modeling.addLane(lista[Math.min(indice, lista.length) - 1]!, 'bottom');
+  }
+
+  /**
+   * Deletes `carril` with bpmn-js's own rule: its neighbours take its room and its elements stay
+   * in the pool, in whichever lane now covers them. Asking first is the caller's business.
+   */
+  quitar(carril: Forma): void {
+    this.modeling.removeShape(carril);
+  }
+
+  /**
+   * Sets the height of `carril` (a lane of a horizontal pool) keeping its top: the lanes and
+   * elements below move with its bottom edge and the pool grows or shrinks — bpmn-js's resize of
+   * a lane with ⌘ held. One undo step. The caller validates against `tamanoMinimo`.
+   */
+  fijarTamano(carril: Forma, valor: number): void {
+    this.modeling.resizeLane(carril, { x: carril.x, y: carril.y, width: carril.width, height: valor }, false);
   }
 
   private intercambiar({ carril, direccion }: Contexto): void {

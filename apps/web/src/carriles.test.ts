@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 /**
- * #580: moving a lane up or down, and the palette's Lane tool with nothing selected.
+ * #580: moving a lane up or down, and the palette's Lane tool with nothing selected. #596: adding a
+ * lane at a position, taking a lane several places at once, deleting it and setting its height.
  *
  * Unlike the sibling suites, this one builds a real bpmn-js `Modeler` and imports a diagram: the
  * swap is a composition of bpmn-js's own commands (`moveElements`, `updateLaneRefs`), so faking
@@ -12,7 +13,7 @@
 import Modeler from 'bpmn-js/lib/Modeler';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { moduloLote } from './lote';
-import { moduloCarriles, vecino, type LilaCarriles, type Forma } from './carriles';
+import { carrilesDe, elementosDe, moduloCarriles, nombreCarril, tamanoMinimo, TAMANO_MINIMO, vecino, type LilaCarriles, type Forma } from './carriles';
 import { insertar, gruposDeFiguras, type Figura } from './Paleta';
 import type { Servicios } from './Modeler';
 import { setLocale } from './i18n';
@@ -267,5 +268,136 @@ describe('the palette Lane tool with nothing selected (#580)', () => {
     dialogo.remove();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(m.carriles.eligiendo()).toBe(false);
+  });
+});
+
+describe('lane operations for the canvas controls and the lane list (#596)', () => {
+  const lanesOf = (m: Awaited<ReturnType<typeof montar>>, pool = 'Pool') =>
+    carrilesDe(m.el(pool)).map((l) => l.id);
+
+  it('adds a lane at any position of the pool in one undo step: first, between two, last', async () => {
+    const m = await montar(TRES_CARRILES);
+    const antes = await m.xml();
+    const pool = m.el('Pool');
+
+    const medio = m.carriles.insertar(pool, 2);
+    expect(lanesOf(m)).toEqual(['L1', 'L2', medio.id, 'L3']);
+    // It opens below «Two»; the third lane and its task make room below it, the pool grows.
+    expect([medio.y, medio.height, m.el('L3').y, m.el('T3').y, pool.height]).toEqual([320, 120, 440, 490, 520]);
+    expect(ordenSemantico(await m.xml())).toEqual(['L1', 'L2', 'L3', medio.id]);
+    expect(refs(m, 'L3')).toEqual(['T3', 'B3']);
+    m.commandStack.undo();
+    expect(lanesOf(m)).toEqual(['L1', 'L2', 'L3']);
+    expect(await m.xml()).toBe(antes);
+
+    const primero = m.carriles.insertar(pool, 0);
+    expect(lanesOf(m)).toEqual([primero.id, 'L1', 'L2', 'L3']);
+    // Above the first lane the pool grows upwards, like bpmn-js's «Add lane above».
+    expect([primero.y, m.el('L1').y, pool.y]).toEqual([-20, 100, -20]);
+    m.commandStack.undo();
+
+    const ultimo = m.carriles.insertar(pool, 3);
+    expect(lanesOf(m)).toEqual(['L1', 'L2', 'L3', ultimo.id]);
+    expect(ultimo.y).toBe(500);
+    m.commandStack.undo();
+    expect(await m.xml()).toBe(antes);
+  });
+
+  it('gives a pool without lanes bpmn-js\'s two', async () => {
+    const m = await montar(DOS_POOLS);
+    m.carriles.insertar(m.el('Otro'), 0);
+    expect(lanesOf(m, 'Otro')).toHaveLength(2);
+  });
+
+  it('takes a lane several places at once with its elements, and one undo puts everything back', async () => {
+    const m = await montar(TRES_CARRILES);
+    const antes = await m.xml();
+    expect(m.carriles.moverA(m.el('L3'), 0)).toBe(true);
+    expect(ordenVisual(m)).toEqual(['L3', 'L1', 'L2']);
+    expect([m.el('L3').y, m.el('L1').y, m.el('L2').y]).toEqual([100, 280, 380]);
+    expect(m.el('T3').y).toBe(370 - 220);
+    expect(m.el('Start').y).toBe(132 + 180);
+    expect(refs(m, 'L3')).toEqual(['T3', 'B3']);
+    expect(refs(m, 'L1')).toEqual(['Start']);
+    const despues = await m.xml();
+    expect(ordenSemantico(despues)).toEqual(['L3', 'L1', 'L2']);
+
+    m.commandStack.undo();
+    expect(await m.xml()).toBe(antes);
+    m.commandStack.redo();
+    expect(await m.xml()).toBe(despues);
+  });
+
+  it('refuses a move to where the lane already is or out of range', async () => {
+    const m = await montar(TRES_CARRILES);
+    expect(m.carriles.moverA(m.el('L2'), 1)).toBe(false);
+    expect(m.carriles.moverA(m.el('L2'), 3)).toBe(false);
+    expect(m.carriles.moverA(m.el('L2'), -1)).toBe(false);
+    expect(m.carriles.moverA(m.el('T3'), 0)).toBe(false);
+    expect(m.modeler.get<{ canUndo(): boolean }>('commandStack').canUndo()).toBe(false);
+  });
+
+  it('deletes a lane as bpmn-js does: its elements stay in the pool, in the lane that takes its room', async () => {
+    const m = await montar(TRES_CARRILES);
+    const antes = await m.xml();
+    expect(elementosDe(m.el('L3'))).toBe(1);
+    m.carriles.quitar(m.el('L3'));
+    expect(lanesOf(m)).toEqual(['L1', 'L2']);
+    // «Two» grows over the room of «Three»: the task, its boundary event and the flow stay.
+    expect([m.el('L2').y, m.el('L2').height, m.el('T3').y]).toEqual([200, 300, 370]);
+    expect(refs(m, 'L2')).toEqual(['T2', 'T3', 'B3']);
+    expect(ordenSemantico(await m.xml())).toEqual(['L1', 'L2']);
+    m.commandStack.undo();
+    expect(lanesOf(m)).toEqual(['L1', 'L2', 'L3']);
+    expect(refs(m, 'L3')).toEqual(['T3']);
+    expect(await m.xml()).toBe(antes);
+  });
+
+  it('names an unnamed lane by its position, in the active language, never by its id', async () => {
+    const m = await montar(TRES_CARRILES.replace('<bpmn:lane id="L2" name="Two">', '<bpmn:lane id="L2">'));
+    expect(nombreCarril(m.el('L1'))).toBe('One');
+    expect(nombreCarril(m.el('L2'))).toBe('Unnamed lane 2');
+    setLocale('es');
+    expect(nombreCarril(m.el('L2'))).toBe('Carril sin nombre 2');
+  });
+
+  it('sets a lane\'s height keeping its top: what is below moves, the pool follows; never below its last element', async () => {
+    const m = await montar(TRES_CARRILES);
+    // «Two» starts at 200 and holds a task down to 300; «One» an event down to 168. An empty lane
+    // goes down to bpmn-js's minimum.
+    expect(tamanoMinimo(m.el('L2'))).toBe(300 - 200 + 20);
+    expect(tamanoMinimo(m.el('L1'))).toBe(168 - 100 + 20);
+    const vacio = m.carriles.insertar(m.el('Pool'), 3);
+    expect(tamanoMinimo(vacio)).toBe(TAMANO_MINIMO);
+    m.commandStack.undo();
+    // An element already past the room it would need: the lane cannot shrink, its own size is valid.
+    m.modeler.get<{ moveElements(f: Forma[], d: object): void }>('modeling').moveElements([m.el('T2')], { x: 0, y: 25 });
+    expect(tamanoMinimo(m.el('L2'))).toBe(120);
+    m.commandStack.undo();
+    m.carriles.fijarTamano(m.el('L2'), 200);
+    expect([m.el('L2').y, m.el('L2').height, m.el('L3').y, m.el('T3').y, m.el('Pool').height]).toEqual([200, 200, 400, 450, 480]);
+    expect(refs(m, 'L3')).toEqual(['T3', 'B3']);
+    m.commandStack.undo();
+    expect([m.el('L2').height, m.el('L3').y, m.el('T3').y, m.el('Pool').height]).toEqual([120, 320, 370, 400]);
+  });
+
+  it('lists the lanes of a vertical pool left to right and adds one at the end on the right', async () => {
+    const VERTICAL = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" id="D" targetNamespace="http://example.com">
+  <bpmn:collaboration id="C"><bpmn:participant id="Pool" processRef="P" /></bpmn:collaboration>
+  <bpmn:process id="P"><bpmn:laneSet id="LS"><bpmn:lane id="A" name="A" /><bpmn:lane id="B" name="B" /></bpmn:laneSet></bpmn:process>
+  <bpmndi:BPMNDiagram id="DI"><bpmndi:BPMNPlane id="PL" bpmnElement="C">
+    <bpmndi:BPMNShape id="Pool_di" bpmnElement="Pool" isHorizontal="false"><dc:Bounds x="100" y="100" width="400" height="600" /></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="B_di" bpmnElement="B" isHorizontal="false"><dc:Bounds x="300" y="130" width="200" height="570" /></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="A_di" bpmnElement="A" isHorizontal="false"><dc:Bounds x="100" y="130" width="200" height="570" /></bpmndi:BPMNShape>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+    const m = await montar(VERTICAL);
+    expect(lanesOf(m)).toEqual(['A', 'B']);
+    const nuevo = m.carriles.insertar(m.el('Pool'), 2);
+    expect(lanesOf(m)).toEqual(['A', 'B', nuevo.id]);
+    expect([nuevo.x, nuevo.width, m.el('Pool').width]).toEqual([500, 120, 520]);
+    m.carriles.moverA(nuevo, 0);
+    expect(lanesOf(m)).toEqual([nuevo.id, 'A', 'B']);
   });
 });

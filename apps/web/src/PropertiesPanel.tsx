@@ -20,8 +20,10 @@
  * Los literales van escritos donde se usan: `strings.es.ts` es LILA-066.
  */
 import { documentationHolder } from '@lila-modeler/engine/bpmn';
-import { useEffect, useReducer, useState } from 'react';
-import { ANCHO_MAXIMO, ANCHO_MINIMO, conAncho, problemaDeAncho } from './ancho';
+import { isExpanded } from 'bpmn-js/lib/util/DiUtil';
+import { useEffect, useReducer, useRef, useState } from 'react';
+import { ANCHO_MAXIMO, ANCHO_MINIMO, conAncho, problemaDeMedida } from './ancho';
+import { carrilesDe, eje, elementosDe, nombreCarril, tamanoMinimo, TAMANO_MAXIMO, vertical, type Forma } from './carriles';
 import type { Elemento, Modelador, Servicios } from './Modeler';
 import { atajoPorId, etiqueta, MAC } from './atajos';
 import { AtributosDelElemento } from './AtributosExtendidos';
@@ -380,7 +382,7 @@ export function PanelPropiedades({ modelador, pestana, avisos = 0, avanzado = fa
     <>
       <CabeceraElemento elemento={elemento} avanzado={avanzado} simulacion={simulacion} />
       {pestana === 'propiedades' ? (
-        <Propiedades elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} avanzado={avanzado} pintar={modelador.servicios.colores?.pintar} ancho={modelador.servicios.ancho} raiz={modelador.servicios.rootElement?.() as ElementoLienzo | undefined} />
+        <Propiedades elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} avanzado={avanzado} pintar={modelador.servicios.colores?.pintar} ancho={modelador.servicios.ancho} carriles={modelador.servicios.carriles} raiz={modelador.servicios.rootElement?.() as ElementoLienzo | undefined} />
       ) : (
         <Documentacion elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} />
       )}
@@ -550,11 +552,14 @@ function Propiedades({
   avanzado = false,
   pintar,
   ancho,
+  carriles,
   raiz,
 }: PropsPestana & {
   avanzado?: boolean;
   pintar?: ((elementos: ElementoColoreable[], color: ColorId | null) => void) | undefined;
   ancho?: Servicios['ancho'];
+  /** Lane operations (#596): the lane list of a pool or lane, and a lane's size. */
+  carriles?: Servicios['carriles'];
   /** The canvas root, where the extended attribute definitions are found (#509). */
   raiz?: ElementoLienzo | undefined;
 }): React.JSX.Element {
@@ -657,6 +662,10 @@ function Propiedades({
 
       {ancho !== undefined && conAncho(real) && <CampoAncho key={real.id} forma={real as ElementoLienzo & Caja} ancho={ancho} refrescar={refrescar} />}
 
+      {carriles !== undefined && esCarrilConTamano(real) && <CampoTamanoCarril key={real.id} carril={real as unknown as Forma} carriles={carriles} refrescar={refrescar} />}
+
+      {carriles !== undefined && <ListaCarriles elemento={real} carriles={carriles} escritor={escritor} refrescar={refrescar} />}
+
       {pintar !== undefined && <Colores elementos={[elemento]} pintar={pintar} refrescar={refrescar} />}
 
       {raiz !== undefined && <AtributosDelElemento elemento={real} raiz={raiz} escritor={escritor} refrescar={refrescar} />}
@@ -667,36 +676,40 @@ function Propiedades({
 interface Caja { x: number; y: number; width: number; height: number }
 
 /**
- * The width of a task or call activity (#563), in diagram units. Like a number attribute it keeps
- * a draft and writes it on blur or Enter, and only if it fits; an invalid draft stays on screen
- * with the reason and the diagram keeps its width. Escape, undo or a drag on the canvas drop it.
+ * A size in diagram units: the width of a task or call activity (#563), the height of a lane
+ * (#596). It keeps a draft and writes it on blur or Enter, and only if it fits; an invalid draft
+ * stays on screen with the reason and the diagram keeps its size. Escape, undo or a drag on the
+ * canvas drop it.
  */
-function CampoAncho({ forma, ancho, refrescar }: {
-  forma: ElementoLienzo & Caja;
-  ancho: NonNullable<Servicios['ancho']>;
-  refrescar: () => void;
+function CampoMedida({ id, etiqueta, valor, minimo, maximo, mensajes, aplicar, className }: {
+  id: string;
+  etiqueta: string;
+  valor: number;
+  minimo: number;
+  maximo: number;
+  mensajes: { vacio: string; numero: string; minimo: (n: number) => string; maximo: (n: number) => string };
+  aplicar: (valor: number) => void;
+  className?: string;
 }): React.JSX.Element {
-  const S = useStrings();
-  const guardado = String(forma.width);
+  const guardado = String(valor);
   const [borrador, setBorrador] = useState<string | null>(null);
   useEffect(() => setBorrador(null), [guardado]);
   const mostrado = borrador ?? guardado;
-  const problema = problemaDeAncho(mostrado);
-  const idError = `ancho-error-${forma.id}`;
+  const problema = problemaDeMedida(mostrado, minimo, maximo);
+  const idError = `${id}-error`;
   const confirmar = (): void => {
-    if (borrador === null || problemaDeAncho(borrador) !== null) return;
+    if (borrador === null || problemaDeMedida(borrador, minimo, maximo) !== null) return;
     setBorrador(null);
-    if (Number(borrador) === forma.width) return;
-    ancho.fijar(forma, Number(borrador));
-    refrescar();
+    if (Number(borrador) === valor) return;
+    aplicar(Number(borrador));
   };
   return (
-    <label className="campo">
-      <span>{S.propiedades.ancho}</span>
+    <label className={className === undefined ? 'campo' : `campo ${className}`}>
+      <span>{etiqueta}</span>
       <input
         type="text"
         inputMode="decimal"
-        aria-label={S.propiedades.ancho}
+        aria-label={etiqueta}
         aria-invalid={problema !== null}
         {...(problema === null ? {} : { 'aria-describedby': idError })}
         value={mostrado}
@@ -709,12 +722,206 @@ function CampoAncho({ forma, ancho, refrescar }: {
       />
       {problema !== null && (
         <small id={idError} className="error" role="alert">
-          {problema === 'minimo' ? S.propiedades.anchoProblemas.minimo(ANCHO_MINIMO)
-            : problema === 'maximo' ? S.propiedades.anchoProblemas.maximo(ANCHO_MAXIMO)
-              : S.propiedades.anchoProblemas[problema]}
+          {problema === 'minimo' ? mensajes.minimo(minimo) : problema === 'maximo' ? mensajes.maximo(maximo) : mensajes[problema]}
         </small>
       )}
     </label>
+  );
+}
+
+/** The width of a task or call activity (#563), in diagram units. */
+function CampoAncho({ forma, ancho, refrescar }: {
+  forma: ElementoLienzo & Caja;
+  ancho: NonNullable<Servicios['ancho']>;
+  refrescar: () => void;
+}): React.JSX.Element {
+  const S = useStrings();
+  return (
+    <CampoMedida
+      id={`ancho-${forma.id}`}
+      etiqueta={S.propiedades.ancho}
+      valor={forma.width}
+      minimo={ANCHO_MINIMO}
+      maximo={ANCHO_MAXIMO}
+      mensajes={S.propiedades.anchoProblemas}
+      aplicar={(valor) => {
+        ancho.fijar(forma, valor);
+        refrescar();
+      }}
+    />
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Lanes (#596): the size of a selected lane, and the lane list of a pool.
+ * ------------------------------------------------------------------ */
+
+/**
+ * The lanes whose size the field sets: lanes of a horizontal pool without nested lanes. bpmn-js
+ * moves only the lanes, not their elements, when a vertical lane changes width without
+ * compensating its neighbour, so those keep the canvas handles only.
+ */
+const esCarrilConTamano = (el: ElementoLienzo): boolean => {
+  const forma = el as unknown as Forma;
+  return forma.type === 'bpmn:Lane' && !vertical(forma) && carrilesDe(forma).length === 0;
+};
+
+function CampoTamanoCarril({ carril, carriles, refrescar }: {
+  carril: Forma;
+  carriles: NonNullable<Servicios['carriles']>;
+  refrescar: () => void;
+}): React.JSX.Element {
+  const S = useStrings();
+  return (
+    <CampoMedida
+      id={`alto-${carril.id}`}
+      className="carriles-modelar"
+      etiqueta={S.carriles.alto}
+      valor={carril.height}
+      minimo={tamanoMinimo(carril)}
+      maximo={TAMANO_MAXIMO}
+      mensajes={S.carriles.medidaProblemas}
+      aplicar={(valor) => {
+        carriles.fijarTamano(carril, valor);
+        refrescar();
+      }}
+    />
+  );
+}
+
+/**
+ * The lanes of a selected pool, or of the selected lane's pool (or parent lane), in drawing order
+ * (design 07): each with its number, its name — edited in place —, how many elements it holds and
+ * its size, and ↑ ↓ ✕. ✕ asks first when the lane holds elements; deleting follows bpmn-js (the
+ * neighbours take its room and its elements stay in the pool). «+ Add a lane at the end» closes
+ * the list. Every operation is one undo step. `app.css` hides the section outside Model.
+ */
+function ListaCarriles({ elemento, carriles, escritor, refrescar }: {
+  elemento: ElementoLienzo;
+  carriles: NonNullable<Servicios['carriles']>;
+  escritor: Escritor;
+  refrescar: () => void;
+}): React.JSX.Element | null {
+  const S = useStrings();
+  const C = S.carriles;
+  const forma = elemento as unknown as Forma;
+  const contenedor = forma.type === 'bpmn:Lane' ? forma.parent : forma.type === 'bpmn:Participant' && isExpanded(forma as never) ? forma : undefined;
+  const [borrando, setBorrando] = useState<Forma | null>(null);
+  /** `${lane id}:${what}` to focus after the next render: a moved row is a new DOM position. */
+  const [enfocar, setEnfocar] = useState<string | null>(null);
+  const seccion = useRef<HTMLElement>(null);
+  const dialogo = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (borrando !== null && !dialogo.current?.open) dialogo.current?.showModal();
+  }, [borrando]);
+  useEffect(() => {
+    if (enfocar === null) return;
+    setEnfocar(null);
+    const [id, que] = enfocar.split(':') as [string, string];
+    const botones = [...(seccion.current?.querySelectorAll<HTMLElement>('[data-carril]') ?? [])];
+    const de = (accion: string): HTMLElement | undefined =>
+      botones.find((b) => b.dataset['carril'] === id && b.dataset['accion'] === accion && !(b as HTMLButtonElement).disabled);
+    // At the edge the arrow just pressed is disabled: the other one, then the name, keep the place.
+    (de(que) ?? de(que === 'arriba' ? 'abajo' : 'arriba') ?? de('nombre') ?? seccion.current?.querySelector<HTMLElement>('.anadir'))?.focus();
+  }, [enfocar]);
+  if (contenedor === undefined) return null;
+
+  const lista = carrilesDe(contenedor);
+  const { tam } = lista[0] === undefined ? { tam: 'height' as const } : eje(lista[0]);
+  const v = vertical(contenedor);
+  const nombreContenedor = contenedor.type === 'bpmn:Lane'
+    ? nombreCarril(contenedor)
+    : String(contenedor.businessObject.get?.('name') ?? '').trim() || nombreDeTipo('bpmn:Participant');
+  const cerrar = (): void => {
+    dialogo.current?.close();
+    setBorrando(null);
+  };
+  const borrar = (carril: Forma): void => {
+    carriles.quitar(carril);
+    setEnfocar('-:anadir');
+    refrescar();
+  };
+
+  return (
+    <section ref={seccion} className="grupo lista-carriles carriles-modelar" aria-label={C.lista(nombreContenedor)}>
+      <div className="lista-carriles-cabecera">
+        <h3>{C.titulo}</h3>
+        <small>{C.pista}</small>
+      </div>
+      <ol>
+        {lista.map((carril, i) => {
+          const nombre = nombreCarril(carril);
+          const actual = carril === forma;
+          const mover = (direccion: 'arriba' | 'abajo'): void => {
+            carriles.mover(carril, direccion);
+            setEnfocar(`${carril.id}:${direccion}`);
+            refrescar();
+          };
+          return (
+            <li key={carril.id} className={actual ? 'actual' : undefined} aria-current={actual ? 'true' : undefined}>
+              <span className="mono lista-carriles-num" aria-hidden="true">{i + 1}</span>
+              <div className="lista-carriles-datos">
+                <input
+                  type="text"
+                  aria-label={C.nombreDe(i + 1)}
+                  placeholder={C.sinNombre(i + 1)}
+                  value={String(carril.businessObject.get?.('name') ?? '')}
+                  data-carril={carril.id}
+                  data-accion="nombre"
+                  onChange={(e) => {
+                    escribirNombre(escritor, carril as unknown as ElementoLienzo, e.target.value);
+                    refrescar();
+                  }}
+                />
+                <small>{C.resumen(elementosDe(carril), v ? C.ancho : C.alto, Math.round(carril[tam]))}</small>
+              </div>
+              <button type="button" className="quitar" data-carril={carril.id} data-accion="arriba" disabled={i === 0}
+                aria-label={v ? C.aLaIzquierda(nombre) : C.subir(nombre)} title={v ? C.aLaIzquierda(nombre) : C.subir(nombre)}
+                onClick={() => mover('arriba')}>{v ? '←' : '↑'}</button>
+              <button type="button" className="quitar" data-carril={carril.id} data-accion="abajo" disabled={i === lista.length - 1}
+                aria-label={v ? C.aLaDerecha(nombre) : C.bajar(nombre)} title={v ? C.aLaDerecha(nombre) : C.bajar(nombre)}
+                onClick={() => mover('abajo')}>{v ? '→' : '↓'}</button>
+              <button type="button" className="quitar" data-carril={carril.id} data-accion="borrar"
+                aria-label={C.borrar(nombre)} title={C.borrar(nombre)}
+                onClick={() => {
+                  if (elementosDe(carril) > 0) setBorrando(carril);
+                  else borrar(carril);
+                }}>{S.propiedades.cruz}</button>
+            </li>
+          );
+        })}
+      </ol>
+      <button
+        type="button"
+        className="anadir"
+        onClick={() => {
+          const nuevo = carriles.insertar(contenedor, lista.length);
+          setEnfocar(`${nuevo.id}:nombre`);
+          refrescar();
+        }}
+      >
+        {C.anadirAlFinal}
+      </button>
+      <small className="lista-carriles-ayuda">{C.ayuda}</small>
+
+      {borrando !== null && (
+        <dialog ref={dialogo} className="confirmar-reemplazo" aria-labelledby="carril-borrar-titulo" onCancel={(e) => { e.preventDefault(); cerrar(); }}>
+          <form method="dialog" onSubmit={(e) => {
+            e.preventDefault();
+            const carril = borrando;
+            cerrar();
+            borrar(carril);
+          }}>
+            <h2 id="carril-borrar-titulo">{C.confirmarTitulo}</h2>
+            <p>{C.confirmarTexto(nombreCarril(borrando), elementosDe(borrando))}</p>
+            <div className="acciones">
+              <button type="submit" className="boton primario">{C.confirmarBorrar}</button>
+              <button type="button" className="boton" onClick={cerrar}>{S.app.cancelar}</button>
+            </div>
+          </form>
+        </dialog>
+      )}
+    </section>
   );
 }
 
