@@ -72,6 +72,16 @@ export function defaultElement(type: 'start' | 'task'): Record<string, unknown> 
     : { processingTime: { type: 'constant', value: 60 } };
 }
 
+/**
+ * The file a scenario's `model` has to name (#556), the `expectedModel` of `prepareSimulation` (`simulationGate.ts`): a
+ * project's model is always its `model.bpmn`, whatever its manifest calls it (a folder opened
+ * without `lila-project.json` and saved before #556 stored the folder's name there). Only a loose
+ * diagram (LILA-072) is the file that was opened.
+ */
+export function modeloEsperado(suelto: boolean, archivo: string): string {
+  return suelto ? archivo : 'model.bpmn';
+}
+
 export function defaultScenarios(ir: ProcessIR): Record<string, ScenarioDocument> {
   const S = strings();
   const elements: Record<string, unknown> = {};

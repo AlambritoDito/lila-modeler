@@ -130,14 +130,18 @@ export async function isOwnSnapshot(path: string): Promise<boolean> {
   return sameSnapshot(await currentSnapshot(path), lastSeen.get(path) ?? null);
 }
 
-/** Manifiesto por defecto cuando `lila-project.json` falta o no se pudo interpretar. */
+/**
+ * Manifiesto por defecto cuando `lila-project.json` falta o no se pudo interpretar. The project
+ * takes the folder's name, but the model is the folder's `model.bpmn`, which is what every
+ * scenario's `model` points at (#556): naming it after the folder made Run refuse the folder's own
+ * scenarios ("the scenario points at model.bpmn, but the active model is pedido").
+ */
 function defaultManifest(dir: string): Manifest {
-  const nombre = basename(dir);
   return {
     version: 1,
     id: crypto.randomUUID(),
-    name: nombre,
-    model: { id: crypto.randomUUID(), name: nombre, revision: 0 },
+    name: basename(dir),
+    model: { id: crypto.randomUUID(), name: MODEL_FILE, revision: 0 },
     scenarioRevisions: {},
   };
 }

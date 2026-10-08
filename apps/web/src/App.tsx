@@ -16,7 +16,7 @@ import { resolveExtends, type ResolvedScenario } from '@lila-modeler/engine/sche
 import { compare } from '@lila-modeler/engine';
 import { CompareView } from './CompareView';
 import { runMetaFrom } from './compareWarnings';
-import { changeToken, defaultElement, defaultScenarios, documentToken, newModelXml, nextScenarioRevisions, processIds, projectStore, readLila, readProject, repositoryToken, tokenPart } from './project';
+import { changeToken, defaultElement, defaultScenarios, documentToken, modeloEsperado, newModelXml, nextScenarioRevisions, processIds, projectStore, readLila, readProject, repositoryToken, tokenPart } from './project';
 import { encodeLila, isCurrentRun, processesOf, processSlug, storedRun, withProcesses, type ProcessDocument } from '@lila-modeler/engine/project';
 import { PestanasProcesos } from './PestanasProcesos';
 import type { ProcessIR, SimulationProgress } from '@lila-modeler/engine';
@@ -562,6 +562,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [runs, setRuns] = useState<StoredRun[]>([]);
   const [scenarioRevisions, setScenarioRevisions] = useState<Record<string, number>>({});
   const [archivo, setArchivo] = useState('model.bpmn');
+  const modeloDeEscenarios = modeloEsperado(suelto, archivo);
   const [pestana, setPestana] = useState<PestanaId>('propiedades');
   // El lienzo no se monta hasta que el tema está resuelto: bpmn-js lee los colores de las
   // figuras de los tokens al montar (ver Modeler.tsx). `tema === undefined` es "todavía no se
@@ -1959,7 +1960,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const xml = await modelador.exportar();
       // The language is decided when the run starts and travels with it: a run already stored
       // keeps the language it was produced in (its warnings are data, not text that is repainted).
-      const { ir, scenario, warnings } = await prepareSimulation(xml, escenarioId, escenarios, archivo, { locale });
+      const { ir, scenario, warnings } = await prepareSimulation(xml, escenarioId, escenarios, modeloDeEscenarios, { locale });
       if (control.signal.aborted || enVuelo.current !== control) return;
       const { result: rawResult, logSample, cycleTimes } = await runInWorker(ir, scenario, {
         locale,
@@ -2068,7 +2069,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       ]);
       const escenario = run !== undefined
         ? { scenario: run.inputs.scenario as unknown as ResolvedScenario, result: run.result }
-        : await prepareSimulation(xml, escenarioId, escenarios, archivo, { locale }).then(({ scenario }) => ({ scenario }), () => ({}));
+        : await prepareSimulation(xml, escenarioId, escenarios, modeloDeEscenarios, { locale }).then(({ scenario }) => ({ scenario }), () => ({}));
       const hoy = new Date();
       const date = [hoy.getFullYear(), hoy.getMonth() + 1, hoy.getDate()].map((n) => String(n).padStart(2, '0')).join('-');
       // #460: the run's charts, rasterised like the diagram; no run, no charts.

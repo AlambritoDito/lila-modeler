@@ -1,5 +1,9 @@
-import { readFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { readProjectFolder } from '@lila-modeler/engine/project-fs';
 import { expect, it } from 'vitest';
+import { modeloEsperado } from './project';
 import { entradasHuerfanas, prepareSimulation, sinHuerfanas, sinRepetir } from './simulationGate';
 import { setLocale } from './i18n';
 
@@ -163,4 +167,33 @@ it('the process simulated is the one all the project scenarios target, whichever
   await expect(prepareSimulation(xml, 'cliente.scenario.json', escenarios, 'model.bpmn', { locale: 'en' })).rejects.toThrow(
     'E-ELEMENTO-DESCONOCIDO: the id StartEvent_ClienteInicio belongs to the process "Customer" (Process_Cliente), but the simulated process is "Restaurant" (Process_Restaurante).',
   );
+});
+
+// #556: examples/pedido has no lila-project.json. Opened as a folder, the reconstructed manifest
+// named the model after the folder («pedido»), and Run refused the folder's own scenarios with
+// «the scenario points at model.bpmn, but the active model is pedido». The same read the desktop
+// app does, then the same gate Run goes through, with the model name the app gets from it.
+it('examples/pedido opened as a folder simulates its scenarios: their model is the folder\'s model.bpmn (#556)', async () => {
+  const { document, loose } = await readProjectFolder('examples/pedido');
+  expect(loose).toBe(false);
+  for (const file of ['as-is.scenario.json', 'to-be-3-cajeros.scenario.json']) {
+    const prepared = await prepareSimulation(document.model.xml, file, document.scenarios, document.model.name);
+    expect(prepared.scenario.model).toBe('model.bpmn');
+  }
+});
+
+// The other half of #556: a manifest saved before the fix keeps the folder's name as the model's.
+// The run is still checked against the project's model.bpmn; a loose diagram, against its file.
+it('a manifest saved before #556 with the folder name as the model still simulates (#556)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'lila-556-'));
+  try {
+    cpSync('examples/pedido', dir, { recursive: true });
+    writeFileSync(join(dir, 'lila-project.json'), JSON.stringify({ version: 1, id: 'p', name: 'pedido', model: { id: 'm', name: 'pedido', revision: 0 }, scenarioRevisions: {} }));
+    const { document, loose } = await readProjectFolder(dir);
+    expect(document.model.name).toBe('pedido');
+    await expect(prepareSimulation(document.model.xml, 'as-is.scenario.json', document.scenarios, modeloEsperado(loose, document.model.name))).resolves.toBeDefined();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  expect(modeloEsperado(true, 'ventas.bpmn')).toBe('ventas.bpmn');
 });
