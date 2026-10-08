@@ -16,7 +16,7 @@ import { resolveExtends, resolveScenarioPath, type ResolvedScenario } from '@lil
 import { compare } from '@lila-modeler/engine';
 import { CompareView } from './CompareView';
 import { runMetaFrom } from './compareWarnings';
-import { changeToken, defaultElement, defaultScenarios, documentToken, newModelXml, nextScenarioRevisions, processIds, projectStore, readLila, readProject, repositoryToken, tokenPart } from './project';
+import { changeToken, defaultElement, defaultScenarios, documentToken, escenariosDelProyecto, MODELO_PROYECTO, newModelXml, nextScenarioRevisions, procesoDelProyecto, processIds, projectStore, proyectoDeSuelto, readLila, readProject, repositoryToken, tokenPart } from './project';
 import { encodeLila, isCurrentRun, processesOf, processSlug, storedRun, withProcesses, type ProcessDocument } from '@lila-modeler/engine/project';
 import { PestanasProcesos } from './PestanasProcesos';
 import type { ProcessIR, SimulationProgress } from '@lila-modeler/engine';
@@ -949,7 +949,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (soltar === null) { setIoError(S.app.guardadoOcupado); return 'cancelled'; }
     setIoError(null);
     try {
-      const { doc, revision: revisionGuardada } = await snapshotConRevision();
+      const { doc: leido, revision: revisionGuardada } = await snapshotConRevision();
       // Un guardado normal en modo suelto escribe SOLO el `.bpmn` (`diagramOnly`, LILA-206): los
       // escenarios y las corridas siguen sin estar en disco. El token guardado avanza entonces
       // únicamente en la revisión del modelo y conserva los escenarios/corridas que SÍ estaban
@@ -957,7 +957,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // «Guardado» y la guardia de cierre dejaba salir sin escribirlo (LILA-208, hallazgo 2 del QA).
       // A loose diagram that grew a second process (#498) is saved whole, as a new destination
       // (`DesktopStore`): it is no longer a diagram-only save.
-      const repositorio = (doc.processes?.length ?? 0) > 0;
+      const repositorio = (leido.processes?.length ?? 0) > 0;
+      // #613: saved as a project, a loose diagram becomes its `model.bpmn` (`proyectoDeSuelto`).
+      const deSuelto = suelto && (saveAs || repositorio);
+      const doc = deSuelto ? proyectoDeSuelto(leido) : leido;
       const previo: readonly [string, number, Record<string, number>, string[]] | null =
         suelto && !saveAs && !repositorio && savedToken !== '' ? JSON.parse(savedToken) : null;
       const token = previo === null
@@ -969,6 +972,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       slugsEnDisco.current = new Set(repositorio ? processesOf(doc).map((p) => p.slug) : []);
       // «Guardar como» crea el proyecto completo en la carpeta elegida: deja de ser suelto.
       if (saveAs || repositorio) setSuelto(false);
+      if (deSuelto) {
+        // What was written, from now on: the canvas file and every process are the project's model.bpmn.
+        const viejo = archivo;
+        if (viejo !== MODELO_PROYECTO) { setArchivo(MODELO_PROYECTO); setEscenarios((actuales) => escenariosDelProyecto(actuales, viejo)); }
+        setProcesos((lista) => lista.map(procesoDelProyecto));
+      }
       setSavedToken(token);
       // B puede cerrar antes del siguiente efecto de React; publicar el dirty confirmado.
       const unchanged = token === tokenRef.current && revisionGuardada === revisionRef.current;

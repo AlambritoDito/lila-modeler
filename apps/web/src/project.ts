@@ -159,6 +159,31 @@ export function documentToken(doc: ProjectDocument): string {
     : changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id));
 }
 
+/** The one model file of a project folder or `.lila`. */
+export const MODELO_PROYECTO = 'model.bpmn';
+
+/** `scenarios` with every `model` that named `suelto` naming the project's `model.bpmn` instead (#613). */
+export function escenariosDelProyecto(scenarios: Readonly<Record<string, ScenarioDocument>>, suelto: string): Record<string, ScenarioDocument> {
+  return Object.fromEntries(Object.entries(scenarios).map(([nombre, s]) => [nombre, s['model'] === suelto ? { ...s, model: MODELO_PROYECTO } : s]));
+}
+
+/**
+ * A process of a loose diagram saved as a project (#613): its model is the project's `model.bpmn`
+ * from then on, the name the manifest gives it, and its scenarios that named the loose file (a
+ * CLI-style folder, `"model": "ventas.bpmn"`) name `model.bpmn`, or the project would not run once
+ * reopened. A process already named `model.bpmn` comes back as it is.
+ */
+export function procesoDelProyecto<T extends Pick<ProcessDocument, 'model' | 'scenarios'>>(p: T): T {
+  if (p.model.name === MODELO_PROYECTO) return p;
+  return { ...p, model: { ...p.model, name: MODELO_PROYECTO }, scenarios: escenariosDelProyecto(p.scenarios, p.model.name) };
+}
+
+/** `doc`, a loose diagram (and the processes it grew), as the project «Save As» writes (#613). */
+export function proyectoDeSuelto(doc: ProjectDocument): ProjectDocument {
+  const top = procesoDelProyecto(doc);
+  return doc.processes === undefined ? top : { ...top, processes: doc.processes.map(procesoDelProyecto) };
+}
+
 /**
  * The BPMN process ids a model declares — what a call activity's `calledElement` names (#461).
  * A pattern over the XML and not a parse: it runs on a double-click, over every process of the
