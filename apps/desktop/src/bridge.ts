@@ -169,10 +169,13 @@ export interface LilaBridge {
   writeSettings(ajustes: Ajustes): Promise<void>;
 
   /**
-   * Saves the diagram as an image (#451) through the native save dialog, proposing
-   * `<nombre>.<tipo>`. `datos` is the SVG text for `svg` and `pdf` (main prints the PDF from it in
-   * a hidden window) and the PNG bytes for `png`. Resolves to the path written, or `null` if the
-   * dialog was cancelled.
+   * Saves an export through the app's own native save dialog, proposing `<nombre>.<tipo>`: the
+   * diagram as an image (#451), the process document (#454), and the results' XLSX/CSV and a
+   * theme's JSON (#564), which used to go through Chromium's download manager. `datos` is the SVG
+   * text for `svg` and `pdf` (main prints the PDF from it in a hidden window). Main writes the
+   * file itself, so it carries no download mark. Resolves to the path written, or `null` if the
+   * dialog was cancelled. `nombre` is a plain file name without its extension (`requireExportacion`
+   * in `exportacion.ts` refuses anything else).
    */
   exportar(exportacion: Exportacion): Promise<string | null>;
 
@@ -191,10 +194,13 @@ export interface LilaBridge {
   takeRecovery?(): Promise<Uint8Array | null>;
 }
 
-/** What `exportar` saves: the diagram (#451) and the process document (#454). */
+/**
+ * What `exportar` saves: the diagram (#451), the process document (#454), and the results'
+ * workbook and CSV and a theme (#564).
+ */
 export type Exportacion =
-  | { readonly nombre: string; readonly tipo: 'svg' | 'pdf' | 'html'; readonly datos: string }
-  | { readonly nombre: string; readonly tipo: 'png' | 'docx'; readonly datos: Uint8Array };
+  | { readonly nombre: string; readonly tipo: 'svg' | 'pdf' | 'html' | 'csv' | 'json'; readonly datos: string }
+  | { readonly nombre: string; readonly tipo: 'png' | 'docx' | 'xlsx'; readonly datos: Uint8Array };
 
 /**
  * Preferencias de apariencia persistidas (LILA-113). Las dos son opcionales: un `estado.json`

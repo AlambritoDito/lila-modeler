@@ -433,10 +433,17 @@ forma no puede tocar). No son una API pública ni deben usarse en un uso normal 
   un clic.
 - `LILA_E2E_SAVE_FILE=<ruta absoluta a un .lila>`: lo mismo que `LILA_E2E_FOLDER`, para el diálogo
   nativo de «Guardar como…».
+- `LILA_E2E_IMPORT=<ruta absoluta a un .bpmn/.xml>`: lo mismo, para Archivo › Importar BPMN….
+- `LILA_E2E_EXPORT_FILE=<ruta absoluta>`: toda exportación que la app guarda con su propio diálogo
+  (diagrama en SVG/PNG/PDF, documento del proceso, XLSX y CSV de resultados, libro de la
+  comparación, plantilla del escenario, un tema) se escribe exactamente en esa ruta, sin abrir el
+  diálogo y sin añadir extensión. Cada exportación sobrescribe la anterior. `"cancel"` simula
+  cancelar el diálogo.
 - `LILA_E2E_RECOVERY=restore|discard`: hace que la oferta de recuperación del arranque
   (Restaurar / Descartar) se resuelva automáticamente con ese valor.
 - `LILA_E2E_LOG=<ruta de archivo>`: si está presente, añade una línea JSON por cada evento
-  relevante (`chooseFolder`, `writeProject`, `closeRequested`, `openPath`, `recovery`) a ese archivo.
+  relevante (`chooseFolder`, `writeProject`, `closeRequested`, `openPath`, `recovery`, `exportar`) a
+  ese archivo.
 
 Sin ninguna de ellas, el comportamiento de la app es exactamente el mismo que si no existieran.
 **Advertencia**: son un atajo para pruebas, no algo que un usuario final deba fijar nunca — dejan
