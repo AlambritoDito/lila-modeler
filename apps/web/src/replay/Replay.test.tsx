@@ -124,6 +124,12 @@ it('paints a frame on the canvas and shows the pool with its capacity', async ()
   expect(document.querySelector('[data-pool="analyst"]')?.textContent).toContain('2');
 });
 
+it('#554: the pool reads by its name, its key without one', () => {
+  const { modelador } = falso();
+  montar(<Replay modelador={modelador} replay={{ ...modelo(), poolNames: { analyst: 'Technical Reviewer' } }} originalIds={{}} motivo="x" />);
+  expect(document.querySelector('[data-pool="analyst"]')?.textContent).toMatch(/^Technical Reviewer \d\/2$/);
+});
+
 it('without a log there is nothing to animate and Play is disabled', () => {
   const { modelador, pinturas } = falso();
   montar(<Replay modelador={modelador} replay={null} originalIds={{}} motivo="no log here" />);

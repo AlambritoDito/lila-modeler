@@ -169,7 +169,7 @@ export function Replay({ modelador, replay, originalIds, motivo, leyenda, ...con
       {Object.keys(estado.pools).length > 0 && (
         <span className="c5-ocupacion" title={S.animacion.recursos}>
           {Object.entries(estado.pools).map(([id, pool]) => (
-            <span key={id} data-pool={id} data-busy={pool.busy} className="c5-pool">{S.c5.tiempo.ocupacion(id, pool.busy, pool.capacity)}</span>
+            <span key={id} data-pool={id} data-busy={pool.busy} className="c5-pool">{S.c5.tiempo.ocupacion(replay.poolNames?.[id] ?? id, pool.busy, pool.capacity)}</span>
           ))}
         </span>
       )}

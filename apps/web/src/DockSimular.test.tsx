@@ -17,7 +17,8 @@ import { formatNumber, type BaseTimeUnit } from '@lila-modeler/engine/format';
 import { resolveExtends, type ResolvedScenario } from '@lila-modeler/engine/schema';
 import { simulate, type ProcessIR, type RunResult } from '@lila-modeler/engine';
 
-import { FILAS_LOG, filasTareas, PESTANAS_DOCK, TablaResultados, type PestanaDock, type TablaResultadosProps } from './DockSimular';
+import { avisosDelDock, FILAS_LOG, filasTareas, PESTANAS_DOCK, TablaResultados, type AvisoDock, type PestanaDock, type TablaResultadosProps } from './DockSimular';
+import { problemasEscenario } from './escenarioModelo';
 import type { LogDeCorrida } from './GraficasResultados';
 import { agruparAvisos } from './avisos';
 import { exactDuration, formatDisplayDurationWithUnit } from './formatDisplay';
@@ -213,6 +214,25 @@ describe('tabs (#394)', () => {
     expect(items[0]!.querySelector('details li')!.textContent).toBe(warnings[2]);
     expect(items[3]!.className).toBe('error');
     expect(tabs()[3]!.textContent).toBe(`${S.c5.tabla.pestanas.avisos} (4)`);
+  });
+
+  test('#554: after a language change the live lint still dedupes against the run, by code and path', async () => {
+    // The run's scenario warnings as `prepareSimulation` copies them, in the language it ran in…
+    const corridaEn = problemasEscenario(scenario, ir, 'en').filter((p) => p.severidad === 'warning');
+    const warnings = corridaEn.map((p) => `${p.codigo}: ${p.mensaje}`);
+    expect(warnings.some((w) => w.startsWith('W-ELEMENTO-SIN-PARAMETROS: ') && w.includes('(elements.Task_Empacar)'))).toBe(true);
+    // …and the live lint after switching to Spanish, as `App.tsx` hands it to the table.
+    const lintEs: AvisoDock[] = problemasEscenario(scenario, ir, 'es')
+      .map((p) => ({ mensaje: p.mensaje, severidad: p.severidad, codigo: p.codigo, ruta: p.ruta }));
+    expect(lintEs.length).toBe(warnings.length);
+    expect(lintEs.every((a) => !warnings.some((w) => w.includes(a.mensaje)))).toBe(true);
+    const grupos = avisosDelDock(warnings, lintEs);
+    expect(grupos.map((g) => g.mensajes)).toEqual(warnings.map((w) => [w]));
+    await montar({ inicial: 'avisos', corrida: { result: { ...result, warnings }, scenario }, avisos: lintEs });
+    expect(tabs()[3]!.textContent).toBe(`${S.c5.tabla.pestanas.avisos} (${warnings.length})`);
+    // The same code on another element is another problem: it is not swallowed.
+    const otra: AvisoDock = { ...lintEs[0]!, mensaje: 'otra (elements.Task_Otra).', ruta: 'elements.Task_Otra' };
+    expect(avisosDelDock(warnings, [...lintEs, otra])).toHaveLength(warnings.length + 1);
   });
 
   test('agruparAvisos keeps two subjects of the same code apart, wherever the subject sits (QA of #394)', () => {

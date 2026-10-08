@@ -36,6 +36,7 @@ import {
   type UnidadTiempo,
 } from './scenarioFields.js';
 import { strings, useStrings } from './i18n';
+import { nombreRecurso } from './recursosModelo.js';
 
 export function Problemas({ ruta, ctx }: { ruta: Ruta; ctx: Contexto }): React.JSX.Element | null {
   const lista = ctx.problemas.get(rutaTexto(ruta));
@@ -227,7 +228,8 @@ function CampoClave({
   const S = useStrings();
   const id = `campo-${rutaTexto(ruta)}`;
   const valor = leer(ctx.resuelto, ruta);
-  const declaradas = esObjeto(ctx.resuelto[seccion]) ? Object.keys(ctx.resuelto[seccion]) : [];
+  const tabla = esObjeto(ctx.resuelto[seccion]) ? ctx.resuelto[seccion] : {};
+  const declaradas = Object.keys(tabla);
   const opciones =
     typeof valor === 'string' && valor !== '' && !declaradas.includes(valor)
       ? [valor, ...declaradas]
@@ -246,7 +248,8 @@ function CampoClave({
         <option value="">{S.escenario.sinDefinir}</option>
         {opciones.map((clave) => (
           <option key={clave} value={clave}>
-            {clave}
+            {/* #554: a resource reads by its name, as in the Resources step; a calendar's key is its name. */}
+            {seccion === 'resources' ? nombreRecurso(clave, esObjeto(tabla[clave]) ? tabla[clave] : undefined) : clave}
           </option>
         ))}
       </select>
