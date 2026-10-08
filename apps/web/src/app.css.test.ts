@@ -368,6 +368,15 @@ it('`hidden` wins over the shared `.campo` flex box inside Settings, and the rad
   expect(bloqueDeLinea(".ajustes .tarjetas-tema [role='radio'][aria-checked='true']")).toContain('border-color: var(--accent-primary)');
 });
 
+it('the chosen segment and the theme strips survive forced colors (QA of #618)', () => {
+  // Colour alone marked the chosen segment: under Windows high contrast all six looked the same.
+  expect(bloqueDeLinea(".ajustes .segmentado [role='radio'][aria-checked='true']")).toContain('font-weight: 600');
+  const forzado = appCss.slice(appCss.indexOf('@media (forced-colors: active) {'));
+  expect(forzado).toMatch(/^@media \(forced-colors: active\) \{\n  \.ajustes \.segmentado \[role='radio'\]\[aria-checked='true'\] \{ background: Highlight; border-color: Highlight; color: HighlightText; forced-color-adjust: none; \}/);
+  expect(forzado).toContain('.ajustes .tarjetas-tema .muestra { forced-color-adjust: none; }');
+  expect(forzado).toContain(".ajustes .tarjetas-tema [role='radio'][aria-checked='true'] { outline: 2px solid Highlight;");
+});
+
 it('General lays its rows out label-left, in a fixed column (#407)', () => {
   const fila = bloque('.ajustes .fila');
   expect(fila).toContain('display: grid');

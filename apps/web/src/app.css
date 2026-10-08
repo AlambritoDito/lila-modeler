@@ -2921,7 +2921,7 @@ button.gcal-uso-fila:hover {
 .ajustes .segmentado [role='radio'] { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 0; color: var(--fg-muted); cursor: pointer; font: inherit; margin-left: -1px; padding: calc(5px * var(--espacio, 1)) 12px; }
 .ajustes .segmentado [role='radio']:first-child { margin-left: 0; }
 .ajustes .segmentado [role='radio']:hover { color: var(--fg-primary); }
-.ajustes .segmentado [role='radio'][aria-checked='true'] { background: var(--accent-primary); border-color: var(--accent-primary); color: var(--fg-onAccent); }
+.ajustes .segmentado [role='radio'][aria-checked='true'] { background: var(--accent-primary); border-color: var(--accent-primary); color: var(--fg-onAccent); font-weight: 600; }
 
 /* Theme cards (the artboard's TEMAS column, #441): a strip of the palette, the name, and whether
    it ships with the app. Also one `role="radiogroup"`. */
@@ -2937,6 +2937,13 @@ button.gcal-uso-fila:hover {
 .ajustes .tarjetas-tema .tipo { color: var(--fg-muted); flex: none; font-family: var(--font-mono); font-size: 10px; font-weight: 400; }
 .ajustes .segmentado [role='radio']:focus-visible,
 .ajustes .tarjetas-tema [role='radio']:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; position: relative; z-index: 1; }
+/* Forced colors (Windows high contrast) repaint every segment alike: the chosen one keeps the
+   system selection colours, and the theme cards keep their palette strip. */
+@media (forced-colors: active) {
+  .ajustes .segmentado [role='radio'][aria-checked='true'] { background: Highlight; border-color: Highlight; color: HighlightText; forced-color-adjust: none; }
+  .ajustes .tarjetas-tema .muestra { forced-color-adjust: none; }
+  .ajustes .tarjetas-tema [role='radio'][aria-checked='true'] { outline: 2px solid Highlight; outline-offset: -2px; }
+}
 
 /* Theme editor (LILA-114): groups are `<details>`, and only the first one opens by default. Not
    a single literal color here: everything comes from the tokens, including the editor's own,
