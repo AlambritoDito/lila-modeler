@@ -1419,6 +1419,22 @@ it('un diagrama suelto lo advierte en el pie, y «Guardar como» deja de adverti
   expect(pie.textContent).not.toContain(T.app.diagramaSuelto);
 });
 
+// #610: a loose diagram is read with the opened file's name as its model's (`readProjectFolder`),
+// and its default scenarios name model.bpmn. Run checked them against «ventas.bpmn» and never ran;
+// it checks against model.bpmn, where the scenarios live once «Save As» writes the project.
+it('Run on a loose ventas.bpmn checks its default scenarios against model.bpmn (#610)', async () => {
+  const base = proyecto('p610', 'Ventas');
+  const suelto = { ...base, model: { ...base.model, name: 'ventas.bpmn' }, scenarios: {}, loose: true };
+  (session as unknown as { openRecent: unknown }).openRecent = vi.fn().mockResolvedValue(suelto);
+  puenteConRutas({ dir: '/p/descargas', file: 'ventas.bpmn' });
+  await remontar();
+  await click(T.app.ejecutar);
+  const [, file, escenarios, modelo] = mocks.gate.mock.calls.at(-1)!;
+  expect(file).toBe('as-is.scenario.json');
+  expect((escenarios as Record<string, { model?: string }>)[file]?.model).toBe('model.bpmn');
+  expect(modelo).toEqual(['model.bpmn', 'ventas.bpmn']);
+});
+
 it.each([
   ['escenario editado', 'escenario', T.app.sinGuardar],
   ['corrida sin guardar', 'corrida', T.app.sinGuardar],
