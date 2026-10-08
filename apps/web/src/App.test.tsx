@@ -1682,6 +1682,38 @@ it('a tab switch while the process document is being exported waits: the documen
   expect(pestanasProceso()[0]!.getAttribute('aria-current')).toBe('true');
 });
 
+it('a tab switch, a save and an export started in the same JS task: only the export takes the file lock (#535)', async () => {
+  const lienzo = lienzoQueRecuerda();
+  await nuevoProcesoConNombre('Facturación');
+  mocks.exportarSvg.mockResolvedValue('<svg id="papel"/>');
+  mocks.aPng.mockResolvedValue(new Blob(['png'], { type: 'image/png' }));
+  const abiertos = mocks.abrir.mock.calls.length;
+  let soltar!: () => void;
+  const retenido = new Promise<void>((r) => { soltar = r; });
+  await act(async () => {
+    mocks.exportXml.mockImplementationOnce(async () => { const xml = lienzo.xml(); await retenido; return xml; });
+    // QA of #533: three clicks dispatched in one task. The switch and the save await the loss
+    // check before they lock; the export locks at once, in between.
+    pestanasProceso()[0]!.click();
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...mod('s') }));
+    ejecutarArchivo(T.app.exportarHtml);
+  });
+  // Neither the switch nor the save ran next to the export: the canvas is still the second process.
+  expect(mocks.abrir.mock.calls.length).toBe(abiertos);
+  expect(pestanasProceso()[1]!.getAttribute('aria-current')).toBe('true');
+  expect(session.saveProject).not.toHaveBeenCalled();
+  expect(container.querySelector('footer.estado [role="alert"].error')?.textContent).toBe(T.app.guardadoOcupado);
+  // The lock is still the export's, not released by an operation that finished first.
+  await pulsar(document.body, mod('s'));
+  expect(session.saveProject).not.toHaveBeenCalled();
+  await act(async () => soltar());
+  await vi.waitFor(() => expect(mocks.descargar).toHaveBeenCalledOnce());
+  expect(mocks.descargar.mock.calls[0]![1]).toBe('Facturación.html');
+  // Once the export is done, the switch goes through.
+  await act(async () => pestanasProceso()[0]!.click());
+  expect(pestanasProceso()[0]!.getAttribute('aria-current')).toBe('true');
+});
+
 it('a second process document export while one is running is refused with a notice (#522)', async () => {
   mocks.exportarSvg.mockResolvedValue('<svg id="papel"/>');
   let soltar!: () => void;
