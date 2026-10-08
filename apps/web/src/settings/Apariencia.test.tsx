@@ -8,6 +8,7 @@
  * repite el cableado mínimo de `App.tsx` —aplicar el tema seleccionado y guardar la lista— porque
  * el componente no aplica ni persiste nada por sí solo, a propósito.
  */
+import { readFileSync } from 'node:fs';
 import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -401,4 +402,73 @@ it('the light and dark theme selects show only while following the system (#472)
   expect(ranura('Tema oscuro')).toBeNull();
   act(() => { interruptor.click(); });
   expect(ranura('Tema oscuro')).not.toBeNull();
+});
+
+// ---------- #441: theme cards and a keyboard-reachable Import (artboard 09) ----------
+
+/** The theme radio group, named by its visible «Tema» label as a screen reader would. */
+function tarjetas(): HTMLElement[] {
+  const grupo = [...container.querySelectorAll<HTMLElement>('[role="radiogroup"]')]
+    .find((g) => document.getElementById(g.getAttribute('aria-labelledby') ?? '')?.textContent === 'Tema');
+  expect(grupo, 'radiogroup «Tema»').toBeDefined();
+  return [...grupo!.querySelectorAll<HTMLElement>('[role="radio"]')];
+}
+const tarjeta = (nombre: string): HTMLElement => tarjetas().find((t) => t.querySelector('.nombre')?.textContent === nombre)!;
+/** jsdom spells a colour back however it likes: compare through the same parser. */
+function color(valor: string): string {
+  const prueba = document.createElement('span');
+  prueba.style.background = valor;
+  return prueba.style.background;
+}
+
+it('the themes are cards in one radio group, each with a strip of its own palette (#441)', () => {
+  // The path goes through a variable: Vite's asset plugin rewrites a literal `new URL(…, import.meta.url)`.
+  const real = (id: string): Theme => { const ruta = `../theme/themes/${id}.json`; return JSON.parse(readFileSync(new URL(ruta, import.meta.url), 'utf8')) as Theme; };
+  // Every built-in, in the catalog's order, tagged as such; the active one checked, one Tab stop.
+  expect(tarjetas().map((t) => [t.querySelector('.nombre')?.textContent, t.querySelector('.tipo')?.textContent, t.getAttribute('aria-checked'), t.tabIndex]))
+    .toEqual(['Lila claro', 'Lila oscuro', 'Eva-01', 'Papel', 'Tieso', 'Akira', 'Montana'].map((n) => [n, 'Integrado', String(n === 'Eva-01'), n === 'Eva-01' ? 0 : -1]));
+  // The strip is the real theme file's surface and two accents, not the active theme's.
+  for (const [nombre, id] of [['Papel', 'papel'], ['Lila oscuro', 'lila-dark'], ['Montana', 'montana']] as const) {
+    const muestras = [...tarjeta(nombre).querySelectorAll<HTMLElement>('.muestra > span')].map((s) => s.style.background);
+    const tokens = real(id).tokens;
+    expect(muestras, nombre).toEqual([tokens['bg.base']!, tokens['accent.primary']!, tokens['accent.secondary']!].map(color));
+  }
+  expect(tarjeta('Papel').querySelector('.muestra')!.getAttribute('aria-hidden')).toBe('true');
+});
+
+it('a click or an arrow on a card applies that theme, and the hidden select follows (#441)', async () => {
+  await act(async () => { tarjeta('Papel').click(); });
+  expect(variable('--accent-primary')).toBe(PAPEL.tokens['accent.primary']);
+  expect(tarjeta('Papel').getAttribute('aria-checked')).toBe('true');
+  expect(tarjeta('Eva-01').getAttribute('aria-checked')).toBe('false');
+  expect(selectTema().value).toBe('papel');
+  expect(guardado).toEqual([]);
+  // ← from Papel is Eva-01: it moves the focus there and applies it.
+  tarjeta('Papel').focus();
+  await act(async () => { tarjeta('Papel').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true })); });
+  expect(document.activeElement).toBe(tarjeta('Eva-01'));
+  expect(variable('--accent-primary')).toBe(EVA.tokens['accent.primary']);
+  expect(tarjeta('Eva-01').getAttribute('aria-checked')).toBe('true');
+});
+
+it('an edited copy shows up as a checked card of its own, tagged as mine, with its palette (#441)', () => {
+  teclear(porEtiqueta('Hex de accent.primary'), '#123456');
+  const mia = tarjeta('Eva-01 (copia)');
+  expect(mia.getAttribute('aria-checked')).toBe('true');
+  expect(mia.querySelector('.tipo')?.textContent).toBe('Mío');
+  expect([...mia.querySelectorAll<HTMLElement>('.muestra > span')].map((s) => s.style.background)[1]).toBe(color('#123456'));
+  expect(tarjeta('Eva-01').getAttribute('aria-checked')).toBe('false');
+});
+
+it('Import is a real button, in the Tab order, that opens the hidden file input (#441, QA of #437 N6)', async () => {
+  const importar = boton('Importar');
+  expect(importar.type).toBe('button');
+  expect(importar.tabIndex).toBe(0);
+  const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+  expect(input.hidden).toBe(true);
+  expect(importar.contains(input)).toBe(false);
+  const abrir = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(function (this: HTMLInputElement) {});
+  await act(async () => { importar.click(); });
+  expect(abrir).toHaveBeenCalledOnce();
+  expect(abrir.mock.contexts[0]).toBe(input);
 });

@@ -2881,10 +2881,15 @@ button.gcal-uso-fila:hover {
 .ajustes-encabezado { align-items: center; border-bottom: 1px solid var(--border); display: flex; flex: none; gap: 12px; justify-content: space-between; padding: calc(16px * var(--espacio, 1)) 24px; }
 .ajustes-encabezado h2 { font-size: 1em; margin: 0; }
 .ajustes-cuerpo { display: flex; flex: 1 1 auto; min-height: 0; }
-.ajustes-nav { border-right: 1px solid var(--border); display: flex; flex: none; flex-direction: column; gap: 2px; overflow: auto; padding: calc(12px * var(--espacio, 1)); width: 200px; }
+/* `border-box`: the 200 px of the artboard are the whole rail, its padding and divider included
+   (it measured ~225 px with the default `content-box`, QA of #437 N3; #441). */
+.ajustes-nav { border-right: 1px solid var(--border); box-sizing: border-box; display: flex; flex: none; flex-direction: column; gap: 2px; overflow: auto; padding: calc(12px * var(--espacio, 1)); width: 200px; }
 .ajustes-nav [role='tab'] { background: none; border: none; border-radius: 0; color: var(--fg-muted); cursor: pointer; font: inherit; padding: calc(8px * var(--espacio, 1)) 10px; text-align: left; }
 .ajustes-nav [role='tab']:hover { color: var(--fg-primary); }
 .ajustes-nav [role='tab'].activo { background: var(--bg-hover); color: var(--fg-primary); font-weight: 600; }
+/* The theme's focus ring, not the browser's default one (QA of #437 N2; #441). Inset: the rail
+   scrolls, and an outer ring would be clipped at its edges. */
+.ajustes-nav [role='tab']:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
 .ajustes-panel { flex: 1 1 auto; min-width: 0; overflow: auto; padding: calc(20px * var(--espacio, 1)) 24px; }
 .ajustes .fila { align-items: center; display: grid; gap: 8px; grid-template-columns: 9rem 1fr; margin-bottom: calc(10px * var(--espacio, 1)); }
 .ajustes .fila > span { color: var(--fg-muted); }
@@ -2906,6 +2911,32 @@ button.gcal-uso-fila:hover {
 /* #472: the help line under «Follow the system theme», tucked against its toggle. */
 .ajustes .ayuda { color: var(--fg-muted); font-size: 0.9em; margin: 0 0 calc(12px * var(--espacio, 1)); }
 .ajustes .acciones { border-top: 1px solid var(--border); flex: none; justify-content: flex-end; margin: 0; padding: calc(12px * var(--espacio, 1)) 24px; }
+/* `hidden` wins over the `display` of the shared rules (`.campo` is a flex box): the native
+   selects that the segmented controls and the theme cards replaced stay in the DOM, hidden (#441). */
+.ajustes [hidden] { display: none; }
+
+/* Segmented controls of General (language, density; artboard 09, #441): one `role="radiogroup"`,
+   the chosen option filled with the accent like the artboard's «Normal». */
+.ajustes .segmentado { display: flex; flex-wrap: wrap; justify-self: start; }
+.ajustes .segmentado [role='radio'] { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 0; color: var(--fg-muted); cursor: pointer; font: inherit; margin-left: -1px; padding: calc(5px * var(--espacio, 1)) 12px; }
+.ajustes .segmentado [role='radio']:first-child { margin-left: 0; }
+.ajustes .segmentado [role='radio']:hover { color: var(--fg-primary); }
+.ajustes .segmentado [role='radio'][aria-checked='true'] { background: var(--accent-primary); border-color: var(--accent-primary); color: var(--fg-onAccent); }
+
+/* Theme cards (the artboard's TEMAS column, #441): a strip of the palette, the name, and whether
+   it ships with the app. Also one `role="radiogroup"`. */
+.ajustes .fila.temas { align-items: start; }
+.ajustes .fila.temas > span { padding-top: calc(7px * var(--espacio, 1)); }
+.ajustes .tarjetas-tema { display: grid; gap: 6px; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); }
+.ajustes .tarjetas-tema [role='radio'] { align-items: center; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 0; color: var(--fg-primary); cursor: pointer; display: flex; font: inherit; gap: 8px; min-width: 0; padding: calc(6px * var(--espacio, 1)) 8px; text-align: left; }
+.ajustes .tarjetas-tema [role='radio']:hover { background: var(--bg-hover); }
+.ajustes .tarjetas-tema [role='radio'][aria-checked='true'] { background: var(--bg-hover); border-color: var(--accent-primary); box-shadow: inset 2px 0 0 var(--accent-primary); font-weight: 600; }
+.ajustes .tarjetas-tema .muestra { border: 1px solid var(--border); display: flex; flex: none; }
+.ajustes .tarjetas-tema .muestra > span { block-size: 18px; inline-size: 7px; }
+.ajustes .tarjetas-tema .nombre { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ajustes .tarjetas-tema .tipo { color: var(--fg-muted); flex: none; font-family: var(--font-mono); font-size: 10px; font-weight: 400; }
+.ajustes .segmentado [role='radio']:focus-visible,
+.ajustes .tarjetas-tema [role='radio']:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; position: relative; z-index: 1; }
 
 /* Theme editor (LILA-114): groups are `<details>`, and only the first one opens by default. Not
    a single literal color here: everything comes from the tokens, including the editor's own,
@@ -2917,10 +2948,6 @@ button.gcal-uso-fila:hover {
    row inherited a stray divider and the footer's indent. Zeroing both out here keeps the footer
    rule for the actual footer only. */
 .ajustes .acciones.temas { border-top: 0; justify-content: flex-start; margin: 12px 0; padding: 0; }
-/* El `<label>` es el botón del `<input type="file">`: el input de verdad no se ve, pero sigue ahí
-   y es el que abre el selector nativo (y el que un test acciona). */
-.ajustes .acciones.temas .boton { display: inline-flex; }
-.ajustes .acciones.temas input[type='file'] { display: none; }
 .ajustes .muestras { align-items: center; background: var(--bg-surface); border: 1px solid var(--border); display: flex; gap: 12px; margin: 12px 0; padding: 10px; }
 .ajustes .muestras .apagado { color: var(--fg-muted); }
 .ajustes .muestras .acento { background: var(--accent-primary); color: var(--fg-onAccent); font-weight: 600; padding: 2px 10px; }
