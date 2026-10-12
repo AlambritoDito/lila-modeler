@@ -17,10 +17,12 @@
  * llama a `applyTheme` y no hay dos fuentes de verdad del tema vivo.
  */
 import { useRef, useState } from 'react';
+import { guardarDesdeBoton } from '../guardarArchivo';
 import { useStrings } from '../i18n';
 import type { Theme } from '../theme/applyTheme';
 import type { TokenName } from '../theme/tokens';
 import { duplicar, esColor, grupos, temaDe, validarTema, valorValido, type TemaGuardado } from '../theme/temas';
+import { Radios } from './Radios';
 
 export interface AparienciaProps {
   /** Id del tema aplicado: `eva-01`, `papel` o `u:<n>`. */
@@ -60,6 +62,31 @@ function OpcionesTema({ temas }: { temas: readonly TemaGuardado[] }): React.JSX.
           {temas.map((t) => <option key={t.id} value={t.id}>{t.tema.name}</option>)}
         </optgroup>
       )}
+    </>
+  );
+}
+
+/**
+ * The built-in palettes, for the theme cards' preview (#441). `App.tsx` still loads the theme it
+ * applies with `fetch('./<id>.json')`; this reads the same files at build time, `tokens` only.
+ */
+const INTEGRADOS = import.meta.glob<Partial<Record<TokenName, string>>>('../theme/themes/*.json', { eager: true, import: 'tokens' });
+const tokensIntegrados = (id: string): Partial<Record<TokenName, string>> => INTEGRADOS[`../theme/themes/${id}.json`] ?? {};
+/** The three tokens a card previews: the surface, the main accent and the second one. */
+const MUESTRA: readonly TokenName[] = ['bg.base', 'accent.primary', 'accent.secondary'];
+
+/** One theme card: a strip of its palette, its name and whether it ships with the app. */
+function Tarjeta({ nombre, tokens, tipo }: { nombre: string; tokens: Partial<Record<TokenName, string>>; tipo: string }): React.JSX.Element {
+  // A user theme can be partial (`docs/THEMES.md`): what it leaves out is what `tokens.css` paints,
+  // which is Eva-01.
+  const color = (t: TokenName): string | undefined => tokens[t] ?? tokensIntegrados('eva-01')[t];
+  return (
+    <>
+      <span className="muestra" aria-hidden="true">
+        {MUESTRA.map((t) => <span key={t} style={{ background: color(t) }} />)}
+      </span>
+      <span className="nombre">{nombre}</span>
+      <span className="tipo">{tipo}</span>
     </>
   );
 }
@@ -210,15 +237,8 @@ export function Apariencia(props: AparienciaProps): React.JSX.Element {
     // Exactamente `{ name, tokens }` y nada más: es el formato de `docs/THEMES.md`, y lo que
     // vuelve a entrar por «Importar» reproduce este mismo archivo.
     const json = `${JSON.stringify({ name: tema.name, tokens: tema.tokens }, null, 2)}\n`;
-    const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
-    try {
-      const enlace = document.createElement('a');
-      enlace.href = url;
-      enlace.download = archivoDe(tema.name);
-      enlace.click();
-    } finally {
-      URL.revokeObjectURL(url);
-    }
+    // En el escritorio, con el diálogo de guardar de la app y no como descarga (#564).
+    void guardarDesdeBoton(archivoDe(tema.name), { tipo: 'json', datos: json });
   }
 
   async function importar(fichero: File): Promise<void> {
@@ -244,13 +264,23 @@ export function Apariencia(props: AparienciaProps): React.JSX.Element {
 
   return (
     <>
-      {/* Label to the left of the control, same `.fila` row as General's (QA must-fix of #407):
-          the visible text moves to a sibling `<span>` so `label.campo` keeps wrapping only the
-          `<select>`, which is what `dialog.ajustes .campo:not(.idioma) select` (App.test.tsx)
-          reaches into. */}
-      <div className="fila">
-        <span>{S.app.tema}</span>
-        <label className="campo">
+      {/* The themes as cards with their palette (artboard 09, #441), one radio group, label to
+          the left like General's rows. The `<select>` of before stays in the DOM, `hidden`, alone
+          inside its `label.campo` — what `dialog.ajustes .campo:not(.idioma) select` (App suite)
+          and `selectTema()` (this component's suite) drive — and goes through the same handler. */}
+      <div className="fila temas">
+        <span id="apariencia-tema">{S.app.tema}</span>
+        <Radios
+          etiquetaId="apariencia-tema"
+          className="tarjetas-tema"
+          valor={temaId}
+          onCambiar={(id) => { setError(null); props.onSeleccionar(id); }}
+          opciones={[
+            ...Object.entries(S.app.temas).map(([id, nombre]) => ({ valor: id, contenido: <Tarjeta nombre={nombre} tokens={tokensIntegrados(id)} tipo={S.apariencia.tarjetaIntegrado} /> })),
+            ...temas.map((t) => ({ valor: t.id, contenido: <Tarjeta nombre={t.tema.name} tokens={t.tema.tokens} tipo={S.apariencia.tarjetaDelUsuario} /> })),
+          ]}
+        />
+        <label className="campo" hidden>
           <select value={temaId} onChange={(e) => { setError(null); props.onSeleccionar(e.target.value); }}>
             <OpcionesTema temas={temas} />
           </select>
@@ -302,16 +332,16 @@ export function Apariencia(props: AparienciaProps): React.JSX.Element {
         <button type="button" className="boton" disabled={tema === null} onClick={() => { if (tema !== null) { const n = duplicar(tema, temas); props.onTemas([...temas, n], n.id); } }}>{S.apariencia.duplicar}</button>
         <button type="button" className="boton" onClick={restablecer}>{S.apariencia.restablecer}</button>
         <button type="button" className="boton" disabled={tema === null} onClick={exportar}>{S.apariencia.exportar}</button>
-        {/* Sin diálogo propio ni librería: el `<label>` es el botón del `<input type="file">`. */}
-        <label className="boton">
-          {S.apariencia.importar}
-          <input
-            ref={archivo}
-            type="file"
-            accept="application/json,.json"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f !== undefined) void importar(f).finally(() => { if (archivo.current !== null) archivo.current.value = ''; }); }}
-          />
-        </label>
+        {/* A real button that opens the hidden `<input type="file">` (#441, QA of #437 N6): the
+            styled `<label>` that wrapped it before was not reachable with Tab. */}
+        <button type="button" className="boton" onClick={() => archivo.current?.click()}>{S.apariencia.importar}</button>
+        <input
+          ref={archivo}
+          type="file"
+          hidden
+          accept="application/json,.json"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f !== undefined) void importar(f).finally(() => { if (archivo.current !== null) archivo.current.value = ''; }); }}
+        />
         {/* #422: deleting the active theme falls back to "no theme saved" (an empty `seleccion`),
             the same rule the first launch uses (`temaPorDefecto`, #404) — no longer the fixed
             `'eva-01'` of before. `''`, not the resolved id: `App.tsx`'s `seleccionarTema` shows and

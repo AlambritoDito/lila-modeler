@@ -14,6 +14,11 @@
  *   carpeta contenedora igual que el diálogo real, o `null` con el valor literal `"cancel"`.
  * - `LILA_E2E_IMPORT=<ruta absoluta a un .bpmn/.xml>` (#591): lo mismo para `importBpmn()` (File →
  *   Import BPMN…); `cancel` simula cancelar.
+ * - `LILA_E2E_EXPORT_FILE=<absolute path>` (#564, #568): every export that goes through
+ *   `exportar()` — diagram (SVG/PNG/PDF), process document (Word/HTML), the results' XLSX and CSV,
+ *   a theme's JSON — is written to that exact path, as is (no extension added), instead of asking
+ *   with the native save dialog; `cancel` simulates cancelling it. Each export overwrites the
+ *   previous one.
  * - `LILA_E2E_CLOSE=save|discard|cancel`: el diálogo nativo Guardar/Descartar/Cancelar del cierre
  *   se resuelve con esa opción sin mostrarse. Cualquier otro valor es inválido y se ignora (se
  *   sigue mostrando el diálogo real, como si la variable no existiera).
@@ -22,7 +27,8 @@
  *   value is ignored, like `LILA_E2E_CLOSE`.
  * - `LILA_E2E_LOG=<ruta de archivo>`: `main.ts` añade una línea JSON por evento relevante
  *   (`chooseFolder`, `writeProject` con éxito/error y código, `closeRequested` con la elección y el
- *   resultado, `openPath`, `recovery` con la elección) a ese archivo, para que la sesión de
+ *   resultado, `openPath`, `recovery` con la elección, `exportar` con el tipo y la ruta escrita) a
+ *   ese archivo, para que la sesión de
  *   pruebas la lea después del recorrido.
  *
  * Un valor ausente, vacío, o con forma inválida para cualquiera de las variables se ignora —
@@ -44,6 +50,8 @@ export interface E2EOverrides {
   readonly saveFile?: string | null;
   /** Lo mismo que `folder`, para `importBpmn()` (`LILA_E2E_IMPORT`, #591). */
   readonly importFile?: string | null;
+  /** The same as `folder`, for `exportar()`'s save dialog (`LILA_E2E_EXPORT_FILE`, #564). */
+  readonly exportFile?: string | null;
   readonly close?: E2ECloseChoice;
   readonly recovery?: RecoveryChoice;
   readonly logPath?: string;
@@ -57,7 +65,7 @@ function isCloseChoice(value: string): value is E2ECloseChoice {
 
 /** Parsea las variables de entorno del seam E2E. Cualquier valor ausente o con forma inválida se ignora. */
 export function e2eOverrides(env: Readonly<Record<string, string | undefined>>): E2EOverrides {
-  const result: { folder?: string | null; saveFile?: string | null; importFile?: string | null; close?: E2ECloseChoice; recovery?: RecoveryChoice; logPath?: string } = {};
+  const result: { -readonly [K in keyof E2EOverrides]: E2EOverrides[K] } = {};
 
   const folder = env.LILA_E2E_FOLDER;
   if (typeof folder === 'string' && folder.length > 0) {
@@ -72,6 +80,11 @@ export function e2eOverrides(env: Readonly<Record<string, string | undefined>>):
   const importFile = env.LILA_E2E_IMPORT;
   if (typeof importFile === 'string' && importFile.length > 0) {
     result.importFile = importFile === 'cancel' ? null : importFile;
+  }
+
+  const exportFile = env.LILA_E2E_EXPORT_FILE;
+  if (typeof exportFile === 'string' && exportFile.length > 0) {
+    result.exportFile = exportFile === 'cancel' ? null : exportFile;
   }
 
   const close = env.LILA_E2E_CLOSE;

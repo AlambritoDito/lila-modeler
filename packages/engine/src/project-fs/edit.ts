@@ -20,7 +20,7 @@ import type { ProcessIR } from '../core/ir.js';
 import { messages, type Locale } from '../messages/index.js';
 import { processesOf, withProcesses, type ProcessDocument, type ScenarioDocument } from '../project/index.js';
 import { parseScenario, resolveExtends, validateScenario } from '../scenario.js';
-import { lilaScenarioPath, lilaScenarioReader, openLilaProcess, writeLilaProject, type LilaProcess } from './input.js';
+import { lilaScenarioPath, lilaScenarioReader, lilaWritten, openLilaProcess, writeLilaProject, type LilaProcess } from './input.js';
 import { BASE_SCENARIO } from './outline.js';
 
 export interface EditLilaProcessOptions {
@@ -231,16 +231,17 @@ export async function editLilaProcess(file: string, operations: unknown, options
     processesOf(input.document).map((p) => (p.slug === current.slug ? edited : p)),
   );
   const dryRun = options.dryRun === true;
-  if (!dryRun) await writeLilaProject(input, next, locale);
+  // The slug the process has in the file once written (#613): a one-process version 2 archive is version 1 after it.
+  const slug = dryRun ? current.slug : lilaWritten(input, await writeLilaProject(input, next, locale)).slug;
   const count = Array.isArray(operations) ? operations.length : 0;
   const notes = [...edit.notes, ...scenarioRemovals.map((r) => C.editScenarioRemoved(r.scenario, r.id, JSON.stringify(r.removed)))];
   const { outline } = await bpmnToOutline(edit.xml, { scenario: scenarios[BASE_SCENARIO], locale, processId: ir.id });
   return {
     file: input.file,
-    slug: current.slug,
+    slug,
     name: current.name,
     dryRun,
-    summary: (dryRun ? C.processEditDryRun : C.processEdited)(current.name, current.slug, input.file, count, edit.removed.length),
+    summary: (dryRun ? C.processEditDryRun : C.processEdited)(current.name, slug, input.file, count, edit.removed.length),
     changes: edit.changes,
     removed: edit.removed,
     scenarioRemovals,

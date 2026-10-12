@@ -16,7 +16,7 @@ import { resolveExtends, resolveScenarioPath, type ResolvedScenario } from '@lil
 import { compare } from '@lila-modeler/engine';
 import { CompareView } from './CompareView';
 import { runMetaFrom } from './compareWarnings';
-import { changeToken, defaultElement, defaultScenarios, documentToken, newModelXml, nextScenarioRevisions, processIds, projectStore, readLila, readProject, repositoryToken, tokenPart } from './project';
+import { changeToken, defaultElement, defaultScenarios, documentToken, escenariosDelProyecto, MODELO_PROYECTO, newModelXml, nextScenarioRevisions, procesoDelProyecto, processIds, projectStore, proyectoDeSuelto, readLila, readProject, repositoryToken, tokenPart } from './project';
 import { encodeLila, isCurrentRun, processesOf, processSlug, storedRun, withProcesses, type ProcessDocument } from '@lila-modeler/engine/project';
 import { PestanasProcesos } from './PestanasProcesos';
 import type { ProcessIR, SimulationProgress } from '@lila-modeler/engine';
@@ -564,7 +564,21 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [suelto, setSuelto] = useState(false);
   const [ioError, setIoError] = useState<string | null>(null);
   const [ioBusy, setIoBusy] = useState(false);
-  const ioLock = useRef(false);
+  /** The file lock (#522): the operation that holds it, taken and released only through `tomarIoLock`. */
+  const ioLock = useRef<object | null>(null);
+  /**
+   * Takes the file lock for one operation (#535), or returns `null` when another one holds it. The
+   * check and the take are one synchronous step, so an operation that awaits anything first (the
+   * loss dialog) calls this after that await, never before: two operations started in the same JS
+   * task would otherwise both pass the check. The release it returns frees the lock only while this
+   * operation still holds it.
+   */
+  function tomarIoLock(): (() => void) | null {
+    if (ioLock.current !== null) return null;
+    const propio = {};
+    ioLock.current = propio; setIoBusy(true);
+    return () => { if (ioLock.current === propio) { ioLock.current = null; setIoBusy(false); } };
+  }
   // A «still running» notice (#533) is only true while the lock is held: it goes once it is released (#537).
   useEffect(() => {
     if (!ioBusy) setIoError((e) => (e === S.app.exportacionOcupada || e === S.app.guardadoOcupado ? null : e));
@@ -932,9 +946,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // devuelve `false`, que es lo que el cierre de Electron lee como «no se guardó» y le hace
     // cancelar el cierre: la ventana sigue abierta con el diálogo delante, sin nada perdido.
     if (!await aceptaPerdida('guardar')) return 'cancelled';
-    ioLock.current = true; setIoBusy(true); setIoError(null);
+    // #535: something started in the same task may have taken the lock during that await.
+    const soltar = tomarIoLock();
+    if (soltar === null) { setIoError(S.app.guardadoOcupado); return 'cancelled'; }
+    setIoError(null);
     try {
-      const { doc, revision: revisionGuardada } = await snapshotConRevision();
+      const { doc: leido, revision: revisionGuardada } = await snapshotConRevision();
       // Un guardado normal en modo suelto escribe SOLO el `.bpmn` (`diagramOnly`, LILA-206): los
       // escenarios y las corridas siguen sin estar en disco. El token guardado avanza entonces
       // únicamente en la revisión del modelo y conserva los escenarios/corridas que SÍ estaban
@@ -942,7 +959,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // «Guardado» y la guardia de cierre dejaba salir sin escribirlo (LILA-208, hallazgo 2 del QA).
       // A loose diagram that grew a second process (#498) is saved whole, as a new destination
       // (`DesktopStore`): it is no longer a diagram-only save.
-      const repositorio = (doc.processes?.length ?? 0) > 0;
+      const repositorio = (leido.processes?.length ?? 0) > 0;
+      // #613: saved as a project, a loose diagram becomes its `model.bpmn` (`proyectoDeSuelto`).
+      const deSuelto = suelto && (saveAs || repositorio);
+      const doc = deSuelto ? proyectoDeSuelto(leido) : leido;
       const previo: readonly [string, number, Record<string, number>, string[]] | null =
         suelto && !saveAs && !repositorio && savedToken !== '' ? JSON.parse(savedToken) : null;
       const token = previo === null
@@ -954,13 +974,19 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       slugsEnDisco.current = new Set(repositorio ? processesOf(doc).map((p) => p.slug) : []);
       // «Guardar como» crea el proyecto completo en la carpeta elegida: deja de ser suelto.
       if (saveAs || repositorio) setSuelto(false);
+      if (deSuelto) {
+        // What was written, from now on: the canvas file and every process are the project's model.bpmn.
+        const viejo = archivo;
+        if (viejo !== MODELO_PROYECTO) { setArchivo(MODELO_PROYECTO); setEscenarios((actuales) => escenariosDelProyecto(actuales, viejo)); }
+        setProcesos((lista) => lista.map(procesoDelProyecto));
+      }
       setSavedToken(token);
       // B puede cerrar antes del siguiente efecto de React; publicar el dirty confirmado.
       const unchanged = token === tokenRef.current && revisionGuardada === revisionRef.current;
       adapter.setDirty?.(!unchanged);
       return unchanged ? 'saved' : previo !== null ? 'diagram-only' : 'cancelled';
     } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); return 'failed'; }
-    finally { ioLock.current = false; setIoBusy(false); }
+    finally { soltar(); }
   }
   async function activate(raw: ProjectDocument, saved: boolean, expectedToken: string): Promise<boolean> {
     if (modelador === null) return false;
@@ -1032,12 +1058,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   async function conProcesos(accion: (lista: ProcessDocument[]) => Promise<void>): Promise<void> {
     if (modelador === null || ioLock.current || respuestaPerdida.current !== null) return;
     if (!await aceptaPerdida('guardar')) return;
-    ioLock.current = true; setIoBusy(true); setIoError(null);
+    // #535: an export clicked in the same task took the lock during that await; it stays the export's.
+    const soltar = tomarIoLock();
+    if (soltar === null) return;
+    setIoError(null);
     try {
       const actual = await procesoActual();
       await accion(procesos.length > 1 ? procesos.map((p, i) => (i === activo ? actual : p)) : [actual]);
     } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
-    finally { ioLock.current = false; setIoBusy(false); }
+    finally { soltar(); }
   }
 
   /** Another tab (#498), or the process a call activity calls (#461, `desdeLlamada`). */
@@ -1082,12 +1111,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       return;
     }
     // The canvas process goes: nothing of it has to be read back, so no loss dialog either.
-    ioLock.current = true; setIoBusy(true); setIoError(null);
+    const soltar = tomarIoLock();
+    if (soltar === null) return;
+    setIoError(null);
     try {
       const lista = procesos.filter((_, i) => i !== indice);
       await cargarProceso(lista, Math.max(0, indice - 1));
     } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
-    finally { ioLock.current = false; setIoBusy(false); }
+    finally { soltar(); }
   }
 
   /**
@@ -1142,10 +1173,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     sessionRestored.current = true;
     const doc = adapter?.restoreSession?.();
     if (!doc) return;
-    ioLock.current = true; setIoBusy(true);
+    // Nothing else runs before the first canvas, so the lock is free here.
+    const soltar = tomarIoLock();
+    if (soltar === null) return;
     void activate(doc, true, tokenRef.current)
       .catch((error: unknown) => setIoError(error instanceof Error ? error.message : String(error)))
-      .finally(() => { ioLock.current = false; setIoBusy(false); });
+      .finally(soltar);
   }, [modelador, adapter]);
 
   /**
@@ -1170,7 +1203,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     if (dirty && !confirmed) { setPendingAction(kind); return; }
     const beforeToken = tokenRef.current;
     recordarFocoLienzo();
-    ioLock.current = true; setIoBusy(true); setIoError(null); cancelarCorrida();
+    const soltar = tomarIoLock();
+    if (soltar === null) return;
+    setIoError(null); cancelarCorrida();
     try {
       if (kind === 'open' || kind === 'openFile') {
         const doc = await adapter.openProject(kind === 'openFile' ? { fileOnly: true } : undefined);
@@ -1228,7 +1263,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       setIoError(kind === 'bpmn' ? S.app.errorAbrirDiagrama(mensaje) : mensaje);
     }
     finally {
-      ioLock.current = false; setIoBusy(false);
+      soltar();
       if (enfocarTrasRecarga.current) setFocoPendiente((n) => n + 1);
     }
   }
@@ -1262,10 +1297,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     const escenario = escenarioId;
     const base = baseId;
     const modoPrevio = modo;
-    const elegido = seleccion;
+    // Every selected element by id, one or several (#568).
+    const elegidos = (serviciosDe(modelador)?.selection.get() ?? []).map((el) => el.id);
     const beforeToken = tokenRef.current;
     recordarFocoLienzo();
-    ioLock.current = true; setIoBusy(true); setIoError(null); cancelarCorrida();
+    const soltar = tomarIoLock();
+    if (soltar === null) return;
+    setIoError(null); cancelarCorrida();
     try {
       const raw = await adapter.reload();
       // Deleted on disk: `openRecent` already took it off the recents, and says so.
@@ -1279,13 +1317,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       if (escenario in escenarios) setEscenarioId(escenario);
       if (base in escenarios) setBaseId(base);
       setModo(modoPrevio); // `activate` goes back to Model, as an Open does; a reload stays put.
-      // The import made new elements: select the same id in them, so the properties panel and the
-      // quick view show (and edit) the reloaded element, not the one from before (QA of #539).
-      // `seleccionar` does nothing when the id is gone, and the selection stays empty.
-      if (elegido !== null) modelador.seleccionar?.(elegido);
+      // The import made new elements: select the same ids in them, so the properties panel and the
+      // quick view show (and edit) the reloaded elements, not the ones from before (QA of #539).
+      // `seleccionar` leaves out an id that is gone or not on the plane on screen (#568).
+      if (elegidos.length > 0) modelador.seleccionar?.(elegidos);
     } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
     finally {
-      ioLock.current = false; setIoBusy(false);
+      soltar();
       if (enfocar) enfocarTrasRecarga.current = true;
       if (enfocarTrasRecarga.current) setFocoPendiente((n) => n + 1);
     }
@@ -2121,7 +2159,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    */
   function restaurarCopia(copia: Uint8Array): void {
     if (modelador === null) { copiaPendiente.current = copia; return; }
-    ioLock.current = true; setIoBusy(true);
+    // An open or save the user started while main was still handing the copy over goes first.
+    const soltar = tomarIoLock();
+    if (soltar === null) { setTimeout(() => restaurarCopiaRef.current(copia), 300); return; }
     void (async () => activate(readLila(copia), false, tokenRef.current))()
       .catch((error: unknown) => {
         setIoError(S.app.errorCopiaRecuperacion(error instanceof Error ? error.message : String(error)));
@@ -2130,7 +2170,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         adapter?.setDirty?.(false);
         setBienvenida(true);
       })
-      .finally(() => { ioLock.current = false; setIoBusy(false); });
+      .finally(soltar);
   }
   const restaurarCopiaRef = useRef(restaurarCopia);
   restaurarCopiaRef.current = restaurarCopia;
@@ -2345,7 +2385,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       setIoError(S.app.exportacionOcupada);
       return;
     }
-    ioLock.current = true; setIoBusy(true); setIoError(null);
+    const soltar = tomarIoLock()!; // Checked just above, in this same synchronous step.
+    setIoError(null);
     try {
       confirmarEdicionEnCurso(serviciosDe(modelador)?.directEditing);
       // #498: the document is of the process on the canvas, and its cover says which one.
@@ -2383,7 +2424,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         else await lila.exportar({ nombre, tipo, datos });
       }
     } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); }
-    finally { ioLock.current = false; setIoBusy(false); }
+    finally { soltar(); }
   }
 
   async function exportar(): Promise<void> {
@@ -2867,6 +2908,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               type="button"
               className={m === modo ? 'modo activo' : 'modo'}
               aria-current={m === modo ? 'page' : undefined}
+              title={DESKTOP ? `${S.app.modos[m]}${atajo(`modo:${m}`)}` : undefined}
               onClick={() => elegirModo(m)}
             >
               {S.app.modos[m]}
@@ -3485,7 +3527,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             <button type="button" className="enlace" onClick={() => { setCambioExterno(false); modelador?.enfocar?.(); }}>{S.app.mantenerMios}</button>
           </span>
         )}
-        {ioError !== null && <span role="alert" className="error">{ioError}</span>}
+        {ioError !== null && (
+          <span role="alert" className="error">
+            {ioError}
+            {/* #568: the error says «Reload»; after «Keep mine» the notice with that button is gone. */}
+            {adapter?.reload !== undefined && ioError.startsWith('E-CAMBIO-EXTERNO') && (
+              <>{' '}<button type="button" className="enlace" disabled={ioBusy} onClick={() => void recargar(true)}>{S.app.recargarCambioExterno}</button></>
+            )}
+          </span>
+        )}
         {errorSimOculto !== null && (
           <span role="alert" className="error corrida-fallida" title={errorSimOculto}>{S.app.errorSimular(errorSimOculto.split('\n')[0]!)}</span>
         )}

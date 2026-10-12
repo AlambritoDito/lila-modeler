@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { MenuItemConstructorOptions } from 'electron';
 import { menuTemplate, teclaDeVentanaHija } from './menu.js';
 import { desktopStrings } from './strings/index.js';
@@ -48,7 +48,7 @@ describe.each(IDIOMAS)('menuTemplate (%s)', (locale) => {
     const archivo = menuTemplate([], 'win32', send, desktopStrings(locale))[0]!.submenu as MenuItemConstructorOptions[];
     const labels = archivo.map((i) => i.label ?? i.role);
     expect(labels.indexOf(S.acercaDe)).toBeGreaterThan(-1);
-    expect(labels.indexOf(S.acercaDe)).toBeLessThan(labels.indexOf('quit'));
+    expect(labels.indexOf(S.acercaDe)).toBeLessThan(archivo.findIndex((i) => i.role === 'quit'));
     const acerca = archivo.find((i) => i.label === S.acercaDe);
     (acerca!.click as () => void)();
     expect(send).toHaveBeenCalledWith('acerca');
@@ -57,9 +57,9 @@ describe.each(IDIOMAS)('menuTemplate (%s)', (locale) => {
   it('fuera de macOS Preferencias… y Salir van en Archivo', () => {
     const items = menuTemplate([], 'win32', vi.fn(), desktopStrings(locale));
     expect(items[0]?.label).toBe(S.archivo);
-    const labels = (items[0]!.submenu as MenuItemConstructorOptions[]).map((i) => i.label ?? i.role);
-    expect(labels).toContain(S.preferencias);
-    expect(labels).toContain('quit');
+    const archivo = items[0]!.submenu as MenuItemConstructorOptions[];
+    expect(archivo.map((i) => i.label)).toContain(S.preferencias);
+    expect(archivo.find((i) => i.role === 'quit')?.label).toBe(S.salir);
   });
 
   it('Abrir reciente lista los recientes y manda su carpeta; vacío queda deshabilitado', () => {
@@ -160,6 +160,63 @@ describe('menuTemplate · the language only changes the labels', () => {
   });
 });
 
+/**
+ * #566: outside macOS nothing localises a bare role, so Electron labelled them in English — the
+ * Spanish menu bar read «Archivo · Edit · Vista · Simulación · Window · Ayuda» and File ended in
+ * «Exit». There every item has to carry a label from the catalog, and the roles it carries must be
+ * the ones Electron's `editMenu`/`windowMenu` bring there (less `zoom`, which is macOS-only).
+ */
+describe.each(['win32', 'linux'] as const)('menuTemplate · no English role label outside macOS (%s)', (platform) => {
+  // `process.platform` is what Electron itself looks at; the template reads the argument, and both
+  // are set so a stray `process.platform` check in the template could not hide behind macOS.
+  const original = Object.getOwnPropertyDescriptor(process, 'platform')!;
+  beforeAll(() => Object.defineProperty(process, 'platform', { ...original, value: platform }));
+  afterAll(() => Object.defineProperty(process, 'platform', original));
+
+  it.each(IDIOMAS)('every item but the separators has a label from the catalog (%s)', (locale) => {
+    const strings = desktopStrings(locale);
+    const catalogo = new Set<string>(Object.values(strings.menu));
+    const items = flat(menuTemplate(recents, process.platform, vi.fn(), strings, { dev: true }))
+      .filter((i) => i.type !== 'separator' && i.label !== 'Uno');
+    expect(items.filter((i) => i.label === undefined).map((i) => i.role)).toEqual([]);
+    expect(items.map((i) => i.label).filter((l) => !catalogo.has(l!))).toEqual([]);
+  });
+
+  it('the Spanish menu bar and its role items read in Spanish', () => {
+    const items = menuTemplate([], process.platform, vi.fn(), desktopStrings('es'), { dev: true });
+    expect(items.map((i) => i.label)).toEqual(['Archivo', 'Edición', 'Vista', 'Simulación', 'Ventana', 'Ayuda']);
+    const sub = (label: string) => (items.find((m) => m.label === label)!.submenu as MenuItemConstructorOptions[])
+      .filter((i) => i.role !== undefined).map((i) => [i.role, i.label]);
+    expect(sub('Edición')).toEqual([
+      ['undo', 'Deshacer'], ['redo', 'Rehacer'], ['cut', 'Cortar'], ['copy', 'Copiar'], ['paste', 'Pegar'],
+      ['delete', 'Eliminar'], ['selectAll', 'Seleccionar todo'],
+    ]);
+    expect(sub('Ventana')).toEqual([['minimize', 'Minimizar'], ['close', 'Cerrar']]);
+    expect(sub('Vista')).toEqual([['togglefullscreen', 'Pantalla completa'], ['toggleDevTools', 'Herramientas de desarrollo']]);
+    expect(sub('Archivo')).toEqual([['quit', 'Salir']]);
+  });
+
+  it('the role items keep their role: no hand-set accelerator, so Electron still brings its own', () => {
+    const roles = flat(menuTemplate([], process.platform, vi.fn(), desktopStrings('en'), { dev: true }))
+      .filter((i) => i.role !== undefined && i.role !== 'help');
+    expect(roles.filter((i) => i.accelerator !== undefined || i.click !== undefined)).toEqual([]);
+    expect(roles.some((i) => i.role === 'editMenu' || i.role === 'windowMenu' || i.role === 'zoom')).toBe(false);
+  });
+});
+
+describe('menuTemplate · macOS keeps the bare roles (#566)', () => {
+  it('no role item carries a label of ours, in either language', () => {
+    for (const locale of IDIOMAS) {
+      const items = flat(menuTemplate(recents, 'darwin', vi.fn(), desktopStrings(locale), { dev: true }));
+      expect(items.filter((i) => i.role !== undefined && i.role !== 'help' && i.label !== undefined)).toEqual([]);
+      expect(items.map((i) => i.role).filter(Boolean)).toEqual([
+        'appMenu', 'services', 'hide', 'hideOthers', 'unhide', 'quit', 'close',
+        'editMenu', 'togglefullscreen', 'toggleDevTools', 'windowMenu', 'help',
+      ]);
+    }
+  });
+});
+
 describe('menuTemplate · close and quit (owner request 2026-09-25)', () => {
   it('on macOS File ends with the `close` role after the save entries, once, with no hand-set accelerator', () => {
     const S = desktopStrings('en').menu;
@@ -174,10 +231,13 @@ describe('menuTemplate · close and quit (owner request 2026-09-25)', () => {
     expect(flat(menus).filter((i) => i.role === 'quit')).toHaveLength(1);
   });
 
-  it('on Windows/Linux File has no `close`: the `windowMenu` role already lists Close (Ctrl+W)', () => {
+  it('on Windows/Linux File has no `close`: the Window menu already lists Close (Ctrl+W)', () => {
+    const S = desktopStrings('en').menu;
     const menus = menuTemplate([], 'win32', vi.fn(), desktopStrings('en'));
-    expect(flat(menus).filter((i) => i.role === 'close')).toHaveLength(0);
-    expect(menus.some((m) => m.role === 'windowMenu')).toBe(true);
+    const archivo = menus.find((m) => m.label === S.archivo)!.submenu as MenuItemConstructorOptions[];
+    expect(archivo.filter((i) => i.role === 'close')).toHaveLength(0);
+    const ventana = menus.find((m) => m.label === S.ventana)!.submenu as MenuItemConstructorOptions[];
+    expect(ventana.filter((i) => i.role === 'close')).toHaveLength(1);
     expect(flat(menus).filter((i) => i.role === 'quit')).toHaveLength(1);
   });
 });

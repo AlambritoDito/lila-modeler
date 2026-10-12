@@ -33,6 +33,12 @@ describe('e2eOverrides', () => {
     expect(e2eOverrides({ LILA_E2E_IMPORT: '' })).toEqual({});
   });
 
+  it('LILA_E2E_EXPORT_FILE (#564): the same three forms, for the export save dialog', () => {
+    expect(e2eOverrides({ LILA_E2E_EXPORT_FILE: '/tmp/lila-e2e/resultados.xlsx' })).toEqual({ exportFile: '/tmp/lila-e2e/resultados.xlsx' });
+    expect(e2eOverrides({ LILA_E2E_EXPORT_FILE: 'cancel' })).toEqual({ exportFile: null });
+    expect(e2eOverrides({ LILA_E2E_EXPORT_FILE: '' })).toEqual({});
+  });
+
   it('las dos rutas conviven: abrir y guardar son diálogos distintos', () => {
     expect(e2eOverrides({ LILA_E2E_FOLDER: '/tmp/a', LILA_E2E_SAVE_FILE: '/tmp/b.lila' })).toEqual({
       folder: '/tmp/a',
