@@ -62,10 +62,12 @@ jobs:
       - run: npm pack --workspace @lila-modeler/mcp --dry-run
       - name: Publish to npm (explicit owner action only)
         if: env.PUBLISH_NPM == 'true'
-        # A prerelease version (1.0.0-beta.1) goes to the `beta` dist-tag so `latest` never
-        # points at a beta; a stable version goes to `latest`. Publication is only possible from
-        # a dispatch on a `v*` tag. Note: the registry sets `latest` on a package's very first
-        # publish regardless of --tag; check `npm view <package> dist-tags` after a first publish.
+        # A prerelease version (1.0.0-beta.1) goes to the `beta` dist-tag; a stable version goes
+        # to `latest`. While `latest` itself is still a prerelease (the beta line before 1.0.0),
+        # it follows the newest one too, so `npx @lila-modeler/mcp` without `@beta` is current;
+        # once a stable version is out, a beta never moves `latest` again. Moving it needs
+        # «Allow npm dist-tag» on each package's trusted publisher. Publication is only possible
+        # from a dispatch on a `v*` tag.
         # The engine goes first: @lila-modeler/mcp pins the same engine version, so it must exist
         # on the registry before the server that depends on it (ADR-030).
         run: |
@@ -78,10 +80,21 @@ jobs:
             # what is already on the registry instead of failing on it before reaching the rest.
             if npm view "$package@$version" version >/dev/null 2>&1; then
               echo "$package@$version is already on the registry; skipping"
-              continue
+            else
+              echo "Publishing $package@$version with dist-tag $tag"
+              npm publish --workspace "$package" --provenance --access public --tag "$tag"
             fi
-            echo "Publishing $package@$version with dist-tag $tag"
-            npm publish --workspace "$package" --provenance --access public --tag "$tag"
+            # Outside the loop's skip on purpose: a rerun also repairs a `latest` that did not move.
+            latest=$(npm view "$package" dist-tags.latest 2>/dev/null || true)
+            if [ "$tag" != latest ] && case "$latest" in ''|*-*) true;; *) false;; esac; then
+              echo "Moving $package latest from ${latest:-nothing} to $version (no stable version yet)"
+              # A fresh publish can take minutes to become visible to the registry's other endpoints.
+              for attempt in 1 2 3 4 5 6 7 8 9 10; do
+                npm dist-tag add "$package@$version" latest && break
+                [ "$attempt" = 10 ] && exit 1
+                sleep 60
+              done
+            fi
           done
       - name: Report that publication was skipped
         if: env.PUBLISH_NPM != 'true'
