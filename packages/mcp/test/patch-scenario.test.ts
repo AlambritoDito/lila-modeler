@@ -306,3 +306,43 @@ test('modo (b): extendsFrom por defecto es el propio scenario', async () => {
   const resolvedExtends = posix.resolve(posix.dirname(saveTo.split('\\').join('/')), written.extends);
   expect(resolvedExtends).toBe(pedidoScenario.split('\\').join('/'));
 });
+
+/* ------------------------------------------------------------------ *
+ * #627: a patch that changes nothing writes nothing
+ * ------------------------------------------------------------------ */
+
+test('#627: a test-only patch, or a replace with the same value, leaves the file as it was', async () => {
+  const path = copyAsIs();
+  const before = readFileSync(path);
+  for (const patch of [
+    [{ op: 'test', path: '/version', value: 1 }],
+    [{ op: 'replace', path: '/resources/cajero/capacity', value: 2 }],
+  ]) {
+    const result = await client.callTool({ name: 'patch_scenario', arguments: { scenario: path, patch } });
+    expect(result.isError, textOf(result)).toBe(false);
+    const payload = JSON.parse(textOf(result)) as { written: boolean; file: string; notes: string[] };
+    expect(payload).toMatchObject({ written: false, file: path });
+    expect(payload.notes[0]).toMatch(/^the patch changes nothing, so nothing was written/);
+    expect(readFileSync(path).equals(before)).toBe(true);
+  }
+  // A real change is still written, and says so.
+  const changed = await client.callTool({
+    name: 'patch_scenario',
+    arguments: { scenario: path, patch: [{ op: 'replace', path: '/resources/cajero/capacity', value: 3 }] },
+  });
+  expect(JSON.parse(textOf(changed)).written).toBe(true);
+});
+
+test('#627: saveTo over a file that already holds the same delta writes nothing', async () => {
+  const saveTo = join(scratch, 'to-be.scenario.json');
+  const args = { scenario: pedidoScenario, saveTo, name: 'TO-BE', patch: [{ op: 'replace', path: '/resources/cajero/capacity', value: 4 }] };
+  const first = await client.callTool({ name: 'patch_scenario', arguments: args });
+  expect(JSON.parse(textOf(first)).written).toBe(true);
+  const before = readFileSync(saveTo);
+  const again = await client.callTool({ name: 'patch_scenario', arguments: { ...args, locale: 'es' } });
+  expect(again.isError, textOf(again)).toBe(false);
+  const payload = JSON.parse(textOf(again)) as { written: boolean; notes: string[] };
+  expect(payload.written).toBe(false);
+  expect(payload.notes[0]).toBe(`${saveTo.replaceAll('\\', '/')} ya tiene este escenario, así que no se escribió nada: conserva su revisión y sus corridas siguen vigentes.`);
+  expect(readFileSync(saveTo).equals(before)).toBe(true);
+});

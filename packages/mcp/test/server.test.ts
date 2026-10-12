@@ -72,7 +72,9 @@ test('listTools devuelve todas las tools', async () => {
     'export_results',
     'export_scenario_template',
     'get_process_outline',
+    'get_project',
     'get_raci_matrix',
+    'get_scenario',
     'import_scenario_sheet',
     'patch_scenario',
     'run_simulation',
@@ -341,7 +343,8 @@ test(
     expect(await main(['run', pedidoBpmn, scenarioFile, '--seed', '42', '--json', cliJson])).toBe(0);
     const expected = readFileSync(cliJson, 'utf8');
 
-    const result = await client.callTool({ name: 'run_simulation', arguments: { scenario: degraded } });
+    // `detail: "full"` is today's answer (#629): the whole RunResult, byte for byte the CLI's.
+    const result = await client.callTool({ name: 'run_simulation', arguments: { scenario: degraded, detail: 'full' } });
     expect(result.isError).toBe(false);
     expect(`${textOf(result)}\n`).toBe(expected);
 
@@ -464,7 +467,7 @@ test('run_simulation: structuredContent repite el texto, sin log, y valida contr
   const { tools } = await client.listTools();
   expect(tools.find((tool) => tool.name === 'run_simulation')?.outputSchema).toBeDefined();
 
-  const result = await client.callTool({ name: 'run_simulation', arguments: { scenario: barato() } });
+  const result = await client.callTool({ name: 'run_simulation', arguments: { scenario: barato(), detail: 'full' } });
   expect(result.isError).toBe(false);
   // El contrato MCP: con `outputSchema` declarado, `structuredContent` es obligatorio y tiene que
   // validar contra él. `safeParse` sobre el resultado real, no sobre un objeto de laboratorio.
@@ -474,6 +477,46 @@ test('run_simulation: structuredContent repite el texto, sin log, y valida contr
   // `log: false`: el event log no viaja por MCP ni siquiera duplicado en `structuredContent`.
   expect(result.structuredContent).not.toHaveProperty('log');
 });
+
+test('run_simulation: summary by default (#629), and saveTo still writes the full RunResult', async () => {
+  const saveTo = join(scratch, 'full.json');
+  const result = await client.callTool({ name: 'run_simulation', arguments: { scenario: pedidoScenario, seed: 42, replications: 2, saveTo } });
+  expect(result.isError).toBe(false);
+  const summary = JSON.parse(textOf(result)) as Record<string, unknown> & {
+    resources: Record<string, { utilization: number; resourceWaitTotal: number; totalCost: number }>;
+    topWaits: { elementId: string }[];
+    warnings: { message: string; count: number }[];
+  };
+  const full = runResultSchema.parse(JSON.parse(readFileSync(saveTo, 'utf8')));
+  expect(Object.keys(summary).sort()).toEqual(['bottlenecks', 'detail', 'process', 'replications', 'resources', 'topWaits', 'warnings']);
+  expect(summary).toMatchObject({ detail: 'summary', process: full.process, bottlenecks: full.bottlenecks, replications: 2 });
+  expect(Object.keys(summary.resources).sort()).toEqual(Object.keys(full.resources).sort());
+  expect(summary.resources['cajero']).toMatchObject({ utilization: full.resources['cajero']!.utilization, totalCost: full.resources['cajero']!.totalCost });
+  expect(summary.resources['cajero']!.resourceWaitTotal).toBeGreaterThan(0);
+  expect(summary.topWaits.length).toBeLessThanOrEqual(5);
+  expect(summary.topWaits[0]?.elementId).toBe(full.bottlenecks[0]?.elementId);
+  // The warnings each replication repeats with other numbers come once, with their count.
+  expect(summary.warnings.reduce((total, warning) => total + warning.count, 0)).toBe(full.warnings.length);
+  expect(summary.warnings.length).toBeLessThan(full.warnings.length);
+  expect(JSON.stringify(result.structuredContent, null, 2)).toBe(textOf(result));
+  expect(textOf(result).length).toBeLessThan(JSON.stringify(full, null, 2).length / 5);
+}, 60_000);
+
+test('compare_scenarios: the summary keeps the process and resource rows and the significant ones', async () => {
+  const saveTo = join(scratch, 'compare.json');
+  const args = { scenarios: [pedidoScenario, toBeScenario], seed: 42, replications: 3, saveTo };
+  const summary = await client.callTool({ name: 'compare_scenarios', arguments: args });
+  const full = await client.callTool({ name: 'compare_scenarios', arguments: { ...args, detail: 'full' } });
+  type Rows = { comparison: { count: number; omittedRows?: number; rows: { kpi: string; scope: string; significant: boolean[] }[] }; notes: string[] };
+  const small = JSON.parse(textOf(summary)) as Rows;
+  const whole = JSON.parse(textOf(full)) as Rows;
+  // `full` is the CompareResult `saveTo` writes, as `lila compare --json` does.
+  expect(`${JSON.stringify(whole.comparison, null, 2)}\n`).toBe(readFileSync(saveTo, 'utf8'));
+  const kept = whole.comparison.rows.filter((row) => row.scope === 'process' || row.scope === 'resources' || row.significant.some(Boolean));
+  expect(small.comparison).toEqual({ detail: 'summary', count: 2, rows: kept, omittedRows: whole.comparison.rows.length - kept.length });
+  expect(small.comparison.rows.map((row) => row.kpi)).toContain('elements.Task_TomarPedido.resourceWait.mean');
+  expect(small.notes).toEqual(whole.notes);
+}, 120_000);
 
 test('run_simulation: un escenario inline inválido no cita un archivo que no existe', async () => {
   const result = await client.callTool({
@@ -518,6 +561,8 @@ test('`title`, `description` y los `describe()` de las tools están en inglés',
     'Export scenario template',
     'Get RACI matrix',
     'Get process outline',
+    'Get project',
+    'Get scenario',
     'Import scenario sheet',
     'Patch scenario',
     'Run simulation',

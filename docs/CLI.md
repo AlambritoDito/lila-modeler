@@ -230,6 +230,36 @@ npx lila scenario import project.lila as-is as-is.xlsx --dry-run
 npx lila scenario import project.lila as-is as-is.xlsx
 ```
 
+## `project show` and `scenario show` (#628)
+
+What a `.lila` holds, read without writing anything — no write, no revision change:
+
+- `lila project show <project.lila>` prints the project's name and format version (2 for a
+  repository of several processes, 1 otherwise) and, per process, its slug, name, `bpmn:process`
+  id, model revision and number of flow nodes, its scenarios (entry, name, revision, `extends`)
+  and its saved runs (id, scenario, replications, simulated start, and whether the run is
+  **current** or **stale**: stale when the model or the scenario changed after it). A `.lila`
+  keeps no date of when a run was taken; `start` is the `run.start` of the scenario it ran.
+  `--json` prints `{ file, name, formatVersion, processes: [{ slug, name, processId,
+  modelRevision, elements, scenarios: [{ entry, name, revision, extends }], runs: [{ id,
+  scenario, start, replications, current }] }] }`.
+- `lila scenario show <project.lila> <scenario>` prints the scenario as stored (with its
+  `extends`), or with `--resolved` merged through `extends` with the engine's defaults — the
+  object `patch_scenario` patches, `model` relative to the scenario. Then the validator's notes
+  against the process model (errors `E-…` first, then warnings `W-…`), the checks `run` makes
+  before it simulates, so it doubles as a scenario lint; it still exits `0` when there are errors.
+  `--json` prints `{ file, process, entry, revision, resolved, scenario, runnable, notes }`.
+
+```bash
+npx lila project show examples/pedido.lila --json
+```
+Exit code: `0`.
+
+```bash
+npx lila scenario show examples/pedido.lila to-be-3-cajeros --resolved
+```
+Exit code: `0`.
+
 ## `mcp`
 
 Starts the MCP server (`@lila-modeler/mcp`) over stdio, for an MCP client to launch — not something you

@@ -39,6 +39,7 @@ import {
 } from '../bpmn/index.js';
 import { layoutMissingDiagram } from '../bpmn/edit.js';
 import { LayoutError } from '../bpmn/layout.js';
+import type { ProcessIR } from '../core/ir.js';
 import { toCsv } from '../csv.js';
 import { agentToolMessages, messages, type Locale } from '../messages/index.js';
 import { raciMatrix, type RaciMatrix } from '../process-document.js';
@@ -57,6 +58,9 @@ import {
   resolveScenarioPath,
   schemaIssueLines,
   validateScenario,
+  type ResolvedScenario,
+  type ScenarioReader,
+  type ValidateScenarioOptions,
 } from '../scenario.js';
 import {
   describeImportValue,
@@ -586,6 +590,54 @@ function problemText(problem: { code: string; message: string }): string {
   return `${problem.code}: ${problem.message}`;
 }
 
+/** What `checkScenario` found: the scenario as far as it could be read, and its problems. */
+export interface ScenarioCheck {
+  /** The scenario with `extends` merged, unparsed; absent when the chain could not be read. */
+  readonly merged?: Record<string, unknown>;
+  /** The parsed scenario (defaults applied), when it has a valid shape with `model` and `run`. */
+  readonly scenario?: ResolvedScenario;
+  /** `code: message` of every problem that keeps it from running. */
+  readonly errors: readonly string[];
+  /** `code: message` of the lint warnings. */
+  readonly warnings: readonly string[];
+}
+
+/**
+ * The scenario at `path` checked the way it will run: `extends` resolved through `read`, the shape
+ * (`parseScenario`), `model` and `run` present, then `validateScenario` against `ir`. Every problem
+ * is reported instead of thrown, so a draft can be listed with what it lacks (`create_project`,
+ * `get_scenario`).
+ */
+export function checkScenario(
+  path: string,
+  read: ScenarioReader,
+  ir: ProcessIR,
+  options: { readonly locale: Locale; readonly elsewhere?: ValidateScenarioOptions['elsewhere'] },
+): ScenarioCheck {
+  const { locale } = options;
+  let merged: Record<string, unknown>;
+  try {
+    merged = resolveExtends(path, read);
+  } catch (error) {
+    return { errors: [error instanceof Error ? error.message : String(error)], warnings: [] };
+  }
+  const parsed = parseScenario(merged, { locale });
+  if (!parsed.success) return { merged, errors: schemaIssueLines(parsed.error.issues, { locale }), warnings: [] };
+  const missing = [
+    ...(parsed.data.model === undefined ? [messages(locale).mcp.patchedMissingModel()] : []),
+    ...(parsed.data.run === undefined ? [messages(locale).mcp.patchedMissingRun()] : []),
+  ];
+  if (missing.length > 0) return { merged, errors: missing, warnings: [] };
+  const scenario = parsed.data as ResolvedScenario;
+  const problems = validateScenario(scenario, ir, { locale, ...(options.elsewhere === undefined ? {} : { elsewhere: options.elsewhere }) });
+  return {
+    merged,
+    scenario,
+    errors: problems.filter((p) => p.severity === 'error').map(problemText),
+    warnings: problems.filter((p) => p.severity === 'warning').map(problemText),
+  };
+}
+
 /** A scenario's diagnostics against the new model, its `extends` read from the scenarios given. */
 function scenarioDiagnostics(
   root: string,
@@ -595,30 +647,14 @@ function scenarioDiagnostics(
   locale: Locale,
 ): CreatedScenario {
   const C = messages(locale).cli;
-  let raw: Record<string, unknown>;
-  try {
-    raw = resolveExtends(`${root}${entry}`, (path) => {
-      const name = path.startsWith(root) ? path.slice(root.length) : '';
-      if (!Object.hasOwn(scenarios, name)) {
-        throw new Error(C.lilaScenarioUnknown(path.startsWith(root) ? name : path, 'model', root.slice(0, -1), Object.keys(scenarios).sort().join(', ')));
-      }
-      return scenarios[name];
-    });
-  } catch (error) {
-    return { entry, runnable: false, errors: [error instanceof Error ? error.message : String(error)], warnings: [] };
-  }
-  const parsed = parseScenario(raw, { locale });
-  if (!parsed.success) {
-    return { entry, runnable: false, errors: schemaIssueLines(parsed.error.issues, { locale }), warnings: [] };
-  }
-  const missing = [
-    ...(parsed.data.model === undefined ? [messages(locale).mcp.patchedMissingModel()] : []),
-    ...(parsed.data.run === undefined ? [messages(locale).mcp.patchedMissingRun()] : []),
-  ];
-  if (missing.length > 0) return { entry, runnable: false, errors: missing, warnings: [] };
-  const problems = validateScenario(parsed.data as Parameters<typeof validateScenario>[0], report.ir, { locale });
-  const errors = problems.filter((p) => p.severity === 'error').map(problemText);
-  const warnings = problems.filter((p) => p.severity === 'warning').map(problemText);
+  const read = (path: string): unknown => {
+    const name = path.startsWith(root) ? path.slice(root.length) : '';
+    if (!Object.hasOwn(scenarios, name)) {
+      throw new Error(C.lilaScenarioUnknown(path.startsWith(root) ? name : path, 'model', root.slice(0, -1), Object.keys(scenarios).sort().join(', ')));
+    }
+    return scenarios[name];
+  };
+  const { errors, warnings } = checkScenario(`${root}${entry}`, read, report.ir, { locale });
   return { entry, runnable: errors.length === 0, errors, warnings };
 }
 

@@ -54,6 +54,8 @@ const EN_USAGE = `Usage: lila validate <file.bpmn|project.lila> [--process slug]
        lila scenario import <project.lila> <scenario> <sheet.xlsx|sheet.csv> [--process slug]
                             [--dry-run] [--json]
        lila scenario template <project.lila> <scenario> --out sheet.xlsx [--process slug] [--force]
+       lila scenario show <project.lila> <scenario> [--process slug] [--resolved] [--json]
+       lila project show <project.lila> [--json]
        lila mcp
 
 Commands:
@@ -69,6 +71,8 @@ Commands:
              attributes into the .lila. raci: prints the RACI matrix of the process document.
   scenario   import: applies a scenario sheet (.xlsx/.csv) to a scenario of the .lila, like the
              app's Import Excel/CSV. template: writes that sheet, filled in, for a person.
+             show: prints a scenario as stored (or --resolved) with the validator's notes.
+  project    show: lists the processes of a .lila, their scenarios and saved runs. Read only.
   mcp        Starts the MCP server over stdio (for Claude Code / Desktop). See docs/MCP.md.
 
 A model can be a .bpmn or a .lila project. With a .lila, a scenario is a .json path or, when no
@@ -631,5 +635,9 @@ export const en: Catalog = {
     patchedName: (name) => `${name} (patched)`,
     inlineScenario: () => 'inline scenario',
     projectNotLila: (file) => `\`project\` must be a .lila file; got ${file}.`,
+    patchNoChange: () =>
+      'the patch changes nothing, so nothing was written: the scenario keeps its revision and its runs stay current.',
+    patchSameTarget: (target) =>
+      `${target} already holds this scenario, so nothing was written: it keeps its revision and its runs stay current.`,
   },
 };

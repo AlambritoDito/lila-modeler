@@ -1,6 +1,6 @@
 {
   "name": "@lila-modeler/mcp",
-  "version": "1.0.0-beta.23",
+  "version": "1.0.0-beta.24",
   "description": "MCP server (stdio) for Lila Modeler: model, validate, simulate and document BPMN processes from an AI agent, on top of @lila-modeler/engine",
   "license": "Apache-2.0",
   "type": "module",
@@ -34,10 +34,10 @@
   },
   "scripts": {
     "build": "tsc --build",
-    "prepack": "npm run build"
+    "prepack": "npm run build && node scripts/bundle-resources.mjs"
   },
   "dependencies": {
-    "@lila-modeler/engine": "1.0.0-beta.23",
+    "@lila-modeler/engine": "1.0.0-beta.24",
     "@modelcontextprotocol/server": "^2.0.0",
     "zod": "^4.5.4"
   },
