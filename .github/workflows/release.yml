@@ -74,6 +74,12 @@ jobs:
           case "$version" in *-*) tag=$(echo "$version" | sed -E 's/^[^-]+-([A-Za-z]+).*$/\1/');; esac
           npm --version
           for package in @lila-modeler/engine @lila-modeler/mcp; do
+            # A rerun after a partial failure (the engine published, the server refused) must skip
+            # what is already on the registry instead of failing on it before reaching the rest.
+            if npm view "$package@$version" version >/dev/null 2>&1; then
+              echo "$package@$version is already on the registry; skipping"
+              continue
+            fi
             echo "Publishing $package@$version with dist-tag $tag"
             npm publish --workspace "$package" --provenance --access public --tag "$tag"
           done
