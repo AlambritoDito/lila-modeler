@@ -415,8 +415,9 @@ mismo desde una terminal.
   reescribirse con algo de menos.
 - **Maquetado.** Por defecto (`layout: true`) el proceso editado se maqueta de nuevo con el mismo
   maquetador y el mismo arreglo de carriles que `create_process`: se pierden las posiciones puestas a
-  mano en ese proceso; las anotaciones de texto y los objetos de datos siguen a su elemento; los
-  pools de abajo (o de al lado) se mueven en bloque lo que creció. Con `layout: false` cada figura
+  mano en ese proceso; las anotaciones de texto y los objetos de datos siguen a su elemento, y los
+  que aún no tienen figura (un modelo que llegó sin diagrama) reciben una junto a él, o en una fila
+  bajo el dibujo si no cuelgan de nada (#630); los pools de abajo (o de al lado) se mueven en bloque lo que creció. Con `layout: false` cada figura
   conserva su lugar: un paso nuevo va a la derecha del paso al que sigue, en su carril (que crece una
   fila si está lleno), y solo se vuelven a trazar los flujos cuyos extremos cambiaron. Para hacer
   lugar a un paso insertado entre dos pasos muy juntos, lo que está a su derecha en ese pool se

@@ -392,7 +392,9 @@ terminal.
   something missing.
 - **Layout.** By default (`layout: true`) the edited process is laid out again with the same
   layouter and lane fix as `create_process`: positions set by hand in that process are lost; text
-  annotations and data objects follow their element; pools below (or beside) it move as one piece
+  annotations and data objects follow their element, and those with no shape yet (a model that
+  arrived without a diagram) get one beside it, or in a row below the drawing when they hang on
+  nothing (#630); pools below (or beside) it move as one piece
   by as much as it grew. With `layout: false` every shape keeps its place: a new step goes right of
   the step it follows, in its lane (which grows a row when it is full), and only flows whose ends
   changed are drawn again. To make room for a step inserted between two close steps, what lies to
