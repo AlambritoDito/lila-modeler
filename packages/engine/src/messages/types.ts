@@ -483,6 +483,10 @@ export interface McpMessages {
   inlineScenario: () => string;
   /** `patch_scenario` with a `project` that is not a `.lila` (#466). */
   projectNotLila: (file: string) => string;
+  /** `patch_scenario` whose result is the scenario it read (#627): nothing is written. */
+  patchNoChange: () => string;
+  /** `patch_scenario` with `saveTo` whose target already holds the candidate (#627). */
+  patchSameTarget: (target: string) => string;
 }
 
 export interface Catalog {

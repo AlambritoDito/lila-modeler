@@ -20,6 +20,7 @@ interview ([`MCP.md`](MCP.md#resources-and-prompt)).
 
 | Step | Tool | CLI |
 | --- | --- | --- |
+| 0. The file exists: read what it holds | `get_project`, `get_scenario` | `lila project show`, `lila scenario show` |
 | 1. Read the interview, write an outline | (the agent) | |
 | 2. Create the process | `create_process` | `lila process create` |
 | 3. Fix it | `edit_process`, `get_process_outline` | `lila process edit`, `lila process show` |
@@ -38,6 +39,21 @@ Two rules shape the flow:
 - **Everything is the `.lila`.** There is no server state. Every tool reads the file, does its
   work and, if it writes, writes the whole file atomically. The desktop app that has it open
   reloads it by itself.
+
+### 0. An existing `.lila`: `get_project`
+
+When the `.lila` already exists, start here, not with the interview:
+
+```json
+{ "name": "get_project", "arguments": { "project": "card.lila" } }
+```
+
+It lists the processes (their `slug` is what `process` takes when there are several), each one's
+scenarios with their revisions and `extends`, and the saved runs, `current` or stale. It writes
+nothing. `get_scenario` reads one scenario, as stored or `resolved: true`, with the validator's
+`notes`; read a scenario with it before you patch it, never with a `patch_scenario` of only
+`test`. Then pick the step below that the person asked for: a new process (step 2), a fix
+(step 3), new numbers (step 5) or a new run (step 6).
 
 ### 1. From the interview to an outline
 
@@ -94,7 +110,8 @@ print. Both are optional; the document is better with them.
 ### 5. The scenario
 
 The base scenario `as-is.scenario.json` starts with the app's defaults (20 cases, one a minute, a
-one-hour run) plus what the outline carried. Fill in the rest from the interview with one
+one-hour run) plus what the outline carried (`get_scenario` with `resolved: true` shows it, with
+the paths a patch uses). Fill in the rest from the interview with one
 `patch_scenario` (JSON Patch, validated before anything is written):
 
 ```json

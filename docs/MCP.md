@@ -3,7 +3,7 @@
 > Read this in: [Español](es/MCP.md)
 
 `packages/mcp` (`@lila-modeler/mcp`) provides a stdio [MCP](https://modelcontextprotocol.io) server
-backed by `@lila-modeler/engine`. Its sixteen tools reuse the CLI validation and simulation pipeline — see
+backed by `@lila-modeler/engine`. Its eighteen tools reuse the CLI validation and simulation pipeline — see
 [`docs/CLI.md`](CLI.md) for the same pipeline driven from a terminal instead of an MCP client.
 
 For the whole flow an agent follows — interview, outline, scenario, run, document, and seeing the
@@ -40,8 +40,10 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
   process and resource rows and the significant ones; `detail: "full"` returns every row.
 - **`patch_scenario({ scenario, project?, process?, patch, saveTo?, extendsFrom?, name?, description?, locale? })`**
   applies [JSON Patch](https://www.rfc-editor.org/rfc/rfc6902), validates the result and writes
-  only when valid. It returns `{ scenario, file, notes }` (plus `process` and `entry` inside a
-  `.lila`).
+  only when valid. It returns `{ scenario, file, written, notes }` (plus `process` and `entry` inside a
+  `.lila`). A patch that changes nothing (only `test`, or a `saveTo` whose target already holds the
+  result) writes nothing: `written` is `false`, `notes` says so first, and the scenario keeps its
+  revision, so its saved runs stay current (#627).
 
 - **`export_diagram({ project | path, process?, saveTo?, overwrite?, locale? })`** draws the
   diagram of a `.lila` process (`project`) or a `.bpmn` (`path`) as SVG with the engine's own
@@ -77,9 +79,16 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
 - **`create_project({ path, name, bpmn, scenarios?, overwrite?, locale? })`** creates a new `.lila`
   from a BPMN you already have (an agent that starts from steps uses `create_process`) and
   scenarios. Returns `{ file, name, processId, warnings, scenarios }`.
+- **`get_project({ project, locale? })`** lists what a `.lila` holds, writing nothing: its
+  processes, their scenarios and their saved runs, current or stale. Returns
+  `{ file, name, formatVersion, processes }`.
+- **`get_scenario({ project, process?, scenario, resolved?, locale? })`** reads one scenario as
+  stored, or resolved through `extends`, with the validator's notes, writing nothing. Returns
+  `{ file, process, entry, revision, resolved, scenario, runnable, notes }`.
 
-The three export tools are described in [App-free exports](#app-free-exports); the last five in
-[Modelling tools for agents](#modelling-tools-for-agents).
+The three export tools are described in [App-free exports](#app-free-exports); the five after
+them in [Modelling tools for agents](#modelling-tools-for-agents); the last two in
+[Reading a project](#reading-a-project).
 
 Every tool that takes a model also takes a `.lila` project; see [A `.lila` as input](#a-lila-as-input).
 
@@ -123,7 +132,7 @@ A `.lila` (`docs/PROJECT_FORMAT.md`) is accepted wherever a tool takes a model (
   and writes only a valid result, as on disk. The write goes through the engine's codec
   (`encodeLila`) to a temporary file that is then renamed over the `.lila`, so a failure never
   leaves a partial archive. The scenario's revision goes up by one, so the app sees the runs of
-  the old version as stale. Every other process, scenario and run is carried through unchanged
+  the old version as stale; a patch that changes nothing is not written and leaves the revision as it was. Every other process, scenario and run is carried through unchanged
   and, in an archive written by the app or the engine, byte for byte; entries outside the
   project layout are dropped, as in any `.lila` save. If the file changed on disk while the tool
   worked (another program, another MCP server, the CLI or the desktop app), nothing is written and
@@ -139,6 +148,40 @@ A `.lila` (`docs/PROJECT_FORMAT.md`) is accepted wherever a tool takes a model (
 ```json
 { "name": "patch_scenario", "arguments": { "project": "project.lila", "process": "pedido", "scenario": "as-is",
   "saveTo": "to-be-4", "patch": [{ "op": "replace", "path": "/resources/cajero/capacity", "value": 4 }] } }
+```
+
+## Reading a project
+
+`get_project` and `get_scenario` (#628) are `lila project show` and `lila scenario show`
+(`docs/CLI.md`) as tools. They only read: no write, no revision change, the `.lila` stays byte for
+byte as it was. Call `get_project` first on a file that already exists, instead of finding its
+processes, scenarios and runs through the errors of other tools.
+
+- **`get_project`** returns `{ file, name, formatVersion, processes }`. `formatVersion` is 2 for a
+  repository of several processes and 1 otherwise. Each process has `slug` (what `process` takes),
+  `name`, `processId` (its `bpmn:process`), `modelRevision`, `elements` (flow nodes: tasks, events,
+  gateways; `null` when the model cannot be read), `scenarios` (`entry`, `name`, `revision`,
+  `extends`) and `runs` (`id`, `scenario`, `start`, `replications`, `current`). A run is
+  `current: false` (stale) when the model or its scenario changed after it: `export_results` and
+  `export_document` take it only by id. A `.lila` keeps no date of when a run was taken; `start` is
+  the simulated start (`run.start`) of the scenario it ran.
+- **`get_scenario`** returns `{ file, process, entry, revision, resolved, scenario, runnable, notes }`.
+  `scenario` is the entry as stored (with its `extends`), or with `resolved: true` merged through
+  `extends` with the engine's defaults: the object `patch_scenario` patches, with `model` relative
+  to the scenario. `notes` are the validator's against the process model — errors (`E-…`) first,
+  then warnings (`W-…`), the checks `run_simulation` makes before it simulates — so it works as a
+  scenario lint; `runnable` is `false` when there is an error. A scenario whose `extends` cannot be
+  resolved comes back with `scenario: null` (when resolved) and the reason in `notes`.
+
+To read a scenario, use `get_scenario`, not a `patch_scenario` with only `test`: that one writes
+nothing either (#627), but it is not meant for reading.
+
+```json
+{ "name": "get_project", "arguments": { "project": "credit.lila" } }
+```
+
+```json
+{ "name": "get_scenario", "arguments": { "project": "credit.lila", "scenario": "as-is", "resolved": true } }
 ```
 
 ## App-free exports
@@ -621,8 +664,8 @@ mcp_servers:
 - Run `/reload-mcp` in a Hermes session after editing the file. Hermes names the tools
   `mcp_lila_<tool>` (`mcp_lila_create_process`); the arguments are the ones on this page.
 - `tools: { include: [...] }` limits what the agent sees, for example to the read-only
-  `validate_bpmn`, `describe_process`, `get_process_outline`, `get_raci_matrix` and `run_simulation`
-  (which writes only with `saveTo` or `saveRun`).
+  `get_project`, `get_scenario`, `validate_bpmn`, `describe_process`, `get_process_outline`,
+  `get_raci_matrix` and `run_simulation` (which writes only with `saveTo` or `saveRun`).
 
 The same block, with `command` and `args`, is the generic stdio configuration for any other MCP
 client.

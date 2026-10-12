@@ -248,6 +248,40 @@ describe('patch_scenario on a .lila', () => {
     expect(run.isError, run.text).toBe(false);
   });
 
+  test('#627: a patch that changes nothing leaves the .lila bytes and the revision as they were', async () => {
+    const file = archive('repo.lila', repositoryDocument());
+    const untouched = readFileSync(file);
+    const noOp = await call('patch_scenario', {
+      project: file,
+      process: 'pedido',
+      scenario: 'to-be-3-cajeros',
+      patch: [{ op: 'test', path: '/version', value: 1 }],
+    });
+    expect(noOp.isError, noOp.text).toBe(false);
+    expect(JSON.parse(noOp.text)).toMatchObject({ written: false, process: 'pedido', entry: 'to-be-3-cajeros.scenario.json' });
+    expect(JSON.parse(noOp.text).notes[0]).toMatch(/^the patch changes nothing/);
+    // A scenario that `extends` another is not flattened by a patch that changes nothing.
+    expect(readFileSync(file).equals(untouched)).toBe(true);
+
+    // saveTo onto an entry that already holds the same delta: nothing written either.
+    const delta = repositoryDocument().scenarios['to-be-3-cajeros.scenario.json'] as { name: string; resources: { cajero: { capacity: number } } };
+    const same = await call('patch_scenario', {
+      project: file,
+      process: 'pedido',
+      scenario: 'as-is',
+      saveTo: 'to-be-3-cajeros',
+      name: delta.name,
+      patch: [{ op: 'replace', path: '/resources/cajero/capacity', value: delta.resources.cajero.capacity }],
+    });
+    expect(same.isError, same.text).toBe(false);
+    expect(JSON.parse(same.text).written, same.text).toBe(false);
+    expect(readFileSync(file).equals(untouched)).toBe(true);
+    expect(processesOf(decodeLila(new Uint8Array(readFileSync(file))))[0]!.scenarioRevisions).toEqual({
+      'as-is.scenario.json': 1,
+      'to-be-3-cajeros.scenario.json': 1,
+    });
+  });
+
   test('a patch that leaves the scenario invalid writes nothing', async () => {
     const file = archive('pedido.lila', pedidoDocument());
     const untouched = readFileSync(file);
