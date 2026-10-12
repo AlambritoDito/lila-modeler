@@ -34,7 +34,7 @@
   },
   "scripts": {
     "build": "tsc --build",
-    "prepack": "npm run build"
+    "prepack": "npm run build && node scripts/bundle-resources.mjs"
   },
   "dependencies": {
     "@lila-modeler/engine": "1.0.0-beta.23",

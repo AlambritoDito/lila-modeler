@@ -11,7 +11,10 @@ from the synthetic interview `packages/mcp/test/fixtures/entrevista-tarjeta.txt`
 desktop app, so it is checked by hand with `tools/agent-live-check.mjs`.
 
 The server is its own npm package, started with `npx -y @lila-modeler/mcp`; setting it up in each
-client is in [`MCP.md`](MCP.md#installation).
+client is in [`MCP.md`](MCP.md#installation). A client that only has MCP reads this guide as the
+resource `lila://guide` (the formats are `lila://outline-format`, `lila://scenario-format` and
+`lila://scenario-schema`), and the prompt `interview-to-process` starts the flow below with an
+interview ([`MCP.md`](MCP.md#resources-and-prompt)).
 
 ## The flow
 
@@ -138,10 +141,14 @@ each field before → after, `issues` the rows it could not apply).
 { "name": "run_simulation", "arguments": { "model": "card.lila", "scenario": "as-is", "seed": 42, "replications": 10, "saveRun": true } }
 ```
 
-The answer is the `RunResult` (`structuredContent`, [`RESULTS_FORMAT.md`](RESULTS_FORMAT.md)) plus a
-second text block `{ "savedRun": { "id", … } }`. The run is stored in the `.lila` exactly as the app
-stores it, so the app shows it as the current run and the exports use it. Use a fixed `seed` so
-the person can reproduce the numbers; use `compare_scenarios` to compare AS-IS and TO-BE.
+The answer is a summary of the run, a few KB: `process`, `bottlenecks`, each resource's utilization,
+wait and cost, the elements that wait most (`topWaits`) and the warnings grouped; `detail: "full"`
+returns the whole `RunResult` ([`RESULTS_FORMAT.md`](RESULTS_FORMAT.md)), which is large. A second
+text block says `{ "savedRun": { "id", … } }`. The run is stored in full in the `.lila`, exactly as
+the app stores it, so the app shows it as the current run and the exports use it. Use a fixed
+`seed` so the person can reproduce the numbers; use `compare_scenarios` to compare AS-IS and TO-BE
+(its summary keeps the process and resource rows and the significant differences). A long run
+reports progress per replication and can be cancelled.
 
 ### 7. Exports
 
@@ -261,5 +268,6 @@ the same `.lila`.
   be removed.
 - **Scenario fields from the outline** are only `duration`, `resources` and branch `probability`.
   Arrivals, calendars, costs and capacities go through `patch_scenario` or a sheet.
-- **Simulation is synchronous** in the server: a long run blocks the server until it finishes. Keep
-  replications reasonable while iterating.
+- **A long run takes its time.** The server keeps answering and reports each replication, and a
+  cancelled call stops the run, but the run itself is not faster. Keep replications reasonable
+  while iterating.

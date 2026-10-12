@@ -9,6 +9,10 @@ backed by `@lila-modeler/engine`. Its eighteen tools reuse the CLI validation an
 For the whole flow an agent follows — interview, outline, scenario, run, document, and seeing the
 result in the app — read the [agent guide](AGENT_GUIDE.md).
 
+Besides the tools, the server offers that guide, the outline and scenario formats and the scenario
+JSON Schema as resources, and the guide's flow as the prompt `interview-to-process`; see
+[Resources and prompt](#resources-and-prompt).
+
 ## Tools
 
 - **`validate_bpmn({ path | xml, process?, locale? })`** parses and validates BPMN and returns the same JSON
@@ -18,18 +22,22 @@ result in the app — read the [agent guide](AGENT_GUIDE.md).
   `resumen`: node counts, gateway outputs, lanes, flattened subprocesses, ignored processes
   and validation status. An optional scenario path resolves `extends` and adds referenced
   resources. An unreadable scenario is reported in the summary without failing the tool.
-- **`run_simulation({ model?, process?, scenario, seed?, replications?, saveTo?, saveRun?, locale? })`** validates
+- **`run_simulation({ model?, process?, scenario, seed?, replications?, saveTo?, saveRun?, detail?, locale? })`** validates
   the model and scenario, simulates with `log: false` and returns the same `RunResult` as
   `lila run --json`. It supports resources and calendars. `scenario` may be a JSON file path
   or an inline resolved scenario. `model` defaults to `scenario.model`; a supplied different
   model is rejected. The response includes text, `structuredContent` and an `outputSchema`.
+  By default the answer is a summary; `detail: "full"` returns the whole `RunResult` (see
+  [Summary or full results](#summary-or-full-results)). Long runs report progress and can be
+  cancelled ([Progress and cancellation](#progress-and-cancellation)).
   With a `.lila` `model` and a scenario of it, `saveRun: true` stores the run in the project (see
   [Saving a run](#saving-a-run)).
-- **`compare_scenarios({ model?, process?, scenarios, seed?, replications?, saveTo?, locale? })`** validates
+- **`compare_scenarios({ model?, process?, scenarios, seed?, replications?, saveTo?, detail?, locale? })`** validates
   all scenarios before running any. Two or more scenarios must use the same model; the first
   is the baseline. Paths and inline objects may be mixed. Returns `{ comparison, notes }`,
   with the same `CompareResult` as `lila compare --json`. Notes cover seeds, units, insufficient
-  replications for confidence intervals, and engine warnings.
+  replications for confidence intervals, and engine warnings. By default `comparison` keeps the
+  process and resource rows and the significant ones; `detail: "full"` returns every row.
 - **`patch_scenario({ scenario, project?, process?, patch, saveTo?, extendsFrom?, name?, description?, locale? })`**
   applies [JSON Patch](https://www.rfc-editor.org/rfc/rfc6902), validates the result and writes
   only when valid. It returns `{ scenario, file, written, notes }` (plus `process` and `entry` inside a
@@ -217,8 +225,9 @@ model XML and the resolved scenario (with `model: "model.bpmn"`), built by the s
 the app uses (`storedRun`). The app then opens it as the current run of that scenario, and
 `export_document` / `export_results` use it. It needs a `.lila` `model` and a scenario **of the
 archive** (by name); a `.bpmn`, a scenario file on disk or an inline scenario is `isError`, after
-nothing was written. The answer's `structuredContent` is still the `RunResult`; a second text block
-says `{ "savedRun": { "id", "file", "process", "scenario" } }`.
+nothing was written. The stored run is always the full `RunResult`; the answer (its text and
+`structuredContent`) is the summary or the full result as `detail` asks. A second text block says
+`{ "savedRun": { "id", "file", "process", "scenario" } }`.
 
 The write is atomic, under the file's lock. If another writer saved the `.lila` meanwhile, the
 archive is read again and the run appended to what is there now, so concurrent saves all land. If
@@ -453,6 +462,77 @@ terminal.
   "warnings": [], "outline": { … } }
 ```
 
+## Summary or full results
+
+A full `RunResult` lists every element and flow with every statistic: about 70 KB (some 20k tokens)
+for a ten-step process, and a full comparison more than twice that. `run_simulation` and
+`compare_scenarios` therefore answer with a summary by default (#629), and `detail: "full"` returns
+today's whole result. `saveTo` and `saveRun` always store the full result, whatever `detail` says,
+so a client with a filesystem can keep everything and read only the summary.
+
+The summary of `run_simulation` (`"detail": "summary"`):
+
+- `process`: cycle time, wait time, throughput, cost per case and `byEndEvent`, as in the full result;
+- `bottlenecks`, as in the full result;
+- `resources`: for each resource, `utilization`, `resourceWaitTotal` (the resource wait, in seconds,
+  of the elements that request it; an element that requests two resources counts for both) and
+  `totalCost`;
+- `topWaits`: the five elements that wait most (resource wait plus off-hours wait), with their
+  `name`, `completed`, `resourceWaitMean`, `resourceWaitTotal`, `offHoursWaitMean` and
+  `queueLengthMean`;
+- `replications`, the number of replications (when there are several), and `cancelled` /
+  `completedReplications` as in the full result;
+- `warnings` as `{ message, count }`: a warning that each replication repeats with other numbers
+  (`… (2941 times)`, `… 1457 cases …`) comes once, with the first message and how many times it came up.
+
+The summary of `compare_scenarios` keeps `{ comparison, notes }`: `comparison` has `count`, the rows
+of scope `process` and `resources`, every other row marked `significant` for some scenario, and
+`omittedRows`, the number of rows left out. The rows are the full result's rows, unchanged.
+
+For the credit card process of the [agent guide](AGENT_GUIDE.md) flow (`agent-flow.e2e.test.ts`) the summary is
+about 4.4 KB against 68 KB in full; a test keeps it under 8 KB.
+
+```json
+{ "name": "run_simulation", "arguments": { "scenario": "examples/pedido/as-is.scenario.json", "seed": 42, "detail": "full" } }
+```
+
+## Resources and prompt
+
+The server serves the docs an agent needs as MCP resources, in the server's language (`lila mcp
+--lang`, `LILA_LANG`…; English by default), so a client that only has MCP does not have to guess the
+formats from the tool descriptions:
+
+| URI | Content |
+| --- | --- |
+| `lila://guide` | The [agent guide](AGENT_GUIDE.md) (`docs/es/GUIA-AGENTES.md` in Spanish). |
+| `lila://outline-format` | The outline: the guide's example and field table, then [the rules](#creating-a-process-from-an-outline). |
+| `lila://scenario-format` | [`SCENARIO_FORMAT.md`](SCENARIO_FORMAT.md). |
+| `lila://scenario-schema` | [`scenario.schema.json`](scenario.schema.json), the JSON Schema of a scenario. |
+
+The prompt `interview-to-process` (arguments `transcript` and `project`, both optional) is the
+guide's flow, steps 1 to 8, followed by the interview; without `transcript` it asks for it first.
+
+They are the docs themselves: from a checkout the server reads `docs/`, and the published package
+carries copies of the same files in `dist/resources/` (`prepack` runs
+`packages/mcp/scripts/bundle-resources.mjs`).
+
+```json
+{ "method": "resources/read", "params": { "uri": "lila://guide" } }
+```
+
+## Progress and cancellation
+
+`run_simulation` and `compare_scenarios` simulate in a worker thread, so the server keeps answering
+(a `ping`, other calls) while a run works. When the call carries `_meta.progressToken`, the server
+sends `notifications/progress` once per completed replication, with `progress` (replications done)
+and `total` (`run.replications`, or the sum over the scenarios of a comparison). A client's
+`notifications/cancelled` stops the run at once: the worker is terminated, nothing is saved, and,
+as MCP requires, no answer is sent for the cancelled request.
+
+```json
+{ "method": "tools/call", "params": { "name": "run_simulation", "arguments": { "scenario": "examples/pedido/as-is.scenario.json", "replications": 30 }, "_meta": { "progressToken": 1 } } }
+```
+
 ## Language
 
 Tool titles, descriptions and schema descriptions are English protocol metadata. Response
@@ -673,7 +753,8 @@ prevents producing a result. Messages identify the tool and offending scenario (
 Writes use the server process's filesystem permissions. Files are staged in the destination
 directory and published with `rename`, preventing partial JSON reads. An existing file is
 replaced; an existing directory is rejected. The export tools are the exception: they never
-replace a file unless `overwrite: true` (see [App-free exports](#app-free-exports)). `compare_scenarios` saves only `comparison`,
+replace a file unless `overwrite: true` (see [App-free exports](#app-free-exports)). `run_simulation` and `compare_scenarios` save the
+full result whatever `detail` asks. `compare_scenarios` saves only `comparison`,
 without `notes`, matching CLI JSON output. For `patch_scenario`, omitting `saveTo` selects
 in-place editing; supplying it selects the derived-scenario mode described above.
 
@@ -710,9 +791,8 @@ stays in the foreground, so it is not a CI smoke test.
 
 ## Known limitations
 
-- Simulation is synchronous in the server process. It blocks requests, including ping and
-  cancellation notifications; progress and cancellation would require a worker integration.
-- Simulation results are returned as both text and `structuredContent`, increasing payload size.
+- With `detail: "full"`, simulation results are returned as both text and `structuredContent`,
+  doubling a large payload; the default summary keeps it small.
 - `compare_scenarios` returns structured content but does not publish an `outputSchema`.
 - File writes use server permissions and can overwrite files without an interactive confirmation.
 - `create_process` lays out with `bpmn-auto-layout` 1.3, which draws no pool or lanes: Lila keeps
