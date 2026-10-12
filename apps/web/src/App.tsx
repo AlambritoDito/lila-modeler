@@ -511,6 +511,11 @@ function Tarjeta({ tono, kicker, titulo, texto, children, lila = false }: { tono
   );
 }
 
+/** #554: a held key's repeats do not click the Run/Cancel button again once it has swapped. */
+function sinAutorepeticion(e: React.KeyboardEvent): void {
+  if (e.repeat) e.preventDefault();
+}
+
 export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; bpmnFilesEnabled?: boolean }): React.JSX.Element {
   const S = useStrings();
   const [modelador, setModelador] = useState<Modelador | null>(null);
@@ -2488,7 +2493,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const pulsado: Record<Region, boolean> = { ...visible, estado: visibles.estado };
   /** The Warnings tab of the results table: the live lint, then a failed Run. */
   const avisosDock: AvisoDock[] = [
-    ...validacion.problemas.map((p) => ({ mensaje: p.mensaje, severidad: p.severidad })),
+    ...validacion.problemas.map((p) => ({ mensaje: p.mensaje, severidad: p.severidad, codigo: p.codigo, ruta: p.ruta })),
     ...(sim.tipo === 'error' ? [{ mensaje: S.app.errorSimular(sim.mensaje), severidad: 'error' as const }] : []),
   ];
   const tituloRegion = (r: Region): string => (r === 'estado' && hayAlerta ? S.app.tituloEstadoForzado : S.app.tituloRegiones[r]);
@@ -2907,6 +2912,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               key={m}
               type="button"
               className={m === modo ? 'modo activo' : 'modo'}
+              aria-current={m === modo ? 'page' : undefined}
               title={DESKTOP ? `${S.app.modos[m]}${atajo(`modo:${m}`)}` : undefined}
               onClick={() => elegirModo(m)}
             >
@@ -3028,26 +3034,29 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           </button>
         )}
         {/* Única acción primaria de la app (artboard 01), y el mismo hueco enseña el progreso y
-            el botón de cancelar mientras corre (artboard 03). Corre desde cualquier modo. */}
+            el botón de cancelar mientras corre (artboard 03). Corre desde cualquier modo.
+            #554: Run and Cancel are one keyed button, so the focus a keyboard Run put there stays. 
+            Holding Enter repeats the keydown, and each repeat would click the button it has become
+            (Run → Cancel → Run…), so the repeats are dropped (`sinAutorepeticion`). */}
         {sim.tipo === 'simulando' ? (
           <>
-            <div className="progreso">
+            <div key="progreso" className="progreso">
               <div className="progreso-cifras">
                 <span>{sim.progreso === null ? S.app.preparando : S.app.replicacion(sim.progreso.replication + 1, sim.progreso.totalReplications)}</span>
                 {sim.progreso !== null && <span className="por-ciento">{S.app.porCiento(Math.round(sim.progreso.fraction * 100))}</span>}
               </div>
               <div className="progreso-pista"><div style={{ width: `${Math.round((sim.progreso?.fraction ?? 0) * 100)}%` }} /></div>
             </div>
-            <button type="button" className="boton cancelar" title={`${S.app.cancelar}${atajo('cancelar')}`} onClick={cancelarCorrida}>{S.app.cancelar}</button>
+            <button key="accion" type="button" className="boton cancelar" title={`${S.app.cancelar}${atajo('cancelar')}`} onKeyDown={sinAutorepeticion} onClick={cancelarCorrida}>{S.app.cancelar}</button>
           </>
-        ) : (
-          <button type="button" className="boton primario ejecutar" title={`${S.app.ejecutar}${atajo('ejecutar')}`} disabled={modelador === null} onClick={simularDesdeBarra}>
+        ) : (<>
+          <button key="accion" type="button" className="boton primario ejecutar" title={`${S.app.ejecutar}${atajo('ejecutar')}`} disabled={modelador === null} onKeyDown={sinAutorepeticion} onClick={simularDesdeBarra}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4l14 8-14 8z" /></svg>
             {S.app.ejecutar}
             {/* Design 01: the number of problems that hold the run back, on the button itself. */}
             {conteoProblemas > 0 && <span className="c5-insignia" title={S.c5.problemasPendientes(conteoProblemas)}>{conteoProblemas}</span>}
           </button>
-        )}
+        </>)}
         <button type="button" className="boton icono" title={`${S.app.ajustes}${atajo('ajustes')}`} aria-label={S.app.ajustes} onClick={() => ejecutar('ajustes')}>⚙</button>
         {/* Panel toggles (#412): four icon buttons in wide windows, one «View» menu in narrow
             ones (`app.css` swaps them). Pressed = the region is on screen (see `pulsado`). */}

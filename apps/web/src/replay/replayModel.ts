@@ -16,6 +16,7 @@
 import type { ProcessIR } from '@lila-modeler/engine';
 import type { ResolvedScenario } from '@lila-modeler/engine/schema';
 import type { EventLogRow } from '@lila-modeler/engine';
+import { nombreRecurso } from '../recursosModelo.js';
 
 /** One activity occurrence (all the log rows that share an `activityInstanceId`). */
 export interface ReplayActivity {
@@ -57,6 +58,8 @@ export interface Replay {
   elementIds: readonly string[];
   /** Capacity per pool referenced by the log. */
   pools: Readonly<Record<string, number>>;
+  /** #554: what each of those pools reads as (its `name`, or its id), like the Resources step. */
+  poolNames?: Readonly<Record<string, string>>;
   /** Last instant of the replication, in simulated seconds from the run start. */
   horizon: number;
   /** `run.start` as epoch milliseconds, or `null` when the scenario has no start date. */
@@ -343,6 +346,7 @@ export function buildReplay(
     moves,
     passages,
     pools,
+    poolNames: Object.fromEntries(Object.keys(pools).map((id) => [id, nombreRecurso(id, scenario.resources?.[id])])),
     replications: scenario.run.replications,
     rows: rows.length,
     startMs: startMs === null || Number.isNaN(startMs) ? null : startMs,

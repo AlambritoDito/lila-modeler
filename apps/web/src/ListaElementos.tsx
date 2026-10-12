@@ -4,6 +4,7 @@
  * summaries those lists print. Shared by the Simulate steps.
  */
 import { esObjeto } from './escenarioModelo.js';
+import { nombreRecurso } from './recursosModelo.js';
 import { aUnidad, esTiempoEnSegundos, type UnidadTiempo } from './scenarioFields.js';
 import { useStrings } from './i18n';
 
@@ -72,14 +73,21 @@ export function resumenDistribucion(
   return `${etiqueta} ${numeros.join(' / ')}${hayTiempo ? ` ${S.escenario.unidades[unidad]}` : ''}`;
 }
 
-/** `elements[id].resources` as one line: «cashier ×1, till ×2», or «—» when there is none. */
-export function resumenRecursos(valor: unknown, S: ReturnType<typeof useStrings>): string {
+/**
+ * `elements[id].resources` as one line: «Cashier ×1, Oven ×2», or «—» when there is none.
+ *
+ * #554: a resource reads as the Resources step names it (`nombreRecurso`: its `name`, or its key
+ * without one), so `recursos` is the resolved scenario's `resources`; without it, the keys.
+ */
+export function resumenRecursos(valor: unknown, S: ReturnType<typeof useStrings>, recursos: unknown = {}): string {
   if (!Array.isArray(valor) || valor.length === 0) return S.escenario.sinResumen;
+  const tabla = esObjeto(recursos) ? recursos : {};
   return valor
     .map((entrada) => {
       if (!esObjeto(entrada) || typeof entrada['ref'] !== 'string') return S.escenario.sinResumen;
       const cantidad = typeof entrada['quantity'] === 'number' ? entrada['quantity'] : 1;
-      return S.escenario.resumenAsignacion(entrada['ref'], cantidad);
+      const recurso = tabla[entrada['ref']];
+      return S.escenario.resumenAsignacion(nombreRecurso(entrada['ref'], esObjeto(recurso) ? recurso : undefined), cantidad);
     })
     .join(', ');
 }
