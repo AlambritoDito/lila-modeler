@@ -24,7 +24,7 @@ resultado en la app — lee la [guía para agentes](GUIA-AGENTES.md).
   del perfil y no se puede simular. Con `scenario` (ruta a un escenario `.json`, resuelve
   `extends`) agrega los recursos referenciados por elemento; si el escenario no se puede leer, el
   resumen dice por qué y la tool no falla.
-- **`run_simulation({ model?, process?, scenario, seed?, replications?, saveTo?, saveRun?, locale? })`** (LILA-054) — valida
+- **`run_simulation({ model?, process?, scenario, seed?, replications?, saveTo?, saveRun?, detail?, locale? })`** (LILA-054) — valida
   modelo y escenario, simula con `log: false` y devuelve exactamente el mismo `RunResult` que
   `lila run --json` (elementos, flujos, recursos, proceso, bottlenecks y avisos). `scenario` acepta
   una ruta `.json` (resuelve `extends`, igual que la CLI) o el escenario ya resuelto como objeto
@@ -34,7 +34,7 @@ resultado en la app — lee la [guía para agentes](GUIA-AGENTES.md).
   `outputSchema` (`@lila-modeler/engine/result-schema`) y responde `structuredContent` además del texto.
   Con un `model` `.lila` y un escenario suyo, `saveRun: true` guarda la corrida en el proyecto (ver
   [Guardar una corrida](#guardar-una-corrida)).
-- **`compare_scenarios({ model?, process?, scenarios, seed?, replications?, saveTo?, locale? })`** (LILA-054) — valida
+- **`compare_scenarios({ model?, process?, scenarios, seed?, replications?, saveTo?, detail?, locale? })`** (LILA-054) — valida
   y simula dos o más escenarios sobre el mismo modelo (el primero es la base) y devuelve
   exactamente el mismo `CompareResult` que `lila compare --json`, más `notes`: los avisos que la
   CLI imprime aparte de la tabla (semillas distintas, `baseTimeUnit` distinto, réplicas

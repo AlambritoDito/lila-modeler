@@ -174,7 +174,7 @@ test('extends cíclico y XML impenetrable: isError con el motivo, y el servidor 
 
 test('dos llamadas concurrentes se responden las dos, sin mezclarse', async () => {
   const [simulacion, validacion] = await Promise.all([
-    client.callTool({ name: 'run_simulation', arguments: { scenario: asIs, seed: 7, replications: 2 } }),
+    client.callTool({ name: 'run_simulation', arguments: { scenario: asIs, seed: 7, replications: 2, detail: 'full' } }),
     client.callTool({ name: 'validate_bpmn', arguments: { path: modelo } }),
   ]);
   expect(simulacion.isError ?? false).toBe(false);

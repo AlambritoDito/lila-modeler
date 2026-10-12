@@ -48,7 +48,7 @@ test('describe_process and validate_bpmn describe Restaurant, with or without a 
 });
 
 test('run_simulation runs Restaurant and export_results names its elements', async () => {
-  const run = await call('run_simulation', { model: file, scenario: 'as-is', replications: 1 });
+  const run = await call('run_simulation', { model: file, scenario: 'as-is', replications: 1, detail: 'full' });
   expect(run.isError).toBe(false);
   expect(run.text).toContain('StartEvent_Pedido');
   const csv = await call('export_results', { project: file, format: 'csv', saveTo: join(dir, 'csv') });

@@ -103,7 +103,7 @@ describe('read-only tools on a .lila', () => {
   });
 
   test('run_simulation: same RunResult as on the .bpmn + .json, same seed', async () => {
-    const args = { seed: 11, replications: 2 };
+    const args = { seed: 11, replications: 2, detail: 'full' };
     const fromFiles = await call('run_simulation', { model, scenario: toBe, ...args });
     const fromLila = await call('run_simulation', { model: exampleLila, scenario: 'TO-BE 3 cashiers', ...args });
     expect(fromLila.isError, fromLila.text).toBe(false);
@@ -111,7 +111,7 @@ describe('read-only tools on a .lila', () => {
   });
 
   test('run_simulation: an inline scenario extends a scenario of the archive', async () => {
-    const args = { seed: 11, replications: 2 };
+    const args = { seed: 11, replications: 2, detail: 'full' };
     const fromFiles = await call('run_simulation', { model, scenario: toBe, ...args });
     const inline = { version: 1, name: 'TO-BE 3 cashiers', extends: 'as-is.scenario.json', resources: { cajero: { capacity: 3 } } };
     const fromLila = await call('run_simulation', { model: exampleLila, scenario: inline, ...args });
@@ -120,7 +120,7 @@ describe('read-only tools on a .lila', () => {
   });
 
   test('compare_scenarios: same CompareResult as on the extracted files', async () => {
-    const args = { seed: 11, replications: 2 };
+    const args = { seed: 11, replications: 2, detail: 'full' };
     const fromFiles = await call('compare_scenarios', { model, scenarios: [asIs, toBe], ...args });
     const fromLila = await call('compare_scenarios', { model: exampleLila, scenarios: ['as-is', 'to-be-3-cajeros'], ...args });
     expect(fromLila.isError, fromLila.text).toBe(false);
@@ -135,7 +135,7 @@ describe('read-only tools on a .lila', () => {
     const unknown = await call('validate_bpmn', { path: file, process: 'otro', locale: 'es' });
     expect(unknown.isError).toBe(true);
     expect(unknown.text).toContain('no tiene el proceso "otro"; sus procesos son: pedido, copia');
-    const args = { seed: 5, replications: 2 };
+    const args = { seed: 5, replications: 2, detail: 'full' };
     const reference = await call('run_simulation', { model, scenario: asIs, ...args });
     const chosen = await call('run_simulation', { model: file, process: 'copia', scenario: 'Solo', ...args });
     expect(chosen.isError, chosen.text).toBe(false);
@@ -186,7 +186,11 @@ describe('writes on a one-process version 2 .lila report the process as written 
     expect(result.isError, textOf(result)).not.toBe(true);
     const blocks = (result.content as { text: string }[]).map((b) => JSON.parse(b.text) as { savedRun?: { process: string } });
     expect(blocks.find((b) => b.savedRun !== undefined)?.savedRun?.process).toBe('pedido');
-    expect(processesOf(decodeLila(new Uint8Array(readFileSync(file))))[0]!.slug).toBe('pedido');
+    const [saved] = processesOf(decodeLila(new Uint8Array(readFileSync(file))));
+    expect(saved!.slug).toBe('pedido');
+    // #629: the answer is the summary, the stored run the full RunResult.
+    expect(JSON.parse(textOf(result))).toMatchObject({ detail: 'summary' });
+    expect(Object.keys(saved!.runs.at(-1)!.result.elements)).toContain('Task_TomarPedido');
   });
 });
 

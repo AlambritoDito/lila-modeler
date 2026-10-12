@@ -75,6 +75,7 @@ import { z } from 'zod';
 import { registerAgentTools } from './agent-tools.js';
 import { applyJsonPatch, buildPatchDelta, type JsonPatchOp } from './json-patch.js';
 import { resolveScenarioInput, type ScenarioInput } from './scenario-input.js';
+import { detailSchema, runSummarySchema, summarizeComparison, summarizeRun, type Detail } from './result-summary.js';
 
 const NAME = 'lila-mcp';
 const VERSION = '1.0.0-beta.23';
@@ -302,6 +303,7 @@ interface RunSimulationInput {
   replications?: number | undefined;
   saveTo?: string | undefined;
   saveRun?: boolean | undefined;
+  detail?: Detail | undefined;
   locale?: Locale | undefined;
 }
 
@@ -312,7 +314,7 @@ interface RunSimulationInput {
  * El `RunResult` devuelto es el mismo objeto que produce `lila run --json`.
  */
 async function runSimulation(
-  { model, process, scenario, seed, replications, saveTo, saveRun }: RunSimulationInput,
+  { model, process, scenario, seed, replications, saveTo, saveRun, detail }: RunSimulationInput,
   locale: Locale,
 ): Promise<CallToolResult> {
   const M = messages(locale).mcp;
@@ -375,7 +377,9 @@ async function runSimulation(
     }
   }
 
-  const content: CallToolResult['content'] = [{ type: 'text', text: JSON.stringify(result, null, 2) }];
+  // #629: the answer is a summary unless `detail: "full"`; what is saved above is always the full result.
+  const answer = detail === 'full' ? result : summarizeRun(result, ir, withOverrides);
+  const content: CallToolResult['content'] = [{ type: 'text', text: JSON.stringify(answer, null, 2) }];
   if (saveRun === true) {
     try {
       // The `RunResult` stays the structured content (its `outputSchema`); where the run went is a
@@ -386,7 +390,7 @@ async function runSimulation(
       return fail(message(error));
     }
   }
-  return { content, isError: false, structuredContent: result };
+  return { content, isError: false, structuredContent: answer };
 }
 
 interface CompareScenariosInput {
@@ -396,6 +400,7 @@ interface CompareScenariosInput {
   seed?: number | undefined;
   replications?: number | undefined;
   saveTo?: string | undefined;
+  detail?: Detail | undefined;
   locale?: Locale | undefined;
 }
 
@@ -412,7 +417,7 @@ function scenarioLabel(entry: ScenarioInput, index: number): string {
  * `baseTimeUnit` distinto, réplicas insuficientes) van en `notes`, sin tocar `comparison`.
  */
 async function compareScenarios(
-  { model, process, scenarios, seed, replications, saveTo }: CompareScenariosInput,
+  { model, process, scenarios, seed, replications, saveTo, detail }: CompareScenariosInput,
   locale: Locale,
 ): Promise<CallToolResult> {
   const M = messages(locale).mcp;
@@ -504,7 +509,7 @@ async function compareScenarios(
     }
   }
 
-  const payload = { comparison, notes };
+  const payload = { comparison: detail === 'full' ? comparison : summarizeComparison(comparison), notes };
   return { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }], isError: false, structuredContent: payload };
 }
 
@@ -919,6 +924,9 @@ export function createServer(options: ServerOptions = {}): McpServer {
         'scenario of that process (a .json path that exists wins), and `process` picks the process ' +
         'when there are several. `saveTo` writes the same JSON atomically, like `lila run --json <path>`; ' +
         '`saveRun` stores the run in the .lila, like `lila run --save`. ' +
+        'By default the answer is a summary (`detail: "summary"`: process, bottlenecks, per-resource ' +
+        'utilization/wait/cost, `topWaits`, grouped warnings); `detail: "full"` returns the whole ' +
+        '`RunResult`. `saveTo` and `saveRun` always store the full result. ' +
         'isError only marks that the tool failed (invalid model/scenario, unreadable file).',
       inputSchema: z.object({
         model: z.string().optional().describe('Path to the .bpmn or .lila; defaults to scenario.model.'),
@@ -938,9 +946,10 @@ export function createServer(options: ServerOptions = {}): McpServer {
               '(it opens as the current run; export_document/export_results use it). A second content ' +
               'block returns { savedRun: { id, file, process, scenario } }.',
           ),
+        detail: detailSchema,
         locale: localeSchema,
       }),
-      outputSchema: runResultSchema,
+      outputSchema: z.union([runSummarySchema, runResultSchema]),
     },
     async (input): Promise<CallToolResult> => runSimulation(input, localeOf(input.locale)),
   );
@@ -955,7 +964,9 @@ export function createServer(options: ServerOptions = {}): McpServer {
         'warnings the CLI prints beside the table (different seeds, different `baseTimeUnit`, too ' +
         'few replications for a 95% CI). `scenarios` accepts .json paths and inline objects, mixed; ' +
         'with a .lila `model`, also scenario names of that process (`process` picks it). ' +
-        '`saveTo` writes `comparison` as JSON, like `lila compare --json`.',
+        '`saveTo` writes `comparison` as JSON, like `lila compare --json`. By default `comparison` is a ' +
+        'summary (`detail: "summary"`: the process and resource rows plus every row marked significant, ' +
+        'and `omittedRows`); `detail: "full"` returns every row. `saveTo` always writes the full comparison.',
       inputSchema: z.object({
         model: z
           .string()
@@ -971,6 +982,7 @@ export function createServer(options: ServerOptions = {}): McpServer {
         seed: z.number().int().optional().describe('Overrides run.seed in every scenario.'),
         replications: z.number().int().min(1).optional().describe('Overrides run.replications in every scenario.'),
         saveTo: z.string().optional().describe('Path to write the CompareResult as JSON.'),
+        detail: detailSchema,
         locale: localeSchema,
       }),
     },
