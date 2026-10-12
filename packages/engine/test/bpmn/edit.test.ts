@@ -183,6 +183,20 @@ describe.each([true, false])('each operation (layout %s)', (layout) => {
     expect(to.xml).toContain('<bpmn:subProcess id="wait" name="Wait a day">');
   });
 
+  test('moveToLane takes EndEvent_<id> and EndEvent_<id>_<n>, not another id that starts the same (#630)', async () => {
+    const { xml } = await credit();
+    const laneOf = async (out: string, id: string) => {
+      const { rootElement } = await BpmnModdle().fromXML(out);
+      const lanes = (rootElement as any).rootElements.find((e: any) => e.$type === 'bpmn:Process').laneSets[0].lanes;
+      return lanes.find((l: any) => (l.flowNodeRef ?? []).some((n: any) => n.id === id))?.id;
+    };
+    for (const [end, moves] of [['EndEvent_issue_2', true], ['EndEvent_issue_b', false]] as const) {
+      const renamed = xml.replaceAll('EndEvent_issue', end);
+      const edit = await editBpmn(renamed, [{ op: 'addLane', name: 'Back office', id: 'Lane_back' }, { op: 'moveToLane', id: 'issue', lane: 'Lane_back' }], { layout });
+      expect(await laneOf(edit.xml, end) === 'Lane_back').toBe(moves);
+    }
+  });
+
   test('moveToLane and addLane', async () => {
     const { xml } = await credit();
     const edit = await editBpmn(
@@ -204,6 +218,15 @@ describe.each([true, false])('each operation (layout %s)', (layout) => {
     const issue = shapes.get('issue')!;
     expect(issue.y).toBeGreaterThanOrEqual(lane.y);
     expect(issue.y + issue.height).toBeLessThanOrEqual(lane.y + lane.height);
+    // The end event the outline made for "issue" goes with it (#630).
+    const end = shapes.get('EndEvent_issue')!;
+    expect(end.y).toBeGreaterThanOrEqual(lane.y);
+    expect(end.y + end.height).toBeLessThanOrEqual(lane.y + lane.height);
+    const { rootElement } = await BpmnModdle().fromXML(edit.xml);
+    const lanes = (rootElement as any).rootElements.find((e: any) => e.$type === 'bpmn:Process').laneSets[0].lanes;
+    const refs = (id: string) => (lanes.find((l: any) => l.id === id).flowNodeRef ?? []).map((n: any) => n.id);
+    expect(refs('Lane_back')).toEqual(['issue', 'EndEvent_issue']);
+    expect(refs('Lane_2')).not.toContain('EndEvent_issue');
     const pool = shapes.get('Participant_1')!;
     for (const id of ['Lane_1', 'Lane_2', 'Lane_back', 'Lane_4']) {
       const l = shapes.get(id)!;

@@ -181,3 +181,16 @@ describe('#546: a Customer-first .lila, through the CLI and the exports', () => 
     expect(html).toContain('Take order');
   });
 });
+
+describe('#630: docs/SEMANTICS.md says what parse does with several pools', () => {
+  test.each(['docs/SEMANTICS.md', 'docs/es/SEMANTICS.md'])('%s', async (doc) => {
+    // parse simulates one process and lists the others as ignored: nothing is flattened.
+    const { ir, ignoredProcessIds } = await parseBpmn(PEDIDO);
+    expect(ignoredProcessIds).toEqual(['Process_Cliente']);
+    expect(Object.keys(ir.nodes).some((id) => id.includes('Cliente'))).toBe(false);
+    const text = readFileSync(new URL(`../../../${doc}`, import.meta.url), 'utf8');
+    const row = text.split('\n').find((line) => line.startsWith('| `bpmn:participant`'))!;
+    expect(row).toContain('R-DURA-5');
+    expect(row).not.toMatch(/flattened|aplanan/);
+  });
+});

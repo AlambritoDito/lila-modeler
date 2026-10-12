@@ -13,6 +13,7 @@ import { strToU8, unzipSync } from 'fflate';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { annotateElement, documentationHolder, parseBpmn, readAnnotations } from '../../src/bpmn/index.js';
+import { renderSvg } from '../../src/bpmn/render-svg.js';
 import { main } from '../../src/cli.js';
 import { AGENT_TOOL_MESSAGES } from '../../src/messages/index.js';
 import { buildProcessDocument } from '../../src/process-document.js';
@@ -301,6 +302,7 @@ describe('createLilaProject (#403)', () => {
     });
     expect(result.file).toBe(path.replaceAll('\\', '/'));
     expect(result.processId).toBe('Process_Restaurante');
+    expect(result.laidOut).toBe(false);
     expect(result.scenarios.map((s) => [s.entry, s.runnable])).toEqual([
       ['as-is.scenario.json', true],
       ['draft.scenario.json', false],
@@ -315,6 +317,23 @@ describe('createLilaProject (#403)', () => {
 
     // It runs as any .lila does.
     expect(await main(['run', path, 'more', '--replications', '1'])).toBe(0);
+  });
+
+  test('a model without a diagram gets one, drawn as edit_process lays it out (#630)', async () => {
+    const bare = pedidoXml.replace(/<bpmndi:BPMNDiagram[\s\S]*<\/bpmndi:BPMNDiagram>/, '');
+    expect(bare).not.toContain('bpmndi:');
+    await expect(renderSvg(bare)).rejects.toThrow(/has no diagram/);
+    const path = join(scratch, 'bare.lila');
+    const result = await createLilaProject({ path, name: 'Bare', bpmn: bare, scenarios: [{ name: 'as-is', scenario: asIs }] });
+    expect(result.laidOut).toBe(true);
+    expect(result.scenarios[0]!.runnable).toBe(true);
+    const xml = decodeLila(readFileSync(path)).model.xml;
+    // Every node of the simulated process has a shape, and the drawing renders.
+    const { ir } = await parseBpmn(xml);
+    for (const id of Object.keys(ir.nodes)) expect(xml, id).toContain(`bpmnElement="${id}"`);
+    expect(await renderSvg(xml)).toContain('<svg');
+    // The model is the same model: only the diagram was added.
+    expect((await parseBpmn(xml)).ir.nodes).toEqual((await parseBpmn(bare)).ir.nodes);
   });
 
   test('refuses an existing file unless overwrite, an invalid model and bad scenarios, writing nothing', async () => {

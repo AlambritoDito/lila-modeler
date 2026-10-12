@@ -78,7 +78,7 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
   writes that sheet as `.xlsx`, filled in. Returns `{ file, project, process, scenario }`.
 - **`create_project({ path, name, bpmn, scenarios?, overwrite?, locale? })`** creates a new `.lila`
   from a BPMN you already have (an agent that starts from steps uses `create_process`) and
-  scenarios. Returns `{ file, name, processId, warnings, scenarios }`.
+  scenarios. Returns `{ file, name, processId, laidOut, warnings, scenarios }`.
 - **`get_project({ project, locale? })`** lists what a `.lila` holds, writing nothing: its
   processes, their scenarios and their saved runs, current or stale. Returns
   `{ file, name, formatVersion, processes }`.
@@ -361,7 +361,10 @@ written. `dryRun: true` answers what would change and writes nothing.
   `"model": "model.bpmn"`, and one that names another model is refused. A scenario that cannot
   run yet is a draft: it is saved, and comes back with `runnable: false` and its `errors`. The
   file is written whole or not at all, and an existing one is refused unless `overwrite`. The web
-  and desktop apps open it.
+  and desktop apps open it. A model without a diagram (no `bpmndi` shapes) gets one, drawn by the
+  same auto-layout as `edit_process` with `layout: true`, for the process it simulates, so
+  `export_diagram` works on it; `laidOut: true` says so (#630). A model the layouter cannot place
+  is saved as given.
 
 ```json
 { "name": "create_project", "arguments": { "path": "project.lila", "name": "Orders", "bpmn": "examples/pedido/model.bpmn",
@@ -441,7 +444,9 @@ terminal.
   something missing.
 - **Layout.** By default (`layout: true`) the edited process is laid out again with the same
   layouter and lane fix as `create_process`: positions set by hand in that process are lost; text
-  annotations and data objects follow their element; pools below (or beside) it move as one piece
+  annotations and data objects follow their element, and those with no shape yet (a model that
+  arrived without a diagram) get one beside it, or in a row below the drawing when they hang on
+  nothing (#630); pools below (or beside) it move as one piece
   by as much as it grew. With `layout: false` every shape keeps its place: a new step goes right of
   the step it follows, in its lane (which grows a row when it is full), and only flows whose ends
   changed are drawn again. To make room for a step inserted between two close steps, what lies to

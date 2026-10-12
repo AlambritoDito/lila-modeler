@@ -79,7 +79,7 @@ defined semantics; everything else falls into section 3 of this document.
 | `bpmn:parallelGateway` | `and` | §8 |
 | `bpmn:sequenceFlow` (with `isDefault` when the gateway declares it) | `flow` | edge; carries `probability` |
 | `bpmn:laneSet` / `bpmn:lane` | `lane` on the node | label only; no effect on the simulation |
-| `bpmn:participant` (pools) | — | several pools are flattened into a single token graph |
+| `bpmn:participant` (pools) | — | one process is simulated (R-DURA-5); the other pools' processes are read and preserved, not simulated |
 | `bpmn:documentation`, `bpmn:textAnnotation`, `bpmn:association`, `bpmn:group`, `bpmn:dataObject*`, `bpmn:dataStore*`, `bpmn:*DI` | — | read and preserved, they **do not** affect the simulation |
 
 - **R-PERF-1 — Every task variant is `task`.** The concrete task type changes nothing in the
@@ -88,8 +88,8 @@ defined semantics; everything else falls into section 3 of this document.
   wait**: every token that arrives leaves immediately through the single outgoing flow, with no
   synchronizing and no time consumed. *(test: LILA-026)*
 - **R-PERF-3 — `bpmn:messageFlow` does not carry tokens.** Message flows between pools are
-  ignored and produce warning `W-MSGFLOW` once per file, citing how many were ignored. Pools are
-  simulated as a single graph: a token never "jumps" between pools. *(test: LILA-021, LILA-163)*
+  ignored and produce warning `W-MSGFLOW` once per file, citing how many were ignored. Only one
+  process is simulated (R-DURA-5), so a token never "jumps" between pools. *(test: LILA-021, LILA-163)*
 - **R-PERF-4 — `conditionExpression` is ignored.** Sequence flow conditions are not evaluated in
   v1: branching is probabilistic, and the scenario's `conditions` (§6.1) route on the flows the
   case already took, not on its data. A flow with a
