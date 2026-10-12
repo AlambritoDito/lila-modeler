@@ -348,7 +348,7 @@ This is real, working functionality: `DesktopStore` is wired up in `main.tsx` an
 
 ## Limitations of this beta
 
-*(as of 1.0.0-beta.23, tag `v1.0.0-beta.23`; the macOS verification notes below were recorded for
+*(as of 1.0.0-beta.24, tag `v1.0.0-beta.24`; the macOS verification notes below were recorded for
 Beta 1. Check whether any of these has already been resolved before trusting this list blindly at a
 later date)*
 
@@ -390,10 +390,10 @@ npm run dist:mac -w @lila-modeler/desktop   # tsc + copia dist/web + electron-bu
 
 The last command chains together: `apps/desktop`'s `tsc --build`, copying `apps/web/dist` to
 `apps/desktop/dist/web`, and `electron-builder --mac --arm64`. The result lands in
-`apps/desktop/release/` (the version in `apps/desktop/package.json`: `1.0.0-beta.23` for Beta 23):
+`apps/desktop/release/` (the version in `apps/desktop/package.json`: `1.0.0-beta.24` for Beta 24):
 
-- `apps/desktop/release/Lila-Modeler-1.0.0-beta.23-mac-arm64.dmg` — the installer.
-- `apps/desktop/release/Lila-Modeler-1.0.0-beta.23-mac-arm64.dmg.blockmap`.
+- `apps/desktop/release/Lila-Modeler-1.0.0-beta.24-mac-arm64.dmg` — the installer.
+- `apps/desktop/release/Lila-Modeler-1.0.0-beta.24-mac-arm64.dmg.blockmap`.
 - `apps/desktop/release/mac-arm64/Lila Modeler.app` — the app unpackaged from the DMG, useful for
   quick testing.
 - `apps/desktop/release/ORIGEN.txt` — the build's `sha`, `fecha` (date, ISO), and `arch`
@@ -436,10 +436,17 @@ touch). They are not a public API and must never be used in normal use of the ap
   of waiting for a click.
 - `LILA_E2E_SAVE_FILE=<absolute path to a .lila>`: the same as `LILA_E2E_FOLDER`, for the native
   "Save as…" dialog.
+- `LILA_E2E_IMPORT=<absolute path to a .bpmn/.xml>`: the same, for File › Import BPMN….
+- `LILA_E2E_EXPORT_FILE=<absolute path>`: every export the app saves through its own save dialog
+  (diagram as SVG/PNG/PDF, process document, the results' XLSX and CSV, the comparison workbook,
+  the scenario template, a theme) is written to exactly that path, without opening the dialog and
+  without adding an extension. Each export overwrites the previous one. `"cancel"` simulates
+  cancelling the dialog.
 - `LILA_E2E_RECOVERY=restore|discard`: makes the launch offer of the autosave copy (Restore /
   Discard) resolve automatically with that value.
 - `LILA_E2E_LOG=<file path>`: if present, appends one JSON line per relevant event
-  (`chooseFolder`, `writeProject`, `closeRequested`, `openPath`, `recovery`) to that file.
+  (`chooseFolder`, `writeProject`, `closeRequested`, `openPath`, `recovery`, `exportar`) to that
+  file.
 
 With none of them set, the app behaves exactly as if they did not exist. **Warning**: these
 are a shortcut for testing, not something an end user should ever set — they leave the app

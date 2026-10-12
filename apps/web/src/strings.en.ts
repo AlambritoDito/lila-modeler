@@ -341,6 +341,9 @@ export const en = {
     eliminar: 'Delete',
     integrado: 'Built-in',
     delUsuario: 'Mine',
+    /** The tag of each theme card (#441), singular where `integrado`/`delUsuario` name a group. */
+    tarjetaIntegrado: 'Built-in',
+    tarjetaDelUsuario: 'Mine',
     muestraTexto: 'Text on surface',
     muestraSecundario: 'Secondary text',
     muestraBoton: 'Accent',
@@ -1545,6 +1548,48 @@ export const en = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Lane controls (#596): the canvas «+» and ⠿ handle (`controlesCarriles.ts`) and the lane
+   * list and lane size of the properties panel (`PropertiesPanel.tsx`)
+   * ------------------------------------------------------------------ */
+  carriles: {
+    /** What a lane without a name is called everywhere it is listed; `n` is its position. */
+    sinNombre: (n: number): string => `Unnamed lane ${n}`,
+    anadirAqui: 'Add a lane here',
+    anadirEn: (posicion: number, pool: string): string => `Add a lane at position ${posicion} of «${pool}»`,
+    asaTitulo: 'Drag to reorder · Alt+↑/↓',
+    asa: (carril: string): string => `Lane «${carril}». Drag it, or press Alt+↑/↓, to move it`,
+    titulo: 'Lanes',
+    pista: 'Alt+↑/↓ on the canvas',
+    lista: (pool: string): string => `Lanes of «${pool}»`,
+    nombreDe: (n: number): string => `Name of lane ${n}`,
+    resumen: (elementos: number, medida: string, valor: number): string =>
+      `${elementos} ${elementos === 1 ? 'element' : 'elements'} · ${medida.toLowerCase()} ${valor}`,
+    /** ↑ and ↓ of a row; a vertical pool stacks its lanes left to right. */
+    subir: (carril: string): string => `Move «${carril}» up`,
+    bajar: (carril: string): string => `Move «${carril}» down`,
+    aLaIzquierda: (carril: string): string => `Move «${carril}» left`,
+    aLaDerecha: (carril: string): string => `Move «${carril}» right`,
+    borrar: (carril: string): string => `Delete «${carril}»`,
+    anadirAlFinal: '+ Add a lane at the end',
+    ayuda: 'No need to select the pool first: the «+» on its edge adds a lane right there. Drag a selected lane\'s handles to resize it.',
+    confirmarTitulo: 'Delete lane',
+    confirmarTexto: (carril: string, elementos: number): string =>
+      `«${carril}» holds ${elementos} ${elementos === 1 ? 'element' : 'elements'}. Deleting the lane keeps ${elementos === 1 ? 'it' : 'them'} in the pool, in the lane that takes its room.`,
+    confirmarBorrar: 'Delete lane',
+    /** The size of a selected lane across the pool: its height, or its width in a vertical pool. */
+    alto: 'Height',
+    ancho: 'Width',
+    medidaProblemas: {
+      vacio: 'Enter a size.',
+      numero: 'The size must be a number, for example 120.',
+      minimo: (minimo: number): string => `The size must be at least ${minimo}: anything smaller leaves an element outside the lane.`,
+      /** The minimum of a lane whose elements would fit in less: bpmn-js's smallest lane. */
+      minimoVacio: (minimo: number): string => `The size must be at least ${minimo}.`,
+      maximo: (maximo: number): string => `The size must be at most ${maximo}.`,
+    },
+  },
+
+  /* ------------------------------------------------------------------ *
    * Routes step and the canvas percentage fields (Lote M, C4: `PasoRutas.tsx`,
    * `etiquetasPorcentaje.ts`, the gateway block of the properties panel)
    * ------------------------------------------------------------------ */
@@ -1663,7 +1708,7 @@ export const en = {
     tipoLilaJson: 'Lila Modeler project (JSON)',
     /** #573: the web app's Save found its `.lila` changed since this window read or wrote it. */
     errorCambioExternoWeb: (nombre: string): string =>
-      `${nombre} changed outside this window since it was opened, so nothing was saved. ` +
+      `${nombre} changed outside this window since it was last read or saved here, so nothing was saved. ` +
       'Open it again to get the other version, or use Save As to keep yours in another file.',
     errorSinBridge: 'DesktopStore requires `window.lila`: is it being instantiated outside Electron?',
     errorProyectoDistinto:
@@ -1681,7 +1726,7 @@ export const en = {
       'Try again in a moment.',
     /** `E-CAMBIO-EXTERNO` from the disk (#539): `nombre` changed outside Lila since it was last read. */
     errorCambioExterno: (nombre: string): string =>
-      `E-CAMBIO-EXTERNO: ${nombre} changed outside Lila since it was opened, so nothing was saved. ` +
+      `E-CAMBIO-EXTERNO: ${nombre} changed outside Lila since Lila last read or saved it, so nothing was saved. ` +
       'Reload to get the other version, or use Save As to keep yours in another file.',
     /** `E-CARPETA-OCUPADA` from the disk (#517): `ruta` holds another project's files. */
     errorCarpetaOcupada: (ruta: string): string =>

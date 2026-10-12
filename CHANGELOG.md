@@ -3,6 +3,46 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.24] - 2026-10-12
+
+Lote O: lane controls on the canvas, Settings per artboard 09, the Windows menu in the user's
+language, desktop exports through the app's own dialog, and the follow-ups left by the QA of the
+previous lots. Simulation results are unchanged.
+
+### Added
+
+- **Lane controls (#596, #625)**: in Model, a «+» on the pool's edge adds a lane at that position,
+  a ⠿ handle drags a lane (or Alt+↑/↓ moves it) with its elements, and Properties lists the pool's
+  lanes to reorder, rename and delete them. Every way of adding a lane — the «+», the palette and
+  the context pad — keeps the file's lane list in drawing order, so `lila process show` and agents
+  read the same order as the canvas. ⌘Z works right after using the controls.
+
+### Changed
+
+- **Settings per artboard 09 (#441, #618)**: language and density are segmented controls, themes are
+  cards with a strip of their palette, and Import is reachable from the keyboard.
+- **The palette and Settings keep the File keys (#442, #621)**: ⌘O, ⌘S, ⇧⌘S and ⌘P no longer reach
+  the browser while they are open; the mode tabs show their shortcut. The desktop app has no page
+  zoom by decision: ⌘+/⌘−/⌘0 zoom the diagram and Density scales the interface.
+
+### Fixed
+
+- **Windows menu and dialogs in the user's language (#566, #617)**: Edit, Window, Exit and the file
+  type filters were in English outside macOS; the installer names its folder and file types.
+- **Desktop exports through the app's dialog (#564, #619)**: the results' XLSX and CSV, the
+  comparison, the scenario template and the theme export are written by the app, not by the
+  browser's download manager, so Windows no longer opens them in Protected View.
+- **Reload next to «changed on disk» (#568, #620)**: the status bar error offers Reload, and the
+  reload notice handles a multi-selection.
+- **File lock (#535, #616)**: switching process, saving and exporting in the same instant no longer
+  release each other's lock.
+- **Loose diagram saved as a project (#613, #622, #623)**: it is saved as its `model.bpmn` without
+  the folder's runs, and writes on a one-process version 2 `.lila` report the process name they
+  actually wrote.
+- **Simulate and Results accessibility (#554, #624)**: the active mode is announced, the focus stays
+  on Run/Cancel through a keyboard run (a held Enter no longer cancels it), the replay speed has a
+  name, and resources show by name instead of key in the quick view, Compare and the replay.
+
 ## [1.0.0-beta.23] - 2026-10-08
 
 Simulate and Results redesigned from the owner's Claude Design draft (Lote M, #581, epic #582). The

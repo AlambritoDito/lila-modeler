@@ -61,7 +61,7 @@ afterEach(() => {
   setLocale('es');
 });
 
-function Anfitrion({ inicial, ir, avanzado = false }: { inicial: Json; ir: ProcessIR; avanzado?: boolean }): React.JSX.Element {
+function Anfitrion({ inicial, ir, avanzado = false, seleccion = null }: { inicial: Json; ir: ProcessIR; avanzado?: boolean; seleccion?: string | null }): React.JSX.Element {
   const [escenarios, setEscenarios] = useState<Readonly<Record<string, Json>>>({ 'e.scenario.json': inicial });
   actual = escenarios['e.scenario.json'] ?? {};
   return (
@@ -74,19 +74,19 @@ function Anfitrion({ inicial, ir, avanzado = false }: { inicial: Json; ir: Proce
       onGuardar={() => {}}
       onDuplicar={() => {}}
       ir={ir}
-      seleccion={null}
+      seleccion={seleccion}
       onSeleccionar={() => {}}
       avanzado={avanzado}
     />
   );
 }
 
-function montar(inicial: Json, ir: ProcessIR = irPedido, avanzado = false): void {
+function montar(inicial: Json, ir: ProcessIR = irPedido, avanzado = false, seleccion: string | null = null): void {
   contenedor = document.createElement('div');
   document.body.appendChild(contenedor);
   raiz = createRoot(contenedor);
   act(() => {
-    raiz!.render(<Anfitrion inicial={inicial} ir={ir} avanzado={avanzado} />);
+    raiz!.render(<Anfitrion inicial={inicial} ir={ir} avanzado={avanzado} seleccion={seleccion} />);
   });
   clics = 0;
 }
@@ -189,6 +189,29 @@ describe('the list', () => {
     expect(fila('cajero').textContent).toBe(`Cashieroficina×2220.00 ${es.recursos.colCosto('MXN')}`);
     expect(fila('horno').textContent).toBe(`Oven${es.recursos.siempre}×10.00 ${es.recursos.colCosto('MXN')}`);
     expect(document.querySelector('.rec-lista')?.textContent).toContain(es.recursos.colCosto('MXN'));
+  });
+
+  it('#554: «Resources by element» and a task\'s resource choice name each pool as the list does', () => {
+    const sinNombre = pedido();
+    (sinNombre['resources'] as Record<string, Json>)['horno']!['name'] = '';
+    montar(sinNombre);
+    clic(document.querySelector('.pasos button[data-paso="resources"]'));
+    const porElemento = document.querySelector('.lista-paso')!;
+    expect(porElemento.textContent).toContain(es.escenario.listaRecursos);
+    const resumenes = [...porElemento.querySelectorAll('.resumen')].map((r) => r.textContent);
+    // A pool without a name reads as its key, as its row in the list above.
+    expect(resumenes).toEqual(['Cashier ×1', 'Cook ×1, horno ×1', es.escenario.sinResumen, 'Cashier ×1, Cook ×1']);
+    act(() => raiz!.unmount());
+    raiz = null;
+    contenedor?.remove();
+
+    montar(pedido(), irPedido, false, 'Task_Revisar');
+    clic(document.querySelector('.pasos button[data-paso="resources"]'));
+    const campo = document.getElementById('campo-elements.Task_Revisar.resources[0].ref') as HTMLSelectElement;
+    expect([...campo.options].map((o) => [o.value, o.textContent])).toEqual([
+      ['', es.escenario.sinDefinir], ['cajero', 'Cashier'], ['cocinero', 'Cook'], ['horno', 'Oven'],
+    ]);
+    expect(campo.value).toBe('cajero');
   });
 
   it('empty state: says what a resource is for and creates the first one', () => {

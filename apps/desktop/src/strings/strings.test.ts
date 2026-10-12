@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { desktopStrings } from './index.js';
 import { en } from './en.js';
 import { es } from './es.js';
@@ -48,8 +49,10 @@ describe('LILA-213 · the two desktop catalogs are the same catalog in two langu
     const vacias = [
       ...Object.entries(en.menu),
       ...Object.entries(en.cierre),
+      ...Object.entries(en.dialogos),
       ...Object.entries(es.menu),
       ...Object.entries(es.cierre),
+      ...Object.entries(es.dialogos),
     ].filter(([, texto]) => texto.trim() === '');
     expect(vacias).toEqual([]);
     // The desktop catalog is small enough that no entry happens to be the same word in both
@@ -57,6 +60,7 @@ describe('LILA-213 · the two desktop catalogs are the same catalog in two langu
     const iguales = [
       ...Object.entries(en.menu).filter(([k, v]) => es.menu[k as keyof typeof en.menu] === v),
       ...Object.entries(en.cierre).filter(([k, v]) => es.cierre[k as keyof typeof en.cierre] === v),
+      ...Object.entries(en.dialogos).filter(([k, v]) => es.dialogos[k as keyof typeof en.dialogos] === v),
     ];
     expect(iguales).toEqual([]);
   });
@@ -107,6 +111,21 @@ describe('LILA-213 · the two desktop catalogs are the same catalog in two langu
       // The Help menu is new.
       ayuda: 'Ayuda',
       documentacion: 'Documentación',
+      // #566: the role items Electron labelled in English outside macOS, new as labels.
+      editar: 'Edición',
+      deshacer: 'Deshacer',
+      rehacer: 'Rehacer',
+      cortar: 'Cortar',
+      copiar: 'Copiar',
+      pegar: 'Pegar',
+      eliminar: 'Eliminar',
+      seleccionarTodo: 'Seleccionar todo',
+      ventana: 'Ventana',
+      minimizar: 'Minimizar',
+      cerrarVentana: 'Cerrar',
+      pantallaCompleta: 'Pantalla completa',
+      herramientasDesarrollo: 'Herramientas de desarrollo',
+      salir: 'Salir',
     });
     expect(es.cierre).toEqual({
       guardar: 'Guardar',
@@ -119,5 +138,19 @@ describe('LILA-213 · the two desktop catalogs are the same catalog in two langu
       errorMensaje: 'No se pudo guardar.',
       errorDetalle: 'El cierre se canceló para no perder cambios. Vuelve a intentar guardar manualmente.',
     });
+  });
+});
+
+describe('#566 · the native dialogs name their file types in the app language', () => {
+  // `main.ts` cannot be imported without Electron, so its source is read: Open and Save as named
+  // the `.lila` filter in English in both languages («Lila project (*.lila)»).
+  const main = readFileSync(new URL('../main.ts', import.meta.url), 'utf8');
+
+  it('no filter name in main.ts is a literal, and the project filters come from `dialogos`', () => {
+    const nombres = [...main.matchAll(/filters:\s*\[\{\s*name:\s*([^,]+),/g)].map((m) => m[1]!.trim());
+    expect(nombres.length).toBeGreaterThanOrEqual(3);
+    expect(nombres.filter((n) => /^['"`]/.test(n))).toEqual([]);
+    expect(nombres.filter((n) => n === 'strings().dialogos.proyectoLila')).toHaveLength(2);
+    expect(nombres).toContain('strings().dialogos.diagramaBpmn');
   });
 });

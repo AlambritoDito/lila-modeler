@@ -21,7 +21,7 @@ import type { Strings } from './strings.types';
 export interface VistaRapidaDatos {
   /** `processingTime` as one line («Triangular 2 / 4 / 9 min»), «—» when it is not set. */
   tiempo: string;
-  /** `resources` as one line («clerk ×1»), «—» without any; `null` where it does not apply (timer). */
+  /** `resources` as one line, by name («Clerk ×1», #554), «—» without any; `null` where it does not apply (timer). */
   recurso: string | null;
   /**
    * Wait for a resource (`resourceWait`, the measure of the canvas labels, the Simulate dock and
@@ -107,7 +107,7 @@ export function datosVistaRapida({ id, ir, escenario, resultado, log, S }: Entra
 
   return {
     tiempo: resumenDistribucion(idIr, 'processingTime', campos['processingTime'], unidad, S),
-    recurso: tipo === 'task' ? resumenRecursos(campos['resources'], S) : null,
+    recurso: tipo === 'task' ? resumenRecursos(campos['resources'], S, escenario['resources']) : null,
     espera,
   };
 }

@@ -13,7 +13,7 @@ import { decodeLila, encodeLila, processesOf } from '@lila-modeler/engine/projec
 import type { ProcessDocument, ProjectDocument } from '@lila-modeler/engine/project';
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
-import { unzipSync } from 'fflate';
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
 import { createServer } from '../src/server.js';
@@ -146,6 +146,47 @@ describe('read-only tools on a .lila', () => {
     const result = await call('run_simulation', { model, process: 'pedido', scenario: asIs });
     expect(result.isError).toBe(true);
     expect(result.text).toContain('only applies when the model is a .lila');
+  });
+});
+
+/**
+ * A version 2 archive whose manifest lists a single process, `mostrador` (#517): any write saves it
+ * as version 1, where its process is named after the project (`pedido`).
+ */
+function oneProcessVersion2(name: string): string {
+  const entries = unzipSync(encodeLila({ ...repositoryDocument(), process: { slug: 'mostrador', name: 'Mostrador' } }));
+  const manifest = JSON.parse(strFromU8(entries['lila-project.json']!)) as { processes: { slug: string }[] };
+  manifest.processes = manifest.processes.filter((p) => p.slug === 'mostrador');
+  const kept = Object.fromEntries(Object.entries(entries).filter(([entry]) => !entry.startsWith('processes/copia/')));
+  const file = join(scratch, name);
+  writeFileSync(file, zipSync({ ...kept, 'lila-project.json': strToU8(JSON.stringify(manifest)) }));
+  return file;
+}
+
+describe('writes on a one-process version 2 .lila report the process as written (#613)', () => {
+  test('patch_scenario: the slug and the scenario\'s model are the version 1 ones', async () => {
+    const file = oneProcessVersion2('mostrador.lila');
+    const result = await call('patch_scenario', {
+      project: file,
+      scenario: 'as-is',
+      patch: [{ op: 'replace', path: '/resources/cajero/capacity', value: 4 }],
+    });
+    expect(result.isError, result.text).toBe(false);
+    const payload = JSON.parse(result.text) as { process: string; scenario: { model: string } };
+    expect(payload.process).toBe('pedido');
+    expect(payload.scenario.model).toBe(`${file}/model.bpmn`);
+    // The reply names what is there: the next call by that slug finds it.
+    const run = await call('run_simulation', { model: file, process: payload.process, scenario: 'as-is', replications: 1 });
+    expect(run.isError, run.text).toBe(false);
+  });
+
+  test('run_simulation with saveRun: savedRun.process', async () => {
+    const file = oneProcessVersion2('mostrador.lila');
+    const result = await client.callTool({ name: 'run_simulation', arguments: { model: file, scenario: 'as-is', replications: 1, saveRun: true } });
+    expect(result.isError, textOf(result)).not.toBe(true);
+    const blocks = (result.content as { text: string }[]).map((b) => JSON.parse(b.text) as { savedRun?: { process: string } });
+    expect(blocks.find((b) => b.savedRun !== undefined)?.savedRun?.process).toBe('pedido');
+    expect(processesOf(decodeLila(new Uint8Array(readFileSync(file))))[0]!.slug).toBe('pedido');
   });
 });
 

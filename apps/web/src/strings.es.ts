@@ -320,6 +320,9 @@ export const es: Strings = {
     eliminar: 'Eliminar',
     integrado: 'Integrados',
     delUsuario: 'Míos',
+    /** La etiqueta de cada tarjeta de tema (#441), en singular: `integrado`/`delUsuario` nombran un grupo. */
+    tarjetaIntegrado: 'Integrado',
+    tarjetaDelUsuario: 'Mío',
     muestraTexto: 'Texto sobre superficie',
     muestraSecundario: 'Texto secundario',
     muestraBoton: 'Acento',
@@ -1477,6 +1480,44 @@ export const es: Strings = {
   },
 
   /* ------------------------------------------------------------------ *
+   * Controles de carriles (#596): el «+» y el asa ⠿ del lienzo (`controlesCarriles.ts`) y la
+   * lista de carriles y el tamaño de un carril en el panel de propiedades (`PropertiesPanel.tsx`)
+   * ------------------------------------------------------------------ */
+  carriles: {
+    sinNombre: (n: number): string => `Carril sin nombre ${n}`,
+    anadirAqui: 'Añadir un carril aquí',
+    anadirEn: (posicion: number, pool: string): string => `Añadir un carril en la posición ${posicion} de «${pool}»`,
+    asaTitulo: 'Arrastra para reordenar · Alt+↑/↓',
+    asa: (carril: string): string => `Carril «${carril}». Arrástralo, o pulsa Alt+↑/↓, para moverlo`,
+    titulo: 'Carriles',
+    pista: 'Alt+↑/↓ en el lienzo',
+    lista: (pool: string): string => `Carriles de «${pool}»`,
+    nombreDe: (n: number): string => `Nombre del carril ${n}`,
+    resumen: (elementos: number, medida: string, valor: number): string =>
+      `${elementos} ${elementos === 1 ? 'elemento' : 'elementos'} · ${medida.toLowerCase()} ${valor}`,
+    subir: (carril: string): string => `Subir «${carril}»`,
+    bajar: (carril: string): string => `Bajar «${carril}»`,
+    aLaIzquierda: (carril: string): string => `Mover «${carril}» a la izquierda`,
+    aLaDerecha: (carril: string): string => `Mover «${carril}» a la derecha`,
+    borrar: (carril: string): string => `Eliminar «${carril}»`,
+    anadirAlFinal: '+ Añadir carril al final',
+    ayuda: 'No hace falta seleccionar el pool: el «+» de su borde añade un carril justo ahí. Arrastra las asas de un carril seleccionado para cambiar su tamaño.',
+    confirmarTitulo: 'Eliminar carril',
+    confirmarTexto: (carril: string, elementos: number): string =>
+      `«${carril}» tiene ${elementos} ${elementos === 1 ? 'elemento' : 'elementos'}. Al eliminar el carril ${elementos === 1 ? 'se queda' : 'se quedan'} en el pool, en el carril que ocupe su sitio.`,
+    confirmarBorrar: 'Eliminar carril',
+    alto: 'Alto',
+    ancho: 'Ancho',
+    medidaProblemas: {
+      vacio: 'Escribe un tamaño.',
+      numero: 'El tamaño tiene que ser un número, por ejemplo 120.',
+      minimo: (minimo: number): string => `El tamaño tiene que ser al menos ${minimo}: con menos, algún elemento queda fuera del carril.`,
+      minimoVacio: (minimo: number): string => `El tamaño tiene que ser al menos ${minimo}.`,
+      maximo: (maximo: number): string => `El tamaño tiene que ser como mucho ${maximo}.`,
+    },
+  },
+
+  /* ------------------------------------------------------------------ *
    * Paso Rutas y campos de porcentaje del lienzo (Lote M, C4: `PasoRutas.tsx`,
    * `etiquetasPorcentaje.ts`, el bloque de compuerta del panel de propiedades)
    * ------------------------------------------------------------------ */
@@ -1635,7 +1676,7 @@ export const es: Strings = {
     tipoLila: 'Proyecto de Lila Modeler',
     tipoLilaJson: 'Proyecto de Lila Modeler (JSON)',
     errorCambioExternoWeb: (nombre: string): string =>
-      `${nombre} cambió fuera de esta ventana desde que se abrió, así que no se guardó nada. ` +
+      `${nombre} cambió fuera de esta ventana desde que se leyó o guardó aquí por última vez, así que no se guardó nada. ` +
       'Ábrelo de nuevo para tener la otra versión, o usa Guardar como para conservar la tuya en otro archivo.',
     errorSinBridge: 'DesktopStore requiere `window.lila`: ¿se está instanciando fuera de Electron?',
     errorProyectoDistinto:
@@ -1653,7 +1694,7 @@ export const es: Strings = {
       'Vuelve a intentarlo en un momento.',
     /** `E-CAMBIO-EXTERNO` del disco (#539): `nombre` cambió fuera de Lila desde la última lectura. */
     errorCambioExterno: (nombre: string): string =>
-      `E-CAMBIO-EXTERNO: ${nombre} cambió fuera de Lila desde que se abrió, así que no se guardó nada. ` +
+      `E-CAMBIO-EXTERNO: ${nombre} cambió fuera de Lila desde que Lila lo leyó o guardó por última vez, así que no se guardó nada. ` +
       'Recarga para traer la otra versión, o usa «Guardar como» para conservar la tuya en otro archivo.',
     /** `E-CARPETA-OCUPADA` del disco (#517): `ruta` tiene archivos de otro proyecto. */
     errorCarpetaOcupada: (ruta: string): string =>

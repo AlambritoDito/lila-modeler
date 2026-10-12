@@ -63,6 +63,7 @@ import { moduloTraduccion } from './bpmnTranslate';
 import { moduloColores, type LilaColores } from './colores';
 import { moduloLote, type LilaLote } from './lote';
 import { moduloCarriles, type LilaCarriles } from './carriles';
+import { moduloControlesCarriles } from './controlesCarriles';
 import { moduloAncho, type LilaAncho } from './ancho';
 import { centrar, type CanvasCentrable } from './centrar';
 import { idDeSeleccion } from './ids';
@@ -138,8 +139,11 @@ export interface Servicios {
   colores?: Pick<LilaColores, 'pintar'>;
   /** Runs several `modeling` calls as one undoable command (#509). */
   lote?: (hacer: () => void) => void;
-  /** The lane tool's «pick a pool» mode (#580, `carriles.ts`). */
-  carriles?: Pick<LilaCarriles, 'elegirPool' | 'cancelar' | 'eligiendo'>;
+  /**
+   * The lane tool's «pick a pool» mode (#580, `carriles.ts`), and adding, moving and deleting lanes
+   * from the lane list of Properties (#596).
+   */
+  carriles?: Pick<LilaCarriles, 'elegirPool' | 'cancelar' | 'eligiendo' | 'insertar' | 'mover' | 'moverA' | 'quitar' | 'fijarTamano'>;
   /** Sets an activity's width as one undoable command (#563, `ancho.ts`). */
   ancho?: Pick<LilaAncho, 'fijar'>;
 }
@@ -244,9 +248,10 @@ export interface Modelador {
   rehacer?(): void;
   /**
    * Selecciona por id interno o por el id original anterior al saneamiento. `centrar` also scrolls
-   * the element into view (the command palette, #410).
+   * the element into view (the command palette, #410). A list (a selection read back after a reload,
+   * #568) selects the ones still in the diagram and on the plane on screen, and ignores `centrar`.
    */
-  seleccionar?(id: string, opciones?: { centrar?: true }): void;
+  seleccionar?(id: string | readonly string[], opciones?: { centrar?: true }): void;
   /** Gives the canvas the keyboard focus, so bpmn-js's own shortcuts work right away (#410). */
   enfocar?(): void;
   /**
@@ -324,7 +329,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
       // tokens del tema en vez de en blanco y negro (#264).
       // `moduloTraduccion` replaces bpmn-js's `translate` (#456); the minimap's patch below stays,
       // because the minimap writes its title once per toggle and a language change is not one.
-      additionalModules: [moduloMinimapa, tokenSimulationModule, moduloColoresDelTema, moduloSinTeclaT, moduloTraduccion, moduloColores, moduloLote, moduloCarriles, moduloAncho],
+      additionalModules: [moduloMinimapa, tokenSimulationModule, moduloColoresDelTema, moduloSinTeclaT, moduloTraduccion, moduloColores, moduloLote, moduloCarriles, moduloControlesCarriles, moduloAncho],
       // Abierto de entrada, como en el artboard; el plugin guarda el estado en su clase `open`
       // y su cabecera es el propio botón de plegar, restilizado en `app.css`.
       minimap: { open: true },
@@ -608,13 +613,19 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
         const commands = activo?.get<CommandStack>('commandStack');
         if (commands?.canRedo()) commands.redo();
       },
-      seleccionar: (id, opciones) => {
+      seleccionar: (ids, opciones) => {
         if (activo === null) return;
         const registro = activo.get<ElementRegistry>('elementRegistry');
-        const interno = registro.get(id)
-          ? id
-          : [...originalIds].find(([, original]) => original === id)?.[0];
-        const elemento = interno === undefined ? undefined : registro.get(interno);
+        const buscar = (id: string): ReturnType<ElementRegistry['get']> => {
+          const interno = registro.get(id) ? id : [...originalIds].find(([, original]) => original === id)?.[0];
+          return interno === undefined ? undefined : registro.get(interno);
+        };
+        if (typeof ids !== 'string') {
+          // diagram-js's `select` itself leaves out what is not on the plane on screen.
+          activo.get<Selection>('selection').select(ids.map(buscar).filter((el): el is NonNullable<typeof el> => el !== undefined));
+          return;
+        }
+        const elemento = buscar(ids);
         if (elemento === undefined) return;
         // Centre first: it may switch to the element's plane (a collapsed sub-process), and the
         // selection belongs on the plane that ends up on screen.
