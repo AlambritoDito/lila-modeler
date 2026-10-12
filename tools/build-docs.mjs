@@ -108,8 +108,8 @@ const LABELS = {
   'BRANDING.md': ['Branding', 'Branding'],
 };
 const T = {
-  en: { start: 'Start here', intro: 'Introduction', demo: 'Try the demo', more: 'More', releases: 'Releases', reference: 'Reference', search: 'Search docs', menu: 'Menu', prev: 'Previous', next: 'Next', edit: 'Edit this page', targets: 'Targets', onPage: 'On this page', other: 'ES', otherTitle: 'Leer en español' },
-  es: { start: 'Empieza aquí', intro: 'Introducción', demo: 'Probar la demo', more: 'Más', releases: 'Versiones', reference: 'Referencia', search: 'Buscar en la documentación', menu: 'Menú', prev: 'Anterior', next: 'Siguiente', edit: 'Editar esta página', targets: 'Para', onPage: 'En esta página', other: 'EN', otherTitle: 'Read in English' },
+  en: { start: 'Start here', intro: 'Introduction', demo: 'Open the app', more: 'More', releases: 'Releases', reference: 'Reference', search: 'Search docs', menu: 'Menu', prev: 'Previous', next: 'Next', edit: 'Edit this page', targets: 'Targets', onPage: 'On this page', other: 'ES', otherTitle: 'Leer en español' },
+  es: { start: 'Empieza aquí', intro: 'Introducción', demo: 'Abrir la app', more: 'Más', releases: 'Versiones', reference: 'Referencia', search: 'Buscar en la documentación', menu: 'Menú', prev: 'Anterior', next: 'Siguiente', edit: 'Editar esta página', targets: 'Para', onPage: 'En esta página', other: 'EN', otherTitle: 'Read in English' },
 };
 
 /**

@@ -74,7 +74,7 @@ Two file types register with Finder and double-click to open in this app (Beta 1
   below).
 
 **Backup guidance**: keep a copy of the `.lila` (or the project folder) before large edits — the
-app does not version your work for you beyond the "Save as…" workflow. The web demo's browser-local
+app does not version your work for you beyond the "Save as…" workflow. The web app's browser-local
 storage is not a backup: it lives only in that browser's storage on that machine, and is lost if
 you clear site data or switch browsers or profiles. Treat a downloaded `.lila` as the durable copy.
 
