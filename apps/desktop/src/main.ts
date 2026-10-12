@@ -20,10 +20,11 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, protocol, scree
 import type { IpcMainEvent, IpcMainInvokeEvent, WebFrameMain } from 'electron';
 import { appendFile, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { SaveOutcome, Ajustes, Exportacion, ImportedBpmn, OpenPathRequest, Recent } from './bridge.js';
+import type { SaveOutcome, Ajustes, ImportedBpmn, OpenPathRequest, Recent } from './bridge.js';
 import { closeDialogOptions, decideClose, readSaveOutcome, saveOutcomeDialogOptions, type CloseChoice } from './closeGuard.js';
 import { requireAuthorizedPath } from './authorizedPaths.js';
 import { e2eOverrides, type E2EOverrides } from './e2e.js';
+import { filtroExportacion, MAX_EXPORTACION, requireExportacion } from './exportacion.js';
 import { isTrustedSender, permiteVentanaHija } from './ipcGuards.js';
 import { resolveDesktopLocale, type DesktopLocale } from './locale.js';
 import { menuTemplate, teclaDeVentanaHija } from './menu.js';
@@ -276,20 +277,6 @@ function requireWriteOptions(dir: string, value: unknown): WriteProjectOptions {
   if (typeof opts.diagramOnly === 'boolean') (result as { diagramOnly?: boolean }).diagramOnly = opts.diagramOnly;
   if (modelFile !== undefined) (result as { modelFile?: string }).modelFile = modelFile;
   return result;
-}
-
-/** 64 MB: a PNG of a very large diagram at 2x is a few MB; anything past this is not an export. */
-const MAX_EXPORTACION = 64 * 1024 * 1024;
-
-/** Validates the argument of `lila:exportar` (#451). */
-function requireExportacion(value: unknown): Exportacion {
-  const v = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>;
-  const { nombre, tipo, datos } = v;
-  const valido = typeof nombre === 'string' && nombre.length > 0 && nombre.length <= 255
-    && (tipo === 'png' || tipo === 'docx' ? datos instanceof Uint8Array : (tipo === 'svg' || tipo === 'pdf' || tipo === 'html') && typeof datos === 'string')
-    && (datos as { length: number }).length <= MAX_EXPORTACION;
-  if (!valido) throw new Error('E-ARGUMENTO: "exportacion" debe ser { nombre, tipo: svg|png|pdf|docx|html, datos }.');
-  return v as unknown as Exportacion;
 }
 
 /**
@@ -558,7 +545,7 @@ function registerIpcHandlers(win: BrowserWindow): void {
         : process.platform === 'darwin'
           ? ['openFile', 'openDirectory', 'createDirectory']
           : ['openDirectory', 'createDirectory'],
-      filters: [{ name: 'Lila Modeler Project', extensions: ['lila'] }],
+      filters: [{ name: strings().dialogos.proyectoLila, extensions: ['lila'] }],
     });
     if (result.canceled || result.filePaths.length === 0) return null;
     // `realpath`, no la ruta cruda del diálogo: la carpeta autorizada queda anclada a su
@@ -591,7 +578,7 @@ function registerIpcHandlers(win: BrowserWindow): void {
       chosen = e2e.saveFile;
     } else {
       const result = await dialog.showSaveDialog(win, {
-        filters: [{ name: 'Lila project', extensions: ['lila'] }],
+        filters: [{ name: strings().dialogos.proyectoLila, extensions: ['lila'] }],
         ...(defaultPath === undefined ? {} : { defaultPath }),
       });
       if (result.canceled || result.filePath === undefined || result.filePath.length === 0) return null;
@@ -623,7 +610,7 @@ function registerIpcHandlers(win: BrowserWindow): void {
     } else {
       const result = await dialog.showOpenDialog(win, {
         properties: ['openFile'],
-        filters: [{ name: 'BPMN', extensions: ['bpmn', 'xml'] }],
+        filters: [{ name: strings().dialogos.diagramaBpmn, extensions: ['bpmn', 'xml'] }],
       });
       if (result.canceled || result.filePaths.length === 0) return null;
       chosen = result.filePaths[0]!;
@@ -730,17 +717,33 @@ function registerIpcHandlers(win: BrowserWindow): void {
     await persistSessionState();
   });
 
-  // Diagram export (#451): the renderer draws the image, main owns the save dialog and the PDF.
+  // Every export (#451, #454, #564): the renderer builds the bytes, main owns the save dialog, the
+  // PDF and the write. Written here and not through Chromium's download manager, the file carries
+  // no Internet zone mark on Windows and the dialog has the app's title, not a `blob:` URL.
   guardedHandle(win, 'lila:exportar', async (_event, value: unknown): Promise<string | null> => {
     const { nombre, tipo, datos } = requireExportacion(value);
-    const result = await dialog.showSaveDialog(win, {
-      defaultPath: `${path.basename(nombre)}.${tipo}`,
-      filters: [{ name: tipo.toUpperCase(), extensions: [tipo] }],
-    });
-    if (result.canceled || result.filePath === undefined || result.filePath.length === 0) return null;
-    await writeFile(result.filePath, tipo === 'pdf' ? await pdfDeSvg(datos) : datos);
-    await e2eLog('exportar', { tipo, result: result.filePath });
-    return result.filePath;
+    let destino: string;
+    if (e2e.exportFile !== undefined) {
+      // E2E seam (`LILA_E2E_EXPORT_FILE`, see `e2e.ts`): no native dialog.
+      if (e2e.exportFile === null) {
+        await e2eLog('exportar', { tipo, result: null });
+        return null;
+      }
+      await mkdir(path.dirname(e2e.exportFile), { recursive: true });
+      destino = e2e.exportFile;
+    } else {
+      const D = strings().dialogos;
+      const result = await dialog.showSaveDialog(win, {
+        title: D.exportar,
+        defaultPath: `${nombre}.${tipo}`,
+        filters: [filtroExportacion(tipo, D)],
+      });
+      if (result.canceled || result.filePath === undefined || result.filePath.length === 0) return null;
+      destino = result.filePath;
+    }
+    await writeFile(destino, tipo === 'pdf' ? await pdfDeSvg(datos) : datos);
+    await e2eLog('exportar', { tipo, result: destino });
+    return destino;
   });
 
   guardedHandle(win, 'lila:writeRecovery', async (_event, bytes: unknown): Promise<void> => {

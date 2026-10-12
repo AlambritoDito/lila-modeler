@@ -120,7 +120,12 @@ sections behind a left `role="tablist"` nav — **General** (language, density, 
 (theme editor, below) and **Shortcuts** (a read-only table of the current keyboard map) — all
 three mounted at once and toggled with `hidden`, not remounted, so `Apariencia`'s live-preview
 wiring survives switching tabs and a test can reach any control without first clicking through the
-nav. General starts active every time the dialog opens.
+nav. General starts active every time the dialog opens. Language and density are segmented
+controls (#441): one `role="radiogroup"` each, a single Tab stop, and the arrows move and choose
+(wrapping; Home/End jump). The native `<select>` each one replaced stays in the DOM, `hidden` —
+out of the Tab order and the accessibility tree — for what drives Settings by script, through the
+same handler. The rail is 200 px wide, padding and divider included, and its tabs wear the theme's
+focus ring.
 
 `apps/web/src/settings/Apariencia.tsx` is the Appearance section; `App.tsx` remains **the only
 one** that calls `applyTheme` and `Modelador.repintar()`. The component neither applies nor
@@ -131,9 +136,14 @@ you don't have to look behind the dialog.
 
 The controls:
 
-- **Theme list**: the built-in ones (Eva-01, Papel) and the user's own, each group in an
-  `<optgroup>`. Picking one applies it live; built-in themes are requested via `fetch`, user themes
-  come from storage and request nothing.
+- **Theme list**: one card per theme (#441, the artboard's TEMAS column) — the built-in ones,
+  then the user's own — with a strip of its palette (`bg.base`, `accent.primary`,
+  `accent.secondary`; a user theme's missing tokens show Eva-01's, which is what `tokens.css`
+  paints), its name and a «Built-in»/«Mine» tag. The cards are one `role="radiogroup"`: one Tab stop,
+  arrows to move. Picking one applies it live; built-in themes are requested via `fetch`, user
+  themes come from storage and request nothing (the cards read the built-in palettes from the same
+  JSON files at build time). The `<select>` with one `<optgroup>` per group stays in the DOM,
+  `hidden`, like General's.
 - **Follow the system theme** (#472): a toggle, on by default, with a **Light theme** and a **Dark
   theme** selector below it while it is on (see "Following the system scheme" above).
 - **Duplicate**: copies the active theme as a user theme, with an editable name next to it.
@@ -158,7 +168,8 @@ The controls:
   anything app-specific — via an `<a download>` and a Blob. On Electron it works the same way:
   there is no `will-download` intercepting it, and `lila://`'s CSP does not govern downloads, so
   Chromium saves it through the normal path.
-- **Import**: an `<input type="file" accept=".json">`. The whole JSON is validated before touching
+- **Import**: a button that opens a hidden `<input type="file" accept=".json">` (#441: the styled
+  `<label>` it used to be was not reachable with Tab). The whole JSON is validated before touching
   anything (`validarTema`, `apps/web/src/theme/temas.ts`); if something fails, the message
   appears inside the dialog and nothing is applied or saved. If it is valid, it comes in as a user
   theme and is applied.

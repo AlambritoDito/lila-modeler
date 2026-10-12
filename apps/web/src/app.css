@@ -1060,6 +1060,9 @@ body {
   --bendpoint-fill-color: var(--diagram-selected);
   --bendpoint-stroke-color: var(--bg-base);
   --resizer-stroke-color: var(--bg-base);
+  /* #596: the resize handles of a selected lane, pool or activity in the selection colour of the
+     theme (purple in Lila), not bpmn-js's fixed blue. */
+  --resizer-fill-color: var(--diagram-selected);
 
   --palette-background-color: var(--bg-surface);
   --palette-border-color: var(--border);
@@ -1078,6 +1081,186 @@ body {
   --popup-shadow-color: var(--shadow);
 
   --bjs-font-family: var(--font-diagram);
+}
+
+/* ---------- lane controls (#596, design 07 «pools») ---------- */
+
+/* The «+» on the pool's edge and the ⠿ in each lane's header (`controlesCarriles.ts`). Each is
+   anchored at a point of the lane and centred on it here, so diagram-js's scaling (from the top
+   left of the overlay) keeps it on that point. */
+.lienzo .lila-carril-ancla {
+  height: 0;
+  position: relative;
+  width: 0;
+}
+
+.lienzo .lila-carril-mas,
+.lienzo .lila-carril-asa {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  font-family: var(--font-ui);
+  justify-content: center;
+  left: 0;
+  line-height: 1;
+  padding: 0;
+  position: absolute;
+  top: 0;
+  transform: translate(-50%, -50%);
+}
+
+/* Square, like every control here (radius 0, LILA-206): the draft drew it round. */
+.lienzo .lila-carril-mas {
+  background: var(--bg-surface);
+  border: 1.5px solid var(--accent-primary);
+  color: var(--accent-primary);
+  font-size: 15px;
+  font-weight: 700;
+  height: 20px;
+  width: 20px;
+}
+
+/* On a corner of a selected lane it would cover the lane's nw/sw resize handles (bpmn-js draws
+   them 6 px outside the corner, with a 20 px hit area, and next to a 60 px lane there is no room
+   left beside them at any zoom): it steps aside while the lane stays selected. The lane's context
+   pad adds lanes above and below it meanwhile. */
+.lienzo .lila-carril-mas.lila-carril-mas-apartado {
+  visibility: hidden;
+}
+
+.lienzo .lila-carril-mas:hover,
+.lienzo .lila-carril-mas:focus-visible {
+  background: var(--accent-primary);
+  color: var(--fg-onAccent);
+}
+
+.lienzo .lila-carril-asa {
+  background: transparent;
+  border: 0;
+  color: var(--fg-muted);
+  cursor: grab;
+  font-size: 18px;
+  height: 24px;
+  touch-action: none;
+  width: 20px;
+}
+
+.lienzo .lila-carril-asa:hover {
+  background: var(--bg-hover);
+  color: var(--accent-primary);
+}
+
+.lienzo .lila-carril-mas:focus-visible,
+.lienzo .lila-carril-asa:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.lienzo .lila-arrastrando-carril,
+.lienzo .lila-arrastrando-carril * {
+  cursor: grabbing !important;
+}
+
+/* The resize handles of a selected shape (a lane's included): bpmn-js draws them 8 px wide; a
+   quarter larger they are easier to see on a lane's long edges. The hit area stays bpmn-js's. */
+.lienzo .djs-resizer-visual {
+  transform: scale(1.25);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* The lane a dragged lane would take the place of. */
+.lienzo .djs-element.lila-carril-destino .djs-visual > rect {
+  fill: var(--accent-primary) !important;
+  fill-opacity: 0.12 !important;
+  stroke: var(--accent-primary) !important;
+  stroke-width: 3px !important;
+}
+
+/* Model only: not in Simulate or Results, nor while «Validate paths» animates tokens. */
+.app.modo-simular .lienzo .djs-overlay-lila-carril,
+.app.modo-resultados .lienzo .djs-overlay-lila-carril,
+.lienzo .bjs-container.simulation .djs-overlay-lila-carril,
+.app.modo-simular .panel .carriles-modelar,
+.app.modo-resultados .panel .carriles-modelar {
+  display: none !important;
+}
+
+/* The lane list of a pool in Properties: number, name and size, ↑ ↓ ×. */
+.lista-carriles-cabecera {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.lista-carriles-cabecera small,
+.lista-carriles-datos small,
+.lista-carriles-ayuda {
+  color: var(--fg-muted);
+  font-size: 0.8em;
+}
+
+.lista-carriles ol {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.lista-carriles li {
+  align-items: center;
+  border: 1px solid var(--border);
+  display: grid;
+  gap: 4px;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto auto;
+  padding: 6px 6px 6px 8px;
+}
+
+.lista-carriles li.actual {
+  background: var(--bg-hover);
+  border-color: var(--accent-primary);
+}
+
+.lista-carriles-num {
+  color: var(--fg-muted);
+  font-size: 11px;
+}
+
+.lista-carriles-datos {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.lista-carriles-datos input {
+  font-weight: 600;
+}
+
+/* «+ Add a lane at the end»: the dashed accent box of the design, the width of the list. */
+.lista-carriles .anadir {
+  align-self: stretch;
+  border: 1.5px dashed var(--accent-primary);
+  color: var(--accent-primary);
+  font-weight: 700;
+  padding: calc(7px * var(--espacio, 1)) 8px;
+}
+
+.lista-carriles .anadir:hover {
+  background: var(--bg-hover);
+}
+
+.lista-carriles .quitar:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.lista-carriles .quitar:disabled:hover {
+  border-color: var(--border);
+  color: var(--fg-muted);
 }
 
 /* ---------- panel de propiedades (LILA-060) ---------- */
@@ -2881,10 +3064,15 @@ button.gcal-uso-fila:hover {
 .ajustes-encabezado { align-items: center; border-bottom: 1px solid var(--border); display: flex; flex: none; gap: 12px; justify-content: space-between; padding: calc(16px * var(--espacio, 1)) 24px; }
 .ajustes-encabezado h2 { font-size: 1em; margin: 0; }
 .ajustes-cuerpo { display: flex; flex: 1 1 auto; min-height: 0; }
-.ajustes-nav { border-right: 1px solid var(--border); display: flex; flex: none; flex-direction: column; gap: 2px; overflow: auto; padding: calc(12px * var(--espacio, 1)); width: 200px; }
+/* `border-box`: the 200 px of the artboard are the whole rail, its padding and divider included
+   (it measured ~225 px with the default `content-box`, QA of #437 N3; #441). */
+.ajustes-nav { border-right: 1px solid var(--border); box-sizing: border-box; display: flex; flex: none; flex-direction: column; gap: 2px; overflow: auto; padding: calc(12px * var(--espacio, 1)); width: 200px; }
 .ajustes-nav [role='tab'] { background: none; border: none; border-radius: 0; color: var(--fg-muted); cursor: pointer; font: inherit; padding: calc(8px * var(--espacio, 1)) 10px; text-align: left; }
 .ajustes-nav [role='tab']:hover { color: var(--fg-primary); }
 .ajustes-nav [role='tab'].activo { background: var(--bg-hover); color: var(--fg-primary); font-weight: 600; }
+/* The theme's focus ring, not the browser's default one (QA of #437 N2; #441). Inset: the rail
+   scrolls, and an outer ring would be clipped at its edges. */
+.ajustes-nav [role='tab']:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
 .ajustes-panel { flex: 1 1 auto; min-width: 0; overflow: auto; padding: calc(20px * var(--espacio, 1)) 24px; }
 .ajustes .fila { align-items: center; display: grid; gap: 8px; grid-template-columns: 9rem 1fr; margin-bottom: calc(10px * var(--espacio, 1)); }
 .ajustes .fila > span { color: var(--fg-muted); }
@@ -2906,6 +3094,39 @@ button.gcal-uso-fila:hover {
 /* #472: the help line under «Follow the system theme», tucked against its toggle. */
 .ajustes .ayuda { color: var(--fg-muted); font-size: 0.9em; margin: 0 0 calc(12px * var(--espacio, 1)); }
 .ajustes .acciones { border-top: 1px solid var(--border); flex: none; justify-content: flex-end; margin: 0; padding: calc(12px * var(--espacio, 1)) 24px; }
+/* `hidden` wins over the `display` of the shared rules (`.campo` is a flex box): the native
+   selects that the segmented controls and the theme cards replaced stay in the DOM, hidden (#441). */
+.ajustes [hidden] { display: none; }
+
+/* Segmented controls of General (language, density; artboard 09, #441): one `role="radiogroup"`,
+   the chosen option filled with the accent like the artboard's «Normal». */
+.ajustes .segmentado { display: flex; flex-wrap: wrap; justify-self: start; }
+.ajustes .segmentado [role='radio'] { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 0; color: var(--fg-muted); cursor: pointer; font: inherit; margin-left: -1px; padding: calc(5px * var(--espacio, 1)) 12px; }
+.ajustes .segmentado [role='radio']:first-child { margin-left: 0; }
+.ajustes .segmentado [role='radio']:hover { color: var(--fg-primary); }
+.ajustes .segmentado [role='radio'][aria-checked='true'] { background: var(--accent-primary); border-color: var(--accent-primary); color: var(--fg-onAccent); font-weight: 600; }
+
+/* Theme cards (the artboard's TEMAS column, #441): a strip of the palette, the name, and whether
+   it ships with the app. Also one `role="radiogroup"`. */
+.ajustes .fila.temas { align-items: start; }
+.ajustes .fila.temas > span { padding-top: calc(7px * var(--espacio, 1)); }
+.ajustes .tarjetas-tema { display: grid; gap: 6px; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); }
+.ajustes .tarjetas-tema [role='radio'] { align-items: center; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 0; color: var(--fg-primary); cursor: pointer; display: flex; font: inherit; gap: 8px; min-width: 0; padding: calc(6px * var(--espacio, 1)) 8px; text-align: left; }
+.ajustes .tarjetas-tema [role='radio']:hover { background: var(--bg-hover); }
+.ajustes .tarjetas-tema [role='radio'][aria-checked='true'] { background: var(--bg-hover); border-color: var(--accent-primary); box-shadow: inset 2px 0 0 var(--accent-primary); font-weight: 600; }
+.ajustes .tarjetas-tema .muestra { border: 1px solid var(--border); display: flex; flex: none; }
+.ajustes .tarjetas-tema .muestra > span { block-size: 18px; inline-size: 7px; }
+.ajustes .tarjetas-tema .nombre { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ajustes .tarjetas-tema .tipo { color: var(--fg-muted); flex: none; font-family: var(--font-mono); font-size: 10px; font-weight: 400; }
+.ajustes .segmentado [role='radio']:focus-visible,
+.ajustes .tarjetas-tema [role='radio']:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; position: relative; z-index: 1; }
+/* Forced colors (Windows high contrast) repaint every segment alike: the chosen one keeps the
+   system selection colours, and the theme cards keep their palette strip. */
+@media (forced-colors: active) {
+  .ajustes .segmentado [role='radio'][aria-checked='true'] { background: Highlight; border-color: Highlight; color: HighlightText; forced-color-adjust: none; }
+  .ajustes .tarjetas-tema .muestra { forced-color-adjust: none; }
+  .ajustes .tarjetas-tema [role='radio'][aria-checked='true'] { outline: 2px solid Highlight; outline-offset: -2px; }
+}
 
 /* Theme editor (LILA-114): groups are `<details>`, and only the first one opens by default. Not
    a single literal color here: everything comes from the tokens, including the editor's own,
@@ -2917,10 +3138,6 @@ button.gcal-uso-fila:hover {
    row inherited a stray divider and the footer's indent. Zeroing both out here keeps the footer
    rule for the actual footer only. */
 .ajustes .acciones.temas { border-top: 0; justify-content: flex-start; margin: 12px 0; padding: 0; }
-/* El `<label>` es el botón del `<input type="file">`: el input de verdad no se ve, pero sigue ahí
-   y es el que abre el selector nativo (y el que un test acciona). */
-.ajustes .acciones.temas .boton { display: inline-flex; }
-.ajustes .acciones.temas input[type='file'] { display: none; }
 .ajustes .muestras { align-items: center; background: var(--bg-surface); border: 1px solid var(--border); display: flex; gap: 12px; margin: 12px 0; padding: 10px; }
 .ajustes .muestras .apagado { color: var(--fg-muted); }
 .ajustes .muestras .acento { background: var(--accent-primary); color: var(--fg-onAccent); font-weight: 600; padding: 2px 10px; }

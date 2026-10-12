@@ -362,7 +362,10 @@ export async function readProjectFolder(
   const problems: ProjectProblem[] = [];
   const manifest = await readManifest(dir, problems);
   const scenarios = await readScenarios(dir, problems);
-  const runs = await readRuns(dir, problems);
+  // The folder's runs were taken on its `model.bpmn`: another `.bpmn` opened next to it has none of
+  // its own (#613). With them, a run of `model.bpmn` at the same revision counted as the current
+  // run of `ventas.bpmn`, and «Save As» copied it into the new project.
+  const runs = modelFile === MODEL_FILE ? await readRuns(dir, problems) : [];
 
   // «Diagrama suelto» (LILA-072, hallazgo 7 del QA; corregido en LILA-206, P1 del QA): CUALQUIER
   // `.bpmn` abierto que no sea el `model.bpmn` de la carpeta — el doble clic en `~/Descargas`, y
