@@ -67,7 +67,7 @@ interface Inyectados {
     removeShape(forma: Forma): void;
     resizeLane(carril: Forma, caja: { x: number; y: number; width: number; height: number }, equilibrado?: boolean): void;
   };
-  eventBus: { on(evento: string, prioridad: number, escuchar: (e: { element?: Forma }) => unknown): void };
+  eventBus: { on(evento: string, prioridad: number, escuchar: (e: { element?: Forma; context?: { newLane?: Forma } }) => unknown): void };
   contextPad: { registerProvider(prioridad: number, proveedor: object): void; open?(el: Forma, forzar?: boolean): void; isOpen?(el?: Forma): boolean };
   directEditing: { activate(el: unknown): void };
   canvas: { getContainer(): HTMLElement; getRootElement(): Forma };
@@ -230,19 +230,16 @@ export class LilaCarriles {
       },
     });
 
-    // #596: bpmn-js's `addLane` appends the new lane to its `laneSet` and only shifts the lanes it
-    // pushes aside, so a lane added between two others would be listed last in the XML. The same
-    // command puts the `laneSet` back in drawing order (the guarantee of #580), so one undo
-    // reverts both.
-    commandStack.register('lila.carril.insertar', {
-      postExecute: (ctx: { destino: Forma; lugar: 'top' | 'bottom'; nuevo?: Forma }) => {
-        const nuevo = this.modeling.addLane(ctx.destino, ctx.lugar);
-        ctx.nuevo = nuevo;
-        const lista = nuevo.businessObject.$parent?.lanes;
-        if (Array.isArray(lista)) {
-          this.commandStack.execute('lila.carril.orden', { listas: [{ lista, orden: hermanos(nuevo).map((l) => l.businessObject) }] });
-        }
-      },
+    // #596: bpmn-js's `lane.add` appends the new lane to its `laneSet` and only shifts the lanes it
+    // pushes aside, so a lane added between two others would be listed last in the XML. Every
+    // `lane.add` — the «+» on the pool's edge, the palette's Lane tool with or without a selection,
+    // the context pad's «Add lane above/below» — gets its `laneSet` put back in drawing order (the
+    // guarantee of #580) by a command nested in it, so one undo reverts both and redo replays both.
+    eventBus.on('commandStack.lane.add.postExecuted', 500, ({ context }) => {
+      const nuevo = context?.newLane;
+      const lista = nuevo?.businessObject.$parent?.lanes;
+      if (nuevo === undefined || !Array.isArray(lista)) return;
+      this.commandStack.execute('lila.carril.orden', { listas: [{ lista, orden: hermanos(nuevo).map((l) => l.businessObject) }] });
     });
 
     // A destroyed or replaced diagram drops the pick (and its document listener).
@@ -312,19 +309,10 @@ export class LilaCarriles {
    */
   insertar(pool: Forma, indice: number): Forma {
     const lista = carrilesDe(pool);
-    const ctx: { destino: Forma; lugar: 'top' | 'bottom' } = lista.length === 0
-      ? { destino: pool, lugar: 'bottom' }
-      : indice <= 0
-        ? { destino: lista[0]!, lugar: 'top' }
-        : { destino: lista[Math.min(indice, lista.length) - 1]!, lugar: 'bottom' };
-    return this.anadirCarril(ctx.destino, ctx.lugar);
-  }
-
-  /** bpmn-js's `addLane` followed by the `laneSet` in drawing order, as one command. */
-  private anadirCarril(destino: Forma, lugar: 'top' | 'bottom'): Forma {
-    const ctx: { destino: Forma; lugar: 'top' | 'bottom'; nuevo?: Forma } = { destino, lugar };
-    this.commandStack.execute('lila.carril.insertar', ctx);
-    return ctx.nuevo!;
+    if (lista.length === 0) return this.modeling.addLane(pool, 'bottom');
+    return indice <= 0
+      ? this.modeling.addLane(lista[0]!, 'top')
+      : this.modeling.addLane(lista[Math.min(indice, lista.length) - 1]!, 'bottom');
   }
 
   /**
@@ -380,7 +368,7 @@ export class LilaCarriles {
     const pools = this.elementRegistry.filter((el) => esPool(el) && el.labelTarget === undefined);
     if (pools.length === 0) return false;
     if (pools.length === 1) {
-      this.directEditing.activate(this.anadirCarril(pools[0]!, 'bottom'));
+      this.directEditing.activate(this.modeling.addLane(pools[0]!, 'bottom'));
       alTerminar();
       return true;
     }
@@ -401,7 +389,7 @@ export class LilaCarriles {
   }
 
   private anadirEn(destino: Forma): void {
-    const nuevo = this.anadirCarril(destino, 'bottom');
+    const nuevo = this.modeling.addLane(destino, 'bottom');
     this.cancelar();
     this.directEditing.activate(nuevo);
   }

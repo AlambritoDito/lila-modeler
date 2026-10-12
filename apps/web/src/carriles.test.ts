@@ -231,6 +231,42 @@ describe('the palette Lane tool with nothing selected (#580)', () => {
     expect(hecho).toHaveBeenCalledOnce();
   });
 
+  it('below a selected middle lane, keeps the laneSet in drawing order; one undo reverts it all (#596)', async () => {
+    const m = await montar(TRES_CARRILES);
+    const antes = await m.xml();
+    insertar(servicios(m), carril(), 'L2');
+    const enLienzo = lanesOf(m, 'Pool').sort((a, b) => a.y - b.y).map((l) => l.id);
+    expect(enLienzo.filter((id) => /^L\d$/.test(id))).toEqual(['L1', 'L2', 'L3']);
+    expect(enLienzo[2]).not.toMatch(/^L\d$/);
+    expect(ordenSemantico(await m.xml())).toEqual(enLienzo);
+    m.commandStack.undo();
+    expect(await m.xml()).toBe(antes);
+    m.commandStack.redo();
+    expect(ordenSemantico(await m.xml())).toEqual(enLienzo);
+  });
+
+  it('bpmn-js\'s context pad «Add lane above/below» keeps the laneSet in drawing order too (#596)', async () => {
+    const m = await montar(TRES_CARRILES);
+    const antes = await m.xml();
+    const pad = m.modeler.get<{ getEntries(el: Forma): Record<string, { action: { click(e: Event, el: Forma): void } }> }>('contextPad');
+    const pulsar = (entrada: string, id: string) => pad.getEntries(m.el(id))[entrada]!.action.click(new MouseEvent('click'), m.el(id));
+    const enLienzo = () => lanesOf(m, 'Pool').sort((a, b) => a.y - b.y).map((l) => l.id);
+
+    pulsar('lane-insert-below', 'L1');
+    const debajo = enLienzo()[1]!;
+    expect(enLienzo()).toEqual(['L1', debajo, 'L2', 'L3']);
+    expect(ordenSemantico(await m.xml())).toEqual(enLienzo());
+
+    pulsar('lane-insert-above', 'L3');
+    const encima = enLienzo()[3]!;
+    expect(enLienzo()).toEqual(['L1', debajo, 'L2', encima, 'L3']);
+    expect(ordenSemantico(await m.xml())).toEqual(enLienzo());
+
+    m.commandStack.undo();
+    m.commandStack.undo();
+    expect(await m.xml()).toBe(antes);
+  });
+
   it('with two pools, waits for a click on one; Escape cancels', async () => {
     const m = await montar(DOS_POOLS);
     const eventBus = m.modeler.get<{ fire(e: string, d: object): unknown }>('eventBus');
