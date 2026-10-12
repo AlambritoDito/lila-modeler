@@ -144,6 +144,9 @@ General options:
   -h, --help       Shows this help.
   -v, --version    Prints the installed version.`;
 
+/** `count` with its noun, singular for one: «1 step», «2 steps». */
+const n = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
+
 export const en: Catalog = {
   codes: {
     ...coreEn.codes,
@@ -161,7 +164,7 @@ export const en: Catalog = {
     'W-XOR-DEFAULT-ROTO': (id, notice) =>
       `${id}: the declared default flow does not exist; the default-flow mark (\`isDefault\`) is ignored and the split follows the rules of a XOR without a default flow: ${notice}.`,
     'W-MSGFLOW': (processId, count) =>
-      `${processId}: ${count} message flows (bpmn:messageFlow) were ignored.`,
+      `${processId}: ${n(count, 'message flow', 'message flows')} (bpmn:messageFlow) ${count === 1 ? 'was' : 'were'} ignored.`,
     'W-COND': (flowId) => `${flowId}: the flow's condition (\`conditionExpression\`) is ignored; branching is probabilistic.`,
     'E-GATEWAY-SIN-ARISTAS/sin-entradas': (id) => `${id}: the gateway has no incoming flows.`,
     'E-GATEWAY-SIN-ARISTAS/sin-salidas': (id) => `${id}: the gateway has no outgoing flows.`,
@@ -388,7 +391,7 @@ export const en: Catalog = {
     moreWarnings: (count) =>
       count === 1
         ? '(+1 more warning with the same code)'
-        : `(+${count} more warnings with the same code)`,
+        : `(+${n(count, 'more warning', 'more warnings')} with the same code)`,
 
     invalidJson: (file, detail) => `${file}: invalid JSON: ${detail}`,
     invalidScenarioLabel: () => 'invalid scenario:',
@@ -513,9 +516,9 @@ export const en: Catalog = {
     outlineXorAndJoin: (join, split) =>
       `parallel join "${join}" waits for branches of the exclusive gateway "${split}", which only ever takes one: cases would wait there forever. Use an xor (or or) join.`,
     outlineDroppedPools: (names) => `other pools are not part of the outline and were left out: ${names}.`,
-    outlineDroppedMessageFlows: (count) => `${count} message flows are not part of the outline and were left out.`,
+    outlineDroppedMessageFlows: (count) => `${n(count, 'message flow is', 'message flows are')} not part of the outline and ${count === 1 ? 'was' : 'were'} left out.`,
     outlineDroppedEventNames: (events) => `start and end events are implicit in an outline; their names were left out: ${events}.`,
-    outlineDroppedArtifacts: (count) => `${count} annotations, groups or associations are not part of the outline and were left out.`,
+    outlineDroppedArtifacts: (count) => `${n(count, 'annotation, group or association is', 'annotations, groups or associations are')} not part of the outline and ${count === 1 ? 'was' : 'were'} left out.`,
     outlineDroppedDefaults: (ids) => `default-flow marks are not part of the outline and were left out: ${ids}.`,
     outlineScenarioOutside: (kinds) =>
       `the scenario's ${kinds.split(',').map((k) => ({ arrivals: 'arrivals', calendars: 'calendars', costs: 'costs', capacities: 'resource capacities and types', conditions: 'conditional routing' } as Record<string, string>)[k] ?? k).join(', ')} are not part of the outline; they stay in the scenario, which this reading does not change.`,
@@ -526,9 +529,9 @@ export const en: Catalog = {
     processBadSlug: (slug) => `"${slug}" is not a valid process slug (lowercase letters, digits and hyphens).`,
     processExists: (slug, file) => `${file} already has a process "${slug}"; nothing was written. Choose another name or slug.`,
     processCreated: (name, slug, file, steps, lanes, newFile) =>
-      `Created process "${name}" (${slug}) in ${newFile ? 'the new file ' : ''}${file}: ${steps} steps, ${lanes} lanes, base scenario as-is.scenario.json.`,
+      `Created process "${name}" (${slug}) in ${newFile ? 'the new file ' : ''}${file}: ${n(steps, 'step', 'steps')}, ${n(lanes, 'lane', 'lanes')}, base scenario as-is.scenario.json.`,
     processDryRun: (name, slug, file, steps, lanes, newFile) =>
-      `Dry run: would create process "${name}" (${slug}) in ${newFile ? 'the new file ' : ''}${file}: ${steps} steps, ${lanes} lanes. Nothing was written.`,
+      `Dry run: would create process "${name}" (${slug}) in ${newFile ? 'the new file ' : ''}${file}: ${n(steps, 'step', 'steps')}, ${n(lanes, 'lane', 'lanes')}. Nothing was written.`,
     processUnknownSubcommand: (sub) => `unknown subcommand "${sub}"; use create, show, edit, annotate or raci.`,
     processMissingOption: (option) => `missing ${option}.`,
     processShowHeader: (name, slug) => `Process "${name}" (${slug})`,
@@ -584,9 +587,9 @@ export const en: Catalog = {
     editMoved: (id, lane) => `moved "${id}" to lane "${lane}"`,
     editLaneAdded: (name, id) => `added lane "${name}" (${id})`,
     processEdited: (name, slug, file, operations, removed) =>
-      `Edited process "${name}" (${slug}) in ${file}: ${operations} operations, ${removed} elements removed.`,
+      `Edited process "${name}" (${slug}) in ${file}: ${n(operations, 'operation', 'operations')}, ${n(removed, 'element', 'elements')} removed.`,
     processEditDryRun: (name, slug, file, operations, removed) =>
-      `Dry run: would edit process "${name}" (${slug}) in ${file}: ${operations} operations, ${removed} elements removed. Nothing was written.`,
+      `Dry run: would edit process "${name}" (${slug}) in ${file}: ${n(operations, 'operation', 'operations')}, ${n(removed, 'element', 'elements')} removed. Nothing was written.`,
     editOpsUnreadable: (file, detail) => `cannot read the operations ${file}: ${detail}`,
     editNotList: () => 'must be a non-empty list of operations.',
     editUnknownOp: (op, accepted) => `"${op}" is not an operation; use one of ${accepted}.`,

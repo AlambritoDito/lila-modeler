@@ -147,6 +147,9 @@ Opciones generales:
   -h, --help       Muestra esta ayuda.
   -v, --version    Imprime la versión instalada.`;
 
+/** `count` con su sustantivo, en singular para uno: «1 paso», «2 pasos». */
+const n = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
+
 export const es: Catalog = {
   codes: {
     ...coreEs.codes,
@@ -164,7 +167,7 @@ export const es: Catalog = {
     'W-XOR-DEFAULT-ROTO': (id, notice) =>
       `${id}: el flujo por defecto declarado no existe; se ignora la marca de flujo por defecto (\`isDefault\`) y el reparto sigue las reglas de un XOR sin flujo por defecto: ${notice}.`,
     'W-MSGFLOW': (processId, count) =>
-      `${processId}: se ignoraron ${count} flujos de mensaje (bpmn:messageFlow).`,
+      `${processId}: ${count === 1 ? 'se ignoró' : 'se ignoraron'} ${n(count, 'flujo', 'flujos')} de mensaje (bpmn:messageFlow).`,
     'W-COND': (flowId) => `${flowId}: la condición del flujo (\`conditionExpression\`) se ignora; el ramaje es probabilístico.`,
     'E-GATEWAY-SIN-ARISTAS/sin-entradas': (id) => `${id}: la compuerta no tiene entradas.`,
     'E-GATEWAY-SIN-ARISTAS/sin-salidas': (id) => `${id}: la compuerta no tiene salidas.`,
@@ -392,7 +395,7 @@ export const es: Catalog = {
     moreWarnings: (count) =>
       count === 1
         ? '(+1 aviso más con el mismo código)'
-        : `(+${count} avisos más con el mismo código)`,
+        : `(+${n(count, 'aviso', 'avisos')} más con el mismo código)`,
 
     invalidJson: (file, detail) => `${file}: JSON inválido: ${detail}`,
     invalidScenarioLabel: () => 'escenario inválido:',
@@ -519,9 +522,9 @@ export const es: Catalog = {
     outlineXorAndJoin: (join, split) =>
       `la unión paralela "${join}" espera ramas de la compuerta exclusiva "${split}", que solo toma una: los casos esperarían ahí para siempre. Usa una unión xor (u or).`,
     outlineDroppedPools: (names) => `los otros pools no forman parte del esquema y se omitieron: ${names}.`,
-    outlineDroppedMessageFlows: (count) => `${count} flujos de mensaje no forman parte del esquema y se omitieron.`,
+    outlineDroppedMessageFlows: (count) => `${n(count, 'flujo de mensaje no forma', 'flujos de mensaje no forman')} parte del esquema y ${count === 1 ? 'se omitió' : 'se omitieron'}.`,
     outlineDroppedEventNames: (events) => `los eventos de inicio y fin son implícitos en un esquema; se omitieron sus nombres: ${events}.`,
-    outlineDroppedArtifacts: (count) => `${count} anotaciones, grupos o asociaciones no forman parte del esquema y se omitieron.`,
+    outlineDroppedArtifacts: (count) => `${n(count, 'anotación, grupo o asociación no forma', 'anotaciones, grupos o asociaciones no forman')} parte del esquema y ${count === 1 ? 'se omitió' : 'se omitieron'}.`,
     outlineDroppedDefaults: (ids) => `las marcas de flujo por defecto no forman parte del esquema y se omitieron: ${ids}.`,
     outlineScenarioOutside: (kinds) =>
       `${kinds.split(',').map((k) => ({ arrivals: 'las llegadas', calendars: 'los calendarios', costs: 'los costos', capacities: 'las capacidades y tipos de recurso', conditions: 'el ruteo condicionado' } as Record<string, string>)[k] ?? k).join(', ')} del escenario no forman parte del esquema; siguen en el escenario, que esta lectura no cambia.`,
@@ -532,9 +535,9 @@ export const es: Catalog = {
     processBadSlug: (slug) => `"${slug}" no es un slug de proceso válido (minúsculas, dígitos y guiones).`,
     processExists: (slug, file) => `${file} ya tiene un proceso "${slug}"; no se escribió nada. Elige otro nombre u otro slug.`,
     processCreated: (name, slug, file, steps, lanes, newFile) =>
-      `Proceso "${name}" (${slug}) creado en ${newFile ? 'el archivo nuevo ' : ''}${file}: ${steps} pasos, ${lanes} carriles, escenario base as-is.scenario.json.`,
+      `Proceso "${name}" (${slug}) creado en ${newFile ? 'el archivo nuevo ' : ''}${file}: ${n(steps, 'paso', 'pasos')}, ${n(lanes, 'carril', 'carriles')}, escenario base as-is.scenario.json.`,
     processDryRun: (name, slug, file, steps, lanes, newFile) =>
-      `Simulacro: se crearía el proceso "${name}" (${slug}) en ${newFile ? 'el archivo nuevo ' : ''}${file}: ${steps} pasos, ${lanes} carriles. No se escribió nada.`,
+      `Simulacro: se crearía el proceso "${name}" (${slug}) en ${newFile ? 'el archivo nuevo ' : ''}${file}: ${n(steps, 'paso', 'pasos')}, ${n(lanes, 'carril', 'carriles')}. No se escribió nada.`,
     processUnknownSubcommand: (sub) => `subcomando desconocido "${sub}"; usa create, show, edit, annotate o raci.`,
     processMissingOption: (option) => `falta ${option}.`,
     processShowHeader: (name, slug) => `Proceso "${name}" (${slug})`,
@@ -561,7 +564,7 @@ export const es: Catalog = {
     editNeedsScenario: (field, scenario) =>
       `"${field}" va al escenario base ${scenario}, y este proceso no lo tiene; ponlo con patch_scenario.`,
     editRemoveAmbiguous: (id, incoming, outgoing) =>
-      `no se puede quitar "${id}": con ${incoming} flujos de entrada y ${outgoing} de salida no está claro cómo reconectarlos. Quita o reconecta sus flujos primero.`,
+      `no se puede quitar "${id}": con ${n(incoming, 'flujo', 'flujos')} de entrada y ${outgoing} de salida no está claro cómo reconectarlos. Quita o reconecta sus flujos primero.`,
     editRemoveBoundary: (id, boundaries) => `no se puede quitar "${id}": tiene eventos de borde (${boundaries}); quítalos primero.`,
     editCannotRemove: (id, type) => `"${id}" es un ${type}; solo se pueden quitar pasos y flujos de secuencia.`,
     editBoundaryNeedsActivity: (id, boundaries) =>
@@ -590,9 +593,9 @@ export const es: Catalog = {
     editMoved: (id, lane) => `movido "${id}" al carril "${lane}"`,
     editLaneAdded: (name, id) => `agregado el carril "${name}" (${id})`,
     processEdited: (name, slug, file, operations, removed) =>
-      `Editado el proceso "${name}" (${slug}) en ${file}: ${operations} operaciones, ${removed} elementos quitados.`,
+      `Editado el proceso "${name}" (${slug}) en ${file}: ${n(operations, 'operación', 'operaciones')}, ${n(removed, 'elemento quitado', 'elementos quitados')}.`,
     processEditDryRun: (name, slug, file, operations, removed) =>
-      `Simulacro: se editaría el proceso "${name}" (${slug}) en ${file}: ${operations} operaciones, ${removed} elementos quitados. No se escribió nada.`,
+      `Simulacro: se editaría el proceso "${name}" (${slug}) en ${file}: ${n(operations, 'operación', 'operaciones')}, ${n(removed, 'elemento quitado', 'elementos quitados')}. No se escribió nada.`,
     editOpsUnreadable: (file, detail) => `no se pueden leer las operaciones ${file}: ${detail}`,
     editNotList: () => 'debe ser una lista no vacía de operaciones.',
     editUnknownOp: (op, accepted) => `"${op}" no es una operación; usa una de ${accepted}.`,
