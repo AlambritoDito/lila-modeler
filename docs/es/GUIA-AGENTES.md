@@ -12,7 +12,10 @@ sintética `packages/mcp/test/fixtures/entrevista-tarjeta.txt`. El paso 8 necesi
 escritorio, así que se comprueba a mano con `tools/agent-live-check.mjs`.
 
 El servidor es su propio paquete de npm y se arranca con `npx -y @lila-modeler/mcp`; cómo
-registrarlo en cada cliente está en [`MCP.md`](MCP.md#instalación).
+registrarlo en cada cliente está en [`MCP.md`](MCP.md#instalación). Un cliente que solo tiene MCP lee
+esta guía como el recurso `lila://guide` (los formatos son `lila://outline-format`,
+`lila://scenario-format` y `lila://scenario-schema`), y el prompt `interview-to-process` arranca el
+flujo de abajo con una entrevista ([`MCP.md`](MCP.md#recursos-y-prompt)).
 
 ## El flujo
 
@@ -126,11 +129,15 @@ antes → después; `issues`, las filas que no pudo aplicar).
 { "name": "run_simulation", "arguments": { "model": "tarjeta.lila", "scenario": "as-is", "seed": 42, "replications": 10, "saveRun": true } }
 ```
 
-La respuesta es el `RunResult` (`structuredContent`, [`RESULTS_FORMAT.md`](RESULTS_FORMAT.md)) más
-un segundo bloque de texto `{ "savedRun": { "id", … } }`. La corrida queda guardada en el `.lila`
-igual que la guarda la app, así que la app la muestra como la corrida vigente y las exportaciones
-la usan. Usa una `seed` fija para que la persona pueda reproducir los números; usa
-`compare_scenarios` para comparar AS-IS y TO-BE.
+La respuesta es un resumen de la corrida, de pocos KB: `process`, `bottlenecks`, la utilización, la
+espera y el costo de cada recurso, los elementos que más esperan (`topWaits`) y los avisos
+agrupados; `detail: "full"` devuelve el `RunResult` completo ([`RESULTS_FORMAT.md`](RESULTS_FORMAT.md)),
+que es grande. Un segundo bloque de texto dice `{ "savedRun": { "id", … } }`. La corrida queda
+guardada completa en el `.lila`, igual que la guarda la app, así que la app la muestra como la
+corrida vigente y las exportaciones la usan. Usa una `seed` fija para que la persona pueda
+reproducir los números; usa `compare_scenarios` para comparar AS-IS y TO-BE (su resumen conserva las
+filas del proceso y de los recursos y las diferencias significativas). Una corrida larga informa su
+progreso por replicación y se puede cancelar.
 
 ### 7. Exportaciones
 
@@ -254,5 +261,6 @@ Haz una escritura a la vez por archivo y espera su respuesta; escribir en parale
   pueden borrar carriles.
 - **Del esquema al escenario** solo pasan `duration`, `resources` y la `probability` de las ramas.
   Llegadas, calendarios, costos y capacidades van por `patch_scenario` o por una hoja.
-- **La simulación es síncrona** en el servidor: una corrida larga lo bloquea hasta terminar. Usa
-  pocas réplicas mientras iteras.
+- **Una corrida larga tarda lo suyo.** El servidor sigue respondiendo e informa cada replicación, y
+  una llamada cancelada detiene la corrida, pero la corrida en sí no es más rápida. Usa pocas
+  réplicas mientras iteras.

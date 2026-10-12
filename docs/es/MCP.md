@@ -10,6 +10,10 @@ terminal en vez de un cliente MCP.
 Para el flujo completo de un agente — entrevista, esquema, escenario, corrida, documento y ver el
 resultado en la app — lee la [guía para agentes](GUIA-AGENTES.md).
 
+Además de las tools, el servidor ofrece esa guía, los formatos del esquema y del escenario y el JSON
+Schema del escenario como recursos, y el flujo de la guía como el prompt `interview-to-process`; ver
+[Recursos y prompt](#recursos-y-prompt).
+
 - **`validate_bpmn({ path | xml, process?, locale? })`** — parsea y valida un `.bpmn` y devuelve exactamente el mismo
   JSON que `lila validate --json` (el IR, `ignoredProcessIds`, `errors` y `warnings`). Se pasa
   `path` **o** `xml`, nunca los dos: pasar ambos es un error de la tool, no una precedencia
@@ -32,6 +36,9 @@ resultado en la app — lee la [guía para agentes](GUIA-AGENTES.md).
   Ningún campo de nivel 2/3 se rechaza (LILA-184): `resources` y `calendars` los simula el motor desde LILA-033…036 y LILA-041.
   `saveTo` escribe el mismo JSON de forma atómica que `lila run --json <ruta>`. Trae
   `outputSchema` (`@lila-modeler/engine/result-schema`) y responde `structuredContent` además del texto.
+  Por defecto la respuesta es un resumen; `detail: "full"` devuelve el `RunResult` completo (ver
+  [Resumen o resultado completo](#resumen-o-resultado-completo)). Una corrida larga informa su
+  progreso y se puede cancelar ([Progreso y cancelación](#progreso-y-cancelación)).
   Con un `model` `.lila` y un escenario suyo, `saveRun: true` guarda la corrida en el proyecto (ver
   [Guardar una corrida](#guardar-una-corrida)).
 - **`compare_scenarios({ model?, process?, scenarios, seed?, replications?, saveTo?, detail?, locale? })`** (LILA-054) — valida
@@ -39,7 +46,8 @@ resultado en la app — lee la [guía para agentes](GUIA-AGENTES.md).
   exactamente el mismo `CompareResult` que `lila compare --json`, más `notes`: los avisos que la
   CLI imprime aparte de la tabla (semillas distintas, `baseTimeUnit` distinto, réplicas
   insuficientes para IC95). `scenarios` acepta rutas y objetos inline mezclados. Todo escenario se
-  resuelve y valida contra el modelo antes de simular ninguno.
+  resuelve y valida contra el modelo antes de simular ninguno. Por defecto `comparison` conserva
+  las filas del proceso y de los recursos y las significativas; `detail: "full"` devuelve todas.
 - **`patch_scenario({ scenario, project?, process?, patch, saveTo?, extendsFrom?, name?, description?, locale? })`**
   (LILA-055) — aplica un [JSON Patch](https://www.rfc-editor.org/rfc/rfc6902) a `scenario`, valida
   el resultado contra su modelo (mismas reglas que `validateScenario`, `docs/SCENARIO_FORMAT.md`
@@ -197,7 +205,8 @@ XML del modelo y el escenario resuelto (con `model: "model.bpmn"`), construida p
 del motor que usa la app (`storedRun`). La app la abre como la corrida actual de ese escenario, y
 `export_document` / `export_results` la usan. Necesita un `model` `.lila` y un escenario **del
 archivo** (por nombre); un `.bpmn`, un escenario en disco o uno inline son `isError` y no se escribe
-nada. El `structuredContent` de la respuesta sigue siendo el `RunResult`; un segundo bloque de
+nada. La corrida guardada es siempre el `RunResult` completo; la respuesta (su texto y su
+`structuredContent`) es el resumen o el resultado completo según `detail`. Un segundo bloque de
 texto dice `{ "savedRun": { "id", "file", "process", "scenario" } }`.
 
 La escritura es atómica y bajo el candado del archivo. Si otro escritor guardó el `.lila` entre
@@ -423,6 +432,80 @@ mismo desde una terminal.
   cambió en disco desde que se leyó (otro agente, la app), la llamada se rechaza y no se pierde nada.
   La revisión del modelo sube, así que la app ve sus corridas viejas como desactualizadas. Todos los
   demás procesos quedan byte a byte. Con `dryRun`, se comprueba y devuelve todo y no se escribe nada.
+
+## Resumen o resultado completo
+
+Un `RunResult` completo lista cada elemento y cada flujo con todas sus estadísticas: unos 70 KB (unos
+20 mil tokens) para un proceso de diez pasos, y una comparación completa más del doble. Por eso
+`run_simulation` y `compare_scenarios` responden por defecto con un resumen (#629), y
+`detail: "full"` devuelve el resultado completo de siempre. `saveTo` y `saveRun` guardan siempre el
+resultado completo, diga lo que diga `detail`, así que un cliente con sistema de archivos puede
+conservarlo todo y leer solo el resumen.
+
+El resumen de `run_simulation` (`"detail": "summary"`):
+
+- `process`: tiempo de ciclo, espera, throughput, costo por caso y `byEndEvent`, como en el resultado completo;
+- `bottlenecks`, como en el resultado completo;
+- `resources`: por recurso, `utilization`, `resourceWaitTotal` (la espera por recurso, en segundos,
+  de los elementos que lo piden; un elemento que pide dos recursos cuenta para los dos) y `totalCost`;
+- `topWaits`: los cinco elementos que más esperan (espera por recurso más espera fuera de horario),
+  con su `name`, `completed`, `resourceWaitMean`, `resourceWaitTotal`, `offHoursWaitMean` y
+  `queueLengthMean`;
+- `replications`, el número de replicaciones (cuando hay varias), y `cancelled` /
+  `completedReplications` como en el resultado completo;
+- `warnings` como `{ message, count }`: un aviso que cada replicación repite con otros números
+  (`… (2941 veces)`, `… 1457 casos …`) sale una vez, con el primer mensaje y cuántas veces apareció.
+
+El resumen de `compare_scenarios` conserva `{ comparison, notes }`: `comparison` trae `count`, las
+filas de alcance `process` y `resources`, toda otra fila marcada `significant` en algún escenario y
+`omittedRows`, el número de filas que se dejaron fuera. Las filas son las del resultado completo, sin
+cambios.
+
+Para el proceso de tarjeta de crédito del flujo de la [guía para agentes](GUIA-AGENTES.md)
+(`agent-flow.e2e.test.ts`) el resumen ocupa unos 4.4 KB frente a 68 KB completo; un test lo mantiene
+por debajo de 8 KB.
+
+```json
+{ "name": "run_simulation", "arguments": { "scenario": "examples/pedido/as-is.scenario.json", "seed": 42, "detail": "full" } }
+```
+
+## Recursos y prompt
+
+El servidor ofrece como recursos MCP los documentos que un agente necesita, en el idioma del
+servidor (`lila mcp --lang`, `LILA_LANG`…; inglés por defecto), para que un cliente que solo tiene
+MCP no tenga que adivinar los formatos a partir de las descripciones de las tools:
+
+| URI | Contenido |
+| --- | --- |
+| `lila://guide` | La [guía para agentes](GUIA-AGENTES.md) (`docs/AGENT_GUIDE.md` en inglés). |
+| `lila://outline-format` | El esquema: el ejemplo y la tabla de campos de la guía, y después [las reglas](#crear-un-proceso-desde-un-esquema). |
+| `lila://scenario-format` | [`SCENARIO_FORMAT.md`](SCENARIO_FORMAT.md). |
+| `lila://scenario-schema` | [`scenario.schema.json`](../scenario.schema.json), el JSON Schema de un escenario. |
+
+El prompt `interview-to-process` (argumentos `transcript` y `project`, los dos opcionales) es el
+flujo de la guía, pasos 1 a 8, seguido de la entrevista; sin `transcript` pide la transcripción
+primero.
+
+Son los propios documentos: desde un checkout el servidor lee `docs/`, y el paquete publicado lleva
+copias de los mismos archivos en `dist/resources/` (`prepack` corre
+`packages/mcp/scripts/bundle-resources.mjs`).
+
+```json
+{ "method": "resources/read", "params": { "uri": "lila://guide" } }
+```
+
+## Progreso y cancelación
+
+`run_simulation` y `compare_scenarios` simulan en un worker thread, así que el servidor sigue
+respondiendo (un `ping`, otras llamadas) mientras corre una simulación. Cuando la llamada trae
+`_meta.progressToken`, el servidor manda `notifications/progress` una vez por replicación terminada,
+con `progress` (replicaciones hechas) y `total` (`run.replications`, o la suma sobre los escenarios
+de una comparación). Un `notifications/cancelled` del cliente detiene la corrida en el acto: el
+worker se termina, no se guarda nada y, como pide MCP, no se responde a la petición cancelada.
+
+```json
+{ "method": "tools/call", "params": { "name": "run_simulation", "arguments": { "scenario": "examples/pedido/as-is.scenario.json", "replications": 30 }, "_meta": { "progressToken": 1 } } }
+```
 
 ## Idioma
 
@@ -703,7 +786,8 @@ se le pase (relativa al cwd, como todo lo demás). Sobrescribe un archivo existe
 igual que `lila run --json <ruta>`, y publica con `rename` desde un temporal en el mismo
 directorio: nadie llega a leer un JSON a medias. Un directorio con ese nombre es un error de la
 tool, no un borrado. Las tools de exportación son la excepción: nunca reemplazan un archivo
-salvo con `overwrite: true` (ver [Exportar sin la app](#exportar-sin-la-app)). `compare_scenarios` guarda ahí solo `comparison`, sin `notes`: los mismos
+salvo con `overwrite: true` (ver [Exportar sin la app](#exportar-sin-la-app)). `run_simulation` y `compare_scenarios` guardan el resultado
+completo diga lo que diga `detail`. `compare_scenarios` guarda ahí solo `comparison`, sin `notes`: los mismos
 bytes que `lila compare --json <ruta>`. En `patch_scenario`, `saveTo` cambia el modo de la tool
 (§ arriba): sin `saveTo` se sobrescribe `scenario`; con `saveTo` se crea un archivo nuevo con
 `extends` y solo el delta del patch.
@@ -764,17 +848,10 @@ el navegador y se queda en primer plano**: no lo lances desde un agente ni en CI
 
 ## Límites conocidos
 
-- **Sin cancelación ni progreso.** `simulate()` es síncrono y bloquea el event loop del proceso
-  servidor mientras corre: durante esos segundos —o los minutos de un modelo grande con 30
-  replicaciones— el servidor no responde a nada, ni a un `ping` ni a `notifications/cancelled`. Un
-  agente que se arrepiente tiene que matar el proceso. La pieza que lo arreglaría ya existe (el
-  worker con progreso y cancelación de LILA-195, hecho para la web); traerla aquí es un ticket
-  propio.
-- **El resultado viaja dos veces.** `run_simulation` manda el mismo objeto como texto y como
-  `structuredContent`, que es lo que recomienda la especificación MCP por compatibilidad: para
-  `examples/pedido` con 30 replicaciones son ~93 KB de mensaje (~55 KB de texto y ~32 KB de
-  `structuredContent`), del orden de 25 mil tokens duplicados en una sola llamada. Si molesta, la
-  salida barata es mandar en el texto solo `bottlenecks` y `process`, que es lo que el agente lee.
+- **Con `detail: "full"` el resultado viaja dos veces.** `run_simulation` manda el mismo objeto como
+  texto y como `structuredContent`, que es lo que recomienda la especificación MCP por
+  compatibilidad: para `examples/pedido` con 30 replicaciones el resultado completo son ~93 KB de
+  mensaje. El resumen por defecto lo mantiene pequeño.
 - **`compare_scenarios` no publica `outputSchema`** (no hay esquema zod de `CompareResult` en el
   repo), aunque sí manda `structuredContent`. Un cliente estricto puede rechazarlo.
 - **Todo pasa por el disco del servidor.** `saveTo` escribe con los permisos del proceso servidor y
