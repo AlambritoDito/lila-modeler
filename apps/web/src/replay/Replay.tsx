@@ -152,7 +152,9 @@ export function Replay({ modelador, replay, originalIds, motivo, leyenda, ...con
       </button>
       <label className="c5-velocidad">
         <span className="c5-rotulo">{S.animacion.velocidad}</span>
+        {/* #554: the bar's CSS hides the «Speed» span above, and a hidden label names nothing. */}
         <select
+          aria-label={S.animacion.velocidad}
           value={velocidad}
           onChange={(e) => {
             const elegida = e.target.value as Velocidad;

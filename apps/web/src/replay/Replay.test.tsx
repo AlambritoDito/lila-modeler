@@ -130,6 +130,13 @@ it('#554: the pool reads by its name, its key without one', () => {
   expect(document.querySelector('[data-pool="analyst"]')?.textContent).toMatch(/^Technical Reviewer \d\/2$/);
 });
 
+it('#554: the speed select keeps its name when the bar hides the «Speed» label', () => {
+  const { modelador } = falso();
+  montar(<Replay modelador={modelador} replay={modelo()} originalIds={{}} motivo="x" />);
+  // app.css hides `.c5-tiempo .c5-velocidad .c5-rotulo`, and a hidden label gives no name.
+  expect(document.querySelector('select')?.getAttribute('aria-label')).toBe('Speed');
+});
+
 it('without a log there is nothing to animate and Play is disabled', () => {
   const { modelador, pinturas } = falso();
   montar(<Replay modelador={modelador} replay={null} originalIds={{}} motivo="no log here" />);
