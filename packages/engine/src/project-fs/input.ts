@@ -103,6 +103,41 @@ export function lilaWritten(input: LilaProcess, written: ProjectDocument): { rea
   return { slug: processSlug(written.name), root: `${input.file}/` };
 }
 
+/** `file` read and decoded, with the snapshot taken before the bytes (see `openLilaProcess`). */
+async function readLila(
+  file: string,
+  locale: Locale,
+): Promise<{ path: string; document: ProjectDocument; snapshot: LilaSnapshot }> {
+  const path = absolute(file);
+  // Snapshot first, bytes second: if the file changes in between, the snapshot is the older one
+  // and the write is refused, rather than the newer snapshot vouching for older bytes.
+  const snapshot = await snapshotOf(path);
+  if (snapshot === null) throw new Error(messages(locale).mcp.fileMissing(path));
+  let bytes: Uint8Array;
+  try {
+    bytes = new Uint8Array(await readFile(path));
+  } catch (error) {
+    if ((error as { code?: unknown }).code === 'ENOENT') throw new Error(messages(locale).mcp.fileMissing(path));
+    throw error;
+  }
+  try {
+    return { path, document: decodeLila(bytes), snapshot };
+  } catch (error) {
+    if (error instanceof ProjectFormatError) throw new Error(messages(locale).cli.lilaUnreadable(path, `${error.code}: ${error.message}`));
+    throw error;
+  }
+}
+
+function lilaProcessOf(
+  read: { path: string; document: ProjectDocument; snapshot: LilaSnapshot },
+  process: ProcessDocument,
+  slugs: readonly string[],
+): LilaProcess {
+  const { path, document, snapshot } = read;
+  const root = isVersion2(document) ? `${path}/processes/${process.slug}/` : `${path}/`;
+  return { file: path, document, process, slugs, root, modelPath: `${root}${MODEL_FILE}`, snapshot };
+}
+
 /**
  * Opens `file` and selects one process: `process` (a slug) when given, the only one when there is
  * one, and an error listing the slugs when there are several and none was named. Records the
@@ -114,42 +149,39 @@ export async function openLilaProcess(
   options: { process?: string | undefined; locale?: Locale | undefined } = {},
 ): Promise<LilaProcess> {
   const C = messages(options.locale ?? 'en').cli;
-  const path = absolute(file);
-  // Snapshot first, bytes second: if the file changes in between, the snapshot is the older one
-  // and the write is refused, rather than the newer snapshot vouching for older bytes.
-  const snapshot = await snapshotOf(path);
-  if (snapshot === null) throw new Error(messages(options.locale ?? 'en').mcp.fileMissing(path));
-  let bytes: Uint8Array;
-  try {
-    bytes = new Uint8Array(await readFile(path));
-  } catch (error) {
-    if ((error as { code?: unknown }).code === 'ENOENT') {
-      throw new Error(messages(options.locale ?? 'en').mcp.fileMissing(path));
-    }
-    throw error;
-  }
-  let document: ProjectDocument;
-  try {
-    document = decodeLila(bytes);
-  } catch (error) {
-    if (error instanceof ProjectFormatError) throw new Error(C.lilaUnreadable(path, `${error.code}: ${error.message}`));
-    throw error;
-  }
-
-  const all = processesOf(document);
+  const read = await readLila(file, options.locale ?? 'en');
+  const all = processesOf(read.document);
   const slugs = all.map((p) => p.slug);
   let selected: ProcessDocument | undefined;
   if (options.process !== undefined) {
     selected = all.find((p) => p.slug === options.process);
-    if (selected === undefined) throw new Error(C.lilaUnknownProcess(path, options.process, slugs.join(', ')));
+    if (selected === undefined) throw new Error(C.lilaUnknownProcess(read.path, options.process, slugs.join(', ')));
   } else if (all.length === 1) {
     selected = all[0];
   } else {
-    throw new Error(C.lilaProcessRequired(path, slugs.join(', ')));
+    throw new Error(C.lilaProcessRequired(read.path, slugs.join(', ')));
   }
-  const process = selected as ProcessDocument;
-  const root = isVersion2(document) ? `${path}/processes/${process.slug}/` : `${path}/`;
-  return { file: path, document, process, slugs, root, modelPath: `${root}${MODEL_FILE}`, snapshot };
+  return lilaProcessOf(read, selected as ProcessDocument, slugs);
+}
+
+/**
+ * Every process of `file`, opened as `openLilaProcess` opens one, from a single read (#628): the
+ * inventory of a project. `formatVersion` is the layout on disk: 2 for a repository
+ * (`processes/<slug>/`), 1 otherwise.
+ */
+export async function openLilaProject(
+  file: string,
+  options: { locale?: Locale | undefined } = {},
+): Promise<{ readonly file: string; readonly document: ProjectDocument; readonly formatVersion: 1 | 2; readonly processes: readonly LilaProcess[] }> {
+  const read = await readLila(file, options.locale ?? 'en');
+  const all = processesOf(read.document);
+  const slugs = all.map((p) => p.slug);
+  return {
+    file: read.path,
+    document: read.document,
+    formatVersion: isVersion2(read.document) ? 2 : 1,
+    processes: all.map((p) => lilaProcessOf(read, p, slugs)),
+  };
 }
 
 /**

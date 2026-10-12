@@ -68,8 +68,8 @@ function toArgv(command: string, outputDir: string): { argv: string[]; outputs: 
     const token = rest[i]!;
     if (VALUE_FLAGS.has(token)) {
       argv.push(token, rest[++i]!);
-    } else if (token === '--json' && (head === 'validate' || head === 'process' || head === 'scenario')) {
-      // `validate`, `process` and `scenario` take `--json` as a boolean flag; only `run`/`compare`
+    } else if (token === '--json' && (head === 'validate' || head === 'process' || head === 'scenario' || head === 'project')) {
+      // `validate`, `process`, `scenario` and `project` take `--json` as a boolean flag; only `run`/`compare`
       // take `--json <file>`.
       argv.push(token);
     } else if (OUTPUT_FLAGS.has(token)) {

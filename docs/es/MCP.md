@@ -3,7 +3,7 @@
 > Leer en: [English](../MCP.md)
 
 `packages/mcp` (`@lila-modeler/mcp`) es un servidor [MCP](https://modelcontextprotocol.io) por stdio sobre
-`@lila-modeler/engine`, sin lógica propia: dieciséis tools, sobre el mismo pipeline de validación y
+`@lila-modeler/engine`, sin lógica propia: dieciocho tools, sobre el mismo pipeline de validación y
 simulación que la CLI — ver [`docs/es/CLI.md`](CLI.md) para ese mismo pipeline manejado desde una
 terminal en vez de un cliente MCP.
 
@@ -113,9 +113,16 @@ mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
 - **`create_project({ path, name, bpmn, scenarios?, overwrite?, locale? })`** — crea un `.lila`
   nuevo a partir de un BPMN que ya existe (un agente que parte de pasos usa `create_process`) y
   escenarios. Devuelve `{ file, name, processId, warnings, scenarios }`.
+- **`get_project({ project, locale? })`** (#628) — lista lo que tiene un `.lila` sin escribir nada:
+  sus procesos, sus escenarios y sus corridas guardadas, vigentes u obsoletas. Devuelve
+  `{ file, name, formatVersion, processes }`.
+- **`get_scenario({ project, process?, scenario, resolved?, locale? })`** (#628) — lee un escenario
+  como está guardado, o resuelto por `extends`, con las notas del validador, sin escribir nada.
+  Devuelve `{ file, process, entry, revision, resolved, scenario, runnable, notes }`.
 
 Las tres de exportación se explican en [Exportar sin la app](#exportar-sin-la-app); las cinco
-últimas en [Herramientas de modelado para agentes](#herramientas-de-modelado-para-agentes).
+siguientes en [Herramientas de modelado para agentes](#herramientas-de-modelado-para-agentes); las
+dos últimas en [Leer un proyecto](#leer-un-proyecto).
 
 Toda tool que recibe un modelo acepta también un proyecto `.lila`: ver
 [Un `.lila` como entrada](#un-lila-como-entrada).
@@ -158,6 +165,41 @@ de `patch_scenario`. Las reglas son las de la CLI (`docs/CLI.md`, «Un `.lila` c
 ```json
 { "name": "patch_scenario", "arguments": { "project": "proyecto.lila", "process": "pedido", "scenario": "as-is",
   "saveTo": "to-be-4", "patch": [{ "op": "replace", "path": "/resources/cajero/capacity", "value": 4 }] } }
+```
+
+## Leer un proyecto
+
+`get_project` y `get_scenario` (#628) son `lila project show` y `lila scenario show`
+(`docs/es/CLI.md`) como tools. Solo leen: ni escritura ni cambio de revisión, el `.lila` queda byte
+a byte como estaba. Llama primero a `get_project` sobre un archivo que ya existe, en vez de
+descubrir sus procesos, escenarios y corridas por los errores de otras tools.
+
+- **`get_project`** devuelve `{ file, name, formatVersion, processes }`. `formatVersion` es 2 para
+  un repositorio de varios procesos y 1 si no. Cada proceso trae `slug` (lo que recibe `process`),
+  `name`, `processId` (su `bpmn:process`), `modelRevision`, `elements` (nodos de flujo: tareas,
+  eventos, compuertas; `null` si el modelo no se puede leer), `scenarios` (`entry`, `name`,
+  `revision`, `extends`) y `runs` (`id`, `scenario`, `start`, `replications`, `current`). Una
+  corrida tiene `current: false` (obsoleta) cuando el modelo o su escenario cambiaron después de
+  ella: `export_results` y `export_document` solo la toman por id. Un `.lila` no guarda la fecha en
+  que se tomó una corrida; `start` es el inicio simulado (`run.start`) del escenario que corrió.
+- **`get_scenario`** devuelve `{ file, process, entry, revision, resolved, scenario, runnable, notes }`.
+  `scenario` es la entrada como está guardada (con su `extends`), o con `resolved: true` fusionada
+  por `extends` con los valores por defecto del motor: el objeto que parchea `patch_scenario`, con
+  `model` relativo al escenario. `notes` son las del validador contra el modelo del proceso
+  —primero los errores (`E-…`), luego los avisos (`W-…`), las comprobaciones que hace
+  `run_simulation` antes de simular—, así que sirve de lint de escenarios; `runnable` es `false`
+  cuando hay un error. Un escenario cuyo `extends` no se puede resolver vuelve con
+  `scenario: null` (al resolverlo) y el motivo en `notes`.
+
+Para leer un escenario usa `get_scenario`, no un `patch_scenario` con solo `test`: ese tampoco
+escribe nada (#627), pero no es para leer.
+
+```json
+{ "name": "get_project", "arguments": { "project": "credito.lila" } }
+```
+
+```json
+{ "name": "get_scenario", "arguments": { "project": "credito.lila", "scenario": "as-is", "resolved": true } }
 ```
 
 ## Exportar sin la app
@@ -578,8 +620,8 @@ mcp_servers:
 - Después de editar el archivo, corre `/reload-mcp` en una sesión de Hermes. Hermes nombra las tools
   `mcp_lila_<tool>` (`mcp_lila_create_process`); los argumentos son los de esta página.
 - `tools: { include: [...] }` limita lo que ve el agente; por ejemplo, a las de solo lectura
-  `validate_bpmn`, `describe_process`, `get_process_outline`, `get_raci_matrix` y `run_simulation`
-  (que solo escribe con `saveTo` o `saveRun`).
+  `get_project`, `get_scenario`, `validate_bpmn`, `describe_process`, `get_process_outline`,
+  `get_raci_matrix` y `run_simulation` (que solo escribe con `saveTo` o `saveRun`).
 
 El mismo bloque, con `command` y `args`, es la configuración stdio genérica para cualquier otro
 cliente MCP.

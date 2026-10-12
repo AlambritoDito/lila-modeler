@@ -1,7 +1,8 @@
 /**
  * What an agent does to look at a `.lila` without changing it, through the official MCP client
  * against the real `lila mcp` over stdio: a `patch_scenario` that changes nothing keeps the saved
- * runs current (#627). Requires `dist/` (the root `pretest` and the CI build first).
+ * runs current (#627), and `get_project`/`get_scenario` read the inventory and a scenario with no
+ * write at all (#628). Requires `dist/` (the root `pretest` and the CI build first).
  */
 import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -70,4 +71,34 @@ test('#627: a test-only patch_scenario leaves the saved run current (the steps o
     saveTo: 'out/after.xlsx',
   });
   expect(after.run.current).toBe(true);
+}, 120_000);
+
+test('#628: get_project and get_scenario read the .lila and write nothing', async () => {
+  // The .lila of the test above: one process, one scenario, one saved run.
+  const bytes = readFileSync(join(cwd, 'credit.lila'));
+  const project = await answer<{
+    formatVersion: number;
+    processes: { slug: string; scenarios: { entry: string; revision: number }[]; runs: { scenario: string; replications: number; current: boolean }[] }[];
+  }>('get_project', { project: 'credit.lila' });
+  expect(project.formatVersion).toBe(1);
+  expect(project.processes).toHaveLength(1);
+  expect(project.processes[0]).toMatchObject({
+    slug: 'credit-application',
+    scenarios: [{ entry: 'as-is.scenario.json', revision: 1 }],
+    runs: [{ scenario: 'as-is.scenario.json', replications: 2, current: true }],
+  });
+
+  const stored = await answer<{ scenario: Record<string, unknown>; runnable: boolean; notes: string[] }>('get_scenario', {
+    project: 'credit.lila',
+    scenario: 'AS-IS',
+  });
+  expect(stored).toMatchObject({ entry: 'as-is.scenario.json', resolved: false, runnable: true });
+  const resolved = await answer<{ scenario: { run: { warmup: number } } }>('get_scenario', { project: 'credit.lila', scenario: 'as-is', resolved: true });
+  // The engine's defaults are in the resolved scenario, the object patch_scenario patches.
+  expect(resolved.scenario.run.warmup).toBe(0);
+
+  const missing = await call('get_scenario', { project: 'credit.lila', scenario: 'nope', locale: 'es' });
+  expect(missing.isError).toBe(true);
+  expect(missing.text).toMatch(/^get_scenario: no hay un escenario "nope"/);
+  expect(readFileSync(join(cwd, 'credit.lila')).equals(bytes)).toBe(true);
 }, 120_000);

@@ -67,4 +67,6 @@ export type {
   SheetImportResult,
 } from './agent-tools.js';
 export { editLilaProcess } from './edit.js';
+export { lilaProjectInventory, lilaScenarioView } from './inventory.js';
+export type { LilaProcessSummary, LilaProjectInventory, LilaRunSummary, LilaScenarioSummary, LilaScenarioView } from './inventory.js';
 export type { EditedLilaProcess, EditLilaProcessOptions } from './edit.js';
