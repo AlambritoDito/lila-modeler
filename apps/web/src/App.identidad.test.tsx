@@ -294,3 +294,22 @@ it('in Electron the New and ⚙ tooltips show the native menu key', async () => 
   expect(nuevo.title).toContain(`(${etiqueta(atajoPorId('nuevo'), false)})`);
   expect(contenedor.querySelector<HTMLButtonElement>(`button[aria-label="${T.app.ajustes}"]`)!.title).toContain(`(${etiqueta(atajoPorId('ajustes'), false)})`);
 });
+
+it('in Electron each mode tab names its ⌘1…⌘3 key in its title; on the web, where the keys are the browser\'s, none does (#442)', async () => {
+  vi.resetModules();
+  const web = await montarApp();
+  expect([...web.contenedor.querySelectorAll<HTMLButtonElement>('.modos .modo')].map((b) => b.title)).toEqual(['', '', '']);
+  await act(async () => root!.unmount());
+  web.contenedor.remove();
+
+  puenteEscritorio();
+  vi.resetModules();
+  const { contenedor } = await montarApp();
+  expect([...contenedor.querySelectorAll<HTMLButtonElement>('.modos .modo')].map((b) => b.title)).toEqual([
+    `${T.app.modos.modelar} (${etiqueta(atajoPorId('modo:modelar'), false)})`,
+    `${T.app.modos.simular} (${etiqueta(atajoPorId('modo:simular'), false)})`,
+    `${T.app.modos.resultados} (${etiqueta(atajoPorId('modo:resultados'), false)})`,
+  ]);
+  // The visible text, and so the accessible name, stays the mode's alone.
+  expect(contenedor.querySelector('.modos .modo')!.textContent).toBe(T.app.modos.modelar);
+});

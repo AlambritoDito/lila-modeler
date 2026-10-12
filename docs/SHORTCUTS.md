@@ -5,8 +5,10 @@ native menu of the desktop app and this page all come from it, and a test fails 
 misses one of its keys. On Windows and Linux, `Ctrl` takes the place of `⌘`.
 
 Shortcuts without `⌘`/`Ctrl` (F2, F6, Esc, the align keys) do nothing while you type in a field or edit a label,
-and, apart from the desktop app's File menu, no shortcut reaches the app while a dialog
-(Settings, a confirmation) is open.
+and, apart from the File menu of the desktop app's native menu bar (Print excepted), no shortcut
+reaches the app while a dialog (Settings, the command palette, a confirmation) is open. In a
+browser, `⌘O`, `⌘S`, `⇧⌘S` and `⌘P` do nothing while the command palette or Settings is open: they
+no longer fall through to the browser's own «Open file», «Save page as» and «Print».
 
 ## File
 
@@ -24,6 +26,10 @@ and, apart from the desktop app's File menu, no shortcut reaches the app while a
 | Action | macOS | Windows / Linux |
 | --- | --- | --- |
 | Command palette | `⌘K` | `Ctrl+K` |
+
+In the palette `↑`/`↓` move, `Enter` picks, and `Esc` closes it and gives the focus back to where
+it was — to a text field with the caret where you left it. `Tab` does not leave the palette: like
+any modal dialog, it keeps the focus in its field until it closes.
 
 ## Modes
 
@@ -89,8 +95,14 @@ With the canvas focused (click on it first):
 | Distribute horizontally | `⌥⇧H` | `Alt+Shift+H` |
 | Distribute vertically | `⌥⇧V` | `Alt+Shift+V` |
 
-Zoom and fit work from anywhere in the window, not only from the canvas. The align keys work in Model
-only and act on the selected shapes (two or more; three or more to distribute), like the align
+Zoom and fit work from anywhere in the window, not only from the canvas. They zoom the diagram, not
+the page: the desktop app has **no page zoom**, by decision (#442). Its View menu replaced
+Electron's default one, which had Zoom In, Zoom Out and Actual Size, and no `⌘⌥+`/`⌘⌥−` page zoom
+was added in its place; the interface scales with Settings → General → Density and with the theme's
+base font size (Settings → Appearance → Typography). In a browser, the page zoom stays in the
+browser's own menu.
+
+The align keys work in Model only and act on the selected shapes (two or more; three or more to distribute), like the align
 buttons at the top right of the canvas and the command palette. Lanes are not aligned. Distribute
 keeps the first and last shapes where they are and spaces the rest approximately evenly:
 diagram-js leaves the first gap a few pixels (about 5 px) shorter than the others. Shapes that
@@ -117,7 +129,7 @@ left filters as you type and inserts the highlighted shape with `Enter`.
 are taken by the browser before the page sees them, and the web app does not listen to
 `⌘1`…`⌘3`/`Ctrl+1`…`Ctrl+3` so they keep switching the browser's tabs: use the bar's buttons, the
 mode tabs or `⌘K` instead. In the desktop app the File, View and Simulation menus
-list these shortcuts next to each item.
+list these shortcuts next to each item, and each mode tab names its key in its tooltip.
 
 ² Prints the diagram alone, black on white, on one sheet. In a browser, that print dialog is also
 how you get a PDF (choose «Save as PDF»); the desktop app has «File → Export diagram as PDF…» as
