@@ -76,7 +76,10 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   // Lote M, C4 and C1: the Simulate layers of the canvas the shell feeds.
   porcentajes: vi.fn(), etiquetasPaso: vi.fn(),
   // Lote M, C5b: bpmn-js's `selection.select`, called with `[]` when the shell drops the selection.
-  soltar: vi.fn() }));
+  soltar: vi.fn(),
+  // The live reparse's `validateBpmnModel` calls (the gate is mocked, so they are only App's):
+  // what `esperarReparse` waits on instead of guessing how long a real parse takes under CI load.
+  reparses: [] as Promise<unknown>[] }));
 /**
  * The canvas elements the command palette lists (#410), with no box, so the shape palette's
  * drop-target search (which wants a width and a height) still ignores them. Three named shapes,
@@ -94,6 +97,14 @@ const ELEMENTOS = [
   { id: 'Process_1', type: 'bpmn:Process', businessObject: { name: 'Raíz' } },
   { id: 'Sub_1_plane', type: 'bpmn:SubProcess', businessObject: { name: 'Plano' } },
 ];
+vi.mock('@lila-modeler/engine/bpmn', async (real) => {
+  const bpmn = await real<typeof import('@lila-modeler/engine/bpmn')>();
+  return { ...bpmn, validateBpmnModel: (...args: Parameters<typeof bpmn.validateBpmnModel>) => {
+    const informe = bpmn.validateBpmnModel(...args);
+    mocks.reparses.push(informe);
+    return informe;
+  } };
+});
 vi.mock('./simulationGate', () => ({ prepareSimulation: mocks.gate }));
 vi.mock('./simulationClient', () => ({ runInWorker: mocks.worker }));
 vi.mock('./exportarDiagrama', async (real) => ({ ...(await real<object>()), imprimirSvg: mocks.imprimir, aPng: mocks.aPng, descargar: mocks.descargar }));
@@ -189,11 +200,21 @@ function porEtiqueta(etiqueta: string): HTMLButtonElement {
   return boton!;
 }
 /**
- * Run once the 150 ms startup reparse has fired, as «valida antes del Worker…» does (#494): under CI
- * load it would land after the click, bump the revision and leave the run stale mid-assertion.
+ * Waits until the startup reparse has landed, not only fired (#494). Its 150 ms timer is followed by
+ * a real `validateBpmnModel`, which under CI load could finish after a Run: its IR then replaced the
+ * gate's, the #420 seeding rewrote AS-IS, and the run went stale mid-assertion. So: the timer, the
+ * parse itself, then a macrotask so App's `.then` (setIr and the seeding) runs inside this act.
  */
+async function esperarReparse(): Promise<void> {
+  await act(async () => {
+    await new Promise((listo) => { setTimeout(listo, 200); });
+    await Promise.allSettled(mocks.reparses);
+    await new Promise((listo) => { setTimeout(listo, 0); });
+  });
+}
+/** Run once the startup reparse has landed (see `esperarReparse`). */
 async function ejecutarTrasReparse(): Promise<void> {
-  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await esperarReparse();
   await click(T.app.ejecutar);
 }
 async function click(label: string) {
@@ -204,6 +225,7 @@ async function click(label: string) {
 }
 beforeEach(async () => {
   vi.resetAllMocks();
+  mocks.reparses = [];
   mocks.problemas = [];
   mocks.retrasarLienzo = false;
   mocks.seleccionados = [];
@@ -238,7 +260,7 @@ it('valida antes del Worker; la corrida salta sola a Resultados, sobre el mapa, 
   // The startup reparse (150 ms) settles and rewrites `ir`/`noSoportados` on its own timer; wait
   // it out before running, same fix as «abrir un .bpmn inválido...» below (#494): under CI load
   // it could land mid-assertion instead of before the click and fail only there.
-  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await esperarReparse();
   await click(T.app.ejecutar);
   expect(mocks.worker).toHaveBeenCalledOnce();
   // Lote M (design 01): a finished run lands in Results by itself, on the same map.
@@ -294,7 +316,7 @@ it.each([['Task_Preparar', 'Prepare food'], ['Task_Anonima', 'Task_Anonima']])(
     mocks.worker.mockResolvedValue(conCuello(elementId));
     // Since #431 Run waits for the 150 ms startup reparse; under load it fires after the click,
     // so the run would still be pending when the panel is read. Same wait as «valida antes…».
-    await act(async () => { await new Promise((listo) => setTimeout(listo, 200)); });
+    await esperarReparse();
     await click(T.app.ejecutar);
     // The run lands in Results; back in Simulate the panel still names the main bottleneck.
     await click(T.app.modos.simular);
@@ -335,7 +357,7 @@ it('abrir un .bpmn inválido conserva el proyecto, la corrida y su overlay', asy
   // El reparseo con retardo del arranque (150 ms) reescribe `ir` cuando termina, y con el `ir`
   // del XML de mentira el cuello se queda sin nombre. Se le espera ANTES de simular: si no,
   // llegaba en mitad de las aserciones y el test fallaba solo bajo carga.
-  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await esperarReparse();
   mocks.worker.mockResolvedValue(conCuello('Task_Preparar'));
   await click(T.app.ejecutar);
   const pintadas = mocks.cuellos.mock.calls.length;
@@ -2095,7 +2117,7 @@ it('en «Validar rutas» no se pintan el overlay de cuellos ni los marcadores de
 
 it('la barra tiene una sola acción primaria y corre el escenario desde cualquier modo', async () => {
   // Same wait as «valida antes del Worker…» (#494): the 150 ms startup reparse would make the run stale.
-  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await esperarReparse();
   await click(T.app.modos.modelar);
   expect(container.querySelectorAll('.barra .boton.primario')).toHaveLength(1);
   await click(T.app.ejecutar);
@@ -3386,7 +3408,7 @@ it('detaches Results to its own window that follows the current run, and docks i
     expect(container.querySelector(`button[aria-label="${T.app.resultadosAcoplados}"]`)).toBeNull();
     // The startup reparse (150 ms) bumps the revision and would make the run stale mid-test: wait
     // it out first, like «valida antes del Worker…» (#494).
-    await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+    await esperarReparse();
     await click(T.app.ejecutar);
     // The run lands in Results by itself (Lote M).
     await act(async () => mocks.dock!.onPestana('detalle'));
@@ -3441,7 +3463,7 @@ it('reopens the Results window where it was last left (#395)', async () => {
   try {
     // The startup reparse (150 ms) bumps the revision and would make the run stale mid-test: wait
     // it out first, like «valida antes del Worker…» (#494).
-    await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+    await esperarReparse();
     await click(T.app.ejecutar);
     await act(async () => mocks.dock!.onPestana('detalle'));
     await vi.waitFor(() => expect(dock()?.textContent).toContain('Resultado actual'));
@@ -4124,7 +4146,7 @@ const divisorDock = () => container.querySelector<HTMLElement>('.divisor-dock[ro
 it('a run from Simulate lands in Results; the table keeps its tab and its collapsed state (Lote M)', async () => {
   // The startup reparse (150 ms) bumps the revision and would make a run stale mid-test: wait it
   // out first, like «valida antes del Worker…» (#494).
-  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await esperarReparse();
   // No table outside Results.
   expect(dock()).toBeNull();
   await click(T.app.modos.resultados);
@@ -4493,7 +4515,7 @@ it('the status bar shows the seed of the run on screen, not only the scenario\'s
 // ---------- Lote M, C5: results on the map, Space, compare from a duplicate ----------
 
 it('Space plays and pauses the tokens on the Results map, never while typing, on a button, or outside Results (Lote M)', async () => {
-  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await esperarReparse();
   // Outside Results Space is not taken.
   expect(await pulsar(document.body, { key: ' ', code: 'Space' })).toBe(false);
   await click(T.app.ejecutar);
@@ -4517,7 +4539,7 @@ it('Space plays and pauses the tokens on the Results map, never while typing, on
 });
 
 it('Duplicate + Simulate opens the copy compared with the scenario it came from; Close comparison goes back to the map (#581, design 06)', async () => {
-  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await esperarReparse();
   await abrirEscenarios();
   await act(async () => { [...container.querySelectorAll<HTMLButtonElement>('.c5-escenario-acciones button')].find((b) => b.textContent === T.c5.escenario.duplicar)!.click(); });
   const campo = container.querySelector<HTMLInputElement>('.c5-escenario-campo')!;
@@ -4543,7 +4565,7 @@ it('Duplicate + Simulate opens the copy compared with the scenario it came from;
 });
 
 it('a side that fails to run shows its card with «Fix it in Simulate» instead of looping (design 06)', async () => {
-  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await esperarReparse();
   await click(T.app.ejecutar);
   mocks.gate.mockRejectedValue(new Error('E-SIN-RECURSO: Task_1'));
   await compararCon('TO-BE 3 cashiers');
@@ -4575,7 +4597,7 @@ it('reopening a project puts each base scenario before the ones that extend it, 
 });
 
 it('cancelling the run of a comparison side leaves a card with Retry, not «Simulating…» forever (QA of #603)', async () => {
-  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await esperarReparse();
   await click(T.app.ejecutar);
   const colgada = deferred<typeof done>();
   mocks.worker.mockReturnValueOnce(colgada.promise);
@@ -4593,7 +4615,7 @@ it('cancelling the run of a comparison side leaves a card with Retry, not «Simu
 });
 
 it('a comparison side that finishes while the person is in another mode leaves them there (QA of #603)', async () => {
-  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await esperarReparse();
   await click(T.app.ejecutar);
   const lenta = deferred<typeof done>();
   mocks.worker.mockReturnValueOnce(lenta.promise);
@@ -4604,7 +4626,7 @@ it('a comparison side that finishes while the person is in another mode leaves t
 });
 
 it('the Duplicate of the panel header (C1) also records the copy\'s origin: its first run opens compared (QA of #603)', async () => {
-  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await esperarReparse();
   await act(async () => mocks.duplicarPanel('as-is (copy).scenario.json', { version: 1, name: 'AS-IS (copy)', extends: 'as-is.scenario.json' }));
   await click(T.app.ejecutar);
   for (let i = 0; i < 4; i++) await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
@@ -4613,7 +4635,7 @@ it('the Duplicate of the panel header (C1) also records the copy\'s origin: its 
 });
 
 it('«▶ Simulate» and ⌘↩ go to the first problem in the panel while the panel counts errors, and run otherwise (Lote M, C1)', async () => {
-  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await esperarReparse();
   await act(async () => mocks.panel.onConteoProblemas!(2));
   expect(container.querySelector('.ejecutar .c5-insignia')!.textContent).toBe('2');
   await click(T.app.modos.modelar);
@@ -4831,7 +4853,7 @@ it('the step labels follow the panel\'s step under each element and are cleared 
 });
 
 it('duplicating drops the selection, so the copy\'s next step is not filtered to the old element, and its first ▶ Simulate opens compared (Lote M, C5b)', async () => {
-  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await esperarReparse();
   await act(async () => mocks.onSeleccion('Flow_Si'));
   expect(mocks.panel.seleccion).toBe('Flow_Si');
   await act(async () => mocks.panel.onConteoProblemas!(0));
