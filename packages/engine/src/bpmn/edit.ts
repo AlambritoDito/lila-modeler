@@ -794,14 +794,21 @@ class Editor {
     const lane = this.lane(op.lane, 'lane');
     if (el === undefined || lane === undefined) return;
     if (el['$parent'] !== this.process) return this.issue('id', this.C.editLaneOutsideProcess(op.id));
+    // The end events the outline made for this step (`EndEvent_<id>`, `EndEvent_<id>_2`, …) go with it
+    // while nothing else leads to them.
+    const ends = this.outgoing(el)
+      .map((f) => f['targetRef'] as El)
+      .filter((t) => is(t, 'bpmn:EndEvent') && (t.id === `EndEvent_${el.id}` || t.id.startsWith(`EndEvent_${el.id}_`)))
+      .filter((t) => this.incoming(t).every((f) => f['sourceRef'] === el));
+    const moving = [el, ...ends];
     for (const { lane: l } of lanesOf(this.process)) {
-      if (Array.isArray(l['flowNodeRef'])) l['flowNodeRef'] = (l['flowNodeRef'] as El[]).filter((n) => n !== el);
+      if (Array.isArray(l['flowNodeRef'])) l['flowNodeRef'] = (l['flowNodeRef'] as El[]).filter((n) => !moving.includes(n));
     }
-    for (const l of this.laneChain(lane)) ((l['flowNodeRef'] ??= []) as El[]).push(el);
+    for (const l of this.laneChain(lane)) ((l['flowNodeRef'] ??= []) as El[]).push(...moving);
 
     const before = this.incremental ? this.diagram.bounds(el.id) : undefined;
     const from = before === undefined ? undefined : { x: before.x, y: before.y };
-    if (this.incremental) this.diagram.moveIntoLane(el, lane, this.participant);
+    if (this.incremental) for (const node of moving) this.diagram.moveIntoLane(node, lane, this.participant);
     const after = this.diagram.bounds(el.id);
     const attached = ((this.process['flowElements'] ?? []) as El[]).filter((b) => b['attachedToRef'] === el);
     if (from !== undefined && after !== undefined) {
@@ -810,11 +817,11 @@ class Editor {
         if (box !== undefined) this.diagram.setBounds(b.id, { ...box, x: box.x + after.x - from.x, y: box.y + after.y - from.y });
       }
     }
-    for (const node of [el, ...attached]) {
+    for (const node of [el, ...attached, ...ends]) {
       for (const flow of [...this.incoming(node), ...this.outgoing(node)]) this.diagram.routeFlow(flow);
       this.diagram.rerouteAround(node.id, this.links());
     }
-    this.touch(el, lane);
+    this.touch(el, lane, ...ends);
     this.change(this.C.editMoved(op.id, (lane['name'] as string | undefined) ?? lane.id));
   }
 

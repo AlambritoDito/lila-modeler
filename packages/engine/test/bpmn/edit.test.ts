@@ -204,6 +204,15 @@ describe.each([true, false])('each operation (layout %s)', (layout) => {
     const issue = shapes.get('issue')!;
     expect(issue.y).toBeGreaterThanOrEqual(lane.y);
     expect(issue.y + issue.height).toBeLessThanOrEqual(lane.y + lane.height);
+    // The end event the outline made for "issue" goes with it (#630).
+    const end = shapes.get('EndEvent_issue')!;
+    expect(end.y).toBeGreaterThanOrEqual(lane.y);
+    expect(end.y + end.height).toBeLessThanOrEqual(lane.y + lane.height);
+    const { rootElement } = await BpmnModdle().fromXML(edit.xml);
+    const lanes = (rootElement as any).rootElements.find((e: any) => e.$type === 'bpmn:Process').laneSets[0].lanes;
+    const refs = (id: string) => (lanes.find((l: any) => l.id === id).flowNodeRef ?? []).map((n: any) => n.id);
+    expect(refs('Lane_back')).toEqual(['issue', 'EndEvent_issue']);
+    expect(refs('Lane_2')).not.toContain('EndEvent_issue');
     const pool = shapes.get('Participant_1')!;
     for (const id of ['Lane_1', 'Lane_2', 'Lane_back', 'Lane_4']) {
       const l = shapes.get(id)!;
