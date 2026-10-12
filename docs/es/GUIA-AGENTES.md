@@ -18,6 +18,7 @@ registrarlo en cada cliente está en [`MCP.md`](MCP.md#instalación).
 
 | Paso | Tool | CLI |
 | --- | --- | --- |
+| 0. El archivo ya existe: leer lo que tiene | `get_project`, `get_scenario` | `lila project show`, `lila scenario show` |
 | 1. Leer la entrevista, escribir un esquema | (el agente) | |
 | 2. Crear el proceso | `create_process` | `lila process create` |
 | 3. Corregirlo | `edit_process`, `get_process_outline` | `lila process edit`, `lila process show` |
@@ -36,6 +37,21 @@ Dos reglas dan forma al flujo:
 - **Todo es el `.lila`.** El servidor no guarda estado. Cada tool lee el archivo, hace su trabajo y,
   si escribe, escribe el archivo completo de forma atómica. La app de escritorio que lo tiene
   abierto lo recarga sola.
+
+### 0. Un `.lila` que ya existe: `get_project`
+
+Cuando el `.lila` ya existe, empieza aquí, no por la entrevista:
+
+```json
+{ "name": "get_project", "arguments": { "project": "tarjeta.lila" } }
+```
+
+Lista los procesos (su `slug` es lo que recibe `process` cuando hay varios), los escenarios de cada
+uno con su revisión y su `extends`, y las corridas guardadas, vigentes (`current`) u obsoletas. No
+escribe nada. `get_scenario` lee un escenario, como está guardado o con `resolved: true`, con las
+`notes` del validador; lee un escenario con ella antes de parchearlo, nunca con un `patch_scenario`
+de solo `test`. Después sigue el paso de abajo que la persona pidió: un proceso nuevo (paso 2), una
+corrección (paso 3), números nuevos (paso 5) o una corrida nueva (paso 6).
 
 ### 1. De la entrevista al esquema
 
@@ -94,7 +110,8 @@ imprimirá el documento. Las dos son opcionales; el documento sale mejor con ell
 ### 5. El escenario
 
 El escenario base `as-is.scenario.json` empieza con los valores por defecto de la app (20 casos,
-uno por minuto, una corrida de una hora) más lo que traía el esquema. Completa el resto con un solo
+uno por minuto, una corrida de una hora) más lo que traía el esquema (`get_scenario` con
+`resolved: true` lo muestra, con las rutas que usa un patch). Completa el resto con un solo
 `patch_scenario` (JSON Patch, validado antes de escribir nada):
 
 ```json

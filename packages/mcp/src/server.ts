@@ -13,6 +13,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { posix } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 
 import { validateBpmnXml, type TargetingScenario, type ValidateBpmnReport, type ValidationResult } from '@lila-modeler/engine/bpmn';
 import {
@@ -603,6 +604,24 @@ function withRelativeModel(scenario: ResolvedScenario, file: string): ResolvedSc
   return { ...scenario, model: posix.relative(posix.dirname(file), scenario.model) };
 }
 
+/**
+ * Whether two scenarios say the same, as JSON (#627): key order and `undefined` keys do not count.
+ * A patch whose result is the scenario it read (`test` only, or a `replace` with the same value)
+ * writes nothing, so the scenario keeps its revision and its runs stay current.
+ */
+function sameScenario(a: unknown, b: unknown): boolean {
+  return isDeepStrictEqual(JSON.parse(JSON.stringify(a ?? null)), JSON.parse(JSON.stringify(b ?? null)));
+}
+
+/** The JSON at `file`, or `undefined` when there is none or it cannot be read (it is then written over). */
+function existingJson(file: string, locale: Locale): unknown {
+  try {
+    return existsSync(file) ? readJsonFile(file, locale) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 interface PatchScenarioInput {
   scenario: string;
   project?: string | undefined;
@@ -659,13 +678,16 @@ async function patchScenario(input: PatchScenarioInput, locale: Locale): Promise
     }
     const outcome = await validatePatchedScenario(patchedRaw, locale);
     if (!outcome.ok) return fail(outcome.error);
+    if (sameScenario(outcome.scenario, base)) {
+      return textResult({ scenario: outcome.scenario, file: scenarioPath, written: false, notes: [M.patchNoChange(), ...outcome.notes] });
+    }
     try {
       const file = writeJsonAtomic(
         scenarioPath,
         withRelativeModel(outcome.scenario, scenarioPath),
         locale,
       );
-      return textResult({ scenario: outcome.scenario, file, notes: outcome.notes });
+      return textResult({ scenario: outcome.scenario, file, written: true, notes: outcome.notes });
     } catch (error) {
       return fail(message(error));
     }
@@ -696,10 +718,13 @@ async function patchScenario(input: PatchScenarioInput, locale: Locale): Promise
 
   const outcome = await validatePatchedScenario(resolvedCandidate, locale);
   if (!outcome.ok) return fail(outcome.error);
+  if (sameScenario(existingJson(saveToPath, locale), candidate)) {
+    return textResult({ scenario: outcome.scenario, file: saveToPath, written: false, notes: [M.patchSameTarget(saveToPath), ...outcome.notes] });
+  }
 
   try {
     const file = writeJsonAtomic(saveToPath, candidate, locale);
-    return textResult({ scenario: outcome.scenario, file, notes: outcome.notes });
+    return textResult({ scenario: outcome.scenario, file, written: true, notes: outcome.notes });
   } catch (error) {
     return fail(message(error));
   }
@@ -740,8 +765,11 @@ async function patchLilaScenario(
     // the write, so its slug and the folder its `model` resolves under change with it.
     const { slug, root } = lilaWritten(lila, document);
     const model = resolvedScenario.model.startsWith(lila.root) ? `${root}${resolvedScenario.model.slice(lila.root.length)}` : resolvedScenario.model;
-    return textResult({ scenario: { ...resolvedScenario, model }, file: lila.file, process: slug, entry: target, notes });
+    return textResult({ scenario: { ...resolvedScenario, model }, file: lila.file, process: slug, entry: target, written: true, notes });
   };
+  // #627: nothing changes, nothing is written; the process is where it was.
+  const unchanged = (target: string, resolvedScenario: ResolvedScenario, notes: string[]): CallToolResult =>
+    textResult({ scenario: resolvedScenario, file: lila.file, process: lila.process.slug, entry: target, written: false, notes });
 
   let patchedRaw: unknown;
   try {
@@ -757,6 +785,7 @@ async function patchLilaScenario(
     }
     const outcome = await validatePatchedScenario(patchedRaw, locale, lila);
     if (!outcome.ok) return fail(outcome.error);
+    if (sameScenario(outcome.scenario, base)) return unchanged(entry, outcome.scenario, [M.patchNoChange(), ...outcome.notes]);
     try {
       const path = lilaScenarioPath(lila, entry);
       const document = await writeLilaScenario(lila, entry, withRelativeModel(outcome.scenario, path), locale);
@@ -795,6 +824,9 @@ async function patchLilaScenario(
 
   const outcome = await validatePatchedScenario(resolvedCandidate, locale, lila);
   if (!outcome.ok) return fail(outcome.error);
+  if (Object.hasOwn(lila.process.scenarios, target) && sameScenario(lila.process.scenarios[target], candidate)) {
+    return unchanged(target, outcome.scenario, [M.patchSameTarget(target), ...outcome.notes]);
+  }
 
   try {
     const document = await writeLilaScenario(lila, target, candidate, locale);
@@ -987,8 +1019,10 @@ export function createServer(options: ServerOptions = {}): McpServer {
         '`saveTo` it patches `scenario` in place (the full resolved scenario, without `extends`). ' +
         'With `saveTo` it creates a new file with `extends` towards `extendsFrom` (by default, ' +
         '`scenario` itself) and only the keys the patch touched — like ' +
-        '`to-be-3-cajeros.scenario.json`. Returns the resulting resolved scenario, the path written ' +
-        'and `notes` with the lint warnings. A patch that leaves the scenario invalid (`probability` ' +
+        '`to-be-3-cajeros.scenario.json`. Returns the resulting resolved scenario, the path written, ' +
+        '`written` and `notes` with the lint warnings. A patch that changes nothing (only `test`, or ' +
+        'the target already holds the result) writes nothing: `written: false`, the scenario keeps its ' +
+        'revision and its saved runs stay current. A patch that leaves the scenario invalid (`probability` ' +
         'outside `[0,1]`, `capacity` < 1, a `ref` that does not exist in `resources`, …) is rejected ' +
         'without writing anything. With `project` (a .lila), `scenario`, `extendsFrom` and `saveTo` ' +
         'are scenario names inside that process, and the archive is rewritten atomically with every ' +

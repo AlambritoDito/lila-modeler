@@ -237,6 +237,37 @@ npx lila scenario import proyecto.lila as-is as-is.xlsx --dry-run
 npx lila scenario import proyecto.lila as-is as-is.xlsx
 ```
 
+## `project show` y `scenario show` (#628)
+
+Lo que tiene un `.lila`, leído sin escribir nada — ni escritura ni cambio de revisión:
+
+- `lila project show <proyecto.lila>` imprime el nombre del proyecto y su versión de formato (2
+  para un repositorio de varios procesos, 1 si no) y, por proceso, su slug, nombre, id del
+  `bpmn:process`, revisión del modelo y número de nodos de flujo, sus escenarios (entrada, nombre,
+  revisión, `extends`) y sus corridas guardadas (id, escenario, réplicas, inicio simulado y si la
+  corrida está **vigente** u **obsoleta**: obsoleta cuando el modelo o el escenario cambiaron
+  después de ella). Un `.lila` no guarda la fecha en que se tomó una corrida; `start` es el
+  `run.start` del escenario que corrió. `--json` imprime `{ file, name, formatVersion,
+  processes: [{ slug, name, processId, modelRevision, elements, scenarios: [{ entry, name,
+  revision, extends }], runs: [{ id, scenario, start, replications, current }] }] }`.
+- `lila scenario show <proyecto.lila> <escenario>` imprime el escenario como está guardado (con su
+  `extends`), o con `--resolved` fusionado por `extends` con los valores por defecto del motor —el
+  objeto que parchea `patch_scenario`, con `model` relativo al escenario—. Después, las notas del
+  validador contra el modelo del proceso (primero los errores `E-…`, luego los avisos `W-…`), las
+  comprobaciones que hace `run` antes de simular, así que sirve de lint de escenarios; aun con
+  errores sale con `0`. `--json` imprime `{ file, process, entry, revision, resolved, scenario,
+  runnable, notes }`.
+
+```bash
+npx lila project show examples/pedido.lila --json
+```
+Código de salida: `0`.
+
+```bash
+npx lila scenario show examples/pedido.lila to-be-3-cajeros --resolved
+```
+Código de salida: `0`.
+
 ## `mcp`
 
 Arranca el servidor MCP (`@lila-modeler/mcp`) por stdio, para que lo lance un cliente MCP, no algo que se

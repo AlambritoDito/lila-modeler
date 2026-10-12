@@ -58,6 +58,8 @@ const ES_USAGE = `Uso: lila validate <archivo.bpmn|proyecto.lila> [--process slu
      lila scenario import <proyecto.lila> <escenario> <hoja.xlsx|hoja.csv> [--process slug]
                           [--dry-run] [--json]
      lila scenario template <proyecto.lila> <escenario> --out hoja.xlsx [--process slug] [--force]
+     lila scenario show <proyecto.lila> <escenario> [--process slug] [--resolved] [--json]
+     lila project show <proyecto.lila> [--json]
      lila mcp
 
 Comandos:
@@ -73,6 +75,8 @@ Comandos:
              los atributos extendidos de un elemento. raci: imprime la matriz RACI del documento.
   scenario   import: aplica una hoja de escenario (.xlsx/.csv) a un escenario del .lila, como
              Importar Excel/CSV de la app. template: escribe esa hoja, rellenada, para una persona.
+             show: imprime un escenario como está guardado (o --resolved) con las notas del validador.
+  project    show: lista los procesos de un .lila, sus escenarios y sus corridas guardadas. Solo lee.
   mcp        Arranca el servidor MCP por stdio (para Claude Code / Desktop). Ver docs/MCP.md.
 
 Un modelo puede ser un .bpmn o un proyecto .lila. Con un .lila, un escenario es una ruta .json o,
@@ -634,5 +638,9 @@ export const es: Catalog = {
     patchedName: (name) => `${name} (parcheado)`,
     inlineScenario: () => 'escenario inline',
     projectNotLila: (file) => `\`project\` tiene que ser un archivo .lila; se recibió ${file}.`,
+    patchNoChange: () =>
+      'el patch no cambia nada, así que no se escribió nada: el escenario conserva su revisión y sus corridas siguen vigentes.',
+    patchSameTarget: (target) =>
+      `${target} ya tiene este escenario, así que no se escribió nada: conserva su revisión y sus corridas siguen vigentes.`,
   },
 };
