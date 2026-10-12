@@ -142,6 +142,23 @@ it('#554: Run from the keyboard keeps the focus on its button through Cancel and
   expect(document.activeElement).toBe(ejecutar);
 });
 
+it('#554: a held Enter does not cancel the run it started (the repeats are dropped)', async () => {
+  const pulsar = (b: Element, repeat: boolean): boolean =>
+    !b.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', repeat, bubbles: true, cancelable: true }));
+  const corrida = deferred<{ result: object; logSample: [] }>();
+  mocks.worker.mockReturnValueOnce(corrida.promise);
+  const ejecutar = container.querySelector<HTMLButtonElement>('button.ejecutar')!;
+  // The first press is the button's own click; only its repeats are cancelled.
+  expect(pulsar(ejecutar, false)).toBe(false);
+  expect(pulsar(ejecutar, true)).toBe(true);
+  await act(async () => ejecutar.click());
+  // The same button is Cancel now: Enter's repeats from the Run press must not click it.
+  const cancelar = container.querySelector('button.cancelar')!;
+  expect(pulsar(cancelar, true)).toBe(true);
+  expect(pulsar(cancelar, false)).toBe(false);
+  await act(async () => corrida.resolve({ result: { warnings: [], bottlenecks: [], elements: {}, resources: {}, flows: {}, process: {} }, logSample: [] }));
+});
+
 it('#554: the results table gets the lint\'s code and path, so another language still dedupes', async () => {
   // The live lint after switching to Spanish; the run's copy of the same warning is in English.
   mocks.problemas = [{ ruta: 'elements.Task_A', codigo: 'W-ELEMENTO-SIN-PARAMETROS', severidad: 'warning',
