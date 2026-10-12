@@ -81,7 +81,7 @@ import { registerResourcesAndPrompts } from './resources.js';
 import { requestProgress, simulateInWorker, type RequestProgress } from './simulate-in-worker.js';
 
 const NAME = 'lila-mcp';
-const VERSION = '1.0.0-beta.23';
+const VERSION = '1.0.0-beta.24';
 
 /** Idioma por llamada: sobrescribe el del servidor solo para esa respuesta. */
 const localeSchema = z

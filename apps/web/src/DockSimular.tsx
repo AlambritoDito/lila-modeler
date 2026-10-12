@@ -31,13 +31,19 @@ export const FILAS_LOG = 500;
 /**
  * The Warnings tab: the run's warnings, then the live lint minus what the run already says (the
  * lint repeats some of them without their code), grouped by code (QA of #394).
+ *
+ * #554: a lint problem with its code and path is the run's `<code>: … (<path>).` whatever the
+ * language of each: the run keeps the language it ran in, the lint follows the app's, so after a
+ * language change the text alone no longer matches and the same problem was listed twice.
  */
 export function avisosDelDock(warnings: readonly string[], lint: readonly AvisoDock[]): GrupoAvisos[] {
   // The engine's raw floats read with two decimals, like the lint (`numerosLegibles`).
   warnings = warnings.map(numerosLegibles);
+  const yaDicho = (a: AvisoDock): boolean => warnings.some((w) => w.includes(a.mensaje)
+    || (a.codigo !== undefined && a.ruta !== undefined && w.startsWith(`${a.codigo}: `) && w.includes(`(${a.ruta})`)));
   return agruparAvisos([
     ...warnings.map((mensaje): AvisoDock => ({ mensaje, severidad: 'warning' })),
-    ...lint.filter((a) => !warnings.some((w) => w.includes(a.mensaje))),
+    ...lint.filter((a) => !yaDicho(a)),
   ]);
 }
 
@@ -45,6 +51,9 @@ export function avisosDelDock(warnings: readonly string[], lint: readonly AvisoD
 export interface AvisoDock {
   mensaje: string;
   severidad: 'error' | 'warning';
+  /** The engine's code (`W-ELEMENTO-SIN-PARAMETROS`) and the path it names, when the lint has them. */
+  codigo?: string | undefined;
+  ruta?: string | undefined;
 }
 
 export interface TablaResultadosProps {
