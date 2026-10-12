@@ -1024,7 +1024,8 @@ function fail(C: CliMessages, issues: EditIssue[], wrap: (detail: string) => str
  * #630: a model with no diagram (no `bpmndi` shape) gets one, drawn by the same layout as
  * `editBpmn` with `layout: true`, for the main process (`processId`, else the document-order
  * rule). Returns `undefined` when the model already has a diagram, has no process to draw, or
- * holds content the BPMN reader cannot write back whole. Throws `LayoutError` when the layouter cannot place it.
+ * holds content the BPMN reader cannot write back whole. Throws `LayoutError` when the layouter
+ * cannot place it.
  */
 export async function layoutMissingDiagram(xml: string, options: { processId?: string | undefined; locale?: Locale | undefined } = {}): Promise<string | undefined> {
   const moddle = BpmnModdle({ lila });
