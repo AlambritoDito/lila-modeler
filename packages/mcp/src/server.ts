@@ -2,7 +2,7 @@
  * Servidor MCP de Lila Modeler: tools sobre `@lila-modeler/engine`, sin lógica propia. `validate_bpmn` y
  * `describe_process` son de LILA-053; `run_simulation` y `compare_scenarios` de LILA-054, sobre
  * `@lila-modeler/engine/cli-shared` (extraído de `cli.ts` en el mismo ticket, sin cambiar su salida).
- * `createServer()` solo registra tools; conectar un transporte (stdio, in-memory para tests) es
+ * `createServer()` registra tools, resources y el prompt (#637); conectar un transporte (stdio, in-memory para tests) es
  * responsabilidad de quien lo use — ver `src/bin.ts` para el caso stdio real.
  *
  * Idioma (LILA-211, parte 2): `title`, `description` y los `.describe()` son **fijos en inglés**
@@ -65,10 +65,10 @@ import {
   type Scenario,
   type ScenarioProblem,
 } from '@lila-modeler/engine/schema';
-import { compare, simulate, type CompareResult, type RunResult } from '@lila-modeler/engine';
+import { compare, type CompareResult, type RunResult } from '@lila-modeler/engine';
 import { messages, resolveLocale, type Locale } from '@lila-modeler/engine/messages';
 import { McpServer } from '@modelcontextprotocol/server';
-import type { CallToolResult } from '@modelcontextprotocol/server';
+import type { CallToolResult, ServerContext } from '@modelcontextprotocol/server';
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { z } from 'zod';
 
@@ -76,6 +76,8 @@ import { registerAgentTools } from './agent-tools.js';
 import { applyJsonPatch, buildPatchDelta, type JsonPatchOp } from './json-patch.js';
 import { resolveScenarioInput, type ScenarioInput } from './scenario-input.js';
 import { detailSchema, runSummarySchema, summarizeComparison, summarizeRun, type Detail } from './result-summary.js';
+import { registerResourcesAndPrompts } from './resources.js';
+import { requestProgress, simulateInWorker, type RequestProgress } from './simulate-in-worker.js';
 
 const NAME = 'lila-mcp';
 const VERSION = '1.0.0-beta.23';
@@ -316,6 +318,7 @@ interface RunSimulationInput {
 async function runSimulation(
   { model, process, scenario, seed, replications, saveTo, saveRun, detail }: RunSimulationInput,
   locale: Locale,
+  progress: RequestProgress = requestProgress(undefined),
 ): Promise<CallToolResult> {
   const M = messages(locale).mcp;
   const fail = (body: string): CallToolResult => errorResult(toolMessage('run_simulation', body));
@@ -363,7 +366,8 @@ async function runSimulation(
 
   let result: RunResult;
   try {
-    const simulated = simulate(ir, withOverrides, { log: false, locale });
+    // #637: in a worker, with a progress notification per replication and the request's cancellation.
+    const simulated = await simulateInWorker({ ir, scenario: withOverrides, locale }, { signal: progress.signal, onReplication: progress.report });
     result = resultWithBoundaryWarnings(simulated, modelValidation, scenarioProblems);
   } catch (error) {
     return fail(message(error));
@@ -419,6 +423,7 @@ function scenarioLabel(entry: ScenarioInput, index: number): string {
 async function compareScenarios(
   { model, process, scenarios, seed, replications, saveTo, detail }: CompareScenariosInput,
   locale: Locale,
+  progress: RequestProgress = requestProgress(undefined),
 ): Promise<CallToolResult> {
   const M = messages(locale).mcp;
   const fail = (body: string): CallToolResult => errorResult(toolMessage('compare_scenarios', body));
@@ -479,13 +484,19 @@ async function compareScenarios(
     validated.push({ label, scenario: withOverrides, problems });
   }
 
-  let loaded: LoadedScenarioResult[];
+  // #637: one worker per scenario, in order; progress counts the replications of all of them.
+  const loaded: LoadedScenarioResult[] = [];
+  const total = validated.reduce((sum, { scenario }) => sum + (scenario.run.replications ?? 1), 0);
+  let done = 0;
   try {
-    loaded = validated.map(({ label, scenario, problems }) => ({
-      file: label,
-      scenario,
-      result: resultWithBoundaryWarnings(simulate(ir, scenario, { log: false, locale }), modelValidation, problems),
-    }));
+    for (const { label, scenario, problems } of validated) {
+      const simulated = await simulateInWorker(
+        { ir, scenario, locale },
+        { signal: progress.signal, onReplication: (completed) => progress.report(done + completed, total) },
+      );
+      done += scenario.run.replications ?? 1;
+      loaded.push({ file: label, scenario, result: resultWithBoundaryWarnings(simulated, modelValidation, problems) });
+    }
   } catch (error) {
     return fail(message(error));
   }
@@ -951,7 +962,7 @@ export function createServer(options: ServerOptions = {}): McpServer {
       }),
       outputSchema: z.union([runSummarySchema, runResultSchema]),
     },
-    async (input): Promise<CallToolResult> => runSimulation(input, localeOf(input.locale)),
+    async (input, ctx: ServerContext): Promise<CallToolResult> => runSimulation(input, localeOf(input.locale), requestProgress(ctx)),
   );
 
   server.registerTool(
@@ -986,7 +997,7 @@ export function createServer(options: ServerOptions = {}): McpServer {
         locale: localeSchema,
       }),
     },
-    async (input): Promise<CallToolResult> => compareScenarios(input, localeOf(input.locale)),
+    async (input, ctx: ServerContext): Promise<CallToolResult> => compareScenarios(input, localeOf(input.locale), requestProgress(ctx)),
   );
 
   server.registerTool(
@@ -1293,6 +1304,9 @@ export function createServer(options: ServerOptions = {}): McpServer {
       }
     },
   );
+
+  // The agent guide and the formats as resources, and the guide's flow as a prompt (#637).
+  registerResourcesAndPrompts(server, fallbackLocale);
 
   return server;
 }

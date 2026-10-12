@@ -75,7 +75,14 @@ try {
   assert.equal((await client.listTools()).tools.length, 16);
   const validated = await client.callTool({ name: 'validate_bpmn', arguments: { path: model } });
   assert.notEqual(validated.isError, true, JSON.stringify(validated));
+  // #637: the resources come from the copies the package carries, and simulation runs in its worker.
+  assert.deepEqual((await client.listResources()).resources.map((resource) => resource.uri).sort(), ['lila://guide', 'lila://outline-format', 'lila://scenario-format', 'lila://scenario-schema']);
+  assert.equal((await client.readResource({ uri: 'lila://guide' })).contents[0].text, readFileSync(join(root, 'docs/AGENT_GUIDE.md'), 'utf8'));
+  const progress = [];
+  const simulated = await client.callTool({ name: 'run_simulation', arguments: { scenario, seed: 42, replications: 3 } }, { onprogress: (p) => progress.push(p.progress) });
+  assert.notEqual(simulated.isError, true, JSON.stringify(simulated));
+  assert.deepEqual(progress, [1, 2, 3]);
 } finally {
   await client.close();
 }
-console.log('Package consumer OK: runtime exports, JSON descriptor, Node16/Bundler types, English/Spanish CLI, identical simulation bytes, MCP server with 16 tools.');
+console.log('Package consumer OK: runtime exports, JSON descriptor, Node16/Bundler types, English/Spanish CLI, identical simulation bytes, MCP server with 16 tools, its resources and a simulation in its worker.');
