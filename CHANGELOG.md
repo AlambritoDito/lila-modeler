@@ -3,6 +3,46 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.25] - 2026-10-12
+
+Lote P: an agent can see what a `.lila` holds without writing it, get results that fit its
+context, and read the guide and formats straight from the MCP server (#527). Simulation results
+are unchanged.
+
+### Added
+
+- **Read-only inventory (#628, #641)**: `get_project` / `lila project show` lists a `.lila`'s
+  processes, their scenarios and their saved runs (current or stale), and `get_scenario` /
+  `lila scenario show` reads a scenario as stored or resolved through `extends`, with the
+  validator's notes. Neither writes anything. The agent guide starts with `get_project` when the
+  file already exists.
+- **Resources and a prompt in the MCP server (#637, #642)**: `lila://guide` (in the server's
+  language), `lila://outline-format`, `lila://scenario-format` and `lila://scenario-schema`,
+  bundled in the package, and the `interview-to-process` prompt with the guide's flow.
+- **Progress and cancel (#637, #642)**: `run_simulation` and `compare_scenarios` report progress
+  per replication and can be cancelled. The simulation runs in a worker thread, so the server keeps
+  answering while it runs.
+
+### Changed
+
+- **Compact results by default (#629, #642)**: `run_simulation` and `compare_scenarios` take
+  `detail: "summary" | "full"`, and the default is `summary`: process KPIs, bottlenecks, resource
+  utilisation, wait and cost, the top waits and grouped warnings (about 4–7 KB where the full
+  result was 70–120 KB). `full` is the previous output, byte for byte, and `saveTo` and `saveRun`
+  always store the full result.
+- **`create_project` draws a model that arrives without a diagram (#630, #643)**, with the same
+  layout as `edit_process` with `layout: true`, so `export_diagram` works right away. The layout
+  now also places data objects and text annotations.
+
+### Fixed
+
+- **A `patch_scenario` that changes nothing writes nothing (#627, #641)**: the revision stays, the
+  saved runs stay current and the response says `written: false`.
+- **`moveToLane` takes along the end event the outline made for the step (#630, #643).**
+- **Plurals in en and es (#630, #643)**: «1 paso, 1 carril», «1 step, 1 lane».
+- **`docs/SEMANTICS.md` (#630, #643)**: with several pools one process is simulated and the
+  others are ignored (R-DURA-5); the docs no longer say they are flattened.
+
 ## [1.0.0-beta.24] - 2026-10-12
 
 Lote O: lane controls on the canvas, Settings per artboard 09, the Windows menu in the user's
