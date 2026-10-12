@@ -341,6 +341,9 @@ export const en = {
     eliminar: 'Delete',
     integrado: 'Built-in',
     delUsuario: 'Mine',
+    /** The tag of each theme card (#441), singular where `integrado`/`delUsuario` name a group. */
+    tarjetaIntegrado: 'Built-in',
+    tarjetaDelUsuario: 'Mine',
     muestraTexto: 'Text on surface',
     muestraSecundario: 'Secondary text',
     muestraBoton: 'Accent',
@@ -1703,7 +1706,7 @@ export const en = {
     tipoLilaJson: 'Lila Modeler project (JSON)',
     /** #573: the web app's Save found its `.lila` changed since this window read or wrote it. */
     errorCambioExternoWeb: (nombre: string): string =>
-      `${nombre} changed outside this window since it was opened, so nothing was saved. ` +
+      `${nombre} changed outside this window since it was last read or saved here, so nothing was saved. ` +
       'Open it again to get the other version, or use Save As to keep yours in another file.',
     errorSinBridge: 'DesktopStore requires `window.lila`: is it being instantiated outside Electron?',
     errorProyectoDistinto:
@@ -1721,7 +1724,7 @@ export const en = {
       'Try again in a moment.',
     /** `E-CAMBIO-EXTERNO` from the disk (#539): `nombre` changed outside Lila since it was last read. */
     errorCambioExterno: (nombre: string): string =>
-      `E-CAMBIO-EXTERNO: ${nombre} changed outside Lila since it was opened, so nothing was saved. ` +
+      `E-CAMBIO-EXTERNO: ${nombre} changed outside Lila since Lila last read or saved it, so nothing was saved. ` +
       'Reload to get the other version, or use Save As to keep yours in another file.',
     /** `E-CARPETA-OCUPADA` from the disk (#517): `ruta` holds another project's files. */
     errorCarpetaOcupada: (ruta: string): string =>
@@ -2168,9 +2171,18 @@ export const en = {
       arrivals: 'Pick the start event',
       times: 'Pick a task to give it a duration',
       routes: 'Edit the % on the flow labels',
-      resources: 'Pick a task or the name of a lane',
+      resources: 'Pick a task',
       calendars: 'Pick a task to see its schedule',
       run: 'The run settings apply to the whole scenario',
     },
+  },
+  /** Lote M, C7: final polish. */
+  c7: {
+    /** The Resources hint when the diagram has lanes (C2: a click on a lane's name assigns it). Never the pool. */
+    pistaRecursosCarril: 'Pick a task or the name of a lane',
+    /** A selected pool or lane without a name: what the Simulate panel shows instead of its raw id. */
+    sinNombre: { 'bpmn:Participant': 'Unnamed pool', 'bpmn:Lane': 'Unnamed lane' },
+    /** The end of the replay on the time bar: one word, with the whole sentence in its title. */
+    finCorto: 'End',
   },
 } as const;

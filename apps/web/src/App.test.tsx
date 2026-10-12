@@ -25,6 +25,7 @@ import { en as T } from './strings.en';
 import { es as ES } from './strings.es';
 import { version } from '../package.json';
 import { atajoPorId, etiqueta, type AtajoId } from './atajos';
+import { publicarCarriles } from './carrilClic';
 
 const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.fn(), zoom: vi.fn(), ajustar: vi.fn(), changed: () => {}, scenarioChange: (_raw?: object) => {},
   // The panel header's Duplicate (C1): what App wires as the panel's `onDuplicar`.
@@ -1463,6 +1464,51 @@ it('Run on a loose ventas.bpmn checks its default scenarios against model.bpmn (
   expect(modelo).toEqual(['model.bpmn', 'ventas.bpmn']);
 });
 
+it('«Save As» of a loose ventas.bpmn writes a project whose model is model.bpmn, and so do its scenarios (#613)', async () => {
+  const base = proyecto('p613', 'Ventas');
+  // A CLI-style folder: one scenario names the loose file, another the folder's model.bpmn.
+  const suelto = { ...base, model: { ...base.model, name: 'ventas.bpmn' }, loose: true, scenarios: {
+    'as-is.scenario.json': { version: 1, name: 'AS-IS', model: 'ventas.bpmn' },
+    'otro.scenario.json': { version: 1, name: 'Otro', model: 'model.bpmn' },
+  } };
+  (session as unknown as { openRecent: unknown }).openRecent = vi.fn().mockResolvedValue(suelto);
+  const puente = puenteConRutas({ dir: '/p/descargas', file: 'ventas.bpmn' });
+  await remontar();
+  const rotulo = () => container.querySelector('header.barra .archivo')!.firstChild!.textContent;
+  expect(rotulo()).toBe('ventas.bpmn');
+
+  await act(async () => { puente.menu('guardarComo'); });
+  const guardado = vi.mocked(session.saveProject).mock.calls.at(-1)![0];
+  expect(guardado.model.name).toBe('model.bpmn');
+  expect(Object.values(guardado.scenarios).map((e) => e['model'])).toEqual(['model.bpmn', 'model.bpmn']);
+  // The session follows what was written: the bar names model.bpmn, the next save writes it again,
+  // and Run checks the scenarios against model.bpmn alone, which they now name.
+  expect(rotulo()).toBe('model.bpmn');
+  await act(async () => { puente.menu('guardar'); });
+  const otra = vi.mocked(session.saveProject).mock.calls.at(-1)![0];
+  expect([otra.model.name, otra.scenarios['as-is.scenario.json']?.['model']]).toEqual(['model.bpmn', 'model.bpmn']);
+  await click(T.app.ejecutar);
+  const [, file, escenarios, modelo] = mocks.gate.mock.calls.at(-1)!;
+  expect(modelo).toBe('model.bpmn');
+  expect((escenarios as Record<string, { model?: string }>)[file]?.model).toBe('model.bpmn');
+});
+
+it('a loose diagram grown to two processes saves its own as model.bpmn, also from the other tab (#613)', async () => {
+  const base = proyecto('p613b', 'Ventas');
+  const suelto = { ...base, model: { ...base.model, name: 'ventas.bpmn' }, loose: true };
+  (session as unknown as { openRecent: unknown }).openRecent = vi.fn().mockResolvedValue(suelto);
+  const puente = puenteConRutas({ dir: '/p/descargas', file: 'ventas.bpmn' });
+  await remontar();
+  lienzoQueRecuerda();
+  await nuevoProcesoConNombre('Cobro');
+  // A repository is saved whole, as a new destination; the canvas is on the second process.
+  await act(async () => { puente.menu('guardar'); });
+  const nombres = (d: ProjectDocument) => [d.model.name, ...(d.processes ?? []).map((p) => p.model.name)];
+  expect(nombres(vi.mocked(session.saveProject).mock.calls.at(-1)![0])).toEqual(['model.bpmn', 'model.bpmn']);
+  await act(async () => { puente.menu('guardar'); });
+  expect(nombres(vi.mocked(session.saveProject).mock.calls.at(-1)![0])).toEqual(['model.bpmn', 'model.bpmn']);
+});
+
 it.each([
   ['escenario editado', 'escenario', T.app.sinGuardar],
   ['corrida sin guardar', 'corrida', T.app.sinGuardar],
@@ -1678,6 +1724,38 @@ it('a tab switch while the process document is being exported waits: the documen
   expect(texto).toContain(`data:image/png;base64,${btoa(String.fromCharCode(...png(2)))}"`);
   expect(pestanasProceso()[1]!.getAttribute('aria-current')).toBe('true');
   // Once the export is done the switch goes through.
+  await act(async () => pestanasProceso()[0]!.click());
+  expect(pestanasProceso()[0]!.getAttribute('aria-current')).toBe('true');
+});
+
+it('a tab switch, a save and an export started in the same JS task: only the export takes the file lock (#535)', async () => {
+  const lienzo = lienzoQueRecuerda();
+  await nuevoProcesoConNombre('Facturación');
+  mocks.exportarSvg.mockResolvedValue('<svg id="papel"/>');
+  mocks.aPng.mockResolvedValue(new Blob(['png'], { type: 'image/png' }));
+  const abiertos = mocks.abrir.mock.calls.length;
+  let soltar!: () => void;
+  const retenido = new Promise<void>((r) => { soltar = r; });
+  await act(async () => {
+    mocks.exportXml.mockImplementationOnce(async () => { const xml = lienzo.xml(); await retenido; return xml; });
+    // QA of #533: three clicks dispatched in one task. The switch and the save await the loss
+    // check before they lock; the export locks at once, in between.
+    pestanasProceso()[0]!.click();
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...mod('s') }));
+    ejecutarArchivo(T.app.exportarHtml);
+  });
+  // Neither the switch nor the save ran next to the export: the canvas is still the second process.
+  expect(mocks.abrir.mock.calls.length).toBe(abiertos);
+  expect(pestanasProceso()[1]!.getAttribute('aria-current')).toBe('true');
+  expect(session.saveProject).not.toHaveBeenCalled();
+  expect(container.querySelector('footer.estado [role="alert"].error')?.textContent).toBe(T.app.guardadoOcupado);
+  // The lock is still the export's, not released by an operation that finished first.
+  await pulsar(document.body, mod('s'));
+  expect(session.saveProject).not.toHaveBeenCalled();
+  await act(async () => soltar());
+  await vi.waitFor(() => expect(mocks.descargar).toHaveBeenCalledOnce());
+  expect(mocks.descargar.mock.calls[0]![1]).toBe('Facturación.html');
+  // Once the export is done, the switch goes through.
   await act(async () => pestanasProceso()[0]!.click());
   expect(pestanasProceso()[0]!.getAttribute('aria-current')).toBe('true');
 });
@@ -4317,6 +4395,7 @@ it('an automatic reload selects the same element again in the new import (QA of 
   reload.mockImplementation(async () => vi.mocked(session.saveProject).mock.calls.at(-1)?.[0] ?? null);
   await click(T.app.guardar);
   // The canvas reported `Task_TomarPedido` selected (the properties panel shows it).
+  mocks.seleccionados = [{ id: 'Task_TomarPedido' }];
   await act(async () => { mocks.onSeleccion('Task_TomarPedido'); });
   mocks.abrir.mockClear();
   mocks.seleccionar.mockClear();
@@ -4324,23 +4403,61 @@ it('an automatic reload selects the same element again in the new import (QA of 
   await avisar();
   await vi.waitFor(async () => {
     await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
-    expect(mocks.seleccionar).toHaveBeenCalledWith('Task_TomarPedido');
+    expect(mocks.seleccionar).toHaveBeenCalledWith(['Task_TomarPedido']);
   });
   expect(reload).toHaveBeenCalledOnce();
   // After the import, against its new elements: `Modeler.abrir` cleared the old selection, and
   // `seleccionar` finds the id in the reloaded diagram (or does nothing when it is gone).
   expect(mocks.abrir.mock.invocationCallOrder[0]!).toBeLessThan(mocks.seleccionar.mock.invocationCallOrder[0]!);
 
-  // Nothing selected before: nothing is selected after.
+  // Several selected (`onSeleccion` says none, #568): all of them, in one selection.
+  mocks.seleccionados = [{ id: 'Task_TomarPedido' }, { id: 'Task_Preparar' }];
   await act(async () => { mocks.onSeleccion(null); });
   mocks.seleccionar.mockClear();
   await avisar();
   await vi.waitFor(async () => {
     await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
-    expect(reload).toHaveBeenCalledTimes(2);
+    expect(mocks.seleccionar).toHaveBeenCalledWith(['Task_TomarPedido', 'Task_Preparar']);
+  });
+  expect(mocks.seleccionar).toHaveBeenCalledOnce();
+
+  // Nothing selected before: nothing is selected after.
+  mocks.seleccionados = [];
+  await act(async () => { mocks.onSeleccion(null); });
+  mocks.seleccionar.mockClear();
+  await avisar();
+  await vi.waitFor(async () => {
+    await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+    expect(reload).toHaveBeenCalledTimes(3);
   });
   await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
   expect(mocks.seleccionar).not.toHaveBeenCalled();
+});
+
+it('after «Keep mine», a save refused with E-CAMBIO-EXTERNO offers «Reload» next to the error (#568)', async () => {
+  const { avisar, reload } = await montarConVigilancia();
+  reload.mockResolvedValue(null);
+  await act(async () => mocks.scenarioChange({ version: 1, name: 'AS-IS editado' }));
+  await avisar();
+  await click(T.app.mantenerMios);
+  expect(avisoCambioExterno()).toBeUndefined();
+  // The next save meets the disk's guard, as before there was a watcher.
+  vi.mocked(session.saveProject).mockRejectedValueOnce(new Error(T.almacen.errorCambioExterno('pedido.lila')));
+  await click(T.app.guardar);
+  const error = [...container.querySelectorAll('footer.estado [role="alert"].error')].find((n) => n.textContent?.startsWith('E-CAMBIO-EXTERNO'));
+  expect(error).toBeDefined();
+  const recargar = [...error!.querySelectorAll('button')];
+  expect(recargar.map((b) => [b.textContent, b.type])).toEqual([[T.app.recargarCambioExterno, 'button']]);
+  expect(reload).not.toHaveBeenCalled();
+  await act(async () => recargar[0]!.click());
+  expect(reload).toHaveBeenCalledOnce();
+  // The reload took the error's place (here the file is gone from disk).
+  expect(container.textContent).not.toContain('E-CAMBIO-EXTERNO');
+  expect(container.textContent).toContain(T.app.errorRecienteAusente);
+  // Another error has no such button.
+  vi.mocked(session.saveProject).mockRejectedValueOnce(new Error('E-ARCHIVO-OCUPADO: boom'));
+  await click(T.app.guardar);
+  expect(container.querySelector('footer.estado [role="alert"].error button')).toBeNull();
 });
 
 it('the status bar shows the seed of the run on screen, not only the scenario\'s (QA of #539)', async () => {
@@ -4628,6 +4745,25 @@ it('Simulate shows the step\'s hint over the canvas; Model and Results do not (L
   expect(chip?.textContent).toBe(`${T.c6.pasoLienzo(3)}${T.c6.pistasLienzo.routes}`);
   await click(T.app.modos.modelar);
   expect(container.querySelector('.c6-chip-lienzo')).toBeNull();
+});
+
+it('the Resources hint mentions lanes only when the diagram has some, never the pool (Lote M, C7)', async () => {
+  await click(T.app.modos.simular);
+  await act(async () => mocks.panel.onPasoVisible!('resources'));
+  // Sample order has pools and no lane (the mocked canvas may have published some earlier).
+  await act(async () => publicarCarriles([]));
+  const chip = (): string | null | undefined => container.querySelector('.zona-modelo .c6-chip-lienzo')?.textContent;
+  expect(chip()).toBe(`${T.c6.pasoLienzo(4)}${T.c6.pistasLienzo.resources}`);
+  expect(T.c6.pistasLienzo.resources).not.toMatch(/lane|pool/i);
+  try {
+    await act(async () => publicarCarriles([{ id: 'Lane_1', nombre: 'Kitchen', nodos: ['Task_A'] }]));
+    expect(chip()).toBe(`${T.c6.pasoLienzo(4)}${T.c7.pistaRecursosCarril}`);
+    expect(T.c7.pistaRecursosCarril).not.toMatch(/pool/i);
+    await act(async () => publicarCarriles([]));
+    expect(chip()).toBe(`${T.c6.pasoLienzo(4)}${T.c6.pistasLienzo.resources}`);
+  } finally {
+    await act(async () => publicarCarriles(null));
+  }
 });
 
 it('with Properties in front the sub-bar tabs control nothing; Alt+n from the main window focuses the step tab (Lote M, C6)', async () => {

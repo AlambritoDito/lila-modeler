@@ -120,7 +120,12 @@ densidad y **Avanzado**, que muestra los ids BPMN de los elementos junto a sus n
 el mapa de teclado actual) — las tres montadas a la vez y alternadas con `hidden`, no
 desmontadas, así la vista previa en caliente de `Apariencia` sobrevive a cambiar de pestaña y un
 test llega a cualquier control sin tener que pasar antes por la navegación. General es la sección
-con la que arranca el diálogo cada vez que se abre.
+con la que arranca el diálogo cada vez que se abre. Idioma y densidad son controles segmentados
+(#441): un `role="radiogroup"` cada uno, una sola parada de Tab, y las flechas mueven y eligen (dan
+la vuelta; Inicio/Fin saltan a los extremos). El `<select>` nativo al que sustituyen sigue en el
+DOM, `hidden` —fuera del orden de Tab y del árbol de accesibilidad— para lo que maneja Ajustes por
+script, con el mismo manejador. El raíl mide 200 px con su relleno y su divisoria, y sus pestañas
+llevan el anillo de foco del tema.
 
 `apps/web/src/settings/Apariencia.tsx` es la sección Apariencia; `App.tsx` sigue siendo **el
 único** que llama a `applyTheme` y a `Modelador.repintar()`. El componente no aplica ni persiste
@@ -131,9 +136,14 @@ atajo para no tener que mirar detrás del diálogo.
 
 Los controles:
 
-- **Lista de temas**: los integrados (Eva-01, Papel) y los del usuario, en un `<optgroup>` cada
-  grupo. Elegir uno lo aplica en caliente; los integrados se piden por `fetch`, los del usuario
-  salen del almacén y no piden nada.
+- **Lista de temas**: una tarjeta por tema (#441, la columna TEMAS del artboard) —primero los
+  integrados, luego los del usuario— con una tira de su paleta (`bg.base`, `accent.primary`,
+  `accent.secondary`; lo que a un tema del usuario le falte sale de Eva-01, que es lo que pinta
+  `tokens.css`), su nombre y la etiqueta «Integrado»/«Mío». Las tarjetas son un
+  `role="radiogroup"`: una parada de Tab, flechas para moverse. Elegir una lo aplica en caliente;
+  los integrados se piden por `fetch`, los del usuario salen del almacén y no piden nada (las
+  tarjetas leen las paletas integradas de los mismos JSON al compilar). El `<select>` con un
+  `<optgroup>` por grupo sigue en el DOM, `hidden`, como los de General.
 - **Seguir el tema del sistema** (#472): un interruptor, encendido de fábrica, con los selectores
   **Tema claro** y **Tema oscuro** debajo mientras está encendido (ver «Seguir el esquema del
   sistema» arriba).
@@ -156,7 +166,8 @@ Los controles:
   la app— con un `<a download>` y un Blob. En Electron funciona igual: no hay `will-download` que lo
   intercepte y la CSP de `lila://` no gobierna las descargas, así que Chromium lo guarda por el
   camino normal.
-- **Importar**: un `<input type="file" accept=".json">`. El JSON se valida entero antes de tocar
+- **Importar**: un botón que abre un `<input type="file" accept=".json">` oculto (#441: la
+  `<label>` con estilo de botón de antes no se alcanzaba con Tab). El JSON se valida entero antes de tocar
   nada (`validarTema`, `apps/web/src/theme/temas.ts`); si algo falla, el mensaje sale dentro del
   diálogo y no se aplica ni se guarda nada. Si vale, entra como tema del usuario y se aplica.
 - **Eliminar** quita el tema del usuario activo y cae a la misma regla del sistema que el primer

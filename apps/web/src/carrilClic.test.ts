@@ -14,10 +14,13 @@ import {
   MARCA_ASIGNABLE,
   apply,
   carrilElegido,
+  contenedoresDe,
   elegirCarril,
   ordenVisual,
   publicarCarriles,
+  useContenedores,
   usePasoRecursos,
+  type ContenedorVisual,
   type EventoCarril,
   type FormaCarril,
   type LienzoCarriles,
@@ -196,5 +199,50 @@ describe('apply', () => {
     desmontar = null;
     expect(falso.marcadas.size).toBe(0);
     quitar();
+  });
+});
+
+describe('pools and lanes for the Simulate panel (Lote M, C7)', () => {
+  it('contenedoresDe keeps pools and lanes with their trimmed names, null without one', () => {
+    expect(contenedoresDe([
+      { id: 'Participant_R', type: 'bpmn:Participant', businessObject: { name: ' Restaurant ' } },
+      { id: 'Participant_X', type: 'bpmn:Participant', businessObject: { name: '  ' } },
+      carril('Lane_K', 0, ['T1'], 'Kitchen'),
+      { id: 'T1', type: 'bpmn:Task', businessObject: { name: 'Cook' } },
+    ])).toEqual([
+      { id: 'Participant_R', tipo: 'bpmn:Participant', nombre: 'Restaurant' },
+      { id: 'Participant_X', tipo: 'bpmn:Participant', nombre: null },
+      { id: 'Lane_K', tipo: 'bpmn:Lane', nombre: 'Kitchen' },
+    ]);
+  });
+
+  it('apply publishes them and its cleanup takes them back', () => {
+    let leidos: readonly ContenedorVisual[] | null = null;
+    function Sonda(): null {
+      leidos = useContenedores();
+      return null;
+    }
+    const div = document.createElement('div');
+    const raiz = createRoot(div);
+    act(() => {
+      raiz.render(createElement(Sonda));
+    });
+    const falso = lienzoFalso();
+    let quitar = (): void => {};
+    act(() => {
+      quitar = apply(falso.lienzo);
+    });
+    expect(leidos).toEqual([
+      { id: 'Lane_abajo', tipo: 'bpmn:Lane', nombre: 'Cocina' },
+      { id: 'Lane_0x9k2', tipo: 'bpmn:Lane', nombre: null },
+      { id: 'Lane_arriba', tipo: 'bpmn:Lane', nombre: 'Caja' },
+    ]);
+    act(() => {
+      quitar();
+    });
+    expect(leidos).toBeNull();
+    act(() => {
+      raiz.unmount();
+    });
   });
 });

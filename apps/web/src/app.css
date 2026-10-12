@@ -3056,10 +3056,15 @@ button.gcal-uso-fila:hover {
 .ajustes-encabezado { align-items: center; border-bottom: 1px solid var(--border); display: flex; flex: none; gap: 12px; justify-content: space-between; padding: calc(16px * var(--espacio, 1)) 24px; }
 .ajustes-encabezado h2 { font-size: 1em; margin: 0; }
 .ajustes-cuerpo { display: flex; flex: 1 1 auto; min-height: 0; }
-.ajustes-nav { border-right: 1px solid var(--border); display: flex; flex: none; flex-direction: column; gap: 2px; overflow: auto; padding: calc(12px * var(--espacio, 1)); width: 200px; }
+/* `border-box`: the 200 px of the artboard are the whole rail, its padding and divider included
+   (it measured ~225 px with the default `content-box`, QA of #437 N3; #441). */
+.ajustes-nav { border-right: 1px solid var(--border); box-sizing: border-box; display: flex; flex: none; flex-direction: column; gap: 2px; overflow: auto; padding: calc(12px * var(--espacio, 1)); width: 200px; }
 .ajustes-nav [role='tab'] { background: none; border: none; border-radius: 0; color: var(--fg-muted); cursor: pointer; font: inherit; padding: calc(8px * var(--espacio, 1)) 10px; text-align: left; }
 .ajustes-nav [role='tab']:hover { color: var(--fg-primary); }
 .ajustes-nav [role='tab'].activo { background: var(--bg-hover); color: var(--fg-primary); font-weight: 600; }
+/* The theme's focus ring, not the browser's default one (QA of #437 N2; #441). Inset: the rail
+   scrolls, and an outer ring would be clipped at its edges. */
+.ajustes-nav [role='tab']:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
 .ajustes-panel { flex: 1 1 auto; min-width: 0; overflow: auto; padding: calc(20px * var(--espacio, 1)) 24px; }
 .ajustes .fila { align-items: center; display: grid; gap: 8px; grid-template-columns: 9rem 1fr; margin-bottom: calc(10px * var(--espacio, 1)); }
 .ajustes .fila > span { color: var(--fg-muted); }
@@ -3081,6 +3086,39 @@ button.gcal-uso-fila:hover {
 /* #472: the help line under «Follow the system theme», tucked against its toggle. */
 .ajustes .ayuda { color: var(--fg-muted); font-size: 0.9em; margin: 0 0 calc(12px * var(--espacio, 1)); }
 .ajustes .acciones { border-top: 1px solid var(--border); flex: none; justify-content: flex-end; margin: 0; padding: calc(12px * var(--espacio, 1)) 24px; }
+/* `hidden` wins over the `display` of the shared rules (`.campo` is a flex box): the native
+   selects that the segmented controls and the theme cards replaced stay in the DOM, hidden (#441). */
+.ajustes [hidden] { display: none; }
+
+/* Segmented controls of General (language, density; artboard 09, #441): one `role="radiogroup"`,
+   the chosen option filled with the accent like the artboard's «Normal». */
+.ajustes .segmentado { display: flex; flex-wrap: wrap; justify-self: start; }
+.ajustes .segmentado [role='radio'] { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 0; color: var(--fg-muted); cursor: pointer; font: inherit; margin-left: -1px; padding: calc(5px * var(--espacio, 1)) 12px; }
+.ajustes .segmentado [role='radio']:first-child { margin-left: 0; }
+.ajustes .segmentado [role='radio']:hover { color: var(--fg-primary); }
+.ajustes .segmentado [role='radio'][aria-checked='true'] { background: var(--accent-primary); border-color: var(--accent-primary); color: var(--fg-onAccent); font-weight: 600; }
+
+/* Theme cards (the artboard's TEMAS column, #441): a strip of the palette, the name, and whether
+   it ships with the app. Also one `role="radiogroup"`. */
+.ajustes .fila.temas { align-items: start; }
+.ajustes .fila.temas > span { padding-top: calc(7px * var(--espacio, 1)); }
+.ajustes .tarjetas-tema { display: grid; gap: 6px; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); }
+.ajustes .tarjetas-tema [role='radio'] { align-items: center; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 0; color: var(--fg-primary); cursor: pointer; display: flex; font: inherit; gap: 8px; min-width: 0; padding: calc(6px * var(--espacio, 1)) 8px; text-align: left; }
+.ajustes .tarjetas-tema [role='radio']:hover { background: var(--bg-hover); }
+.ajustes .tarjetas-tema [role='radio'][aria-checked='true'] { background: var(--bg-hover); border-color: var(--accent-primary); box-shadow: inset 2px 0 0 var(--accent-primary); font-weight: 600; }
+.ajustes .tarjetas-tema .muestra { border: 1px solid var(--border); display: flex; flex: none; }
+.ajustes .tarjetas-tema .muestra > span { block-size: 18px; inline-size: 7px; }
+.ajustes .tarjetas-tema .nombre { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ajustes .tarjetas-tema .tipo { color: var(--fg-muted); flex: none; font-family: var(--font-mono); font-size: 10px; font-weight: 400; }
+.ajustes .segmentado [role='radio']:focus-visible,
+.ajustes .tarjetas-tema [role='radio']:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; position: relative; z-index: 1; }
+/* Forced colors (Windows high contrast) repaint every segment alike: the chosen one keeps the
+   system selection colours, and the theme cards keep their palette strip. */
+@media (forced-colors: active) {
+  .ajustes .segmentado [role='radio'][aria-checked='true'] { background: Highlight; border-color: Highlight; color: HighlightText; forced-color-adjust: none; }
+  .ajustes .tarjetas-tema .muestra { forced-color-adjust: none; }
+  .ajustes .tarjetas-tema [role='radio'][aria-checked='true'] { outline: 2px solid Highlight; outline-offset: -2px; }
+}
 
 /* Theme editor (LILA-114): groups are `<details>`, and only the first one opens by default. Not
    a single literal color here: everything comes from the tokens, including the editor's own,
@@ -3092,10 +3130,6 @@ button.gcal-uso-fila:hover {
    row inherited a stray divider and the footer's indent. Zeroing both out here keeps the footer
    rule for the actual footer only. */
 .ajustes .acciones.temas { border-top: 0; justify-content: flex-start; margin: 12px 0; padding: 0; }
-/* El `<label>` es el botón del `<input type="file">`: el input de verdad no se ve, pero sigue ahí
-   y es el que abre el selector nativo (y el que un test acciona). */
-.ajustes .acciones.temas .boton { display: inline-flex; }
-.ajustes .acciones.temas input[type='file'] { display: none; }
 .ajustes .muestras { align-items: center; background: var(--bg-surface); border: 1px solid var(--border); display: flex; gap: 12px; margin: 12px 0; padding: 10px; }
 .ajustes .muestras .apagado { color: var(--fg-muted); }
 .ajustes .muestras .acento { background: var(--accent-primary); color: var(--fg-onAccent); font-weight: 600; padding: 2px 10px; }
@@ -4684,13 +4718,6 @@ button.gcal-uso-fila:hover {
 .c5-tiempo .c5-deslizador { flex: 1 1 80px; min-width: 60px; }
 .c5-tiempo .c5-reloj { overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; }
 .c5-tiempo .c5-velocidad .c5-rotulo { display: none; }
-@media (max-width: 1599px) {
-  .c5-tiempo .c5-ocupacion,
-  .c5-tiempo .c5-leyenda { display: none; }
-}
-@media (max-width: 1399px) {
-  .c5-tiempo > .aviso { display: none; }
-}
 
 /* The number of problems on «▶ Simulate» (design 01). */
 .ejecutar .c5-insignia {
@@ -4931,14 +4958,15 @@ button.gcal-uso-fila:hover {
   display: none;
 }
 
-/* Results draws the map with its time bar and table, like design 05: no minimap over it, and the
-   time bar ends before the bpmn.io mark (which must stay where it is, see `.bjs-powered-by`). */
+/* Results draws the map with its time bar and table, like design 05: no minimap over it. The time
+   bar is a row of its own under the map (C7, below), clear of the bpmn.io mark. */
 .app.modo-resultados .lienzo .djs-minimap { display: none; }
-.app.modo-resultados .c5-tiempo { right: 84px; }
 
 /* A narrow summary reads each duration on one line: hours, with the exact value in the title. */
-.panel:not(.ancho) .c5-kpis .c6-kpi-paren { display: none; }
-.c5-kpis dd { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.panel:not(.ancho) .c5-kpis .c6-kpi-paren,
+.panel:not(.ancho) .c5-tarea-datos .c6-kpi-paren { display: none; }
+.c5-kpis dd,
+.c5-tarea-datos dd { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* «BASE» is a filled badge, as in the design (scenario button and the compact header). */
 .c5-escenario-boton .insignia-base,
@@ -5023,3 +5051,46 @@ button.gcal-uso-fila:hover {
 /* Calendars (C6, QA of #605): the calendar being edited is the editor below, with its name field,
    so its row in the list is not drawn twice; the list shows the other calendars. */
 .gcal-lista li:has(> .gcal-fila[aria-current='true']) { display: none; }
+
+/* ---------- Lote M · C7: final polish ---------- */
+
+/* Results, design 05: the time bar is a 48 px row under the map, above the collapsible table — not
+   a box over the bottom of the diagram. The canvas gives up that height (Modeler.tsx resizes
+   bpmn-js through its ResizeObserver); the zoom buttons keep their place above the bpmn.io mark,
+   which now sits at the bottom of the smaller canvas. */
+.app.modo-resultados .zona-modelo:has(> .c5-tiempo) { display: flex; flex-direction: column; }
+.app.modo-resultados .zona-modelo:has(> .c5-tiempo) > .lienzo { flex: 1 1 auto; height: auto; min-height: 0; }
+.app.modo-resultados .zona-modelo > .c5-tiempo {
+  background: var(--bg-surface);
+  border: 0;
+  border-top: 1px solid var(--border);
+  box-shadow: none;
+  box-sizing: border-box;
+  flex: none;
+  gap: 10px;
+  height: 48px;
+  order: 1;
+  padding: 0 14px;
+  position: static;
+}
+.app.modo-resultados .zona-modelo:has(> .c5-tiempo) > .zoom { bottom: calc(46px + 48px); }
+
+/* What the row shows depends on the row's own width (its content box), not on the window's: the
+   panel can be wider than 320 px. The clock is always read whole, at the end too («Fin»), and the
+   slider is what gives way (QA of #615). Thresholds, measured in Spanish (the longer catalog):
+   - 910 px: buttons, speed, a 60 px slider, the clock, «Fin», «1/30» and «Partial replay: first n
+     log rows» — read whole at 1280 px with the 320 px panel (a 932 px content box);
+   - 1170 px: plus the pools' occupancy (Sample order's three pools);
+   - 1490 px: plus the heat-map legend. */
+.c5-tiempo { container-type: inline-size; }
+@container (max-width: 909px) {
+  .c5-tiempo > .aviso { display: none; }
+}
+@container (max-width: 1169px) {
+  .c5-tiempo .c5-ocupacion { display: none; }
+}
+@container (max-width: 1489px) {
+  .c5-tiempo .c5-leyenda { display: none; }
+}
+.app.modo-resultados .zona-modelo > .c5-tiempo .c5-reloj { flex-shrink: 0; }
+.app.modo-resultados .zona-modelo > .c5-tiempo .c5-deslizador { flex: 1 1 60px; }
