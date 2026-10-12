@@ -284,7 +284,8 @@ describe('lane operations for the canvas controls and the lane list (#596)', () 
     expect(lanesOf(m)).toEqual(['L1', 'L2', medio.id, 'L3']);
     // It opens below «Two»; the third lane and its task make room below it, the pool grows.
     expect([medio.y, medio.height, m.el('L3').y, m.el('T3').y, pool.height]).toEqual([320, 120, 440, 490, 520]);
-    expect(ordenSemantico(await m.xml())).toEqual(['L1', 'L2', 'L3', medio.id]);
+    // bpmn-js appends the new lane to the laneSet; the XML still lists the lanes as drawn (#580).
+    expect(ordenSemantico(await m.xml())).toEqual(['L1', 'L2', medio.id, 'L3']);
     expect(refs(m, 'L3')).toEqual(['T3', 'B3']);
     m.commandStack.undo();
     expect(lanesOf(m)).toEqual(['L1', 'L2', 'L3']);
@@ -301,6 +302,30 @@ describe('lane operations for the canvas controls and the lane list (#596)', () 
     expect(ultimo.y).toBe(500);
     m.commandStack.undo();
     expect(await m.xml()).toBe(antes);
+  });
+
+  it('keeps the exported laneSet in drawing order after an insert between two lanes, even after a reorder', async () => {
+    const m = await montar(TRES_CARRILES);
+    const pool = m.el('Pool');
+    // The QA's steps: the third lane to the top, then a lane in the third place.
+    m.carriles.moverA(m.el('L3'), 0);
+    const antes = await m.xml();
+    expect(ordenSemantico(antes)).toEqual(['L3', 'L1', 'L2']);
+    const nuevo = m.carriles.insertar(pool, 2);
+    expect(lanesOf(m)).toEqual(['L3', 'L1', nuevo.id, 'L2']);
+    expect(ordenSemantico(await m.xml())).toEqual(lanesOf(m));
+    // The first lane of the session at position 1, and one more at 0.
+    const segundo = m.carriles.insertar(pool, 1);
+    const primero = m.carriles.insertar(pool, 0);
+    expect(ordenSemantico(await m.xml())).toEqual([primero.id, 'L3', segundo.id, 'L1', nuevo.id, 'L2']);
+    expect(lanesOf(m)).toEqual(ordenSemantico(await m.xml()));
+    // Each insert, reorder included, is one undo step; redo gives the same order back.
+    m.commandStack.undo();
+    m.commandStack.undo();
+    m.commandStack.undo();
+    expect(await m.xml()).toBe(antes);
+    m.commandStack.redo();
+    expect(ordenSemantico(await m.xml())).toEqual(['L3', 'L1', nuevo.id, 'L2']);
   });
 
   it('gives a pool without lanes bpmn-js\'s two', async () => {
