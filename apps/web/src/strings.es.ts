@@ -2085,9 +2085,14 @@ export const es: Strings = {
       arrivals: 'Elige el evento de inicio',
       times: 'Elige una tarea para darle duración',
       routes: 'Edita los % en las etiquetas de los flujos',
-      resources: 'Elige una tarea o el nombre de un carril',
+      resources: 'Elige una tarea',
       calendars: 'Elige una tarea para ver su horario',
       run: 'Los parámetros de ejecución afectan a todo el escenario',
     },
+  },
+  c7: {
+    pistaRecursosCarril: 'Elige una tarea o el nombre de un carril',
+    sinNombre: { 'bpmn:Participant': 'Pool sin nombre', 'bpmn:Lane': 'Carril sin nombre' },
+    finCorto: 'Fin',
   },
 };

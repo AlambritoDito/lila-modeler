@@ -65,6 +65,7 @@ import { moduloLote, type LilaLote } from './lote';
 import { moduloCarriles, type LilaCarriles } from './carriles';
 import { moduloAncho, type LilaAncho } from './ancho';
 import { centrar, type CanvasCentrable } from './centrar';
+import { idDeSeleccion } from './ids';
 import { svgDelLienzo, type LienzoExportable } from './exportarDiagrama';
 
 /** Lo que el shell pinta en la barra de estado. */
@@ -382,10 +383,10 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
         if (modeler === activo) publicar(null);
       });
       // Única fuente de la selección para el resto de la app (LILA-061).
-      modeler.on('selection.changed', (evento: { newSelection: Array<{ id: string }> }) => {
+      // A label's click is its owner's (`idDeSeleccion`): nobody downstream knows label ids.
+      modeler.on('selection.changed', (evento: { newSelection: Array<{ id: string; labelTarget?: { id: string } | null }> }) => {
         if (modeler !== activo) return;
-        const elegidos = evento.newSelection;
-        onSeleccion(elegidos.length === 1 ? (elegidos[0]?.id ?? null) : null);
+        onSeleccion(idDeSeleccion(evento.newSelection));
       });
       // El minimapa reescribe el rótulo y el `title` de su cabecera en inglés («Close minimap»)
       // cada vez que se pliega o se abre, así que se vuelven a poner desde el catálogo en vez de

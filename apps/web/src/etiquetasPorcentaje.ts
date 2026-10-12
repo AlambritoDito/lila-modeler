@@ -108,7 +108,9 @@ interface Forma extends Partial<Caja2D> {
 
 /** Size of a box on screen, in px (CSS `.lila-pct`); in diagram units it is this over the zoom. */
 const ANCHO_PX = 64;
-const ALTO_PX = 32;
+// QA of #615: the CSS box is 33–35 px tall (borders, the name line and the field), not 32: with 32 a
+// box half a box off its flow still grazed the timer of Sample order at 141 % and more.
+const ALTO_PX = 36;
 /** The gateway's validation marker and selection outline stick out of its bounds by about this. */
 const MARGEN_FORMA = 10;
 
@@ -136,7 +138,9 @@ export function posicionDe(
   const escala = Math.max(zoom, 1e-3) < 1 ? 1 / zoom : 1;
   const W = ANCHO_PX * escala;
   const H = ALTO_PX * escala;
-  const candidatos: Caja2D[] = [];
+  /** A place for the box, and how far it stands off the segment beyond the usual 5 units. */
+  const candidatos: { caja: Caja2D; lejos: number }[] = [];
+  const en = (caja: Caja2D, lejos = 0): void => { candidatos.push({ caja, lejos }); };
   // The first segment first (the box reads as the gateway's exit); the second as a fallback, for a
   // flow that leaves the gateway and turns right away (C6, QA of #605: «Rejected 22 %» sat on the
   // flow's own label beside a short first segment).
@@ -145,25 +149,42 @@ export function posicionDe(
     const ux = (b.x - a.x) / largo;
     const uy = (b.y - a.y) / largo;
     const horizontal = Math.abs(ux) >= Math.abs(uy);
+    const primero = a === wps[0];
     for (const d of [6, largo / 2, Math.max(6, largo - 6 - (horizontal ? W : H))]) {
       const px = a.x + ux * Math.min(d, largo);
       const py = a.y + uy * Math.min(d, largo);
       if (horizontal) {
         const x = ux >= 0 ? px : px - W;
-        candidatos.push({ x, y: py + 5, width: W, height: H }, { x, y: py - 5 - H, width: W, height: H });
+        en({ x, y: py + 5, width: W, height: H });
+        en({ x, y: py - 5 - H, width: W, height: H });
+        // C7: a flow shorter than the box (980 → 1030 into the timer of Sample order) left every
+        // place on the segment over the gateway or the event it enters; these stand a quarter of a
+        // box to a whole box off it — no further (QA of #615: «Bad» ended 134 px from its flow).
+        if (primero) for (const k of [1, 2, 3, 4]) {
+          const aparte = (k * H) / 4;
+          en({ x, y: py - 5 - aparte - H, width: W, height: H }, aparte);
+          en({ x, y: py + 5 + aparte, width: W, height: H }, aparte);
+        }
       } else {
         const y = uy >= 0 ? py : py - H;
-        candidatos.push({ x: px + 5, y, width: W, height: H }, { x: px - 5 - W, y, width: W, height: H });
+        en({ x: px + 5, y, width: W, height: H });
+        en({ x: px - 5 - W, y, width: W, height: H });
+        // Beside a vertical segment too, at most a box's height off it: a box's width (up to 96 px)
+        // already reads as belonging to another flow.
+        if (primero) for (const k of [1, 2, 3, 4]) {
+          const aparte = (k * H) / 4;
+          en({ x: px + 5 + aparte, y, width: W, height: H }, aparte);
+          en({ x: px - 5 - aparte - W, y, width: W, height: H }, aparte);
+        }
       }
     }
   }
-  let mejor = candidatos[0]!;
-  let menor = Infinity;
-  for (const c of candidatos) {
-    const total = obstaculos.reduce((acc, o) => acc + solape(c, o), 0);
-    if (total < menor - 1e-6) { menor = total; mejor = c; }
-  }
-  return { left: Math.round(mejor.x - minX), top: Math.round(mejor.y - minY) };
+  // The one that covers least; among those, the nearest to the flow (QA of #615: the box stays at
+  // the gateway's exit, as in the design); then the first, below/right of the start.
+  const puntuados = candidatos.map((c, i) => ({ ...c, i, tapa: obstaculos.reduce((acc, o) => acc + solape(c.caja, o), 0) }));
+  const menor = Math.min(...puntuados.map((p) => p.tapa));
+  const [mejor] = puntuados.filter((p) => p.tapa <= menor + 1e-6).sort((p, q) => p.lejos - q.lejos || p.i - q.i);
+  return { left: Math.round(mejor!.caja.x - minX), top: Math.round(mejor!.caja.y - minY) };
 }
 
 /**
@@ -184,6 +205,8 @@ function obstaculosDe(registro: ElementRegistry, inicio: Punto, puestos: readonl
     if (contiene && caja.width * caja.height > 4 * ANCHO_PX * ALTO_PX) continue;
     const toca = inicio.x >= caja.x - 1 && inicio.x <= caja.x + caja.width + 1 && inicio.y >= caja.y - 1 && inicio.y <= caja.y + caja.height + 1;
     // The gateway the flow leaves: its warning marker and selection outline stick out.
+    // C7: an event's step label («≈ 10 min», `etiquetasPaso.ts`) sits past its right edge, 20 px up.
+    if (e.type?.endsWith('Event') === true) salida.push({ x: caja.x + caja.width + 12, y: caja.y - 20, width: 72, height: 18 });
     salida.push(toca && e.type !== 'label'
       ? { x: caja.x - MARGEN_FORMA, y: caja.y - MARGEN_FORMA, width: caja.width + 2 * MARGEN_FORMA, height: caja.height + 2 * MARGEN_FORMA }
       // A label keeps a few pixels of air too: a box flush against «Rejected» reads as covering it.
