@@ -154,6 +154,25 @@ describe('readProjectFolder — tolerancia', () => {
     expect(document.model.xml).toBe(XML_MINIMO);
   });
 
+  it('ventas.bpmn dentro de un proyecto abre sin las corridas del proyecto, que son de model.bpmn (#613)', async () => {
+    const run: StoredRun = {
+      id: 'run-1',
+      scenarioName: 'as-is.scenario.json',
+      result: { kpis: { total: 42 } },
+      // Same revisions as the manifest: `isCurrentRun` would take it as current for ventas.bpmn.
+      inputs: { modelRevision: 3, scenarioRevision: 1, xml: XML_MINIMO, scenario: { version: 1 } },
+    };
+    await writeProjectFolder(dir, documentoBase({ runs: [run] }));
+    await writeFile(join(dir, 'ventas.bpmn'), XML_MINIMO, 'utf8');
+
+    const suelto = await readProjectFolder(dir, 'ventas.bpmn');
+    expect(suelto.loose).toBe(true);
+    expect(suelto.document.runs).toEqual([]);
+    // Its scenarios still come along (they may name it, a CLI-style folder), and model.bpmn keeps its runs.
+    expect(Object.keys(suelto.document.scenarios)).toEqual(['as-is.scenario.json']);
+    expect((await readProjectFolder(dir)).document.runs.map((r) => r.id)).toEqual(['run-1']);
+  });
+
   it('el .bpmn pedido no existe: E-SIN-MODELO nombra ESE archivo', async () => {
     await writeFile(join(dir, 'model.bpmn'), XML_MINIMO, 'utf8');
     const error = await captureError(() => readProjectFolder(dir, 'ventas.bpmn'));

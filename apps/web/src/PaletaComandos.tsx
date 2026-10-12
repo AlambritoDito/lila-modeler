@@ -1,14 +1,29 @@
 /**
  * Command palette, ⌘K / Ctrl+K (#410).
  *
- * A modal `<dialog>` with an ARIA combobox: the focus stays in the field, ↑/↓ move the active row
- * (`aria-activedescendant`), Enter or a click picks it, Esc closes it and gives the focus back to
- * whatever had it. No library: the rows are plain data (`Comando`) that `App.tsx` builds when the
+ * A modal `<dialog>` with an ARIA combobox: the focus stays in the field (Tab included, #442), ↑/↓
+ * move the active row (`aria-activedescendant`), Enter or a click picks it, Esc closes it and gives
+ * the focus back to whatever had it — a text field with its caret where it was (#442). No library: the rows are plain data (`Comando`) that `App.tsx` builds when the
  * palette opens, and `filtrarComandos` is the whole search.
  */
 import { useEffect, useId, useRef, useState } from 'react';
 import { normalizar } from './Paleta';
+import { teclaDeArchivo } from './atajos';
 import { useStrings } from './i18n';
+
+const DESKTOP = typeof window !== 'undefined' && typeof window.lila !== 'undefined';
+
+/**
+ * Puts the caret back where it was in the text field that had the focus (#442). Chrome's dialog
+ * `close()` hands the focus back to it with the caret at the start (measured by CDP: 3 → 0 in
+ * «Filter shapes»), and the palette's own `focus()` after it is then a no-op. A label being edited
+ * on the canvas needs nothing: bpmn-js ends the edit as soon as the palette takes the focus.
+ */
+function recordarCursor(el: Element | null): () => void {
+  if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) || el.selectionStart === null) return () => {};
+  const { selectionStart: desde, selectionEnd: hasta, selectionDirection: sentido } = el;
+  return () => el.setSelectionRange(desde, hasta ?? desde, sentido ?? undefined);
+}
 
 export const GRUPOS_COMANDO = ['elementos', 'escenarios', 'modos', 'acciones'] as const;
 export type GrupoComando = (typeof GRUPOS_COMANDO)[number];
@@ -68,6 +83,7 @@ export function PaletaComandos({ comandos, mostrarIds = false, onCerrar }: Props
   const campo = useRef<HTMLInputElement>(null);
   // Captured on the first render, before `showModal` moves the focus into the dialog.
   const previo = useRef(document.activeElement as HTMLElement | null);
+  const [cursor] = useState(() => recordarCursor(previo.current));
   const base = useId();
   const [consulta, setConsulta] = useState('');
   const [activo, setActivo] = useState(0);
@@ -79,6 +95,16 @@ export function PaletaComandos({ comandos, mostrarIds = false, onCerrar }: Props
     campo.current?.focus();
   }, []);
   useEffect(() => {
+    // #442: behind an open dialog the app's dispatcher stays quiet, so ⌘O/⌘S/⇧⌘S/⌘P reached the
+    // browser («Open file», «Save page as», «Print»). On `window`, not the dialog: a click on a
+    // non-focusable part of the palette leaves the focus on `<body>`. The desktop app leaves them
+    // to its native menu, as the dispatcher does.
+    if (DESKTOP) return undefined;
+    const retener = (e: KeyboardEvent): void => { if (teclaDeArchivo(e)) e.preventDefault(); };
+    window.addEventListener('keydown', retener, true);
+    return () => window.removeEventListener('keydown', retener, true);
+  }, []);
+  useEffect(() => {
     // jsdom has no `scrollIntoView`; browsers do.
     document.getElementById(idFila(activo))?.scrollIntoView?.({ block: 'nearest' });
   });
@@ -87,6 +113,7 @@ export function PaletaComandos({ comandos, mostrarIds = false, onCerrar }: Props
   function cerrar(): void {
     dialogo.current?.close();
     previo.current?.focus?.();
+    cursor();
     onCerrar();
   }
   function elegir(comando: Comando | undefined): void {
@@ -120,6 +147,9 @@ export function PaletaComandos({ comandos, mostrarIds = false, onCerrar }: Props
       // which lands on the dialog itself.
       onCancel={(e) => { e.preventDefault(); cerrar(); }}
       onClick={(e) => { if (e.target === e.currentTarget) cerrar(); }}
+      // A modal keeps the focus (#442): the field is its only control, so Tab and ⇧Tab stay on it
+      // instead of reaching the scrollable list or leaving the page for the browser's own UI.
+      onKeyDown={(e) => { if (e.key === 'Tab') { e.preventDefault(); campo.current?.focus(); } }}
     >
       <input
         ref={campo}

@@ -71,6 +71,7 @@ import {
   lilaScenarioEntryName,
   lilaScenarioPath,
   lilaScenarioReader,
+  lilaWritten,
   openLilaProcess,
   writeLilaProject,
   writeLilaScenario,
@@ -288,10 +289,11 @@ export async function annotateLilaElement(request: AnnotateRequest): Promise<Ann
   const after = view(await readAnnotations(next));
   const changed = JSON.stringify(after) !== JSON.stringify(before);
   const dryRun = request.dryRun === true;
-  if (changed && !dryRun) await writeLilaProject(lila, withModelXml(lila.document, lila.process.slug, next), locale);
+  const written = changed && !dryRun ? await writeLilaProject(lila, withModelXml(lila.document, lila.process.slug, next), locale) : null;
   return {
     file: lila.file,
-    process: lila.process.slug,
+    // The slug in the file as written (#613): a one-process version 2 archive is version 1 after it.
+    process: written === null ? lila.process.slug : lilaWritten(lila, written).slug,
     elementId: id,
     ...(holder === id ? {} : { documentationOn: holder }),
     dryRun,
@@ -506,8 +508,8 @@ export async function importLilaScenarioSheet(request: SheetImportRequest): Prom
   for (const change of plan.changes) {
     delta = writeAt(delta, change.path, withDeletions(clone(change.after), readAt(opened.parent, change.path)));
   }
-  await writeLilaScenario(opened.lila, opened.entry, delta as ScenarioDocument, locale);
-  return { ...result, written: true };
+  const written = await writeLilaScenario(opened.lila, opened.entry, delta as ScenarioDocument, locale);
+  return { ...result, process: lilaWritten(opened.lila, written).slug, written: true };
 }
 
 /**

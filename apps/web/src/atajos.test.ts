@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expectTypeOf, describe, expect, it } from 'vitest';
-import { ATAJOS, acelerador, coincide, etiqueta, tooltip, type Atajo, type AtajoId, type AtajoLienzo, type AtajoPropio } from './atajos';
+import { ATAJOS, acelerador, coincide, etiqueta, teclaDeArchivo, tooltip, type Atajo, type AtajoId, type AtajoLienzo, type AtajoPropio } from './atajos';
 import { en } from './strings.en';
 import { es } from './strings.es';
 
@@ -83,6 +83,19 @@ describe('the shortcut map (#413)', () => {
     expect(coincide(por('reproducir'), tecla({}), true)).toBe(true);
     expect(coincide(por('reproducir'), tecla({ key: 'a', code: 'KeyA' }), true)).toBe(false);
     expect(coincide(por('reproducir'), tecla({ metaKey: true }), true)).toBe(false);
+  });
+
+  it('teclaDeArchivo is ⌘O/⌘S/⇧⌘S/⌘P (Ctrl elsewhere): the File keys a browser answers itself (#442)', () => {
+    for (const mac of [true, false]) {
+      for (const e of [{ key: 'o' }, { key: 's' }, { key: 'S', shiftKey: true }, { key: 'p' }]) {
+        expect(teclaDeArchivo(tecla({ ...e, metaKey: true }), mac), `${e.key} mac=${mac}`).toBe(true);
+        expect(teclaDeArchivo(tecla({ ...e, ctrlKey: true }), mac), `${e.key} mac=${mac}`).toBe(true);
+        // Without the modifier it is typing.
+        expect(teclaDeArchivo(tecla(e), mac), `${e.key} mac=${mac}`).toBe(false);
+      }
+      // Not the palette's own key, not the desktop-only ⌘N/⌘, (the browser never lets a page see them).
+      for (const key of ['k', 'n', ',', 'z']) expect(teclaDeArchivo(tecla({ key, metaKey: true }), mac), key).toBe(false);
+    }
   });
 
   it('docs/SHORTCUTS.md lists every key of the map, on both platforms', () => {

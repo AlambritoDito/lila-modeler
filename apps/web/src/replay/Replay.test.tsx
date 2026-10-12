@@ -141,3 +141,37 @@ it('clears the overlay when the mode is left', () => {
   raiz = null;
   expect(limpiar).toHaveBeenLastCalledWith(null);
 });
+
+it('«Instant» while playing jumps to the end and stops, whatever the frame clock says (QA of #615)', () => {
+  // The frames are run by hand: one stamped before the loop's own `performance.now()` (dt < 0),
+  // then one with the same stamp (dt 0). `dt * Infinity` made them -Infinity and NaN.
+  const marcos: FrameRequestCallback[] = [];
+  const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => marcos.push(cb));
+  const caf = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+  try {
+    const { modelador } = falso();
+    montar(<Replay modelador={modelador} replay={modelo()} originalIds={{}} motivo="x" />);
+    elegir('instantanea');
+    // From the end, Play starts over — at «Instant».
+    pulsar('Play');
+    const sello = performance.now() - 5;
+    act(() => { marcos.shift()?.(sello); });
+    act(() => { marcos.shift()?.(sello); });
+    expect(document.body.textContent).not.toContain('Invalid Date');
+    expect(progreso()).toBe('100');
+    expect(boton('Play')).toBeDefined();
+    expect(document.body.textContent).toContain('End of the replication');
+  } finally {
+    raf.mockRestore();
+    caf.mockRestore();
+  }
+});
+
+it('the end of the replay is one word on the bar, with the sentence in its title (QA of #615)', () => {
+  const { modelador } = falso();
+  montar(<Replay modelador={modelador} replay={modelo()} originalIds={{}} motivo="x" />);
+  elegir('instantanea');
+  const fin = document.querySelector<HTMLElement>('.c5-fin')!;
+  expect(fin.title).toBe('End of the replication.');
+  expect(fin.querySelector('[aria-hidden="true"]')?.textContent).toBe('End');
+});
