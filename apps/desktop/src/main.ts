@@ -558,7 +558,7 @@ function registerIpcHandlers(win: BrowserWindow): void {
         : process.platform === 'darwin'
           ? ['openFile', 'openDirectory', 'createDirectory']
           : ['openDirectory', 'createDirectory'],
-      filters: [{ name: 'Lila Modeler Project', extensions: ['lila'] }],
+      filters: [{ name: strings().dialogos.proyectoLila, extensions: ['lila'] }],
     });
     if (result.canceled || result.filePaths.length === 0) return null;
     // `realpath`, no la ruta cruda del diálogo: la carpeta autorizada queda anclada a su
@@ -591,7 +591,7 @@ function registerIpcHandlers(win: BrowserWindow): void {
       chosen = e2e.saveFile;
     } else {
       const result = await dialog.showSaveDialog(win, {
-        filters: [{ name: 'Lila project', extensions: ['lila'] }],
+        filters: [{ name: strings().dialogos.proyectoLila, extensions: ['lila'] }],
         ...(defaultPath === undefined ? {} : { defaultPath }),
       });
       if (result.canceled || result.filePath === undefined || result.filePath.length === 0) return null;
@@ -623,7 +623,7 @@ function registerIpcHandlers(win: BrowserWindow): void {
     } else {
       const result = await dialog.showOpenDialog(win, {
         properties: ['openFile'],
-        filters: [{ name: 'BPMN', extensions: ['bpmn', 'xml'] }],
+        filters: [{ name: strings().dialogos.diagramaBpmn, extensions: ['bpmn', 'xml'] }],
       });
       if (result.canceled || result.filePaths.length === 0) return null;
       chosen = result.filePaths[0]!;
