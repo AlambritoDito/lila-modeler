@@ -796,9 +796,10 @@ class Editor {
     if (el['$parent'] !== this.process) return this.issue('id', this.C.editLaneOutsideProcess(op.id));
     // The end events the outline made for this step (`EndEvent_<id>`, `EndEvent_<id>_2`, …) go with it
     // while nothing else leads to them.
+    const own = `EndEvent_${el.id}`;
     const ends = this.outgoing(el)
       .map((f) => f['targetRef'] as El)
-      .filter((t) => is(t, 'bpmn:EndEvent') && (t.id === `EndEvent_${el.id}` || t.id.startsWith(`EndEvent_${el.id}_`)))
+      .filter((t) => is(t, 'bpmn:EndEvent') && t.id.startsWith(own) && /^(_\d+)?$/.test(t.id.slice(own.length)))
       .filter((t) => this.incoming(t).every((f) => f['sourceRef'] === el));
     const moving = [el, ...ends];
     for (const { lane: l } of lanesOf(this.process)) {

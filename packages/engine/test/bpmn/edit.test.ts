@@ -183,6 +183,20 @@ describe.each([true, false])('each operation (layout %s)', (layout) => {
     expect(to.xml).toContain('<bpmn:subProcess id="wait" name="Wait a day">');
   });
 
+  test('moveToLane takes EndEvent_<id> and EndEvent_<id>_<n>, not another id that starts the same (#630)', async () => {
+    const { xml } = await credit();
+    const laneOf = async (out: string, id: string) => {
+      const { rootElement } = await BpmnModdle().fromXML(out);
+      const lanes = (rootElement as any).rootElements.find((e: any) => e.$type === 'bpmn:Process').laneSets[0].lanes;
+      return lanes.find((l: any) => (l.flowNodeRef ?? []).some((n: any) => n.id === id))?.id;
+    };
+    for (const [end, moves] of [['EndEvent_issue_2', true], ['EndEvent_issue_b', false]] as const) {
+      const renamed = xml.replaceAll('EndEvent_issue', end);
+      const edit = await editBpmn(renamed, [{ op: 'addLane', name: 'Back office', id: 'Lane_back' }, { op: 'moveToLane', id: 'issue', lane: 'Lane_back' }], { layout });
+      expect(await laneOf(edit.xml, end) === 'Lane_back').toBe(moves);
+    }
+  });
+
   test('moveToLane and addLane', async () => {
     const { xml } = await credit();
     const edit = await editBpmn(
