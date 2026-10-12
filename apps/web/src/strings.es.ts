@@ -320,6 +320,9 @@ export const es: Strings = {
     eliminar: 'Eliminar',
     integrado: 'Integrados',
     delUsuario: 'Míos',
+    /** La etiqueta de cada tarjeta de tema (#441), en singular: `integrado`/`delUsuario` nombran un grupo. */
+    tarjetaIntegrado: 'Integrado',
+    tarjetaDelUsuario: 'Mío',
     muestraTexto: 'Texto sobre superficie',
     muestraSecundario: 'Texto secundario',
     muestraBoton: 'Acento',

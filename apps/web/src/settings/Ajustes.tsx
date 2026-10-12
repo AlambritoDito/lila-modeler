@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Locale, Preferencia } from '../i18n';
 import { useStrings } from '../i18n';
 import { DENSIDAD_IDS, type Densidad } from '../ids';
+import { Radios } from './Radios';
 import type { Theme } from '../theme/applyTheme';
 import type { TemaGuardado } from '../theme/temas';
 import { Apariencia, type Ranuras } from './Apariencia';
@@ -95,7 +96,10 @@ export function Ajustes(props: AjustesProps): React.JSX.Element {
             const paso = ({ ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 } as Record<string, number>)[e.key];
             if (paso === undefined) return;
             e.preventDefault();
-            const s = SECCIONES[(SECCIONES.indexOf(seccion) + paso + SECCIONES.length) % SECCIONES.length]!;
+            // From the tab that has the focus, not the selected one: Tab can rest on any of them
+            // (#441: ↓ on a focused «Shortcuts» jumped to Appearance, one past General).
+            const enfocada = SECCIONES.indexOf((e.target as HTMLElement).id.slice('ajustes-tab-'.length) as Seccion);
+            const s = SECCIONES[((enfocada < 0 ? SECCIONES.indexOf(seccion) : enfocada) + paso + SECCIONES.length) % SECCIONES.length]!;
             setSeccion(s);
             document.getElementById(`ajustes-tab-${s}`)?.focus();
           }}
@@ -116,21 +120,40 @@ export function Ajustes(props: AjustesProps): React.JSX.Element {
           ))}
         </nav>
         <section className="ajustes-panel" role="tabpanel" id="ajustes-panel-general" aria-labelledby="ajustes-tab-general" hidden={seccion !== 'general'}>
+          {/* Language and density are segmented controls (artboard 09, #441): a radio group each,
+              arrows to move. The native `<select>` of each stays in the DOM, `hidden` — out of the
+              Tab order and the accessibility tree, so people only meet the radio group — because
+              it is still the control everything that drives Settings by script reaches for (the
+              App suite's language and density cases), and it moves through the same handler. */}
           <div className="fila">
-            <span>{S.app.idioma}</span>
-            <label className="campo idioma">
-              <select aria-label={S.app.idioma} autoFocus value={props.idioma} onChange={(e) => props.cambiarIdioma(e.target.value as Preferencia)}>
+            <span id="ajustes-idioma">{S.app.idioma}</span>
+            <Radios
+              etiquetaId="ajustes-idioma"
+              className="segmentado"
+              valor={props.idioma}
+              onCambiar={props.cambiarIdioma}
+              opciones={[{ valor: 'auto', contenido: S.app.idiomaAuto }, ...props.LOCALES.map((l) => ({ valor: l, contenido: S.app.idiomas[l] }))]}
+            />
+            <label className="campo idioma" hidden>
+              <select aria-label={S.app.idioma} value={props.idioma} onChange={(e) => props.cambiarIdioma(e.target.value as Preferencia)}>
                 <option value="auto">{S.app.idiomaAuto}</option>
                 {props.LOCALES.map((l) => <option key={l} value={l}>{S.app.idiomas[l]}</option>)}
               </select>
             </label>
           </div>
           <div className="fila">
-            <span>{S.app.densidad}</span>
+            <span id="ajustes-densidad">{S.app.densidad}</span>
             {/* Density stays a preference, not a theme edit (LILA-113): applies on top of
                 whichever theme is active, independent of the `density` token being edited in
                 Appearance. */}
-            <select aria-label={S.app.densidad} value={props.densidad} onChange={(e) => props.onDensidad(e.target.value as Densidad)}>
+            <Radios
+              etiquetaId="ajustes-densidad"
+              className="segmentado"
+              valor={props.densidad}
+              onCambiar={props.onDensidad}
+              opciones={DENSIDAD_IDS.map((d) => ({ valor: d, contenido: S.app.densidades[d] }))}
+            />
+            <select aria-label={S.app.densidad} hidden value={props.densidad} onChange={(e) => props.onDensidad(e.target.value as Densidad)}>
               {DENSIDAD_IDS.map((d) => <option key={d} value={d}>{S.app.densidades[d]}</option>)}
             </select>
           </div>
