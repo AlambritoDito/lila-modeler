@@ -1583,6 +1583,8 @@ export const en = {
       vacio: 'Enter a size.',
       numero: 'The size must be a number, for example 120.',
       minimo: (minimo: number): string => `The size must be at least ${minimo}: anything smaller leaves an element outside the lane.`,
+      /** The minimum of a lane whose elements would fit in less: bpmn-js's smallest lane. */
+      minimoVacio: (minimo: number): string => `The size must be at least ${minimo}.`,
       maximo: (maximo: number): string => `The size must be at most ${maximo}.`,
     },
   },

@@ -20,6 +20,7 @@
  * `app.css` paints those handles in the theme's selection colour.
  */
 import { isExpanded } from 'bpmn-js/lib/util/DiUtil';
+import { isRedo, isUndo } from 'diagram-js/lib/features/keyboard/KeyboardUtil';
 import { carrilesDe, eje, hermanos, nombreCarril, vertical, type Direccion, type Forma, type LilaCarriles } from './carriles';
 import { strings, subscribe } from './i18n';
 
@@ -29,10 +30,14 @@ const TIPO = 'lila-carril';
 /** Marker of the lane a dragged lane would land on. */
 const DESTINO = 'lila-carril-destino';
 
+/** On a «+» that sits on a corner of a selected lane: `app.css` hides it off the lane's resize handles. */
+const APARTADO = 'lila-carril-mas-apartado';
+
 interface Punto { x: number; y: number }
 
 interface Inyectados {
   eventBus: { on(eventos: string | string[], prioridad: number, escuchar: (e: never) => unknown): void };
+  commandStack: { undo(): void; redo(): void };
   overlays: {
     add(el: Forma, tipo: string, overlay: { position: { left?: number; top?: number; right?: number; bottom?: number }; html: HTMLElement; scale?: object; show?: object }): string;
     remove(filtro: { type: string }): void;
@@ -67,7 +72,7 @@ const nombrePool = (pool: Forma): string => {
 };
 
 export class LilaControlesCarriles {
-  static $inject = ['eventBus', 'overlays', 'elementRegistry', 'canvas', 'selection', 'keyboard', 'directEditing', 'lilaCarriles'];
+  static $inject = ['eventBus', 'overlays', 'elementRegistry', 'canvas', 'selection', 'keyboard', 'directEditing', 'lilaCarriles', 'commandStack'];
 
   /** Ends the drag in progress, if any (restores the marker and the listeners). */
   private terminarArrastre: (() => void) | null = null;
@@ -81,8 +86,10 @@ export class LilaControlesCarriles {
     keyboard: Inyectados['keyboard'],
     private readonly directEditing: Inyectados['directEditing'],
     private readonly carriles: LilaCarriles,
+    private readonly commandStack: Inyectados['commandStack'],
   ) {
     eventBus.on(['import.done', 'elements.changed', 'root.set'], 500, () => this.pintar());
+    eventBus.on('selection.changed', 500, () => this.apartar());
     const dejarDeOir = subscribe(() => this.pintar());
     eventBus.on('diagram.destroy', 1000, () => {
       dejarDeOir();
@@ -109,10 +116,43 @@ export class LilaControlesCarriles {
   pintar(): void {
     const enfocado = (document.activeElement as HTMLElement | null)?.closest?.('[data-lila-carril]')?.getAttribute('data-lila-carril') ?? null;
     this.overlays.remove({ type: TIPO });
-    for (const pool of this.elementRegistry.filter(esPoolConProceso)) this.pintarPool(pool);
+    const pools = this.elementRegistry.filter(esPoolConProceso);
+    for (const pool of pools) this.pintarPool(pool);
+    this.ordenarTab(pools);
+    this.apartar();
     if (enfocado !== null) {
       [...this.canvas.getContainer().querySelectorAll<HTMLElement>('[data-lila-carril]')]
         .find((b) => b.dataset['lilaCarril'] === enfocado)?.focus();
+    }
+  }
+
+  /**
+   * diagram-js keeps one overlay container per element, in the order the elements first got an
+   * overlay, so after a reorder the Tab key would walk the lanes in their old order. The containers
+   * of the pools and lanes are put back in drawing order (pool by pool, each lane before its nested
+   * lanes); being positioned absolutely, they do not move on screen.
+   */
+  private ordenarTab(pools: Forma[]): void {
+    const raiz = this.canvas.getContainer().querySelector('.djs-overlay-container');
+    if (raiz === null) return;
+    const porId = new Map<string, Element>();
+    for (const hijo of raiz.children) {
+      const id = hijo.getAttribute('data-container-id');
+      if (id !== null) porId.set(id, hijo);
+    }
+    const enOrden = (el: Forma): Forma[] => [el, ...carrilesDe(el).flatMap(enOrden)];
+    for (const el of pools.flatMap(enOrden)) {
+      const contenedor = porId.get(el.id);
+      if (contenedor !== undefined) raiz.append(contenedor);
+    }
+  }
+
+  /** Sets aside the «+» on a selected lane's corners, which would cover its nw/sw (ne) handles. */
+  private apartar(): void {
+    const elegidos = new Set(this.selection.get().map((el) => el.id));
+    for (const boton of this.canvas.getContainer().querySelectorAll<HTMLElement>('.lila-carril-mas')) {
+      const junto = (boton.dataset['lilaCarrilJunto'] ?? '').split(' ');
+      boton.classList.toggle(APARTADO, junto.some((id) => elegidos.has(id)));
     }
   }
 
@@ -127,7 +167,7 @@ export class LilaControlesCarriles {
       titulo: strings().carriles.anadirAqui,
       etiqueta: strings().carriles.anadirEn(indice + 1, nombre),
       alPulsar: () => this.anadir(pool, indice),
-    });
+    }, [lista[indice - 1]?.id, lista[indice]?.id]);
     if (lista.length === 0) {
       // Where the first lane would start: past the pool's header, at its far end.
       this.anadirOverlay(pool, v ? { right: 0, top: 30 } : { left: 30, bottom: 0 }, mas(0));
@@ -166,7 +206,11 @@ export class LilaControlesCarriles {
     for (const anidado of carrilesDe(carril)) this.pintarAsas(anidado);
   }
 
-  private boton(o: { clave: string; clase: string; texto: string; titulo: string; etiqueta: string; alPulsar: () => void }): HTMLElement {
+  /** `junto`: the lanes whose corners a «+» sits on, for `apartar`. */
+  private boton(
+    o: { clave: string; clase: string; texto: string; titulo: string; etiqueta: string; alPulsar: () => void },
+    junto: (string | undefined)[] = [],
+  ): HTMLElement {
     const boton = document.createElement('button');
     boton.type = 'button';
     boton.className = o.clase;
@@ -174,9 +218,21 @@ export class LilaControlesCarriles {
     boton.title = o.titulo;
     boton.setAttribute('aria-label', o.etiqueta);
     boton.dataset['lilaCarril'] = o.clave;
+    const ids = junto.filter((id) => id !== undefined);
+    if (ids.length > 0) boton.dataset['lilaCarrilJunto'] = ids.join(' ');
     boton.addEventListener('click', (e) => {
       e.stopPropagation();
       if (this.activo()) o.alPulsar();
+    });
+    // diagram-js's keyboard listens on the canvas only, and these buttons sit beside it: ⌘Z/⌘⇧Z
+    // (and Ctrl+Z/Ctrl+Y) pressed on one — right after a drag or Alt+↑/↓ — undo and redo here.
+    boton.addEventListener('keydown', (e) => {
+      const deshacer = isUndo(e), rehacer = !deshacer && isRedo(e);
+      if (!deshacer && !rehacer) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (deshacer) this.commandStack.undo();
+      else this.commandStack.redo();
     });
     return boton;
   }

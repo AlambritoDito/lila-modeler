@@ -23,7 +23,7 @@ import { documentationHolder } from '@lila-modeler/engine/bpmn';
 import { isExpanded } from 'bpmn-js/lib/util/DiUtil';
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { ANCHO_MAXIMO, ANCHO_MINIMO, conAncho, problemaDeMedida } from './ancho';
-import { carrilesDe, eje, elementosDe, nombreCarril, tamanoMinimo, TAMANO_MAXIMO, vertical, type Forma } from './carriles';
+import { carrilesDe, eje, elementosDe, nombreCarril, tamanoMinimo, TAMANO_MAXIMO, TAMANO_MINIMO, vertical, type Forma } from './carriles';
 import type { Elemento, Modelador, Servicios } from './Modeler';
 import { atajoPorId, etiqueta, MAC } from './atajos';
 import { AtributosDelElemento } from './AtributosExtendidos';
@@ -772,15 +772,19 @@ function CampoTamanoCarril({ carril, carriles, refrescar }: {
   refrescar: () => void;
 }): React.JSX.Element {
   const S = useStrings();
+  const minimo = tamanoMinimo(carril);
+  // Above bpmn-js's own minimum the limit comes from the lane's elements, and the message says so.
+  const P = S.carriles.medidaProblemas;
+  const mensajes = minimo > TAMANO_MINIMO ? P : { ...P, minimo: P.minimoVacio };
   return (
     <CampoMedida
       id={`alto-${carril.id}`}
       className="carriles-modelar"
       etiqueta={S.carriles.alto}
       valor={carril.height}
-      minimo={tamanoMinimo(carril)}
+      minimo={minimo}
       maximo={TAMANO_MAXIMO}
-      mensajes={S.carriles.medidaProblemas}
+      mensajes={mensajes}
       aplicar={(valor) => {
         carriles.fijarTamano(carril, valor);
         refrescar();
@@ -811,8 +815,13 @@ function ListaCarriles({ elemento, carriles, escritor, refrescar }: {
   const [enfocar, setEnfocar] = useState<string | null>(null);
   const seccion = useRef<HTMLElement>(null);
   const dialogo = useRef<HTMLDialogElement>(null);
+  const cancelarBorrado = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    if (borrando !== null && !dialogo.current?.open) dialogo.current?.showModal();
+    const d = dialogo.current;
+    if (borrando === null || d === null || d.open) return;
+    d.showModal();
+    // The safe choice first: Enter right after the dialog opens must not delete the lane.
+    cancelarBorrado.current?.focus();
   }, [borrando]);
   useEffect(() => {
     if (enfocar === null) return;
@@ -916,7 +925,7 @@ function ListaCarriles({ elemento, carriles, escritor, refrescar }: {
             <p>{C.confirmarTexto(nombreCarril(borrando), elementosDe(borrando))}</p>
             <div className="acciones">
               <button type="submit" className="boton primario">{C.confirmarBorrar}</button>
-              <button type="button" className="boton" onClick={cerrar}>{S.app.cancelar}</button>
+              <button ref={cancelarBorrado} type="button" className="boton" onClick={cerrar}>{S.app.cancelar}</button>
             </div>
           </form>
         </dialog>

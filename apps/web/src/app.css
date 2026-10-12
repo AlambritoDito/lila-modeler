@@ -1120,6 +1120,14 @@ body {
   width: 20px;
 }
 
+/* On a corner of a selected lane it would cover the lane's nw/sw resize handles (bpmn-js draws
+   them 6 px outside the corner, with a 20 px hit area, and next to a 60 px lane there is no room
+   left beside them at any zoom): it steps aside while the lane stays selected. The lane's context
+   pad adds lanes above and below it meanwhile. */
+.lienzo .lila-carril-mas.lila-carril-mas-apartado {
+  visibility: hidden;
+}
+
 .lienzo .lila-carril-mas:hover,
 .lienzo .lila-carril-mas:focus-visible {
   background: var(--accent-primary);

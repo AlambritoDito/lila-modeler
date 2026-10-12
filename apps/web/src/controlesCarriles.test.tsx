@@ -231,6 +231,75 @@ describe('reordering lanes (#596)', () => {
     puntero('pointerup', 340);
     expect(m.orden()).toEqual(['L1', 'L2', 'L3']);
   });
+
+  it('⌘Z and ⌘⇧Z work with the focus still on the ⠿, right after a drag or Alt+↓', async () => {
+    const m = await montar();
+    const antes = await m.xml();
+    const canvas = m.modeler.get<{ viewbox(): object }>('canvas');
+    vi.spyOn(canvas, 'viewbox').mockReturnValue({ x: 0, y: 0, scale: 1 });
+    const puntero = (tipo: string, y: number, objetivo: EventTarget = document) =>
+      objetivo.dispatchEvent(new MouseEvent(tipo, { clientX: 400, clientY: y, button: 0, bubbles: true, cancelable: true }));
+    const tecla = (opciones: KeyboardEventInit): KeyboardEvent => {
+      const e = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...opciones });
+      (document.activeElement ?? document.body).dispatchEvent(e);
+      return e;
+    };
+
+    puntero('pointerdown', 340, asaDe(m, 'L3'));
+    puntero('pointermove', 150);
+    puntero('pointerup', 150);
+    expect(m.orden()).toEqual(['L3', 'L1', 'L2']);
+    // The focus stays on the handle (repainted), which is outside diagram-js's keyboard.
+    expect(document.activeElement).toBe(asaDe(m, 'L3'));
+    const deshacer = tecla({ key: 'z', metaKey: true });
+    expect(deshacer.defaultPrevented).toBe(true);
+    expect(m.orden()).toEqual(['L1', 'L2', 'L3']);
+    expect(await m.xml()).toBe(antes);
+    tecla({ key: 'z', metaKey: true, shiftKey: true });
+    expect(m.orden()).toEqual(['L3', 'L1', 'L2']);
+    tecla({ key: 'z', ctrlKey: true });
+    expect(m.orden()).toEqual(['L1', 'L2', 'L3']);
+    tecla({ key: 'y', ctrlKey: true });
+    expect(m.orden()).toEqual(['L3', 'L1', 'L2']);
+    tecla({ key: 'z', metaKey: true });
+
+    asaDe(m, 'L1').focus();
+    tecla({ key: 'ArrowDown', altKey: true });
+    expect(m.orden()).toEqual(['L2', 'L1', 'L3']);
+    expect(document.activeElement).toBe(asaDe(m, 'L1'));
+    tecla({ key: 'z', metaKey: true });
+    expect(m.orden()).toEqual(['L1', 'L2', 'L3']);
+    // Still a button: Enter and Space are the browser's, and a plain «z» does nothing.
+    const z = tecla({ key: 'z' });
+    expect(z.defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(asaDe(m, 'L1'));
+    expect(m.orden()).toEqual(['L1', 'L2', 'L3']);
+  });
+
+  it('keeps the Tab order of the controls in drawing order after a reorder', async () => {
+    const m = await montar();
+    const enOrden = () => [...m.container.querySelectorAll<HTMLElement>('.djs-overlay-lila-carril button')].map((b) => b.dataset['lilaCarril']);
+    expect(enOrden()).toEqual(['mas:Pool:0', 'asa:L1', 'mas:Pool:1', 'asa:L2', 'mas:Pool:2', 'asa:L3', 'mas:Pool:3']);
+    m.carriles.moverA(m.el('L3'), 0);
+    expect(enOrden()).toEqual(['mas:Pool:0', 'asa:L3', 'mas:Pool:1', 'asa:L1', 'mas:Pool:2', 'asa:L2', 'mas:Pool:3']);
+  });
+});
+
+describe('the «+» and a selected lane\'s resize handles (#596)', () => {
+  it('sets aside the «+» on the selected lane\'s corners, and brings it back when deselected', async () => {
+    const m = await montar();
+    const apartados = () => mas(m).filter((b) => b.classList.contains('lila-carril-mas-apartado')).map((b) => b.dataset['lilaCarril']);
+    expect(apartados()).toEqual([]);
+    m.selection.select(m.el('L2'));
+    expect(apartados()).toEqual(['mas:Pool:1', 'mas:Pool:2']);
+    m.selection.select(m.el('L3'));
+    expect(apartados()).toEqual(['mas:Pool:2', 'mas:Pool:3']);
+    // It follows the lane after a move, and the repaint keeps it.
+    m.carriles.mover(m.el('L3'), 'arriba');
+    expect(apartados()).toEqual(['mas:Pool:1', 'mas:Pool:2']);
+    m.selection.select(m.el('T2'));
+    expect(apartados()).toEqual([]);
+  });
 });
 
 describe('the lane list in Properties (#596)', () => {
@@ -313,6 +382,8 @@ describe('the lane list in Properties (#596)', () => {
     const dialogo = contenedor.querySelector('dialog')!;
     expect(dialogo.open).toBe(true);
     expect(dialogo.textContent).toContain('«Committee» holds 1 element.');
+    // It opens on Cancel: an Enter right away must not delete the lane.
+    expect(document.activeElement?.textContent).toBe('Cancel');
     // Cancel keeps it.
     act(() => [...dialogo.querySelectorAll('button')].find((b) => b.textContent === 'Cancel')!.click());
     expect(m.orden()).toEqual(['L2', 'L3']);
@@ -357,6 +428,20 @@ describe('the lane list in Properties (#596)', () => {
     expect([m.el('L2').height, m.el('L3').y, m.el('T3').y]).toEqual([200, 400, 430]);
     act(() => m.commandStack.undo());
     expect([m.el('L2').height, m.el('L3').y, m.el('T3').y]).toEqual([120, 320, 350]);
+  });
+
+  it('gives an empty lane bpmn-js\'s minimum without talking about elements, in en and es', async () => {
+    for (const [idioma, mensaje] of [['en', 'The size must be at least 60.'], ['es', 'El tamaño tiene que ser al menos 60.']] as const) {
+      const { m, contenedor } = await panel('L1', idioma);
+      const alto = contenedor.querySelector<HTMLInputElement>(`input[aria-label="${idioma === 'en' ? 'Height' : 'Alto'}"]`)!;
+      act(() => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(alto, '40');
+        alto.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      act(() => alto.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+      expect(contenedor.querySelector('[role="alert"]')!.textContent).toBe(mensaje);
+      expect(m.el('L1').height).toBe(100);
+    }
   });
 
   it('does not show for a task', async () => {

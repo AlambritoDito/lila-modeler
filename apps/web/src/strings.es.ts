@@ -1512,6 +1512,7 @@ export const es: Strings = {
       vacio: 'Escribe un tamaño.',
       numero: 'El tamaño tiene que ser un número, por ejemplo 120.',
       minimo: (minimo: number): string => `El tamaño tiene que ser al menos ${minimo}: con menos, algún elemento queda fuera del carril.`,
+      minimoVacio: (minimo: number): string => `El tamaño tiene que ser al menos ${minimo}.`,
       maximo: (maximo: number): string => `El tamaño tiene que ser como mucho ${maximo}.`,
     },
   },
