@@ -4169,7 +4169,7 @@ it('a run from Simulate lands in Results; the table keeps its tab and its collap
 
 it('picking a task in the table selects and centres it on the canvas (Lote M)', async () => {
   mocks.worker.mockResolvedValue(conCuello('Task_Preparar'));
-  await click(T.app.ejecutar);
+  await ejecutarTrasReparse();
   await act(async () => mocks.dock!.onSeleccionar(mocks.dock!.corrida!.result.bottlenecks[0]!.elementId));
   expect(mocks.seleccionar).toHaveBeenCalledWith('Task_Preparar', { centrar: true });
 });
