@@ -189,7 +189,8 @@ export function registerAgentTools(
         'validation errors is refused. Scenarios are saved as given (a scenario without `model` ' +
         'or `extends` gets "model.bpmn"): each comes back with `runnable` and its `errors`, so a ' +
         'draft is kept but flagged. Written atomically (no partial file on error); an existing ' +
-        'file is refused unless `overwrite`.',
+        'file is refused unless `overwrite`. A model without a diagram (BPMN DI) gets one, drawn ' +
+        'as `edit_process` with `layout: true` draws it (`laidOut: true`).',
       inputSchema: z.object({
         path: z.string().describe('Path of the new .lila, relative to the cwd of the server process.'),
         name: z.string().describe('Name of the project.'),

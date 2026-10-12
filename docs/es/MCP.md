@@ -109,7 +109,7 @@ mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
   escribe esa hoja como `.xlsx`, rellenada. Devuelve `{ file, project, process, scenario }`.
 - **`create_project({ path, name, bpmn, scenarios?, overwrite?, locale? })`** — crea un `.lila`
   nuevo a partir de un BPMN que ya existe (un agente que parte de pasos usa `create_process`) y
-  escenarios. Devuelve `{ file, name, processId, warnings, scenarios }`.
+  escenarios. Devuelve `{ file, name, processId, laidOut, warnings, scenarios }`.
 
 Las tres de exportación se explican en [Exportar sin la app](#exportar-sin-la-app); las cinco
 últimas en [Herramientas de modelado para agentes](#herramientas-de-modelado-para-agentes).
@@ -330,7 +330,11 @@ cambiaría y no escribe nada.
   `<name>.scenario.json`; un escenario sin `model` ni `extends` recibe `"model": "model.bpmn"`, y
   uno que nombra otro modelo se rechaza. Un escenario que todavía no puede correr es un borrador:
   se guarda y vuelve con `runnable: false` y sus `errors`. El archivo se escribe entero o nada, y
-  uno existente se rechaza salvo con `overwrite`. Las apps web y de escritorio lo abren.
+  uno existente se rechaza salvo con `overwrite`. Las apps web y de escritorio lo abren. Un modelo
+  sin diagrama (sin formas `bpmndi`) recibe uno, dibujado con el mismo maquetado automático que
+  `edit_process` con `layout: true`, para el proceso que simula, así que `export_diagram` funciona
+  con él; `laidOut: true` lo indica (#630). Un modelo que el maquetador no puede colocar se guarda
+  tal como llegó.
 
 ```json
 { "name": "create_project", "arguments": { "path": "proyecto.lila", "name": "Pedidos", "bpmn": "examples/pedido/model.bpmn",

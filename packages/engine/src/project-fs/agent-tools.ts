@@ -37,6 +37,8 @@ import {
   type Responsibility,
   type ValidateBpmnReport,
 } from '../bpmn/index.js';
+import { layoutMissingDiagram } from '../bpmn/edit.js';
+import { LayoutError } from '../bpmn/layout.js';
 import { toCsv } from '../csv.js';
 import { agentToolMessages, messages, type Locale } from '../messages/index.js';
 import { raciMatrix, type RaciMatrix } from '../process-document.js';
@@ -559,6 +561,8 @@ export interface CreateProjectResult {
   readonly name: string;
   /** The `bpmn:process` the project simulates. */
   readonly processId: string;
+  /** #630: the model had no diagram (BPMN DI) and the project's has one drawn by the auto-layout. */
+  readonly laidOut: boolean;
   /** The model's validation warnings (`code: message`). */
   readonly warnings: readonly string[];
   readonly scenarios: readonly CreatedScenario[];
@@ -650,6 +654,15 @@ export async function createLilaProject(request: CreateProjectRequest): Promise<
     throw new Error(T.createModelUnparsable(error instanceof Error ? error.message : String(error)));
   }
   if (report.errors.length > 0) throw new Error(T.createModelInvalid(report.errors.length, report.errors.map(problemText).join('; ')));
+  // #630: a model without a diagram gets one, as `edit_process` with `layout: true` draws it, so
+  // `export_diagram` and the apps show it. A model the layouter cannot place is kept as given.
+  let laidOut = false;
+  try {
+    const drawn = await layoutMissingDiagram(xml, { processId: report.ir.id, locale });
+    if (drawn !== undefined) [xml, laidOut] = [drawn, true];
+  } catch (error) {
+    if (!(error instanceof LayoutError)) throw error;
+  }
 
   const scenarios: Record<string, ScenarioDocument> = {};
   for (const { name: scenarioName, scenario } of request.scenarios ?? []) {
@@ -704,6 +717,7 @@ export async function createLilaProject(request: CreateProjectRequest): Promise<
     file: target,
     name,
     processId: report.ir.id,
+    laidOut,
     warnings: report.warnings.map(problemText),
     scenarios: Object.keys(scenarios).sort().map((entry) => scenarioDiagnostics(root, entry, scenarios, report, locale)),
   };

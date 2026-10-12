@@ -68,7 +68,7 @@ result in the app — read the [agent guide](AGENT_GUIDE.md).
   writes that sheet as `.xlsx`, filled in. Returns `{ file, project, process, scenario }`.
 - **`create_project({ path, name, bpmn, scenarios?, overwrite?, locale? })`** creates a new `.lila`
   from a BPMN you already have (an agent that starts from steps uses `create_process`) and
-  scenarios. Returns `{ file, name, processId, warnings, scenarios }`.
+  scenarios. Returns `{ file, name, processId, laidOut, warnings, scenarios }`.
 
 The three export tools are described in [App-free exports](#app-free-exports); the last five in
 [Modelling tools for agents](#modelling-tools-for-agents).
@@ -309,7 +309,10 @@ written. `dryRun: true` answers what would change and writes nothing.
   `"model": "model.bpmn"`, and one that names another model is refused. A scenario that cannot
   run yet is a draft: it is saved, and comes back with `runnable: false` and its `errors`. The
   file is written whole or not at all, and an existing one is refused unless `overwrite`. The web
-  and desktop apps open it.
+  and desktop apps open it. A model without a diagram (no `bpmndi` shapes) gets one, drawn by the
+  same auto-layout as `edit_process` with `layout: true`, for the process it simulates, so
+  `export_diagram` works on it; `laidOut: true` says so (#630). A model the layouter cannot place
+  is saved as given.
 
 ```json
 { "name": "create_project", "arguments": { "path": "project.lila", "name": "Orders", "bpmn": "examples/pedido/model.bpmn",

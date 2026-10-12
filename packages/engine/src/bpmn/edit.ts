@@ -1021,6 +1021,27 @@ function fail(C: CliMessages, issues: EditIssue[], wrap: (detail: string) => str
 }
 
 /**
+ * #630: a model with no diagram (no `bpmndi` shape) gets one, drawn by the same layout as
+ * `editBpmn` with `layout: true`, for the main process (`processId`, else the document-order
+ * rule). Returns `undefined` when the model already has a diagram, has no process to draw, or
+ * holds content the BPMN reader cannot write back whole. Throws `LayoutError` when the layouter cannot place it.
+ */
+export async function layoutMissingDiagram(xml: string, options: { processId?: string | undefined; locale?: Locale | undefined } = {}): Promise<string | undefined> {
+  const moddle = BpmnModdle({ lila });
+  const { rootElement, warnings } = await moddle.fromXML(xml);
+  // Writing back what the reader could not take whole would lose it: such a model stays as it is.
+  if (warnings.length > 0) return undefined;
+  const definitions = rootElement as unknown as El;
+  const process = mainProcess(definitions, options.processId);
+  if (process === undefined) return undefined;
+  const editor = new Editor(moddle, definitions, process, messages(options.locale ?? 'en').cli, undefined, 'as-is.scenario.json');
+  if (editor.diagram.hasDi || ((process['flowElements'] ?? []) as El[]).length === 0) return undefined;
+  await relayout({ definitions, process, participant: editor.participant, pool: editor.pool, diagram: editor.diagram });
+  const { xml: out } = await moddle.toXML(rootElement, { format: true });
+  return marcarExportador(out);
+}
+
+/**
  * Applies `operations` to the main process of `xml` (the one the simulator reads), all or none
  * (see the header). Throws `EditError`.
  */
