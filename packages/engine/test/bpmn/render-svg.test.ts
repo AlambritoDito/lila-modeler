@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { BpmnModdle, type ModdleElement } from 'bpmn-moddle';
 import { describe, expect, test } from 'vitest';
 
+import { editBpmn, layoutMissingDiagram } from '../../src/bpmn/edit.js';
 import { renderSvg } from '../../src/bpmn/index.js';
 
 const root = resolve(fileURLToPath(new URL('../../../../', import.meta.url)));
@@ -235,5 +236,63 @@ describe('renderSvg', () => {
     await expect(renderSvg(MINI('x').replace(/<bpmndi:BPMNDiagram[\s\S]*<\/bpmndi:BPMNDiagram>/, ''))).rejects.toThrow(/no diagram/);
     await expect(renderSvg(MINI('x'), { diagram: 'nope' })).rejects.toThrow(/nope/);
     expect(await renderSvg(MINI('x'), { diagram: 'D', margin: 0 })).toContain('viewBox="10 50 190 80"');
+  });
+});
+
+/** A pool with two lanes, data objects, a data store and text annotations, and no diagram at all. */
+const ARTIFACTS_WITHOUT_DI = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="x">
+  <bpmn:collaboration id="C"><bpmn:participant id="Pool" name="Claims" processRef="P"/>
+    <bpmn:textAnnotation id="note"><bpmn:text>Within 2 days</bpmn:text></bpmn:textAnnotation>
+    <bpmn:association id="toNote" sourceRef="check" targetRef="note"/>
+  </bpmn:collaboration>
+  <bpmn:process id="P" isExecutable="true">
+    <bpmn:laneSet id="LS"><bpmn:lane id="L1" name="Desk"><bpmn:flowNodeRef>s</bpmn:flowNodeRef><bpmn:flowNodeRef>receive</bpmn:flowNodeRef></bpmn:lane>
+      <bpmn:lane id="L2" name="Back office"><bpmn:flowNodeRef>check</bpmn:flowNodeRef><bpmn:flowNodeRef>e</bpmn:flowNodeRef></bpmn:lane></bpmn:laneSet>
+    <bpmn:startEvent id="s"/>
+    <bpmn:task id="receive" name="Receive claim"><bpmn:dataOutputAssociation id="out"><bpmn:targetRef>form</bpmn:targetRef></bpmn:dataOutputAssociation></bpmn:task>
+    <bpmn:task id="check" name="Check claim"><bpmn:property id="p_in" name="__targetRef_placeholder"/><bpmn:dataInputAssociation id="in"><bpmn:sourceRef>crm</bpmn:sourceRef><bpmn:targetRef>p_in</bpmn:targetRef></bpmn:dataInputAssociation></bpmn:task>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="receive"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="receive" targetRef="check"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="check" targetRef="e"/>
+    <bpmn:dataObject id="formData"/>
+    <bpmn:dataObjectReference id="form" name="Claim form" dataObjectRef="formData"/>
+    <bpmn:dataStoreReference id="crm" name="CRM"/>
+    <bpmn:dataObjectReference id="loose" name="Policy" dataObjectRef="formData"/>
+    <bpmn:textAnnotation id="free"><bpmn:text>Loose note</bpmn:text></bpmn:textAnnotation>
+  </bpmn:process>
+</bpmn:definitions>`;
+
+describe('#630: data objects and text annotations of a model laid out without a diagram', () => {
+  const ARTIFACTS = ['form', 'crm', 'loose', 'note', 'free'];
+  const LINKS = ['toNote', 'in', 'out'];
+
+  test.each([
+    ['create_project (layoutMissingDiagram)', () => layoutMissingDiagram(ARTIFACTS_WITHOUT_DI)],
+    ['edit_process with layout: true', async () => (await editBpmn(ARTIFACTS_WITHOUT_DI, [{ op: 'rename', id: 'check', name: 'Check claim' }])).xml],
+  ])('%s draws them, their associations and their texts', async (_name, lay) => {
+    await expect(renderSvg(ARTIFACTS_WITHOUT_DI)).rejects.toThrow(/has no diagram/);
+    const xml = (await lay())!;
+    const svg = await renderSvg(xml);
+    for (const id of [...ARTIFACTS, ...LINKS]) expect(svg, id).toContain(`data-element-id="${id}"`);
+    for (const text of ['Within 2 days', 'Loose note', 'Claim form', 'CRM', 'Policy']) expect(svg).toContain(text);
+    // Each has its own place: no artifact overlaps another shape.
+    const { rootElement } = await BpmnModdle().fromXML(xml);
+    const boxes = (rootElement as any).diagrams[0].plane.planeElement
+      .filter((di: any) => di.bounds !== undefined && !['bpmn:Participant', 'bpmn:Lane'].includes(di.bpmnElement.$type))
+      .map((di: any) => ({ id: di.bpmnElement.id as string, ...di.bounds }));
+    for (const a of boxes.filter((b: any) => ARTIFACTS.includes(b.id))) {
+      for (const b of boxes) {
+        if (a.id === b.id) continue;
+        const apart = a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+        expect(apart, `${a.id} overlaps ${b.id}`).toBe(true);
+      }
+    }
+  });
+
+  test('a model that has a diagram is left as it is', async () => {
+    const xml = (await layoutMissingDiagram(ARTIFACTS_WITHOUT_DI))!;
+    expect(await layoutMissingDiagram(xml)).toBeUndefined();
   });
 });

@@ -1,6 +1,7 @@
 /**
  * The modelling tools of #99, #403 and #514: `annotate_element`, `get_raci_matrix`,
- * `import_scenario_sheet`, `export_scenario_template` and `create_project`. Thin layers over
+ * `import_scenario_sheet`, `export_scenario_template` and `create_project`, and the read-only
+ * inventory of #628: `get_project` and `get_scenario`. Thin layers over
  * `@lila-modeler/engine/project-fs`, like `lila process annotate|raci` and
  * `lila scenario import|template`; registered by `createServer` (`server.ts`).
  *
@@ -13,8 +14,10 @@ import {
   annotateLilaElement,
   createLilaProject,
   importLilaScenarioSheet,
+  lilaProjectInventory,
   lilaRaciMatrix,
   lilaScenarioTemplate,
+  lilaScenarioView,
   writeExportFile,
 } from '@lila-modeler/engine/project-fs';
 import type { CallToolResult, McpServer } from '@modelcontextprotocol/server';
@@ -189,7 +192,8 @@ export function registerAgentTools(
         'validation errors is refused. Scenarios are saved as given (a scenario without `model` ' +
         'or `extends` gets "model.bpmn"): each comes back with `runnable` and its `errors`, so a ' +
         'draft is kept but flagged. Written atomically (no partial file on error); an existing ' +
-        'file is refused unless `overwrite`.',
+        'file is refused unless `overwrite`. A model without a diagram (BPMN DI) gets one, drawn ' +
+        'as `edit_process` with `layout: true` draws it (`laidOut: true`).',
       inputSchema: z.object({
         path: z.string().describe('Path of the new .lila, relative to the cwd of the server process.'),
         name: z.string().describe('Name of the project.'),
@@ -211,6 +215,55 @@ export function registerAgentTools(
         return textResult(await createLilaProject({ path, name, bpmn, scenarios, overwrite, locale: localeOf(locale) }));
       } catch (error) {
         return failure('create_project', error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_project',
+    {
+      title: 'Get project',
+      description:
+        'What a .lila holds, read without writing anything: its name, `formatVersion` (2 for a ' +
+        'repository of several processes, 1 otherwise) and its `processes`, each with `slug`, ' +
+        '`name`, `processId`, `modelRevision`, `elements` (flow nodes), its `scenarios` (entry, ' +
+        'name, revision, extends) and its stored `runs` (id, scenario, start, replications and ' +
+        '`current`: false when the model or the scenario changed after the run). Call it first on ' +
+        'an existing file. Like `lila project show --json`.',
+      inputSchema: z.object({ project: projectSchema, locale: localeSchema }),
+    },
+    async ({ project, locale }): Promise<CallToolResult> => {
+      try {
+        return textResult(await lilaProjectInventory({ file: project, locale: localeOf(locale) }));
+      } catch (error) {
+        return failure('get_project', error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_scenario',
+    {
+      title: 'Get scenario',
+      description:
+        'One scenario of a process of a .lila, read without writing anything: as stored (with its ' +
+        '`extends`), or with `resolved: true` merged through `extends` with the engine\'s defaults ' +
+        '(the object `patch_scenario` patches). Also `revision`, `runnable` and `notes`: the ' +
+        'validator against the process model, errors (E-…) first, then warnings (W-…), the checks ' +
+        '`run_simulation` makes; so it works as a scenario lint. Like `lila scenario show --json`.',
+      inputSchema: z.object({
+        project: projectSchema,
+        process: processSchema,
+        scenario: z.string().describe('A scenario of the process: its file name (with or without .scenario.json) or its "name".'),
+        resolved: z.boolean().optional().describe('true: resolved through `extends`, with defaults. Default false: as stored.'),
+        locale: localeSchema,
+      }),
+    },
+    async ({ project, process, scenario, resolved, locale }): Promise<CallToolResult> => {
+      try {
+        return textResult(await lilaScenarioView({ file: project, process, scenario, resolved, locale: localeOf(locale) }));
+      } catch (error) {
+        return failure('get_scenario', error);
       }
     },
   );

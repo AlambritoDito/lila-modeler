@@ -37,6 +37,9 @@ import {
   type Responsibility,
   type ValidateBpmnReport,
 } from '../bpmn/index.js';
+import { layoutMissingDiagram } from '../bpmn/edit.js';
+import { LayoutError } from '../bpmn/layout.js';
+import type { ProcessIR } from '../core/ir.js';
 import { toCsv } from '../csv.js';
 import { agentToolMessages, messages, type Locale } from '../messages/index.js';
 import { raciMatrix, type RaciMatrix } from '../process-document.js';
@@ -55,6 +58,9 @@ import {
   resolveScenarioPath,
   schemaIssueLines,
   validateScenario,
+  type ResolvedScenario,
+  type ScenarioReader,
+  type ValidateScenarioOptions,
 } from '../scenario.js';
 import {
   describeImportValue,
@@ -559,6 +565,8 @@ export interface CreateProjectResult {
   readonly name: string;
   /** The `bpmn:process` the project simulates. */
   readonly processId: string;
+  /** #630: the model had no diagram (BPMN DI) and the project's has one drawn by the auto-layout. */
+  readonly laidOut: boolean;
   /** The model's validation warnings (`code: message`). */
   readonly warnings: readonly string[];
   readonly scenarios: readonly CreatedScenario[];
@@ -582,6 +590,54 @@ function problemText(problem: { code: string; message: string }): string {
   return `${problem.code}: ${problem.message}`;
 }
 
+/** What `checkScenario` found: the scenario as far as it could be read, and its problems. */
+export interface ScenarioCheck {
+  /** The scenario with `extends` merged, unparsed; absent when the chain could not be read. */
+  readonly merged?: Record<string, unknown>;
+  /** The parsed scenario (defaults applied), when it has a valid shape with `model` and `run`. */
+  readonly scenario?: ResolvedScenario;
+  /** `code: message` of every problem that keeps it from running. */
+  readonly errors: readonly string[];
+  /** `code: message` of the lint warnings. */
+  readonly warnings: readonly string[];
+}
+
+/**
+ * The scenario at `path` checked the way it will run: `extends` resolved through `read`, the shape
+ * (`parseScenario`), `model` and `run` present, then `validateScenario` against `ir`. Every problem
+ * is reported instead of thrown, so a draft can be listed with what it lacks (`create_project`,
+ * `get_scenario`).
+ */
+export function checkScenario(
+  path: string,
+  read: ScenarioReader,
+  ir: ProcessIR,
+  options: { readonly locale: Locale; readonly elsewhere?: ValidateScenarioOptions['elsewhere'] },
+): ScenarioCheck {
+  const { locale } = options;
+  let merged: Record<string, unknown>;
+  try {
+    merged = resolveExtends(path, read);
+  } catch (error) {
+    return { errors: [error instanceof Error ? error.message : String(error)], warnings: [] };
+  }
+  const parsed = parseScenario(merged, { locale });
+  if (!parsed.success) return { merged, errors: schemaIssueLines(parsed.error.issues, { locale }), warnings: [] };
+  const missing = [
+    ...(parsed.data.model === undefined ? [messages(locale).mcp.patchedMissingModel()] : []),
+    ...(parsed.data.run === undefined ? [messages(locale).mcp.patchedMissingRun()] : []),
+  ];
+  if (missing.length > 0) return { merged, errors: missing, warnings: [] };
+  const scenario = parsed.data as ResolvedScenario;
+  const problems = validateScenario(scenario, ir, { locale, ...(options.elsewhere === undefined ? {} : { elsewhere: options.elsewhere }) });
+  return {
+    merged,
+    scenario,
+    errors: problems.filter((p) => p.severity === 'error').map(problemText),
+    warnings: problems.filter((p) => p.severity === 'warning').map(problemText),
+  };
+}
+
 /** A scenario's diagnostics against the new model, its `extends` read from the scenarios given. */
 function scenarioDiagnostics(
   root: string,
@@ -591,30 +647,14 @@ function scenarioDiagnostics(
   locale: Locale,
 ): CreatedScenario {
   const C = messages(locale).cli;
-  let raw: Record<string, unknown>;
-  try {
-    raw = resolveExtends(`${root}${entry}`, (path) => {
-      const name = path.startsWith(root) ? path.slice(root.length) : '';
-      if (!Object.hasOwn(scenarios, name)) {
-        throw new Error(C.lilaScenarioUnknown(path.startsWith(root) ? name : path, 'model', root.slice(0, -1), Object.keys(scenarios).sort().join(', ')));
-      }
-      return scenarios[name];
-    });
-  } catch (error) {
-    return { entry, runnable: false, errors: [error instanceof Error ? error.message : String(error)], warnings: [] };
-  }
-  const parsed = parseScenario(raw, { locale });
-  if (!parsed.success) {
-    return { entry, runnable: false, errors: schemaIssueLines(parsed.error.issues, { locale }), warnings: [] };
-  }
-  const missing = [
-    ...(parsed.data.model === undefined ? [messages(locale).mcp.patchedMissingModel()] : []),
-    ...(parsed.data.run === undefined ? [messages(locale).mcp.patchedMissingRun()] : []),
-  ];
-  if (missing.length > 0) return { entry, runnable: false, errors: missing, warnings: [] };
-  const problems = validateScenario(parsed.data as Parameters<typeof validateScenario>[0], report.ir, { locale });
-  const errors = problems.filter((p) => p.severity === 'error').map(problemText);
-  const warnings = problems.filter((p) => p.severity === 'warning').map(problemText);
+  const read = (path: string): unknown => {
+    const name = path.startsWith(root) ? path.slice(root.length) : '';
+    if (!Object.hasOwn(scenarios, name)) {
+      throw new Error(C.lilaScenarioUnknown(path.startsWith(root) ? name : path, 'model', root.slice(0, -1), Object.keys(scenarios).sort().join(', ')));
+    }
+    return scenarios[name];
+  };
+  const { errors, warnings } = checkScenario(`${root}${entry}`, read, report.ir, { locale });
   return { entry, runnable: errors.length === 0, errors, warnings };
 }
 
@@ -650,6 +690,15 @@ export async function createLilaProject(request: CreateProjectRequest): Promise<
     throw new Error(T.createModelUnparsable(error instanceof Error ? error.message : String(error)));
   }
   if (report.errors.length > 0) throw new Error(T.createModelInvalid(report.errors.length, report.errors.map(problemText).join('; ')));
+  // #630: a model without a diagram gets one, as `edit_process` with `layout: true` draws it, so
+  // `export_diagram` and the apps show it. A model the layouter cannot place is kept as given.
+  let laidOut = false;
+  try {
+    const drawn = await layoutMissingDiagram(xml, { processId: report.ir.id, locale });
+    if (drawn !== undefined) [xml, laidOut] = [drawn, true];
+  } catch (error) {
+    if (!(error instanceof LayoutError)) throw error;
+  }
 
   const scenarios: Record<string, ScenarioDocument> = {};
   for (const { name: scenarioName, scenario } of request.scenarios ?? []) {
@@ -704,6 +753,7 @@ export async function createLilaProject(request: CreateProjectRequest): Promise<
     file: target,
     name,
     processId: report.ir.id,
+    laidOut,
     warnings: report.warnings.map(problemText),
     scenarios: Object.keys(scenarios).sort().map((entry) => scenarioDiagnostics(root, entry, scenarios, report, locale)),
   };

@@ -188,6 +188,14 @@ function porEtiqueta(etiqueta: string): HTMLButtonElement {
   expect(boton, etiqueta).not.toBeNull();
   return boton!;
 }
+/**
+ * Run once the 150 ms startup reparse has fired, as «valida antes del Worker…» does (#494): under CI
+ * load it would land after the click, bump the revision and leave the run stale mid-assertion.
+ */
+async function ejecutarTrasReparse(): Promise<void> {
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 200); }); });
+  await click(T.app.ejecutar);
+}
 async function click(label: string) {
   await act(async () => {
     const button = [...container.querySelectorAll('button')].filter((b) => b.textContent === label).at(-1);
@@ -297,7 +305,7 @@ it.each([['Task_Preparar', 'Prepare food'], ['Task_Anonima', 'Task_Anonima']])(
 // #226 punto 6, Lote M: the «Bottlenecks» switch became Results' «Heat map» layer.
 it('la capa «Mapa de calor» de Resultados limpia el overlay y lo vuelve a pintar; fuera de Resultados no se pinta', async () => {
   mocks.worker.mockResolvedValue(conCuello('Task_Preparar'));
-  await click(T.app.ejecutar);
+  await ejecutarTrasReparse();
   expect(ultimoOverlay()[0]?.result.bottlenecks[0]?.elementId).toBe('Task_Preparar');
   expect(ultimoOverlay()[1]).toBe(true);
 
@@ -2204,7 +2212,7 @@ it('the «Advanced» switch is off by default, persists as lila.avanzado and sur
   expect(localStorage.getItem('lila.avanzado')).toBe('1');
   // The bottleneck line is one of the places the id returns to.
   mocks.worker.mockResolvedValue(conCuello('Task_Preparar'));
-  await click(T.app.ejecutar);
+  await ejecutarTrasReparse();
   await click(T.app.modos.simular);
   expect(container.querySelector('.simulacion > p.vacio')?.textContent).toBe(`${T.c5.resultados.cuellos}: ${T.app.nombreDeCuello('Prepare food', 'Task_Preparar')}`);
 
@@ -2224,7 +2232,7 @@ it('in Simulate «Scenario ▾» sits over the canvas with no left column; a row
   expect(container.querySelector('.paleta')).toBeNull();
   expect(container.querySelector('.divisor-izquierdo')).toBeNull();
   mocks.worker.mockResolvedValue(conCuello('Task_Preparar'));
-  await click(T.app.ejecutar);
+  await ejecutarTrasReparse();
   expect(ultimoOverlay()[0]).not.toBeNull();
   await click(T.app.modos.simular);
   await abrirEscenarios();

@@ -60,7 +60,9 @@ test('`lila mcp` sirve sus tools por stdio', async () => {
     'export_results',
     'export_scenario_template',
     'get_process_outline',
+    'get_project',
     'get_raci_matrix',
+    'get_scenario',
     'import_scenario_sheet',
     'patch_scenario',
     'run_simulation',
@@ -124,6 +126,54 @@ test('flujo "qué pasa si agrego un cajero": patch_scenario con extends y compar
   expect(espera).toBeDefined();
   expect(espera!.values[1]).toBeLessThan(espera!.base!);
   expect(espera!.significant[1]).toBe(true);
+}, 120_000);
+
+test('resources (#637): the guide and the formats, read over stdio', async () => {
+  const { resources } = await client.listResources();
+  expect(resources.map((resource) => resource.uri).sort()).toEqual([
+    'lila://guide',
+    'lila://outline-format',
+    'lila://scenario-format',
+    'lila://scenario-schema',
+  ]);
+  const guide = await client.readResource({ uri: 'lila://guide' });
+  expect(guide.contents[0]).toMatchObject({ uri: 'lila://guide', mimeType: 'text/markdown' });
+  // The server's language is English here (`lila mcp` without --lang): docs/AGENT_GUIDE.md as is.
+  expect((guide.contents[0] as { text: string }).text).toBe(readFileSync(join(repo, 'docs/AGENT_GUIDE.md'), 'utf8'));
+
+  const { prompts } = await client.listPrompts();
+  expect(prompts.map((prompt) => prompt.name)).toEqual(['interview-to-process']);
+}, 120_000);
+
+test('a 30-replication run reports its progress and can be cancelled (#637)', async () => {
+  const progress: number[] = [];
+  const run = await client.callTool(
+    { name: 'run_simulation', arguments: { scenario: asIs, seed: 3, replications: 30 } },
+    { onprogress: ({ progress: done, total }) => { expect(total).toBe(30); progress.push(done); } },
+  );
+  expect(run.isError ?? false).toBe(false);
+  expect(progress).toEqual(Array.from({ length: 30 }, (_, index) => index + 1));
+
+  // Cancel after the third replication: the call rejects, the server answers a ping at once and
+  // keeps serving.
+  const controller = new AbortController();
+  const seen: number[] = [];
+  const cancelled = client.callTool(
+    { name: 'run_simulation', arguments: { scenario: asIs, seed: 4, replications: 30 } },
+    {
+      signal: controller.signal,
+      onprogress: ({ progress: done }) => {
+        seen.push(done);
+        if (done === 3) controller.abort(new Error('enough'));
+      },
+    },
+  );
+  await expect(cancelled).rejects.toThrow('enough');
+  expect(seen.slice(0, 3)).toEqual([1, 2, 3]);
+  expect(seen.length).toBeLessThan(30);
+  await client.ping();
+  const after = await client.callTool({ name: 'run_simulation', arguments: { scenario: asIs, seed: 4, replications: 1 } });
+  expect(after.isError ?? false).toBe(false);
 }, 120_000);
 
 test('el servidor sobrevive a un error de tool y sigue respondiendo', async () => {

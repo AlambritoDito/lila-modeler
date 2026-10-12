@@ -1,7 +1,8 @@
 /**
- * `lila process annotate|raci` (#99) and `lila scenario import|template` (#514): the CLI side of
- * the MCP tools `annotate_element`, `get_raci_matrix`, `import_scenario_sheet` and
- * `export_scenario_template`, over the same `@lila-modeler/engine/project-fs` functions. Kept out
+ * `lila process annotate|raci` (#99), `lila scenario import|template` (#514) and the read-only
+ * `lila project show` and `lila scenario show` (#628): the CLI side of the MCP tools
+ * `annotate_element`, `get_raci_matrix`, `import_scenario_sheet`, `export_scenario_template`,
+ * `get_project` and `get_scenario`, over the same `@lila-modeler/engine/project-fs` functions. Kept out
  * of `cli.ts` so that file only dispatches here.
  */
 import { parseArgs } from 'node:util';
@@ -11,10 +12,13 @@ import { agentToolMessages, messages, type Locale } from './messages/index.js';
 import {
   annotateLilaElement,
   importLilaScenarioSheet,
+  lilaProjectInventory,
   lilaRaciMatrix,
   lilaScenarioTemplate,
+  lilaScenarioView,
   raciCsv,
   writeExportFile,
+  type LilaProjectInventory,
   type LilaRaciMatrix,
 } from './project-fs/index.js';
 
@@ -234,11 +238,69 @@ async function templateCommand(argv: readonly string[], locale: Locale): Promise
   return 0;
 }
 
-/** `lila scenario import|template`. */
+/** `lila scenario show` (#628): one scenario, as stored or `--resolved`, with the validator's notes. Writes nothing. */
+async function scenarioShowCommand(argv: readonly string[], locale: Locale): Promise<number> {
+  const T = agentToolMessages(locale);
+  const C = messages(locale).cli;
+  const { values, positionals } = parseArgs({
+    args: [...argv],
+    options: { process: { type: 'string' }, resolved: { type: 'boolean' }, json: { type: 'boolean' } },
+    allowPositionals: true,
+  });
+  if (positionals.length !== 2) return usageError('scenario show', C.expectedPositionals('<project.lila> <scenario>'), locale);
+  const [file, scenario] = positionals as [string, string];
+  const view = await lilaScenarioView({ file, process: values.process, scenario, resolved: values.resolved === true, locale });
+  if (values.json === true) {
+    console.log(JSON.stringify(view, null, 2));
+    return 0;
+  }
+  console.log(T.scenarioShowHeader(view.entry, view.process, view.revision, view.resolved));
+  console.log(JSON.stringify(view.scenario, null, 2));
+  if (view.notes.length > 0) {
+    console.log(T.scenarioShowNotes(view.notes.length));
+    for (const note of view.notes) console.log(`  ${note}`);
+  }
+  console.log(T.scenarioShowRunnable(view.runnable));
+  return 0;
+}
+
+/** `lila scenario import|template|show`. */
 export async function dispatchScenarioTools(argv: readonly string[], locale: Locale): Promise<number> {
   if (wantsHelp(argv)) return help(locale);
   const [sub, ...rest] = argv;
   if (sub === 'import') return importCommand(rest, locale);
   if (sub === 'template') return templateCommand(rest, locale);
-  return usageError('scenario', agentToolMessages(locale).scenarioUnknown(sub ?? '', 'import, template'), locale);
+  if (sub === 'show') return scenarioShowCommand(rest, locale);
+  return usageError('scenario', agentToolMessages(locale).scenarioUnknown(sub ?? '', 'import, template, show'), locale);
+}
+
+/** The inventory as text: one block per process, its scenarios and its saved runs. */
+function printInventory(inventory: LilaProjectInventory, locale: Locale): void {
+  const T = agentToolMessages(locale);
+  console.log(T.projectShowHeader(inventory.name, inventory.file, inventory.formatVersion));
+  for (const process of inventory.processes) {
+    console.log(T.projectShowProcess(process.slug, process.name, process.processId, process.modelRevision, process.elements));
+    console.log(T.projectShowScenarios(process.scenarios.length));
+    for (const scenario of process.scenarios) {
+      const parts = [scenario.entry, ...(scenario.name === null ? [] : [`"${scenario.name}"`]), T.projectShowRevision(scenario.revision)];
+      if (scenario.extends !== null) parts.push(T.projectShowExtends(scenario.extends));
+      console.log(`    ${parts.join('  ')}`);
+    }
+    console.log(T.projectShowRuns(process.runs.length));
+    for (const run of process.runs) console.log(`    ${run.id}  ${run.scenario}  ${T.projectShowRun(run.replications, run.start, run.current)}`);
+  }
+}
+
+/** `lila project show` (#628): what a `.lila` holds. Writes nothing. */
+export async function dispatchProjectTools(argv: readonly string[], locale: Locale): Promise<number> {
+  if (wantsHelp(argv)) return help(locale);
+  const C = messages(locale).cli;
+  const [sub, ...rest] = argv;
+  if (sub !== 'show') return usageError('project', agentToolMessages(locale).processToolUnknown(sub ?? '', 'show'), locale);
+  const { values, positionals } = parseArgs({ args: rest, options: { json: { type: 'boolean' } }, allowPositionals: true });
+  if (positionals.length !== 1) return usageError('project show', C.expectedPositionals('<project.lila>'), locale);
+  const inventory = await lilaProjectInventory({ file: positionals[0]!, locale });
+  if (values.json === true) console.log(JSON.stringify(inventory, null, 2));
+  else printInventory(inventory, locale);
+  return 0;
 }

@@ -11,12 +11,16 @@ from the synthetic interview `packages/mcp/test/fixtures/entrevista-tarjeta.txt`
 desktop app, so it is checked by hand with `tools/agent-live-check.mjs`.
 
 The server is its own npm package, started with `npx -y @lila-modeler/mcp`; setting it up in each
-client is in [`MCP.md`](MCP.md#installation).
+client is in [`MCP.md`](MCP.md#installation). A client that only has MCP reads this guide as the
+resource `lila://guide` (the formats are `lila://outline-format`, `lila://scenario-format` and
+`lila://scenario-schema`), and the prompt `interview-to-process` starts the flow below with an
+interview ([`MCP.md`](MCP.md#resources-and-prompt)).
 
 ## The flow
 
 | Step | Tool | CLI |
 | --- | --- | --- |
+| 0. The file exists: read what it holds | `get_project`, `get_scenario` | `lila project show`, `lila scenario show` |
 | 1. Read the interview, write an outline | (the agent) | |
 | 2. Create the process | `create_process` | `lila process create` |
 | 3. Fix it | `edit_process`, `get_process_outline` | `lila process edit`, `lila process show` |
@@ -35,6 +39,21 @@ Two rules shape the flow:
 - **Everything is the `.lila`.** There is no server state. Every tool reads the file, does its
   work and, if it writes, writes the whole file atomically. The desktop app that has it open
   reloads it by itself.
+
+### 0. An existing `.lila`: `get_project`
+
+When the `.lila` already exists, start here, not with the interview:
+
+```json
+{ "name": "get_project", "arguments": { "project": "card.lila" } }
+```
+
+It lists the processes (their `slug` is what `process` takes when there are several), each one's
+scenarios with their revisions and `extends`, and the saved runs, `current` or stale. It writes
+nothing. `get_scenario` reads one scenario, as stored or `resolved: true`, with the validator's
+`notes`; read a scenario with it before you patch it, never with a `patch_scenario` of only
+`test`. Then pick the step below that the person asked for: a new process (step 2), a fix
+(step 3), new numbers (step 5) or a new run (step 6).
 
 ### 1. From the interview to an outline
 
@@ -91,7 +110,8 @@ print. Both are optional; the document is better with them.
 ### 5. The scenario
 
 The base scenario `as-is.scenario.json` starts with the app's defaults (20 cases, one a minute, a
-one-hour run) plus what the outline carried. Fill in the rest from the interview with one
+one-hour run) plus what the outline carried (`get_scenario` with `resolved: true` shows it, with
+the paths a patch uses). Fill in the rest from the interview with one
 `patch_scenario` (JSON Patch, validated before anything is written):
 
 ```json
@@ -121,10 +141,14 @@ each field before → after, `issues` the rows it could not apply).
 { "name": "run_simulation", "arguments": { "model": "card.lila", "scenario": "as-is", "seed": 42, "replications": 10, "saveRun": true } }
 ```
 
-The answer is the `RunResult` (`structuredContent`, [`RESULTS_FORMAT.md`](RESULTS_FORMAT.md)) plus a
-second text block `{ "savedRun": { "id", … } }`. The run is stored in the `.lila` exactly as the app
-stores it, so the app shows it as the current run and the exports use it. Use a fixed `seed` so
-the person can reproduce the numbers; use `compare_scenarios` to compare AS-IS and TO-BE.
+The answer is a summary of the run, a few KB: `process`, `bottlenecks`, each resource's utilization,
+wait and cost, the elements that wait most (`topWaits`) and the warnings grouped; `detail: "full"`
+returns the whole `RunResult` ([`RESULTS_FORMAT.md`](RESULTS_FORMAT.md)), which is large. A second
+text block says `{ "savedRun": { "id", … } }`. The run is stored in full in the `.lila`, exactly as
+the app stores it, so the app shows it as the current run and the exports use it. Use a fixed
+`seed` so the person can reproduce the numbers; use `compare_scenarios` to compare AS-IS and TO-BE
+(its summary keeps the process and resource rows and the significant differences). A long run
+reports progress per replication and can be cancelled.
 
 ### 7. Exports
 
@@ -244,5 +268,6 @@ the same `.lila`.
   be removed.
 - **Scenario fields from the outline** are only `duration`, `resources` and branch `probability`.
   Arrivals, calendars, costs and capacities go through `patch_scenario` or a sheet.
-- **Simulation is synchronous** in the server: a long run blocks the server until it finishes. Keep
-  replications reasonable while iterating.
+- **A long run takes its time.** The server keeps answering and reports each replication, and a
+  cancelled call stops the run, but the run itself is not faster. Keep replications reasonable
+  while iterating.

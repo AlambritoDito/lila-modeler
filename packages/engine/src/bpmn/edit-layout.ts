@@ -728,6 +728,80 @@ export async function relayout(context: RelayoutContext): Promise<void> {
       dataAssociations.push(d);
     }
   }
+  placeArtifacts(diagram, plane, process, nodes, associations, dataAssociations);
   for (const a of [...associations, ...dataAssociations]) diagram.routeOther(a);
   diagram.routeMessages(definitions);
+}
+
+/** bpmn-js's default sizes: a text annotation, a data store, a data object. */
+const artifactSize = (el: El): { width: number; height: number } =>
+  el.$type === 'bpmn:TextAnnotation' ? { width: 100, height: 30 } : el.$type === 'bpmn:DataStoreReference' ? { width: 50, height: 50 } : { width: 36, height: 50 };
+
+/**
+ * #630: the text annotations, data objects and data stores of `process` that have no shape (a
+ * model that arrived without a diagram) get one next to the node they hang on: an annotation above
+ * and right of it, a data object or store below it; one that hangs on nothing goes in a row below
+ * the drawing. Each moves along until it overlaps no other shape. Their associations get an edge.
+ */
+function placeArtifacts(diagram: Diagram, plane: El, process: El, nodes: readonly El[], associations: readonly El[], dataAssociations: readonly El[]): void {
+  const anchorOf = new Map<El, El>();
+  for (const a of associations) {
+    const s = a['sourceRef'] as El | undefined;
+    const t = a['targetRef'] as El | undefined;
+    if (s !== undefined && t !== undefined && nodes.includes(s) && !anchorOf.has(t)) anchorOf.set(t, s);
+    if (s !== undefined && t !== undefined && nodes.includes(t) && !anchorOf.has(s)) anchorOf.set(s, t);
+  }
+  for (const d of dataAssociations) {
+    const node = d['$parent'] as El;
+    const data = d.$type === 'bpmn:DataInputAssociation' ? ((d['sourceRef'] ?? []) as El[])[0] : (d['targetRef'] as El | undefined);
+    if (data !== undefined && !anchorOf.has(data)) anchorOf.set(data, node);
+  }
+  const annotations = [...associations.flatMap((a) => [a['sourceRef'], a['targetRef']] as El[]), ...((process['artifacts'] ?? []) as El[])]
+    .filter((el, i, all) => el !== undefined && el.$type === 'bpmn:TextAnnotation' && all.indexOf(el) === i);
+  const data = ((process['flowElements'] ?? []) as El[]).filter((el) => el.$type === 'bpmn:DataObjectReference' || el.$type === 'bpmn:DataStoreReference');
+  const missing = [...annotations, ...data].filter((el) => !diagram.shapes.has(el.id));
+  if (missing.length === 0) return;
+
+  const taken = (): Box[] => diagram.nodeShapes(plane).map((di) => di['bounds'] as Box);
+  const free = (box: Box, step: Point): Box => {
+    let b = box;
+    for (let i = 0; i < 100 && taken().some((o) => overlaps(b, o, 10)); i++) b = { ...b, x: b.x + step.x, y: b.y + step.y };
+    return b;
+  };
+  const orphans: El[] = [];
+  for (const el of missing) {
+    const anchor = anchorOf.get(el);
+    const at = anchor === undefined ? undefined : diagram.bounds(anchor.id);
+    if (at === undefined) {
+      orphans.push(el);
+      continue;
+    }
+    const size = artifactSize(el);
+    const box =
+      el.$type === 'bpmn:TextAnnotation'
+        ? free({ x: right(at) + 20, y: at.y - size.height - 30, ...size }, { x: size.width + 20, y: 0 })
+        : free({ x: center(at).x - size.width / 2, y: bottom(at) + 40, ...size }, { x: size.width + 20, y: 0 });
+    diagram.addShape(el, plane, box);
+  }
+  if (orphans.length > 0) {
+    const all = taken();
+    let x = all.length === 0 ? 0 : Math.min(...all.map((b) => b.x));
+    const y = all.length === 0 ? 0 : Math.max(...all.map(bottom)) + 40;
+    for (const el of orphans) {
+      const size = artifactSize(el);
+      diagram.addShape(el, plane, { x, y, ...size });
+      x += size.width + 30;
+    }
+  }
+  // Their associations: an edge, drawn straight by `routeOther`.
+  for (const a of [...associations, ...dataAssociations]) {
+    if (diagram.edges.has(a.id)) continue;
+    const [s, t] =
+      a.$type === 'bpmn:DataInputAssociation' ? [((a['sourceRef'] ?? []) as El[])[0], a['$parent'] as El]
+      : a.$type === 'bpmn:DataOutputAssociation' ? [a['$parent'] as El, a['targetRef'] as El | undefined]
+      : [a['sourceRef'] as El | undefined, a['targetRef'] as El | undefined];
+    const sb = s === undefined ? undefined : diagram.bounds(s.id);
+    const tb = t === undefined ? undefined : diagram.bounds(t.id);
+    if (sb !== undefined && tb !== undefined && missing.some((el) => el === s || el === t)) diagram.setWaypoints(a, straight(sb, tb), plane);
+  }
 }

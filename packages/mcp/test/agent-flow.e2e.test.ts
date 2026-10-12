@@ -195,14 +195,20 @@ test('interview → create_process → edit_process → annotate → scenario �
   expect(dry.changes).toHaveLength(1);
   expect(await answer('import_scenario_sheet', sheet)).toMatchObject({ written: true });
 
-  // d. Run it and keep the run in the project, as the app does.
-  const run = await call('run_simulation', { model: 'tarjeta.lila', scenario: 'as-is', seed: 7, replications: 2, saveRun: true });
+  // d. Run it and keep the run in the project, as the app does. The answer is the summary (#629):
+  // small enough for an agent's context, while the run saved in the project is the full result.
+  const run = await call('run_simulation', { model: 'tarjeta.lila', scenario: 'as-is', seed: 7, replications: 2, detail: 'summary', saveRun: true });
   expect(run.isError, run.texts[0]).toBe(false);
+  expect(Buffer.byteLength(run.texts[0]!), 'the summary stays under 8 KB').toBeLessThan(8 * 1024);
   const result = JSON.parse(run.texts[0]!) as {
-    elements: Record<string, { completed: number }>;
-    resources: Record<string, { utilization: number }>;
+    detail: string;
+    elements?: unknown;
+    topWaits: { elementId: string; completed: number }[];
+    resources: Record<string, { utilization: number; resourceWaitTotal: number }>;
   };
-  expect(result.elements.evaluar?.completed).toBeGreaterThan(0);
+  expect(result.detail).toBe('summary');
+  expect(result.elements).toBeUndefined();
+  expect(result.topWaits.find((entry) => entry.elementId === 'evaluar')?.completed).toBeGreaterThan(0);
   expect(result.resources.analista?.utilization).toBeGreaterThan(0);
   const { savedRun } = JSON.parse(run.texts[1]!) as { savedRun: { id: string; scenario: string } };
   expect(savedRun.scenario).toBe('as-is.scenario.json');
