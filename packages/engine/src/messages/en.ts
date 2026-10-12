@@ -628,5 +628,9 @@ export const en: Catalog = {
     patchedName: (name) => `${name} (patched)`,
     inlineScenario: () => 'inline scenario',
     projectNotLila: (file) => `\`project\` must be a .lila file; got ${file}.`,
+    patchNoChange: () =>
+      'the patch changes nothing, so nothing was written: the scenario keeps its revision and its runs stay current.',
+    patchSameTarget: (target) =>
+      `${target} already holds this scenario, so nothing was written: it keeps its revision and its runs stay current.`,
   },
 };

@@ -32,8 +32,10 @@ result in the app — read the [agent guide](AGENT_GUIDE.md).
   replications for confidence intervals, and engine warnings.
 - **`patch_scenario({ scenario, project?, process?, patch, saveTo?, extendsFrom?, name?, description?, locale? })`**
   applies [JSON Patch](https://www.rfc-editor.org/rfc/rfc6902), validates the result and writes
-  only when valid. It returns `{ scenario, file, notes }` (plus `process` and `entry` inside a
-  `.lila`).
+  only when valid. It returns `{ scenario, file, written, notes }` (plus `process` and `entry` inside a
+  `.lila`). A patch that changes nothing (only `test`, or a `saveTo` whose target already holds the
+  result) writes nothing: `written` is `false`, `notes` says so first, and the scenario keeps its
+  revision, so its saved runs stay current (#627).
 
 - **`export_diagram({ project | path, process?, saveTo?, overwrite?, locale? })`** draws the
   diagram of a `.lila` process (`project`) or a `.bpmn` (`path`) as SVG with the engine's own
@@ -115,7 +117,7 @@ A `.lila` (`docs/PROJECT_FORMAT.md`) is accepted wherever a tool takes a model (
   and writes only a valid result, as on disk. The write goes through the engine's codec
   (`encodeLila`) to a temporary file that is then renamed over the `.lila`, so a failure never
   leaves a partial archive. The scenario's revision goes up by one, so the app sees the runs of
-  the old version as stale. Every other process, scenario and run is carried through unchanged
+  the old version as stale; a patch that changes nothing is not written and leaves the revision as it was. Every other process, scenario and run is carried through unchanged
   and, in an archive written by the app or the engine, byte for byte; entries outside the
   project layout are dropped, as in any `.lila` save. If the file changed on disk while the tool
   worked (another program, another MCP server, the CLI or the desktop app), nothing is written and

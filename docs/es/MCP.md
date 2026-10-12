@@ -44,8 +44,11 @@ resultado en la app — lee la [guía para agentes](GUIA-AGENTES.md).
   (LILA-055) — aplica un [JSON Patch](https://www.rfc-editor.org/rfc/rfc6902) a `scenario`, valida
   el resultado contra su modelo (mismas reglas que `validateScenario`, `docs/SCENARIO_FORMAT.md`
   § 5) y **solo si valida** lo escribe a disco de forma atómica; nunca dos veces. Devuelve
-  `{ scenario, file, notes }`: el escenario resultante ya resuelto, la ruta absoluta escrita y los
-  avisos de lint (`W-…`) como `notes`. Dos modos:
+  `{ scenario, file, written, notes }`: el escenario resultante ya resuelto, la ruta absoluta escrita,
+  si se escribió y los avisos de lint (`W-…`) como `notes`. Un patch que no cambia nada (solo `test`,
+  o un `saveTo` cuyo destino ya tiene el resultado) no escribe nada: `written` es `false`, `notes`
+  lo dice primero y el escenario conserva su revisión, así que sus corridas guardadas siguen
+  vigentes (#627). Dos modos:
   - **Sin `saveTo`** (modo a) — parchea `scenario` en sitio: el patch se aplica sobre el escenario
     ya resuelto (con `extends` fusionado) y se sobrescribe el mismo archivo con el resultado
     completo, sin `extends` propio. Es un "aplanar y parchear": si `scenario` tenía su propio
@@ -139,7 +142,7 @@ de `patch_scenario`. Las reglas son las de la CLI (`docs/CLI.md`, «Un `.lila` c
   resultado válido, igual que en disco. La escritura pasa por el códec del motor (`encodeLila`) a
   un temporal que luego se renombra sobre el `.lila`, así que un fallo nunca deja un archivo a
   medias. La revisión del escenario sube en uno, para que la app vea como desactualizadas las
-  corridas de la versión anterior. Los demás procesos, escenarios y corridas pasan sin cambios y,
+  corridas de la versión anterior; un patch que no cambia nada no se escribe y deja la revisión como estaba. Los demás procesos, escenarios y corridas pasan sin cambios y,
   en un archivo escrito por la app o el motor, byte a byte; las entradas que no son parte del
   formato se descartan, como en cualquier guardado de un `.lila`. Si el archivo cambió en disco
   mientras la tool trabajaba (otro programa, otro servidor MCP, la CLI o la app de escritorio), no se

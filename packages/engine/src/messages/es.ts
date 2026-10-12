@@ -634,5 +634,9 @@ export const es: Catalog = {
     patchedName: (name) => `${name} (parcheado)`,
     inlineScenario: () => 'escenario inline',
     projectNotLila: (file) => `\`project\` tiene que ser un archivo .lila; se recibió ${file}.`,
+    patchNoChange: () =>
+      'el patch no cambia nada, así que no se escribió nada: el escenario conserva su revisión y sus corridas siguen vigentes.',
+    patchSameTarget: (target) =>
+      `${target} ya tiene este escenario, así que no se escribió nada: conserva su revisión y sus corridas siguen vigentes.`,
   },
 };
