@@ -95,8 +95,11 @@ export function Replay({ modelador, replay, originalIds, motivo, leyenda, ...con
     const paso = (ahora: number): void => {
       const dt = (ahora - anterior) / 1000;
       anterior = ahora;
-      const factor = velocidadRef.current === 'instantanea' ? Infinity : Number(velocidadRef.current);
-      t.current = Math.min(replay.horizon, t.current + dt * factor);
+      // «Instant» while playing jumps to the end. It used to be `dt * Infinity`: NaN on a frame with
+      // dt 0 and -Infinity when the frame's timestamp precedes the `performance.now()` above, which
+      // left «Invalid Date» on the clock and the bar stuck on Pause (QA of #615). Never backwards.
+      const avance = velocidadRef.current === 'instantanea' ? replay.horizon : Math.max(0, dt) * Number(velocidadRef.current);
+      t.current = Math.min(replay.horizon, t.current + avance);
       pintarRef.current();
       if (ahora - ultimoRender >= 100) { ultimoRender = ahora; setTick((n) => n + 1); }
       if (t.current >= replay.horizon) { setReproduciendo(false); return; }
@@ -165,7 +168,14 @@ export function Replay({ modelador, replay, originalIds, motivo, leyenda, ...con
         aria-valuetext={textoReloj} value={replay.horizon === 0 ? 1000 : Math.round((ahora / replay.horizon) * 1000)}
         onChange={(e) => { t.current = (Number(e.target.value) / 1000) * replay.horizon; setTick((n) => n + 1); }} />
       <span className="c5-reloj mono" title={S.animacion.progreso(porcentaje)}>{textoReloj}</span>
-      {ahora >= replay.horizon && <span className="vacio">{S.animacion.fin}</span>}
+      {/* C7 (QA of #615): one word on the bar, so the clock keeps its room at 1280 px; the sentence
+          stays in the title and for screen readers. */}
+      {ahora >= replay.horizon && (
+        <span className="vacio c5-fin" title={S.animacion.fin}>
+          <span aria-hidden="true">{S.c7.finCorto}</span>
+          <span className="rec-oculto">{S.animacion.fin}</span>
+        </span>
+      )}
       {Object.keys(estado.pools).length > 0 && (
         <span className="c5-ocupacion" title={S.animacion.recursos}>
           {Object.entries(estado.pools).map(([id, pool]) => (
@@ -173,7 +183,7 @@ export function Replay({ modelador, replay, originalIds, motivo, leyenda, ...con
           ))}
         </span>
       )}
-      {replay.replications > 1 && <span className="vacio" title={S.animacion.replicacion(replay.replications)}>{`1/${replay.replications}`}</span>}
+      {replay.replications > 1 && <span className="vacio c5-replica" title={S.animacion.replicacion(replay.replications)}>{`1/${replay.replications}`}</span>}
       {replay.truncated && <span role="note" className="aviso" title={S.animacion.truncado(replay.rows)}>{S.c5.tiempo.truncadoCorto(replay.rows)}</span>}
       {leyenda}
     </div>

@@ -89,8 +89,9 @@ or Actions → Release → Run workflow → pick the tag → tick `publish_npm`.
 
 - The job publishes `@lila-modeler/engine` first and then `@lila-modeler/mcp`, same version and
   dist-tag: the server depends on that exact engine version, so the engine must be on the registry
-  first. If the engine publishes and the server fails, publish the server by hand (below) rather
-  than re-running the job, which would fail on the engine version that already exists.
+  first. A version already on the registry is skipped, so if the engine publishes and the server
+  fails, fix the cause and rerun the job (`gh run rerun <id> --failed`). This works only for tags
+  whose `release.yml` already has that skip; for older tags, publish the server by hand (below).
 - Authentication is **npm trusted publishing (OIDC)**; no npm token is stored in the repository.
   On npmjs.com, each package (`@lila-modeler/engine`, `@lila-modeler/mcp`) → Settings → Trusted
   publishing trusts GitHub Actions
@@ -100,13 +101,20 @@ or Actions → Release → Run workflow → pick the tag → tick `publish_npm`.
 - The job runs on Node 24 because trusted publishing needs npm >= 11.5.1.
 - `--provenance` attaches a signed SLSA statement. Check it with `npm audit signatures` in a
   project that installs the package.
-- Prereleases (`1.0.0-beta.N`) go to the `beta` dist-tag; stable versions go to `latest`.
+- Prereleases (`1.0.0-beta.N`) go to the `beta` dist-tag, and to `latest` while there is no stable
+  version (below); stable versions go to `latest`.
 
 ### Moving `latest` during the beta line
 
-The workflow never moves `latest` for a prerelease. The engine's very first publish set `latest`
-to 1.0.0-beta.9 (and the MCP server's first publish sets it too). Until 1.0.0, point it at the
-newest beta by hand (npm asks for 2FA in the browser):
+While `latest` is itself a prerelease (the beta line before 1.0.0), the workflow moves it to each
+new beta after publishing, so `npx -y @lila-modeler/mcp` without `@beta` gets the current version.
+Once a stable version is `latest`, a beta never moves it again. A rerun repairs a `latest` that
+did not move.
+
+Moving a dist-tag through OIDC needs **Allow npm dist-tag** ticked on each package's trusted
+publisher, next to **Allow npm publish** (off by default). Without it the publish succeeds and the
+step fails on `npm dist-tag`. Tick it and rerun, or move it by hand (npm asks for 2FA in the
+browser):
 
 ```bash
 npm dist-tag add @lila-modeler/engine@1.0.0-beta.N latest
