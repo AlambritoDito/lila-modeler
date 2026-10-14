@@ -1,7 +1,7 @@
 /**
  * The whole agent flow of #527 with no UI (#540), through the official MCP client against the real
  * `lila mcp` over stdio: an interview transcript → an outline → `create_process` into a new .lila →
- * `edit_process` and `annotate_element`/`get_raci_matrix` →
+ * `edit_process`, `define_attribute` and `annotate_element`/`get_raci_matrix` →
  * a scenario filled with `patch_scenario` and with a filled-in template (`export_scenario_template`
  * → `import_scenario_sheet`) → `run_simulation` with `saveRun` → `export_document` as Word and HTML,
  * `export_results` and `export_diagram`. There is no LLM here: the outline is the one an agent
@@ -167,6 +167,17 @@ test('interview → create_process → edit_process → annotate → scenario �
   const raci = await answer<{ roles: string[]; rows: { id: string; cells: Record<string, string> }[] }>('get_raci_matrix', { project: 'tarjeta.lila' });
   expect(raci.rows.find((row) => row.id === 'evaluar')?.cells).toEqual({ analista: 'R', gerente: 'A' });
 
+  // b'''. An extended attribute (#633): a new project defines none, so define it, then fill it in.
+  // The same call again changes nothing, and get_project lists it.
+  const risk = { project: 'tarjeta.lila', name: 'Nivel de riesgo', type: 'list', appliesTo: 'task', options: ['Bajo', 'Medio', 'Alto'], default: 'Bajo' };
+  const defined = await answer<{ changed: boolean; after: { id: string } }>('define_attribute', risk);
+  expect(defined).toMatchObject({ changed: true, after: { id: 'Attr_nivel_de_riesgo' } });
+  expect(await answer('define_attribute', risk)).toMatchObject({ changed: false, written: false });
+  await answer('annotate_element', { project: 'tarjeta.lila', elementId: 'evaluar', attributes: { 'Nivel de riesgo': 'Alto' } });
+  const inventory = await answer<{ processes: { attributes: { id: string; options: string[] }[] }[] }>('get_project', { project: 'tarjeta.lila' });
+  const { project: _, ...definition } = risk;
+  expect(inventory.processes[0]?.attributes).toEqual([{ id: 'Attr_nivel_de_riesgo', ...definition }]);
+
   // c. The numbers of the interview into the base scenario, in place.
   const patched = await answer<{ scenario: { resources: Record<string, { capacity: number }> } }>('patch_scenario', {
     project: 'tarjeta.lila',
@@ -229,6 +240,9 @@ test('interview → create_process → edit_process → annotate → scenario �
   for (const step of outline.steps) expect(svg, step.id).toContain(`data-element-id="${step.id}"`);
   expect(page).toContain('Resultados');
   expect(page).toContain('Solicitud de tarjeta de crédito');
+  // The attribute under its task: its own value there, the default on the other tasks.
+  expect(page).toMatch(/Nivel de riesgo:?(<[^>]+>|\s)*Alto/);
+  expect(page).toMatch(/Nivel de riesgo:?(<[^>]+>|\s)*Bajo/);
 
   const docx = await answer<{ run: { id: string; current: boolean } | null; notes: string[] }>('export_document', {
     project: 'tarjeta.lila',
