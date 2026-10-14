@@ -200,6 +200,10 @@ body {
   gap: 10px;
   grid-area: barra;
   padding: calc(10px * var(--espacio, 1)) 14px;
+  /* Its own stacking context over the Simulate/Results sub-bar (30): the File and View menus
+     drop over it instead of under it (#650). */
+  position: relative;
+  z-index: 40;
 }
 
 /* La identidad y los modos ocupan la barra de arriba abajo —el subrayado del modo activo va
