@@ -548,6 +548,11 @@ export interface CreateProjectRequest {
   readonly scenarios?: readonly { readonly name: string; readonly scenario: unknown }[] | undefined;
   /** Replace an existing file. Default: an existing file is never touched. */
   readonly overwrite?: boolean | undefined;
+  /**
+   * #632: save a model with validation errors too (a diagram kept for documentation), with the
+   * errors in `notes`. Default: such a model is refused. An unreadable file is always refused.
+   */
+  readonly allowUnsimulatable?: boolean | undefined;
   readonly locale?: Locale | undefined;
 }
 
@@ -569,6 +574,8 @@ export interface CreateProjectResult {
   readonly laidOut: boolean;
   /** The model's validation warnings (`code: message`). */
   readonly warnings: readonly string[];
+  /** #632: with `allowUnsimulatable`, the model's validation errors (`code: message`); otherwise empty. */
+  readonly notes: readonly string[];
   readonly scenarios: readonly CreatedScenario[];
 }
 
@@ -588,6 +595,17 @@ function removeEmptyFolders(folder: string, top: string): void {
 
 function problemText(problem: { code: string; message: string }): string {
   return `${problem.code}: ${problem.message}`;
+}
+
+/**
+ * The `bpmn` argument of `create_project` and `put_process_bpmn` (#632): inline XML when it starts
+ * with `<`, otherwise a path to a `.bpmn`, read as UTF-8 (`file` is then its absolute path).
+ */
+export function readBpmnArgument(bpmn: string, locale: Locale): { readonly xml: string; readonly file?: string } {
+  if (bpmn.trimStart().startsWith('<')) return { xml: bpmn };
+  const source = absolute(bpmn);
+  if (!existsSync(source) || lstatSync(source).isDirectory()) throw new Error(messages(locale).mcp.fileMissing(source));
+  return { xml: readFileSync(source, 'utf8'), file: source };
 }
 
 /** What `checkScenario` found: the scenario as far as it could be read, and its problems. */
@@ -660,7 +678,7 @@ function scenarioDiagnostics(
 
 /**
  * Creates a `.lila` (#403): one process, the model validated with `validateBpmnXml` (a model with
- * errors is refused), the scenarios saved as given (a draft that cannot run yet is kept, and its
+ * errors is refused unless `allowUnsimulatable`, #632), the scenarios saved as given (a draft that cannot run yet is kept, and its
  * diagnostics come back). The document is encoded before anything touches the disk, and written by
  * `writeLilaFile` (a temporary file and a `rename`, under the `.lila` lock), so an error never
  * leaves a partial file. An existing file is refused, inside the lock, unless `overwrite`.
@@ -673,12 +691,7 @@ export async function createLilaProject(request: CreateProjectRequest): Promise<
   const name = request.name.trim();
   if (name === '') throw new Error(T.createEmptyName());
 
-  let xml = request.bpmn;
-  if (!xml.trimStart().startsWith('<')) {
-    const source = absolute(request.bpmn);
-    if (!existsSync(source) || lstatSync(source).isDirectory()) throw new Error(messages(locale).mcp.fileMissing(source));
-    xml = readFileSync(source, 'utf8');
-  }
+  let { xml } = readBpmnArgument(request.bpmn, locale);
   let report: ValidateBpmnReport;
   try {
     // #546: validated as the process its scenarios target, the one that will run.
@@ -689,7 +702,10 @@ export async function createLilaProject(request: CreateProjectRequest): Promise<
   } catch (error) {
     throw new Error(T.createModelUnparsable(error instanceof Error ? error.message : String(error)));
   }
-  if (report.errors.length > 0) throw new Error(T.createModelInvalid(report.errors.length, report.errors.map(problemText).join('; ')));
+  // #632: with `allowUnsimulatable` a model with errors is kept, for documentation; they go to `notes`.
+  if (report.errors.length > 0 && request.allowUnsimulatable !== true) {
+    throw new Error(T.createModelInvalid(report.errors.length, report.errors.map(problemText).join('; ')));
+  }
   // #630: a model without a diagram gets one, as `edit_process` with `layout: true` draws it, so
   // `export_diagram` and the apps show it. A model the layouter cannot place is kept as given.
   let laidOut = false;
@@ -755,6 +771,7 @@ export async function createLilaProject(request: CreateProjectRequest): Promise<
     processId: report.ir.id,
     laidOut,
     warnings: report.warnings.map(problemText),
+    notes: report.errors.map((problem) => T.unsimulatableNote(problemText(problem))),
     scenarios: Object.keys(scenarios).sort().map((entry) => scenarioDiagnostics(root, entry, scenarios, report, locale)),
   };
 }

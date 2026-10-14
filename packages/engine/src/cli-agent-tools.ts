@@ -1,8 +1,9 @@
 /**
- * `lila process annotate|raci` (#99), `lila scenario import|template` (#514) and the read-only
- * `lila project show` and `lila scenario show` (#628): the CLI side of the MCP tools
- * `annotate_element`, `get_raci_matrix`, `import_scenario_sheet`, `export_scenario_template`,
- * `get_project` and `get_scenario`, over the same `@lila-modeler/engine/project-fs` functions. Kept out
+ * `lila process annotate|raci` (#99), `lila scenario import|template` (#514), the read-only
+ * `lila project show` and `lila scenario show` (#628) and `lila process export-bpmn|import` (#632):
+ * the CLI side of the MCP tools `annotate_element`, `get_raci_matrix`, `import_scenario_sheet`,
+ * `export_scenario_template`, `get_project`, `get_scenario`, `get_process_bpmn` and
+ * `put_process_bpmn`, over the same `@lila-modeler/engine/project-fs` functions. Kept out
  * of `cli.ts` so that file only dispatches here.
  */
 import { parseArgs } from 'node:util';
@@ -16,19 +17,21 @@ import {
   lilaRaciMatrix,
   lilaScenarioTemplate,
   lilaScenarioView,
+  putLilaProcessBpmn,
   raciCsv,
+  readLilaProcessBpmn,
   writeExportFile,
   type LilaProjectInventory,
   type LilaRaciMatrix,
 } from './project-fs/index.js';
 
 /** The `process` subcommands this file answers. */
-export const PROCESS_TOOL_SUBCOMMANDS = ['annotate', 'raci'] as const;
+export const PROCESS_TOOL_SUBCOMMANDS = ['annotate', 'raci', 'export-bpmn', 'import'] as const;
 
 /** Options of `lila process` (any subcommand) that take a value, so their value is not a subcommand. */
 const PROCESS_VALUE_OPTIONS = new Set([
   '--outline', '--project', '-p', '--process', '--name',
-  '--documentation', '--responsibility', '--ref', '--attribute',
+  '--documentation', '--responsibility', '--ref', '--attribute', '--bpmn', '--out',
 ]);
 
 /** Index of the subcommand in `lila process …` arguments: the first positional, past any option. */
@@ -177,7 +180,67 @@ async function raciCommand(argv: readonly string[], locale: Locale): Promise<num
   return 0;
 }
 
-/** `lila process annotate|raci`. */
+/** `lila process export-bpmn` (#632): the model XML of one process, to `--out` or stdout. Writes nothing else. */
+async function exportBpmnCommand(argv: readonly string[], locale: Locale): Promise<number> {
+  const T = agentToolMessages(locale);
+  const C = messages(locale).cli;
+  const { values, positionals } = parseArgs({
+    args: [...argv],
+    options: { project: { type: 'string', short: 'p' }, process: { type: 'string' }, out: { type: 'string' }, force: { type: 'boolean' } },
+    allowPositionals: true,
+  });
+  if (positionals.length > 0) return usageError('process export-bpmn', C.expectedPositionals('export-bpmn'), locale);
+  if (values.project === undefined) return usageError('process export-bpmn', C.processMissingOption('-p/--project <file.lila>'), locale);
+  const read = await readLilaProcessBpmn(values.project, { process: values.process, locale });
+  if (values.out === undefined) process.stdout.write(read.xml);
+  else console.log(T.bpmnWritten(writeExportFile(values.out, read.xml, { overwrite: values.force === true, source: read.file, locale })));
+  return 0;
+}
+
+/** `lila process import` (#632): a BPMN as a new process of a `.lila`, or `--replace` the model of one. */
+async function importBpmnCommand(argv: readonly string[], locale: Locale): Promise<number> {
+  const T = agentToolMessages(locale);
+  const C = messages(locale).cli;
+  const { values, positionals } = parseArgs({
+    args: [...argv],
+    options: {
+      project: { type: 'string', short: 'p' },
+      bpmn: { type: 'string' },
+      replace: { type: 'boolean' },
+      process: { type: 'string' },
+      name: { type: 'string' },
+      'no-layout': { type: 'boolean' },
+      'allow-unsimulatable': { type: 'boolean' },
+      'dry-run': { type: 'boolean' },
+      json: { type: 'boolean' },
+    },
+    allowPositionals: true,
+  });
+  if (positionals.length > 0) return usageError('process import', C.expectedPositionals('import'), locale);
+  if (values.project === undefined) return usageError('process import', C.processMissingOption('-p/--project <file.lila>'), locale);
+  if (values.bpmn === undefined) return usageError('process import', T.bpmnRequired(), locale);
+  const result = await putLilaProcessBpmn({
+    file: values.project,
+    mode: values.replace === true ? 'replace' : 'add',
+    bpmn: values.bpmn,
+    process: values.process,
+    name: values.name,
+    layout: values['no-layout'] !== true,
+    allowUnsimulatable: values['allow-unsimulatable'] === true,
+    dryRun: values['dry-run'] === true,
+    locale,
+  });
+  if (values.json === true) {
+    console.log(JSON.stringify(result, null, 2));
+    return 0;
+  }
+  console.log(result.summary);
+  for (const note of result.notes) console.log(`${C.warningLabel()} ${note}`);
+  for (const warning of result.warnings) console.log(`${C.warningLabel()} ${warning}`);
+  return 0;
+}
+
+/** `lila process annotate|raci|export-bpmn|import`. */
 export async function dispatchProcessTools(argv: readonly string[], locale: Locale): Promise<number> {
   if (wantsHelp(argv)) return help(locale);
   const index = subcommandIndex(argv);
@@ -185,6 +248,8 @@ export async function dispatchProcessTools(argv: readonly string[], locale: Loca
   const rest = index === -1 ? [...argv] : [...argv.slice(0, index), ...argv.slice(index + 1)];
   if (sub === 'annotate') return annotateCommand(rest, locale);
   if (sub === 'raci') return raciCommand(rest, locale);
+  if (sub === 'export-bpmn') return exportBpmnCommand(rest, locale);
+  if (sub === 'import') return importBpmnCommand(rest, locale);
   return usageError('process', agentToolMessages(locale).processToolUnknown(sub ?? '', PROCESS_TOOL_SUBCOMMANDS.join(', ')), locale);
 }
 

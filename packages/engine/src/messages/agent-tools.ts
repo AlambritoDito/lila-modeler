@@ -38,6 +38,16 @@ export interface AgentToolMessages {
   createScenarioDuplicate: (entry: string) => string;
   createScenarioModel: (name: string, model: string) => string;
   createEmptyName: () => string;
+  // `put_process_bpmn` / `lila process import|export-bpmn` (#632)
+  unsimulatableNote: (problem: string) => string;
+  putMode: (mode: string) => string;
+  putNoProject: (path: string) => string;
+  putReplaceName: () => string;
+  putScenarioBroken: (detail: string) => string;
+  putScenarioNote: (entry: string, problem: string) => string;
+  putSummary: (mode: 'add' | 'replace', dryRun: boolean, name: string, slug: string, file: string, revision: number) => string;
+  bpmnRequired: () => string;
+  bpmnWritten: (file: string) => string;
   // CLI chrome
   processToolUnknown: (sub: string, accepted: string) => string;
   scenarioUnknown: (sub: string, accepted: string) => string;
@@ -108,12 +118,30 @@ const en: AgentToolMessages = {
   createDirectory: (path) => `${path} is a directory; nothing was written.`,
   createModelUnparsable: (detail) => `the BPMN cannot be read; nothing was written: ${detail}`,
   createModelInvalid: (count, detail) =>
-    `the model has ${count} validation ${count === 1 ? 'error' : 'errors'}; nothing was written: ${detail}`,
+    `the model has ${count} validation ${count === 1 ? 'error' : 'errors'}; nothing was written: ${detail}. To keep it as a diagram that does not simulate, pass allowUnsimulatable (--allow-unsimulatable).`,
   createScenarioNotObject: (name) => `scenario "${name}" must be a JSON object.`,
   createScenarioDuplicate: (entry) => `two scenarios would be saved as ${entry}.`,
   createScenarioModel: (name, model) =>
     `scenario "${name}" points to the model "${model}"; inside a .lila it is "model.bpmn" (or leave it out).`,
   createEmptyName: () => 'the project needs a name.',
+  unsimulatableNote: (problem) => `does not simulate: ${problem}`,
+  putMode: (mode) => `mode must be "add" or "replace"; got "${mode}".`,
+  putNoProject: (path) =>
+    `${path} does not exist; nothing was written. put_process_bpmn adds to an existing .lila: create it first with create_project (or create_process).`,
+  putReplaceName: () => 'with mode "replace" the process keeps its name; `name` only names a process that is added. Nothing was written.',
+  putScenarioBroken: (detail) =>
+    `the new model would leave a scenario with errors it did not have; nothing was written:\n${detail}\nPass allowUnsimulatable (--allow-unsimulatable) to save it anyway.`,
+  putScenarioNote: (entry, problem) => `${entry} cannot run as it is: ${problem}`,
+  putSummary: (mode, dryRun, name, slug, file, revision) =>
+    mode === 'add'
+      ? dryRun
+        ? `Dry run: would add process "${name}" (${slug}) to ${file}. Nothing was written.`
+        : `Added process "${name}" (${slug}) to ${file}.`
+      : dryRun
+        ? `Dry run: would replace the model of process "${name}" (${slug}) in ${file} (revision ${revision}). Nothing was written.`
+        : `Replaced the model of process "${name}" (${slug}) in ${file}: revision ${revision}.`,
+  bpmnRequired: () => 'needs --bpmn <file.bpmn>.',
+  bpmnWritten: (file) => `BPMN: ${file}`,
   processToolUnknown: (sub, accepted) => `unknown subcommand "${sub}"; use ${accepted}.`,
   scenarioUnknown: (sub, accepted) => `unknown subcommand "${sub}"; use ${accepted}.`,
   badResponsibilityArgument: (value) => `--responsibility takes TYPE:role, such as R:cashier; got "${value}".`,
@@ -177,12 +205,30 @@ const es: AgentToolMessages = {
   createDirectory: (path) => `${path} es una carpeta; no se escribió nada.`,
   createModelUnparsable: (detail) => `el BPMN no se puede leer; no se escribió nada: ${detail}`,
   createModelInvalid: (count, detail) =>
-    `el modelo tiene ${count} ${count === 1 ? 'error' : 'errores'} de validación; no se escribió nada: ${detail}`,
+    `el modelo tiene ${count} ${count === 1 ? 'error' : 'errores'} de validación; no se escribió nada: ${detail}. Para guardarlo como diagrama que no se simula, pasa allowUnsimulatable (--allow-unsimulatable).`,
   createScenarioNotObject: (name) => `el escenario "${name}" debe ser un objeto JSON.`,
   createScenarioDuplicate: (entry) => `dos escenarios se guardarían como ${entry}.`,
   createScenarioModel: (name, model) =>
     `el escenario "${name}" apunta al modelo "${model}"; dentro de un .lila es "model.bpmn" (u omítelo).`,
   createEmptyName: () => 'el proyecto necesita un nombre.',
+  unsimulatableNote: (problem) => `no se simula: ${problem}`,
+  putMode: (mode) => `mode debe ser "add" o "replace"; llegó "${mode}".`,
+  putNoProject: (path) =>
+    `${path} no existe; no se escribió nada. put_process_bpmn añade a un .lila que ya existe: créalo antes con create_project (o create_process).`,
+  putReplaceName: () => 'con mode "replace" el proceso conserva su nombre; `name` solo nombra un proceso que se añade. No se escribió nada.',
+  putScenarioBroken: (detail) =>
+    `el modelo nuevo dejaría un escenario con errores que no tenía; no se escribió nada:\n${detail}\nPasa allowUnsimulatable (--allow-unsimulatable) para guardarlo de todos modos.`,
+  putScenarioNote: (entry, problem) => `${entry} no se puede correr así: ${problem}`,
+  putSummary: (mode, dryRun, name, slug, file, revision) =>
+    mode === 'add'
+      ? dryRun
+        ? `Simulacro: se añadiría el proceso "${name}" (${slug}) a ${file}. No se escribió nada.`
+        : `Añadido el proceso "${name}" (${slug}) a ${file}.`
+      : dryRun
+        ? `Simulacro: se reemplazaría el modelo del proceso "${name}" (${slug}) en ${file} (revisión ${revision}). No se escribió nada.`
+        : `Reemplazado el modelo del proceso "${name}" (${slug}) en ${file}: revisión ${revision}.`,
+  bpmnRequired: () => 'necesita --bpmn <archivo.bpmn>.',
+  bpmnWritten: (file) => `BPMN: ${file}`,
   processToolUnknown: (sub, accepted) => `subcomando desconocido "${sub}"; usa ${accepted}.`,
   scenarioUnknown: (sub, accepted) => `subcomando desconocido "${sub}"; usa ${accepted}.`,
   badResponsibilityArgument: (value) => `--responsibility recibe TIPO:rol, como R:cajero; llegó "${value}".`,
