@@ -543,6 +543,31 @@ perezosa; la demo en línea puede mantener un repositorio pequeño en memoria.
 No se decide aquí, y no se construye hasta que se pida uno por uno: los esquemas de mapas,
 análisis, dashboards y registros, el flujo de liberación, el CRDT del servidor.
 
+### Adenda (2026-09-26, actualizada 2026-10-14): orden de entrega y límites de contratos
+
+El [roadmap organizacional](ROADMAP.md) amplía esta dirección: repositorio y catálogo locales,
+seguidos de tablas/RACI/Insights, mapas, riesgos, análisis y modelos complementarios; después
+servidor/gobierno compartido. Sustituye la dependencia histórica del servidor para catálogo y
+repositorio local. De todo ello solo está entregado el repositorio de varios procesos descrito
+arriba; el resto está planeado. Su código empieza cuando el Lote R cierre la épica de agentes #527,
+y antes se fija el contrato por objeto (RM-01) en su propia ADR.
+
+Las referencias entre modelos necesitan contexto de modelo/versión e ID BPMN. Abrir v1 no lo
+reescribe; el contenido que requiere funciones de repositorio más allá de varios procesos
+(catálogo, adjuntos) se guarda como v2. Los adjuntos soportados requieren reglas explícitas de
+almacenamiento y conservación; el contenedor actual, versión 1 o 2, descarta lo que queda fuera de
+su layout. Las consultas documentales cubren todo BPMN, incluidos elementos fuera del perfil
+simulable. Un rol RACI no aporta implícitamente capacidad, coste ni calendario. Insights distingue
+evaluación manual, simulación y observación; sin dato no es cero, y asociar un control no prueba
+reducción de riesgo.
+
+El roadmap incluye modelado de decisiones futuro. DMN requiere una ADR de formato estándar antes
+de implementar; no modifica implícitamente la decisión de intercambio limitado a BPMN. La ejecución
+de workflows sigue externa, con adaptadores/API/MCP verificados. Propietario/estado local no es
+aprobación autenticada. RM-01 fija identidad de objetos, revisiones, representación de adjuntos,
+almacenamiento diferido y recuperación sobre el manifiesto versión 2. Los contratos de modelos,
+riesgos, indicadores, liberación y colaboración se especifican en sus fases correspondientes.
+
 ---
 
 ## ADR-030 — El servidor MCP es su propio paquete de npm, `@lila-modeler/mcp`

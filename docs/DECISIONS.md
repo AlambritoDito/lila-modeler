@@ -538,6 +538,32 @@ the online demo may keep a small repository in memory.
 Not decided here, and not built until asked for one by one: the schemas of maps, analyses,
 dashboards and records, the release workflow, the server's CRDT.
 
+### Addendum (2026-09-26, refreshed 2026-10-14): delivery sequence and contract boundaries
+
+The [organizational roadmap](ROADMAP.md) expands this direction: local repository and catalog,
+then editable tables/RACI/Insights, maps, risks, analysis and complementary models; shared
+server/governance follows. It supersedes the historical server-first dependency for catalog and
+local repository work. Of all this, only the multi-process repository described above has
+shipped; the rest is planned. Its code starts after Lote R closes the agent epic #527, and the
+per-object contract (RM-01) is settled first, in its own ADR.
+
+Cross-model references require model/version context plus the BPMN element ID. Opening v1 does
+not rewrite it; content that needs repository features beyond several processes (a catalog,
+attachments) is saved as v2. Supported attachments need explicit storage and preservation rules;
+today's archive, version 1 or 2, drops entries outside its layout. Documentation queries cover the
+complete BPMN, including elements outside the simulation profile. A RACI role never implicitly
+supplies simulation capacity, cost or a calendar. Insights distinguish manual assessments,
+simulation and observations; no data is not zero, and a linked control alone does not prove risk
+reduction.
+
+The roadmap includes decision modelling as future scope. DMN requires a separate standard-format
+ADR before implementation; it does not silently change the BPMN-only interchange decision above.
+Workflow execution stays external, through verified adapters/API/MCP. Local owner/status metadata
+is not authenticated release approval. The first implementation contract (RM-01) settles object
+identity, revisions, attachment representation, lazy storage and recovery on top of the version 2
+manifest. Later model, risk, indicator, release and collaboration contracts remain deferred to
+their respective phases.
+
 ---
 
 ## ADR-030 — The MCP server is its own npm package, `@lila-modeler/mcp`

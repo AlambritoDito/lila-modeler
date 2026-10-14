@@ -253,6 +253,9 @@ English is the base language; Spanish versions live under `docs/es/`.
 - [`MCP.md`](docs/MCP.md) — the MCP server and its eighteen tools.
 - [`THEMES.md`](docs/THEMES.md) — the theme format.
 - [`DECISIONS.md`](docs/DECISIONS.md) — architecture decision records (ADR-001 … ADR-031).
+- [`ROADMAP.md`](docs/ROADMAP.md) — the organizational roadmap: planned repository, catalog,
+  tables, RACI, Insights, maps, risks and governance; current gaps and phased acceptance
+  (research notes in [`docs/research/`](docs/research/README.md)).
 - [`BIZAGI_PARITY.md`](docs/BIZAGI_PARITY.md) — reference behaviour checklist and documented
   differences.
 - [`COMING-FROM-BIZAGI.md`](docs/COMING-FROM-BIZAGI.md) — screen-by-screen guide for Bizagi users.
@@ -274,6 +277,8 @@ Open epics, in [GitHub Issues](https://github.com/AlambritoDito/lila-modeler/iss
 - **#336** — trust and adoption: getting-started guide, signing and notarization (#109), publishing
   `@lila-modeler/engine` on npm (#48), usability validation.
 - **#125** — self-hosted server. **#130** — process mining (parameters from event logs).
+- **#497** — the organizational repository in the spirit of ADONIS (catalog, RACI, process maps,
+  risks and controls), starting after the agent epic #527: see [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Contributing
 

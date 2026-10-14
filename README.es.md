@@ -265,6 +265,9 @@ El inglés es el idioma base; las versiones en español viven en `docs/es/`.
 - [`THEMES.md`](docs/es/THEMES.md) — el formato de tema.
 - [`DECISIONS.md`](docs/es/DECISIONS.md) — registros de decisiones de arquitectura (ADR-001 …
   ADR-031).
+- [`ROADMAP.md`](docs/es/ROADMAP.md) — el roadmap organizacional: repositorio, catálogo, tablas,
+  RACI, Insights, mapas, riesgos y gobierno planeados; brechas actuales y aceptación por fases
+  (notas de investigación en [`docs/es/research/`](docs/es/research/README.md)).
 - [`BIZAGI_PARITY.md`](docs/es/BIZAGI_PARITY.md) — checklist de comportamiento de referencia y
   diferencias documentadas.
 - [`COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md) — guía pantalla por pantalla para
@@ -290,6 +293,9 @@ El inglés es el idioma base; las versiones en español viven en `docs/es/`.
   `@lila-modeler/engine` en npm (#48), validación de usabilidad.
 - **#125** — servidor autoalojado. **#130** — minería de procesos (parámetros desde logs de
   eventos).
+- **#497** — el repositorio organizacional al estilo de ADONIS (catálogo, RACI, mapas de procesos,
+  riesgos y controles), que empieza tras la épica de agentes #527: ver
+  [`docs/es/ROADMAP.md`](docs/es/ROADMAP.md).
 
 ## Cómo contribuir
 
