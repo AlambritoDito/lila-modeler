@@ -76,7 +76,7 @@ Dos tipos de archivo se registran en Finder y abren esta app con doble clic (ver
 
 **Respaldo**: guarda una copia del `.lila` (o de la carpeta de proyecto) antes de ediciones
 grandes — la app no versiona tu trabajo más allá del flujo de «Guardar como…». El almacenamiento
-local del navegador en la demo web no es un respaldo: vive solo en el almacenamiento de ese
+local del navegador en la app web no es un respaldo: vive solo en el almacenamiento de ese
 navegador en esa máquina, y se pierde si borras los datos del sitio o cambias de navegador o
 perfil. Trata un `.lila` descargado como la copia durable.
 

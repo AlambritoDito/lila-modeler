@@ -1,4 +1,4 @@
-# GitHub Pages demo
+# GitHub Pages web app
 
 The live public address is `https://alambritodito.github.io/lila-modeler/`.
 The landing page lives at that root and links to the app at `app/`. The owner authorized the first
@@ -68,7 +68,7 @@ read access to repository contents. No npm token or backend server is required.
 
 ## Publishing from a release tag (owner action)
 
-For a tagged release such as `v1.0.0-beta.1`, publish the landing and demo that match that exact
+For a tagged release such as `v1.0.0-beta.1`, publish the landing and web app that match that exact
 tag, rather than whatever is currently on `main`. This requires `pages.yml`'s `deploy` job to
 accept `main` or a `v*` tag ref (workflow #382) and the `github-pages` environment to carry a tag
 deployment policy of `v*` — both added by the owner/lead. The procedure:
