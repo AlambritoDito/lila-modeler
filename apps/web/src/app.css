@@ -3067,6 +3067,9 @@ button.gcal-uso-fila:hover {
 /* El botón «Acerca de Lila Modeler» vive aquí, junto al título (pedido del dueño, 2026-09-22). */
 .ajustes-encabezado { align-items: center; border-bottom: 1px solid var(--border); display: flex; flex: none; gap: 12px; justify-content: space-between; padding: calc(16px * var(--espacio, 1)) 24px; }
 .ajustes-encabezado h2 { font-size: 1em; margin: 0; }
+/* «Report a problem…» (a link, #651) beside «About»: same box as the button, no underline. */
+.ajustes-encabezado-acciones { display: flex; flex: none; gap: 8px; }
+.ajustes-encabezado-acciones a.boton { text-decoration: none; }
 .ajustes-cuerpo { display: flex; flex: 1 1 auto; min-height: 0; }
 /* `border-box`: the 200 px of the artboard are the whole rail, its padding and divider included
    (it measured ~225 px with the default `content-box`, QA of #437 N3; #441). */
