@@ -53,6 +53,7 @@ test('`lila mcp` sirve sus tools por stdio', async () => {
     'compare_scenarios',
     'create_process',
     'create_project',
+    'define_attribute',
     'describe_process',
     'edit_process',
     'export_diagram',

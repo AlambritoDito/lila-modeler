@@ -3,7 +3,7 @@
 > Leer en: [English](../MCP.md)
 
 `packages/mcp` (`@lila-modeler/mcp`) es un servidor [MCP](https://modelcontextprotocol.io) por stdio sobre
-`@lila-modeler/engine`, sin lógica propia: veinte tools, sobre el mismo pipeline de validación y
+`@lila-modeler/engine`, sin lógica propia: veintiuna tools, sobre el mismo pipeline de validación y
 simulación que la CLI — ver [`docs/es/CLI.md`](CLI.md) para ese mismo pipeline manejado desde una
 terminal en vez de un cliente MCP.
 
@@ -111,6 +111,10 @@ mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
   escribe la descripción, el RACI, las referencias al catálogo y los atributos extendidos de un
   elemento de un proceso de un `.lila`. Devuelve
   `{ file, process, elementId, documentationOn?, dryRun, changed, written, before, after }`.
+- **`define_attribute({ project, process?, id?, name?, type?, appliesTo?, options?, default?, remove?, dryRun?, locale? })`**
+  (#633) — define, cambia o quita un atributo extendido de un proceso de un `.lila`, el que luego
+  rellena `annotate_element`. Devuelve
+  `{ file, process, dryRun, changed, written, before, after, removedValues, definitions }`.
 - **`get_raci_matrix({ project, process?, locale? })`** — devuelve la matriz RACI del proceso:
   `{ file, process, roles, rows }`.
 - **`import_scenario_sheet({ project, process?, scenario, sheet, dryRun?, locale? })`** — aplica
@@ -134,7 +138,7 @@ mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
   reemplaza el modelo de uno (`mode: "replace"`). Devuelve `{ file, mode, slug, name, processId,
   revision, dryRun, laidOut, summary, scenarioRemovals, notes, warnings, slugs }`.
 
-Las tres de exportación se explican en [Exportar sin la app](#exportar-sin-la-app); las cinco
+Las tres de exportación se explican en [Exportar sin la app](#exportar-sin-la-app); las seis
 siguientes en [Herramientas de modelado para agentes](#herramientas-de-modelado-para-agentes);
 `get_project` y `get_scenario` en [Leer un proyecto](#leer-un-proyecto); las dos últimas en
 [El BPMN de un proceso](#el-bpmn-de-un-proceso).
@@ -193,7 +197,9 @@ descubrir sus procesos, escenarios y corridas por los errores de otras tools.
   un repositorio de varios procesos y 1 si no. Cada proceso trae `slug` (lo que recibe `process`),
   `name`, `processId` (su `bpmn:process`), `modelRevision`, `elements` (nodos de flujo: tareas,
   eventos, compuertas; `null` si el modelo no se puede leer), `scenarios` (`entry`, `name`,
-  `revision`, `extends`) y `runs` (`id`, `scenario`, `start`, `replications`, `current`). Una
+  `revision`, `extends`), `runs` (`id`, `scenario`, `start`, `replications`, `current`) y
+  `attributes`, los atributos extendidos que define (`id`, `name`, `type`, `appliesTo`, `default?`,
+  `options?`; `null` si el modelo no se puede releer entero). Una
   corrida tiene `current: false` (obsoleta) cuando el modelo o su escenario cambiaron después de
   ella: `export_results` y `export_document` solo la toman por id. Un `.lila` no guarda la fecha en
   que se tomó una corrida; `start` es el inicio simulado (`run.start`) del escenario que corrió.
@@ -402,10 +408,10 @@ id. Los pasos conservan el orden del documento.
 
 ## Herramientas de modelado para agentes
 
-`annotate_element`, `get_raci_matrix`, `import_scenario_sheet`, `export_scenario_template` y
-`create_project` (#99, #403, #514) dejan que un agente construya y documente un proyecto sin la
-app. La CLI tiene las cuatro primeras como `lila process annotate|raci` y
-`lila scenario import|template` (`docs/es/CLI.md`). Toda escritura pasa por el mismo guardado
+`annotate_element`, `define_attribute`, `get_raci_matrix`, `import_scenario_sheet`,
+`export_scenario_template` y `create_project` (#99, #633, #403, #514) dejan que un agente construya
+y documente un proyecto sin la app. La CLI tiene las cinco primeras como
+`lila process annotate|attribute|raci` y `lila scenario import|template` (`docs/es/CLI.md`). Toda escritura pasa por el mismo guardado
 atómico y con candado del `.lila` que `patch_scenario` (ver
 [Un `.lila` como entrada](#un-lila-como-entrada)): solo cambia el proceso tocado, los demás pasan
 byte a byte, y una entrada inválida es `isError` sin escribir nada. `dryRun: true` responde qué
@@ -427,6 +433,23 @@ cambiaría y no escribe nada.
   `documentationOn`), y un proceso dentro de un pool guarda su RACI y sus referencias en el pool,
   así que `responsibilities` o `refs` sobre ese proceso se rechazan con un mensaje que nombra el
   pool.
+- **`define_attribute`** declara un atributo extendido (#633) para que `annotate_element` lo
+  rellene: `get_project` lista los que define cada proceso. Se pasa siempre la definición entera:
+  `name`, `type` (`text`, `number`, `list`, `date`), `appliesTo` (`task`, `gateway`, `event`,
+  `subProcess`, `lane` para pools y carriles, `process`), y `options` y `default` si los tiene.
+  Cambia la definición con ese `id`; sin `id`, la que tiene ese nombre (sin distinguir mayúsculas)
+  y ese `appliesTo`; si no hay, crea una con un id determinista, `Attr_` y el nombre en ASCII
+  minúsculo (`"SLA (h)"` → `Attr_sla_h`, luego `_2`… si ya existe), así que un simulacro y la
+  escritura la nombran igual y repetir la llamada no cambia nada (`changed: false`). Las reglas son
+  las del diálogo de atributos de la app: un nombre único por tipo de elemento (sin distinguir
+  mayúsculas), una `list` con al menos una opción (recortadas y sin repetidas), `options` solo en
+  una `list` y un `default` que encaje con el tipo. Las definiciones se escriben en la
+  `bpmn:collaboration` (si no, en el proceso), y las copias que haya en otro sitio se mueven ahí
+  (`docs/es/BPMN_EXTENSION.md`). Renombrar conserva todos los valores. `remove: true` (con `id`, o
+  con `name` y `appliesTo`) quita la definición y sus valores; cambiar el tipo, el `appliesTo` o
+  quitar opciones quita los valores que ya no encajan, como el «limpiar» de la app. En los dos
+  casos `removedValues` los lista (`[{ elementId, value }]`), también en un `dryRun`;
+  `definitions` es la lista entera del proceso después.
 - **`get_raci_matrix`** lista lo que el documento del proceso (`export_document`) lista en
   «Responsabilidades (RACI)», en el mismo orden: una fila por elemento con responsabilidades, con
   su `id`, `name`, `lane` (si tiene), las `responsibilities` tal cual y `cells` (rol → `"R"`, o
@@ -464,6 +487,16 @@ cambiaría y no escribe nada.
 { "name": "annotate_element", "arguments": { "project": "proyecto.lila", "elementId": "Task_TomarPedido",
   "documentation": "Toma el pedido en el mostrador.", "responsibilities": [{ "type": "R", "roleRef": "cajero" }, { "type": "A", "roleRef": "gerente" }],
   "refs": { "systemRef": ["POS"] }, "locale": "es" } }
+```
+
+```json
+{ "name": "define_attribute", "arguments": { "project": "proyecto.lila", "name": "Nivel de riesgo", "type": "list",
+  "appliesTo": "task", "options": ["Bajo", "Alto"], "default": "Bajo" } }
+```
+
+```json
+{ "name": "annotate_element", "arguments": { "project": "proyecto.lila", "elementId": "Task_TomarPedido",
+  "attributes": { "Nivel de riesgo": "Alto" } } }
 ```
 
 ```json

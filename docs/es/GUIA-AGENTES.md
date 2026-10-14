@@ -122,6 +122,20 @@ importado de Bizagi; `warnings` dice lo que un esquema no puede llevar.
 atributos extendidos de un elemento, por su id BPMN. `get_raci_matrix` devuelve la matriz que
 imprimirá el documento. Las dos son opcionales; el documento sale mejor con ellas.
 
+Un atributo extendido (un SLA, un nivel de riesgo…) tiene que estar definido antes de que un
+elemento tenga un valor para él. `define_attribute` lo define una vez por tipo de elemento, con las
+reglas del diálogo de la app, y `get_project` lista los que define cada proceso:
+
+```json
+{ "name": "define_attribute", "arguments": { "project": "tarjeta.lila", "name": "Nivel de riesgo", "type": "list",
+  "appliesTo": "task", "options": ["Bajo", "Medio", "Alto"] } }
+```
+
+Luego `annotate_element` lo rellena por nombre, `"attributes": { "Nivel de riesgo": "Alto" }`, y
+el documento del proceso lo imprime bajo el elemento. Repetir `define_attribute` con la misma
+definición no cambia nada; cambiarle el tipo o quitarle opciones quita los valores que ya no
+encajan, y `removedValues` dice cuáles.
+
 ### 5. El escenario
 
 El escenario base `as-is.scenario.json` empieza con los valores por defecto de la app (20 casos,

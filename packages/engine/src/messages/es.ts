@@ -58,6 +58,12 @@ const ES_USAGE = `Uso: lila validate <archivo.bpmn|proyecto.lila> [--process slu
      lila process export-bpmn -p <proyecto.lila> [--process slug] [--out archivo.bpmn] [--force]
      lila process import -p <proyecto.lila> --bpmn <archivo.bpmn> [--replace] [--process slug]
                          [--name nombre] [--no-layout] [--allow-unsimulatable] [--dry-run] [--json]
+     lila process attribute define <proyecto.lila> --name nombre --type text|number|list|date
+                                   --applies-to task|gateway|event|subProcess|lane|process
+                                   [--option valor ...] [--default valor] [--id id]
+                                   [--process slug] [--dry-run] [--json]
+     lila process attribute define <proyecto.lila> --remove --id id|--name nombre --applies-to tipo
+     lila process attribute list <proyecto.lila> [--process slug] [--json]
      lila scenario import <proyecto.lila> <escenario> <hoja.xlsx|hoja.csv> [--process slug]
                           [--dry-run] [--json]
      lila scenario template <proyecto.lila> <escenario> --out hoja.xlsx [--process slug] [--force]
@@ -78,6 +84,7 @@ Comandos:
              los atributos extendidos de un elemento. raci: imprime la matriz RACI del documento.
              export-bpmn: imprime o escribe el BPMN de un proceso. import: añade un .bpmn como
              proceso nuevo de un .lila, o con --replace reemplaza el modelo de uno.
+             attribute: define (o quita) un atributo extendido, o los lista.
   scenario   import: aplica una hoja de escenario (.xlsx/.csv) a un escenario del .lila, como
              Importar Excel/CSV de la app. template: escribe esa hoja, rellenada, para una persona.
              show: imprime un escenario como está guardado (o --resolved) con las notas del validador.
@@ -154,6 +161,14 @@ Opciones de process import:
   --allow-unsimulatable  Guarda un modelo con errores de validación, como diagrama que no se
                     simula; los errores salen como notas.
   --dry-run         Comprueba todo y no escribe nada.
+
+Opciones de process attribute define:
+  --name, --type, --applies-to  La definición entera, siempre; se busca por --id, si no por nombre
+                    (sin mayúsculas) y --applies-to, y si no se crea con un id nuevo.
+  --option v        Una opción de una lista; repetible. --default v: lo que muestra un elemento sin valor.
+  --remove          Quita la definición y sus valores. Cambiar el tipo, --applies-to o quitar
+                    opciones también quita los valores que ya no encajan; los dos casos los listan.
+  --dry-run         Muestra el resultado sin escribir.
 
 Opciones de scenario import:
   --dry-run         Muestra los cambios previstos y las filas no aplicadas sin escribir.
@@ -558,7 +573,7 @@ export const es: Catalog = {
       `Proceso "${name}" (${slug}) creado en ${newFile ? 'el archivo nuevo ' : ''}${file}: ${n(steps, 'paso', 'pasos')}, ${n(lanes, 'carril', 'carriles')}, escenario base as-is.scenario.json.`,
     processDryRun: (name, slug, file, steps, lanes, newFile) =>
       `Simulacro: se crearía el proceso "${name}" (${slug}) en ${newFile ? 'el archivo nuevo ' : ''}${file}: ${n(steps, 'paso', 'pasos')}, ${n(lanes, 'carril', 'carriles')}. No se escribió nada.`,
-    processUnknownSubcommand: (sub) => `subcomando desconocido "${sub}"; usa create, show, edit, annotate, raci, export-bpmn o import.`,
+    processUnknownSubcommand: (sub) => `subcomando desconocido "${sub}"; usa create, show, edit, annotate, raci, export-bpmn, import o attribute.`,
     processMissingOption: (option) => `falta ${option}.`,
     processShowHeader: (name, slug) => `Proceso "${name}" (${slug})`,
     processShowLanes: (lanes) => `Carriles: ${lanes}`,

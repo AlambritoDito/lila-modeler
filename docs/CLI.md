@@ -203,6 +203,38 @@ npx lila process raci examples/pedido.lila --json
 ```
 Exit code: `0`.
 
+## `process attribute` (#633)
+
+Define the extended attributes an element can then have (`--attribute` above), as the app's
+attribute dialog does, and list them:
+
+- `lila process attribute define <project.lila> --name <name> --type text|number|list|date
+  --applies-to task|gateway|event|subProcess|lane|process` defines one, with `--option <value>`
+  (repeatable) for a list and `--default <value>`. Pass the whole definition every time. It
+  changes the definition with `--id`; without it, the one with that name (any case) for that
+  element type; else it creates one with a deterministic id, `Attr_` and the name in lowercase
+  ASCII (`SLA (h)` → `Attr_sla_h`), so running it again changes nothing. The rules are the
+  dialog's: a name unique per element type, a list with at least one option, options only on a
+  list, a default that fits. `--remove` (with `--id`, or `--name` and `--applies-to`) removes the
+  definition and its values; retyping it, changing `--applies-to` or dropping options removes the
+  values that no longer fit. It prints the definition and each value removed; `--json` prints
+  `{ file, process, dryRun, changed, written, before, after, removedValues, definitions }`.
+- `lila process attribute list <project.lila>` prints the definitions of the process; `--json`
+  prints `{ file, process, definitions }`.
+
+`--dry-run` shows the result, values to remove included, and writes nothing. A write saves the
+`.lila` as `process annotate` does.
+
+```bash
+npx lila process attribute define examples/pedido.lila --name SLA --type number --applies-to task --default 24 --dry-run
+```
+Exit code: `0`.
+
+```bash
+npx lila process attribute list examples/pedido.lila --json
+```
+Exit code: `0`.
+
 ## `scenario import` and `scenario template` (#514)
 
 The app's «Download template» and «Import Excel/CSV…» (`docs/SCENARIO_SHEETS.md`) on a scenario
@@ -242,7 +274,9 @@ What a `.lila` holds, read without writing anything — no write, no revision ch
   keeps no date of when a run was taken; `start` is the `run.start` of the scenario it ran.
   `--json` prints `{ file, name, formatVersion, processes: [{ slug, name, processId,
   modelRevision, elements, scenarios: [{ entry, name, revision, extends }], runs: [{ id,
-  scenario, start, replications, current }] }] }`.
+  scenario, start, replications, current }], attributes }] }`, where `attributes` are the
+  extended attribute definitions of the process (see `process attribute`), `null` when the model
+  cannot be read back whole.
 - `lila scenario show <project.lila> <scenario>` prints the scenario as stored (with its
   `extends`), or with `--resolved` merged through `extends` with the engine's defaults — the
   object `patch_scenario` patches, `model` relative to the scenario. Then the validator's notes

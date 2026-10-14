@@ -104,7 +104,7 @@ export interface LilaTarget {
 const RACI_TYPES = ['R', 'A', 'C', 'I'] as const;
 
 /** `annotatableElements` and `readAnnotations`, with bpmn-moddle's content loss in the caller's language. */
-async function readElements(
+export async function readElements(
   xml: string,
   locale: Locale,
 ): Promise<{ elements: Record<string, AnnotatableElement>; annotations: Record<string, Annotations> }> {
@@ -122,13 +122,13 @@ function definitionsOf(annotations: Readonly<Record<string, Annotations>>): Attr
 }
 
 /** `id (name)` of every definition, for an error that has to list them. */
-function definitionList(definitions: readonly AttributeDefinition[], locale: Locale): string {
+export function definitionList(definitions: readonly AttributeDefinition[], locale: Locale): string {
   if (definitions.length === 0) return agentToolMessages(locale).none();
   return definitions.map((d) => (d.name === '' || d.name === d.id ? d.id : `${d.id} (${d.name})`)).join(', ');
 }
 
 /** `document` with `slug`'s model replaced by `xml`, its revision one up (as the app's save does). */
-function withModelXml(document: ProjectDocument, slug: string, xml: string): ProjectDocument {
+export function withModelXml(document: ProjectDocument, slug: string, xml: string): ProjectDocument {
   const processes = processesOf(document).map((p): ProcessDocument =>
     p.slug !== slug ? p : { ...p, model: { ...p.model, xml, revision: p.model.revision + 1 } },
   );

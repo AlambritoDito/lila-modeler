@@ -1,18 +1,20 @@
 /**
  * `lila process annotate|raci` (#99), `lila scenario import|template` (#514), the read-only
- * `lila project show` and `lila scenario show` (#628) and `lila process export-bpmn|import` (#632):
- * the CLI side of the MCP tools `annotate_element`, `get_raci_matrix`, `import_scenario_sheet`,
- * `export_scenario_template`, `get_project`, `get_scenario`, `get_process_bpmn` and
- * `put_process_bpmn`, over the same `@lila-modeler/engine/project-fs` functions. Kept out
- * of `cli.ts` so that file only dispatches here.
+ * `lila project show` and `lila scenario show` (#628), `lila process export-bpmn|import` (#632) and
+ * `lila process attribute define|list` (#633): the CLI side of the MCP tools `annotate_element`,
+ * `get_raci_matrix`, `import_scenario_sheet`, `export_scenario_template`, `get_project`,
+ * `get_scenario`, `get_process_bpmn`, `put_process_bpmn` and `define_attribute`, over the same
+ * `@lila-modeler/engine/project-fs` functions. Kept out of `cli.ts` so that file only dispatches here.
  */
 import { parseArgs } from 'node:util';
 
-import type { Annotations, Responsibility } from './bpmn/index.js';
+import type { Annotations, AttributeDefinition, Responsibility } from './bpmn/index.js';
 import { agentToolMessages, messages, type Locale } from './messages/index.js';
 import {
   annotateLilaElement,
+  defineLilaAttribute,
   importLilaScenarioSheet,
+  lilaAttributeList,
   lilaProjectInventory,
   lilaRaciMatrix,
   lilaScenarioTemplate,
@@ -26,12 +28,13 @@ import {
 } from './project-fs/index.js';
 
 /** The `process` subcommands this file answers. */
-export const PROCESS_TOOL_SUBCOMMANDS = ['annotate', 'raci', 'export-bpmn', 'import'] as const;
+export const PROCESS_TOOL_SUBCOMMANDS = ['annotate', 'raci', 'export-bpmn', 'import', 'attribute'] as const;
 
 /** Options of `lila process` (any subcommand) that take a value, so their value is not a subcommand. */
 const PROCESS_VALUE_OPTIONS = new Set([
   '--outline', '--project', '-p', '--process', '--name',
   '--documentation', '--responsibility', '--ref', '--attribute', '--bpmn', '--out',
+  '--id', '--type', '--applies-to', '--option', '--default',
 ]);
 
 /** Index of the subcommand in `lila process …` arguments: the first positional, past any option. */
@@ -240,7 +243,76 @@ async function importBpmnCommand(argv: readonly string[], locale: Locale): Promi
   return 0;
 }
 
-/** `lila process annotate|raci|export-bpmn|import`. */
+/** One definition per line, as `lila process attribute list` and `lila project show` print it. */
+function printDefinitions(definitions: readonly AttributeDefinition[], indent: string, locale: Locale): void {
+  const T = agentToolMessages(locale);
+  for (const d of definitions) {
+    console.log(`${indent}${T.attributeLine(d.id, d.name, d.type, d.appliesTo, d.options === undefined ? null : d.options.join(', '), d.default ?? null)}`);
+  }
+}
+
+/** `lila process attribute define|list` (#633). */
+async function attributeCommand(argv: readonly string[], locale: Locale): Promise<number> {
+  const T = agentToolMessages(locale);
+  const C = messages(locale).cli;
+  const { values, positionals } = parseArgs({
+    args: [...argv],
+    options: {
+      process: { type: 'string' },
+      id: { type: 'string' },
+      name: { type: 'string' },
+      type: { type: 'string' },
+      'applies-to': { type: 'string' },
+      option: { type: 'string', multiple: true },
+      default: { type: 'string' },
+      remove: { type: 'boolean' },
+      'dry-run': { type: 'boolean' },
+      json: { type: 'boolean' },
+    },
+    allowPositionals: true,
+  });
+  const [sub, file, ...extra] = positionals;
+  if (sub !== 'define' && sub !== 'list') {
+    return usageError('process attribute', T.processToolUnknown(sub ?? '', 'define, list'), locale);
+  }
+  if (file === undefined || extra.length > 0) return usageError(`process attribute ${sub}`, C.expectedPositionals('<project.lila>'), locale);
+  if (sub === 'list') {
+    const list = await lilaAttributeList({ file, process: values.process, locale });
+    if (values.json === true) console.log(JSON.stringify(list, null, 2));
+    else if (list.definitions.length === 0) console.log(T.attributeListEmpty(list.process));
+    else printDefinitions(list.definitions, '', locale);
+    return 0;
+  }
+  const result = await defineLilaAttribute({
+    file,
+    process: values.process,
+    id: values.id,
+    name: values.name,
+    type: values.type,
+    appliesTo: values['applies-to'],
+    options: values.option,
+    default: values.default,
+    remove: values.remove === true,
+    dryRun: values['dry-run'] === true,
+    locale,
+  });
+  if (values.json === true) {
+    console.log(JSON.stringify(result, null, 2));
+    return 0;
+  }
+  const done = result.after === null
+    ? T.attributeRemoved(result.before?.id ?? values.id ?? values.name ?? '', result.file)
+    : T.attributeSaved(result.after.name, result.after.id, result.file);
+  console.log(!result.changed ? T.attributeNoChange() : result.dryRun ? T.attributeDryRun() : done);
+  if (result.after !== null) printDefinitions([result.after], '  ', locale);
+  if (result.removedValues.length > 0) {
+    console.log(T.attributeRemovedValues(result.removedValues.length));
+    for (const { elementId, value } of result.removedValues) console.log(`  ${elementId}: ${value}`);
+  }
+  return 0;
+}
+
+/** `lila process annotate|raci|export-bpmn|import|attribute`. */
 export async function dispatchProcessTools(argv: readonly string[], locale: Locale): Promise<number> {
   if (wantsHelp(argv)) return help(locale);
   const index = subcommandIndex(argv);
@@ -250,6 +322,7 @@ export async function dispatchProcessTools(argv: readonly string[], locale: Loca
   if (sub === 'raci') return raciCommand(rest, locale);
   if (sub === 'export-bpmn') return exportBpmnCommand(rest, locale);
   if (sub === 'import') return importBpmnCommand(rest, locale);
+  if (sub === 'attribute') return attributeCommand(rest, locale);
   return usageError('process', agentToolMessages(locale).processToolUnknown(sub ?? '', PROCESS_TOOL_SUBCOMMANDS.join(', ')), locale);
 }
 
@@ -353,6 +426,8 @@ function printInventory(inventory: LilaProjectInventory, locale: Locale): void {
     }
     console.log(T.projectShowRuns(process.runs.length));
     for (const run of process.runs) console.log(`    ${run.id}  ${run.scenario}  ${T.projectShowRun(run.replications, run.start, run.current)}`);
+    console.log(T.projectShowAttributes(process.attributes === null ? null : process.attributes.length));
+    printDefinitions(process.attributes ?? [], '    ', locale);
   }
 }
 

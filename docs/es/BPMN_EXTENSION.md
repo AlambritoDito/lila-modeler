@@ -125,6 +125,12 @@ viajan con el proceso y el contenedor del proyecto no cambia.
   (editado a mano, otra herramienta) se conserva: se enseña con su `ref` en el panel y en el
   documento del proceso, nunca se pierde; varios valores del mismo atributo en un elemento se
   enseñan todos.
+- Sin la app, la tool MCP `define_attribute` y `lila process attribute define|list` (#633) las
+  definen con las mismas reglas y en el mismo lugar canónico (moviendo ahí las copias sueltas). Sus
+  ids nuevos son deterministas, `Attr_` y el nombre en ASCII minúsculo (`Attr_sla_h`, luego
+  `_2`…), no el sufijo al azar de la app; los dos son NCName y los lectores no los distinguen. No
+  preguntan: quitar una definición quita sus valores, y cambiar el tipo, el `appliesTo` o quitar
+  opciones quita los valores que ya no encajan, y cada uno sale en `removedValues`.
 - Las definiciones no se mueven cuando entran o salen pools: añadir el primer pool o borrar el
   último las lleva a la nueva raíz, borrar un pool cuyo proceso todavía las tenía las pasa antes a
   la colaboración, y pegar un pool nunca las copia (repetiría cada `id`). Una tarea dentro de un
