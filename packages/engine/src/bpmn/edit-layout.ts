@@ -433,23 +433,51 @@ export class Diagram {
 
   /**
    * Moves everything of `plane` at or below `fromY` down by `dy`; pools and lanes across it grow, and
-   * so do the shapes of the elements in `grow` (a lane whose bottom is `fromY`, say).
+   * so do the shapes of the elements in `grow` (a lane whose bottom is `fromY`, say). A boundary
+   * event moves when its host does, wherever it starts (QA of #661, round 3: one left in the lane
+   * its host had left was moved, then moved back by its host's delta). A sequence flow with an end
+   * that moved and an end point that did not (or the other way round) is routed again.
    */
   shiftDown(plane: El, fromY: number, dy: number, skip: ReadonlySet<El> = new Set(), grow: ReadonlySet<El> = new Set()): void {
-    for (const di of (plane['planeElement'] ?? []) as El[]) {
+    const elements = (plane['planeElement'] ?? []) as El[];
+    const goes = (di: El | undefined): boolean =>
+      di !== undefined && !skip.has(di) && !grow.has(di['bpmnElement']) && (di['bounds'] as Box).y >= fromY;
+    // Decided before anything moves, so a host that moved first still takes its boundary events.
+    const moving = new Set(
+      elements.filter((di) => {
+        if (di.$type !== 'bpmndi:BPMNShape') return false;
+        const host = di['bpmnElement']?.['attachedToRef'] as El | undefined;
+        const hostDi = host === undefined ? undefined : this.shapes.get(host.id);
+        return hostDi === undefined ? goes(di) : !skip.has(di) && goes(hostDi);
+      }),
+    );
+    const ends: { flow: El; first: boolean; last: boolean }[] = [];
+    for (const di of elements) {
       if (skip.has(di)) continue;
       if (di.$type === 'bpmndi:BPMNShape') {
         const b = di['bounds'] as Box;
         if (grow.has(di['bpmnElement'])) b.height += dy;
-        else if (b.y >= fromY) {
+        else if (moving.has(di)) {
           b.y += dy;
           this.moved.add(di['bpmnElement'].id);
           if (di['label']?.['bounds'] !== undefined) di['label']['bounds'].y += dy;
         } else if (this.isContainer(di) && bottom(b) > fromY) b.height += dy;
       } else if (di.$type === 'bpmndi:BPMNEdge') {
-        for (const p of (di['waypoint'] ?? []) as Point[]) if (p.y >= fromY) p.y += dy;
+        const points = (di['waypoint'] ?? []) as Point[];
+        const shifted = points.map((p) => p.y >= fromY);
+        points.forEach((p, i) => {
+          if (shifted[i]) p.y += dy;
+        });
         if (di['label']?.['bounds'] !== undefined && di['label']['bounds'].y >= fromY) di['label']['bounds'].y += dy;
+        if (di['bpmnElement']?.$type === 'bpmn:SequenceFlow' && points.length > 0) ends.push({ flow: di['bpmnElement'], first: shifted[0]!, last: shifted[points.length - 1]! });
       }
+    }
+    const went = (el: El | undefined): boolean => {
+      const di = el === undefined ? undefined : this.shapes.get(el.id);
+      return di !== undefined && moving.has(di);
+    };
+    for (const { flow, first, last } of ends) {
+      if (first !== went(flow['sourceRef']) || last !== went(flow['targetRef'])) this.routeFlow(flow);
     }
   }
 
@@ -834,6 +862,21 @@ function besideAnchor(el: El, at: Box, top: number, gap = 40): { box: Box; step:
     : { box: { x: center(at).x - size.width / 2, y: bottom(at) + gap, ...size }, step: { x: size.width + 20, y: 0 } };
 }
 
+/** The pools and lanes of `plane` around the centre of `at`. */
+function bandsAround(plane: El, at: Box): El[] {
+  const c = center(at);
+  return ((plane['planeElement'] ?? []) as El[]).filter((di) => {
+    if (di.$type !== 'bpmndi:BPMNShape' || !(is(di['bpmnElement'], 'bpmn:Participant') || is(di['bpmnElement'], 'bpmn:Lane'))) return false;
+    const b = di['bounds'] as Box;
+    return b.x <= c.x && c.x <= right(b) && b.y <= c.y && c.y <= bottom(b);
+  });
+}
+
+/** The innermost (lowest) of `bands`. */
+function leafOf(bands: readonly El[]): Box | undefined {
+  return bands.map((di) => di['bounds'] as Box).reduce<Box | undefined>((a, b) => (a === undefined || b.height < a.height ? b : a), undefined);
+}
+
 /**
  * QA of #661: keeps the data object or data store `el` in the band (lane, else pool) of the node
  * drawn at `at`, as bpmn-js's editor does. One that sits in another band goes back below the node;
@@ -844,14 +887,9 @@ function besideAnchor(el: El, at: Box, top: number, gap = 40): { box: Box; step:
 export function keepInBand(diagram: Diagram, plane: El, el: El, at: Box): void {
   const box = diagram.bounds(el.id);
   if (box === undefined || el.$type === 'bpmn:TextAnnotation') return;
-  const c = center(at);
-  const around = ((plane['planeElement'] ?? []) as El[]).filter((di) => {
-    if (di.$type !== 'bpmndi:BPMNShape' || !(is(di['bpmnElement'], 'bpmn:Participant') || is(di['bpmnElement'], 'bpmn:Lane'))) return false;
-    const b = di['bounds'] as Box;
-    return b.x <= c.x && c.x <= right(b) && b.y <= c.y && c.y <= bottom(b);
-  });
+  const around = bandsAround(plane, at);
   if (around.length === 0) return;
-  const leaf = around.map((di) => di['bounds'] as Box).reduce((a, b) => (b.height < a.height ? b : a));
+  const leaf = leafOf(around)!;
   let next: Box = { ...box };
   if (center(box).y < leaf.y || center(box).y > bottom(leaf)) {
     const { box: spot, step } = besideAnchor(el, at, leaf.y, 20);
@@ -903,10 +941,28 @@ export function placeArtifacts(diagram: Diagram, plane: El, process: El, nodes: 
     const { box, step } = besideAnchor(el, at, top);
     diagram.addShape(el, plane, freeSpot(diagram, plane, box, step));
   }
-  // A data object or store that is new, moved, or hangs on a node that moved stays in its node's band.
+  // A data object or store that is new, moved, or hangs on a node that moved stays in its node's band;
+  // so does one in the band of none of the nodes it is linked to (QA of #661, round 3: a shared one
+  // left in the lane of a step that was removed).
+  const users = new Map<El, El[]>();
+  for (const d of dataAssociations) {
+    const data = d.$type === 'bpmn:DataInputAssociation' ? ((d['sourceRef'] ?? []) as El[])[0] : (d['targetRef'] as El | undefined);
+    if (data !== undefined) users.set(data, [...(users.get(data) ?? []), d['$parent'] as El]);
+  }
+  const stray = (el: El): boolean => {
+    const box = diagram.bounds(el.id);
+    if (box === undefined) return false;
+    const y = center(box).y;
+    const using = users.get(el) ?? [];
+    return using.length > 0 && using.every((node) => {
+      const at = diagram.bounds(node.id);
+      const leaf = at === undefined ? undefined : leafOf(bandsAround(plane, at));
+      return leaf !== undefined && (y < leaf.y || y > bottom(leaf));
+    });
+  };
   for (const [el, anchor] of anchorOf) {
     const at = diagram.bounds(anchor.id);
-    if (at !== undefined && (diagram.moved.has(el.id) || diagram.moved.has(anchor.id))) keepInBand(diagram, plane, el, at);
+    if (at !== undefined && (diagram.moved.has(el.id) || diagram.moved.has(anchor.id) || stray(el))) keepInBand(diagram, plane, el, at);
   }
   if (orphans.length > 0) {
     const all = diagram.nodeShapes(plane).map((di) => di['bounds'] as Box);

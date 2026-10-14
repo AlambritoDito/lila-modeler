@@ -1227,7 +1227,7 @@ describe('the #638 refusals', () => {
       [0, 'on', '"nope" is not the id of an element of the model.'],
       [1, 'text', '"check" has no text annotation "Other"; its annotations are: "Note".'],
       [2, 'text', '"receive" has no text annotation "Note".'],
-      [3, 'on', 'step "ok": "data" does not apply to a xor.'],
+      [3, 'on', 'step "ok": "data" does not apply to an xor.'],
       [4, 'name', 'the process has no data object named "Folder"; its data objects are: "File".'],
       [5, 'on', 'data object "File" is not connected to "receive".'],
       [6, 'id', expect.stringContaining('"Lane_1" is a bpmn:Lane; only steps, sequence flows, boundary events and artifacts')],
@@ -1484,5 +1484,98 @@ describe('QA of #661, round 2: a host keeps its outgoing flow, data objects stay
       }
       expect(apart(pool, shapes.get('Participant_Cliente')!)).toBe(true);
     }
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * QA of #661, round 3
+ * ------------------------------------------------------------------ */
+
+describe('QA of #661, round 3: boundaries stay on a host that moves up a lane, shared data objects stay in a lane of a step that uses them', () => {
+  const inside = (b: Box, band: Box): boolean => b.y >= band.y && b.y + b.height <= band.y + band.height && b.x >= band.x && b.x + b.width <= band.x + band.width;
+  /** The centre of `b` on the top or bottom border of `host`. */
+  const onBorder = (b: Box, host: Box): boolean => {
+    const c = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+    return c.x >= host.x && c.x <= host.x + host.width && (Math.abs(c.y - host.y) <= 1 || Math.abs(c.y - (host.y + host.height)) <= 1);
+  };
+  const steps = (boundary: unknown[]) => [
+    { id: 'reg', lane: 'A', duration: '5m' },
+    { id: 'work', name: 'Work', lane: 'B', duration: '1h', ...(boundary.length === 0 ? {} : { boundary }) },
+    { id: 'next', lane: 'B', duration: '5m', end: true },
+  ];
+  const sla = { id: 'sla', type: 'timer', duration: '30m', interrupting: false, end: true };
+  const cut = { id: 'cut', type: 'timer', duration: '2h', end: 'terminate' };
+
+  test.each([
+    ['moveToLane up, two boundaries from the outline', [sla, cut], [], [{ op: 'moveToLane', id: 'work', lane: 'A' }], ['sla', 'cut']],
+    ['removeLane of the host\'s lane, one boundary', [sla], [], [{ op: 'removeLane', lane: 'B', moveStepsTo: 'A' }], ['sla']],
+    ['removeLane of the host\'s lane, two boundaries', [sla, cut], [], [{ op: 'removeLane', lane: 'B', moveStepsTo: 'A' }], ['sla', 'cut']],
+    [
+      'two addBoundary, then moveToLane up',
+      [],
+      [
+        { op: 'addBoundary', on: 'work', boundary: { id: 'b1', type: 'timer', duration: '30m', interrupting: false, end: true } },
+        { op: 'addBoundary', on: 'work', boundary: { id: 'b2', type: 'timer', duration: '2h', end: 'terminate' } },
+      ],
+      [{ op: 'moveToLane', id: 'work', lane: 'A' }],
+      ['b1', 'b2'],
+    ],
+  ] as const)('layout: false, %s: every boundary stays on its host', async (_, boundary, first, then, ids) => {
+    const built = await outlineToBpmn({ name: 'D', lanes: ['A', 'B'], steps: steps([...boundary]) });
+    let { xml, scenario } = built;
+    if (first.length > 0) ({ xml, scenario } = await editBpmn(xml, first as unknown as EditOperation[], { scenario, layout: false }));
+    const edit = await editBpmn(xml, then as unknown as EditOperation[], { scenario, layout: false });
+    expect(await errorsOf(edit.xml)).toEqual([]);
+    await expectCleanImport(edit.xml);
+    const { shapes } = await di(edit.xml);
+    const work = shapes.get('work')!;
+    expect(inside(work, shapes.get('Lane_1')!)).toBe(true);
+    for (const id of ids) expect(onBorder(shapes.get(id)!, work), `${id} ${JSON.stringify(shapes.get(id))} on ${JSON.stringify(work)}`).toBe(true);
+    expect((await bpmnToOutline(edit.xml, { scenario: edit.scenario as Record<string, unknown> })).warnings).toEqual([]);
+  });
+
+  const front = { id: 'reg', lane: 'Front', duration: '5m', data: [{ name: 'File', direction: 'out' }] };
+  const pay = { id: 'pay', lane: 'Back', duration: '5m', end: true, data: [{ name: 'File', direction: 'in' }] };
+
+  test.each([
+    [
+      'two lanes, in three calls',
+      { name: 'D', lanes: ['Front', 'Back'], steps: [front, pay] },
+      [[{ op: 'moveLane', lane: 'Back', before: 'Front' }], [{ op: 'remove', id: 'reg' }], [{ op: 'removeLane', lane: 'Front', moveStepsTo: 'Back' }]],
+    ],
+    [
+      'two lanes, in one call',
+      { name: 'D', lanes: ['Front', 'Back'], steps: [front, pay] },
+      [[{ op: 'moveLane', lane: 'Back', before: 'Front' }, { op: 'remove', id: 'reg' }, { op: 'removeLane', lane: 'Front', moveStepsTo: 'Back' }]],
+    ],
+    [
+      'three lanes, in four calls',
+      {
+        name: 'D',
+        lanes: ['Front', 'Middle', 'Back'],
+        steps: [front, { id: 'chk', lane: 'Middle', duration: '5m', data: [{ name: 'File', direction: 'in' }] }, pay],
+      },
+      [
+        [{ op: 'moveLane', lane: 'Back', before: 'Front' }],
+        [{ op: 'removeLane', lane: 'Middle', moveStepsTo: 'Back' }],
+        [{ op: 'remove', id: 'reg' }],
+        [{ op: 'removeLane', lane: 'Front', moveStepsTo: 'Back' }],
+      ],
+    ],
+  ] as const)('layout: false, %s: a data object shared with a removed step stays in the lane of pay, inside the pool', async (_, outline, calls) => {
+    let { xml, scenario } = await outlineToBpmn(outline as never);
+    for (const ops of calls) {
+      ({ xml, scenario } = await editBpmn(xml, ops as unknown as EditOperation[], { scenario, layout: false }));
+      const { shapes } = await di(xml);
+      if (!xml.includes('id="reg"')) {
+        const data = shapes.get('DataObjectReference_reg')!;
+        const lane = [...shapes].find(([id, b]) => id.startsWith('Lane_') && inside(shapes.get('pay')!, b))![1];
+        expect(inside(data, lane), `${JSON.stringify(data)} in ${JSON.stringify(lane)}`).toBe(true);
+        expect(inside(data, shapes.get('Participant_1')!)).toBe(true);
+      }
+    }
+    expect(xml).not.toContain('id="Lane_1"');
+    expect(await errorsOf(xml)).toEqual([]);
+    await expectCleanImport(xml);
   });
 });
