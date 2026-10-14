@@ -662,10 +662,10 @@ describe('the contract rules of the new constructs (#631, #638)', () => {
     expect(issues.get('steps[1].branches[0].to')).toEqual([
       'step "wait" follows the event gateway "g", so that must be its only way in; it has a, g. Check "next", "to", "from" and the step before it in the list.',
     ]);
-    expect(issues.get('steps[1].branches[0].probability')).toEqual(['step "g": "probability" does not apply to a eventGateway.']);
+    expect(issues.get('steps[1].branches[0].probability')).toEqual(['step "g": "probability" does not apply to an eventGateway.']);
     expect(issues.get('steps[1].branches[1].to')![0]).toContain('event gateway "g": every way out goes to a timer or message step, and "a" is not one');
     expect(issues.get('steps[1].branches[2].end')![0]).toContain('and "end" is not one');
-    expect(issues.get('steps[1].branches[3].default')).toEqual(['step "g": "default" does not apply to a eventGateway.']);
+    expect(issues.get('steps[1].branches[3].default')).toEqual(['step "g": "default" does not apply to an eventGateway.']);
     // msg2 is the step right after its gateway in the list, and its only branch: one way in, fine.
     expect(issues.has('steps[4].branches[0].to')).toBe(false);
     // The step before `lost` falls into it, and nothing else: a message needs an event gateway.
@@ -695,7 +695,7 @@ describe('the contract rules of the new constructs (#631, #638)', () => {
         { id: 'a', end: true },
       ],
     });
-    expect(issues.get('steps[0].branches[0].default')).toEqual(['step "p": "default" does not apply to a and.']);
+    expect(issues.get('steps[0].branches[0].default')).toEqual(['step "p": "default" does not apply to an and.']);
     expect(issues.get('steps[1].branches')).toEqual(['gateway "x": only one branch can be the default ("default": true).']);
   });
 
@@ -743,7 +743,7 @@ describe('the contract rules of the new constructs (#631, #638)', () => {
         { id: 's', type: 'subprocess', boundary: [{ id: 'b2', type: 'timer', end: true }], end: true },
       ],
     });
-    expect(issues.get('steps[0].boundary')).toEqual(['step "g": "boundary" does not apply to a xor.']);
+    expect(issues.get('steps[0].boundary')).toEqual(['step "g": "boundary" does not apply to an xor.']);
     expect(issues.has('steps[1].boundary')).toBe(false);
     expect(issues.get('steps[1].boundary[0].to')).toEqual(['step "c": "ghost" is not the id of a step.']);
     expect(issues.get('steps[1].boundary[0].duration')![0]).toContain('duration "soon" is not a distribution');
@@ -761,7 +761,7 @@ describe('the contract rules of the new constructs (#631, #638)', () => {
     });
     expect(issues.get('steps[0].data[2]')).toEqual(['step "a": data "File" (in) is listed more than once.']);
     expect(issues.has('steps[1].data')).toBe(false);
-    expect(issues.get('steps[2].data')).toEqual(['step "g": "data" does not apply to a and.']);
+    expect(issues.get('steps[2].data')).toEqual(['step "g": "data" does not apply to an and.']);
   });
 
   test('notes: each text once per step (removeAnnotation names a note by its text)', async () => {

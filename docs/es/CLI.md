@@ -411,6 +411,10 @@ npx lila process create --outline examples/outline/claim-escalation.json -p clai
 ```
 Código de salida: `0`.
 
+```text
+Simulacro: se crearía el proceso "Claim handling" (claim-handling) en el archivo nuevo /…/claims.lila: 10 pasos, 3 carriles. No se escribió nada.
+```
+
 Su escenario base corre una hora, como el de todo proceso creado: alarga `run.duration` (en la app
 o con la tool MCP `patch_scenario`) antes de correrlo, o ningún caso llega al plazo de 48 horas.
 

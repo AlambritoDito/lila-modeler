@@ -69,6 +69,7 @@ import { messages, type CliMessages, type Locale } from '../messages/index.js';
 import { DistributionSchema, type Distribution } from '../scenario.js';
 import type { ScenarioDocument } from '../project/types.js';
 import { processSlug } from '../project/repository.js';
+import { DEFAULT_ARRIVALS, DEFAULT_RUN } from '../project/default-scenario.js';
 import {
   DISTRIBUTION_ALIASES,
   DISTRIBUTIONS,
@@ -1173,21 +1174,6 @@ function joinNotes(graph: Graph, C: CliMessages): string[] {
   }
   return notes;
 }
-
-/**
- * Default arrivals of the base scenario: the web app's `defaultElement('start')` (`apps/web/src/
- * project.ts`, #420), so a generated process runs out of the box like one drawn with «New».
- */
-const DEFAULT_ARRIVALS = { triggerCount: 20, interTriggerTimer: { type: 'constant', value: 60 } } as const;
-/** The web app's `defaultScenarios` run block, without the currency. */
-const DEFAULT_RUN = {
-  start: '2026-09-07T08:00:00Z',
-  duration: 3600,
-  warmup: 0,
-  replications: 3,
-  seed: 42,
-  baseTimeUnit: 'min',
-} as const;
 
 /** `base`, or `base_2`, `base_3`… the first one not in `used` (which then holds it). */
 function freeId(base: string, used: Set<string>): string {
