@@ -2136,4 +2136,8 @@ export const es: Strings = {
     sinNombre: { 'bpmn:Participant': 'Pool sin nombre', 'bpmn:Lane': 'Carril sin nombre' },
     finCorto: 'Fin',
   },
+  visor: {
+    modo: 'Modo visor',
+    editor: 'Editor completo',
+  },
 };

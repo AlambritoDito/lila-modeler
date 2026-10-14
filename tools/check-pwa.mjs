@@ -12,6 +12,12 @@
  *      by a real handle in the origin-private file system, so the bytes and the modification time
  *      of that very file are checked, and no download happens.
  *   5. Offline: with the static server stopped, a reload still opens the editor.
+ *   6. The phone viewer (#653), still offline, on a 390×844 touch screen: the app opens the
+ *      viewer and not the editor, an example opens, a tap on a task opens its sheet, nothing
+ *      scrolls sideways, a pinch zooms the diagram, a `.lila` with a run saved by `lila run --save`
+ *      opens through the file input and shows its heat map and KPIs, and `?editor` gets the
+ *      editor back.
+ *      `LILA_VISOR_SHOT=<file.png>` also saves a screenshot of it.
  *
  *   npm run build:pages && npm run check:pwa
  *
@@ -19,8 +25,8 @@
  * JSON report and exits non-zero on the first failed expectation. What it cannot do is the part a
  * person does: install from the address bar, double-click a `.lila` in Explorer, the system dialogs.
  */
-import { spawn } from 'node:child_process';
-import { createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
@@ -216,6 +222,51 @@ async function main() {
     await reload();
     await waitFor(canvas, 'the canvas offline', 30_000);
     check('the editor opens offline', true);
+
+    // 6. The phone viewer (#653). `screenWidth` is what `main.tsx` reads to pick it.
+    await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true, screenWidth: 390, screenHeight: 844 });
+    await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+    await cdp.send('Page.navigate', { url: BASE });
+    await waitFor(`!!document.querySelector('.visor .djs-container svg [data-element-id]')`, 'the viewer', 30_000);
+    check('a phone gets the viewer, not the editor', await evaluate(`!document.querySelector('.lienzo')`));
+    const elegir = (id) => evaluate(`(() => { const s = document.querySelector('.visor-ejemplos'); s.value = ${JSON.stringify(id)};
+      s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
+    await elegir('mm3');
+    await waitFor(`!!document.querySelector('.visor [data-element-id="Task_Servicio"]')`, 'the M/M/3 example');
+    const centro = (sel) => evaluate(`(() => { const r = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+    const tap = await centro('.visor [data-element-id="Task_Servicio"]');
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [tap] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await waitFor(`!!document.querySelector('.visor-hoja dl')`, 'the sheet of the tapped task', 10_000);
+    report.visorHoja = await evaluate(`document.querySelector('.visor-hoja').innerText`);
+    check('nothing scrolls sideways', await evaluate('document.documentElement.scrollWidth <= innerWidth'),
+      await evaluate('[document.documentElement.scrollWidth, innerWidth]'));
+    if (process.env.LILA_VISOR_SHOT) writeFileSync(process.env.LILA_VISOR_SHOT, Buffer.from((await cdp.send('Page.captureScreenshot')).data, 'base64'));
+    const zoom = `document.querySelector('.visor .viewport').transform.baseVal.consolidate().matrix.a`;
+    const antes = await evaluate(zoom);
+    const c = await centro('.visor-lienzo');
+    const dedos = (d) => [{ x: c.x - d, y: c.y, id: 0 }, { x: c.x + d, y: c.y, id: 1 }];
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: dedos(40) });
+    for (const d of [60, 80, 100, 120]) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: dedos(d) });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    const despues = await evaluate(zoom);
+    check('a pinch zooms the diagram', despues > antes * 1.5, { antes, despues });
+    const conCorrida = join(work, 'con-corrida.lila');
+    writeFileSync(conCorrida, fixture);
+    const cli = spawnSync(process.execPath, [join(ROOT, 'packages/engine/bin/lila.js'), 'run', conCorrida, 'as-is.scenario.json', '--save'], { encoding: 'utf8' });
+    check('lila run --save stored a run', cli.status === 0, cli.stderr);
+    const { root } = await cdp.send('DOM.getDocument');
+    const { nodeId } = await cdp.send('DOM.querySelector', { nodeId: root.nodeId, selector: '.visor input[type=file]' });
+    await cdp.send('DOM.setFileInputFiles', { nodeId, files: [conCorrida] });
+    await waitFor(`!document.querySelector('.visor-calor input').disabled`, 'the .lila with a saved run', 15_000);
+    await evaluate(`document.querySelector('.visor-calor input').click()`);
+    await waitFor(`!!document.querySelector('.visor .c5-kpis') && !!document.querySelector('.visor .djs-overlay-lila-calor')`, 'its heat map and KPIs', 15_000);
+    check('a saved run shows its heat map and KPIs', true);
+    if (process.env.LILA_VISOR_SHOT) writeFileSync(process.env.LILA_VISOR_SHOT.replace(/\.png$/, '-calor.png'), Buffer.from((await cdp.send('Page.captureScreenshot')).data, 'base64'));
+    await cdp.send('Page.navigate', { url: `${BASE}?editor` });
+    await waitFor(canvas, 'the editor through ?editor', 30_000);
+    check('?editor opens the editor on a phone', true);
   } finally {
     ws.close();
     chrome.kill();

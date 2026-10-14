@@ -531,3 +531,7 @@ it('the top bar stacks over the Simulate/Results sub-bar, so File and View drop 
   expect(bloqueDeLinea('.barra')).toContain('position: relative');
   expect(z('.barra')).toBeGreaterThan(z('.c5-subbarra'));
 });
+
+it('the viewer canvas takes the fingers from the browser, or a pinch zooms the page (#653)', () => {
+  expect(bloqueDeLinea('.visor-lienzo')).toContain('touch-action: none');
+});

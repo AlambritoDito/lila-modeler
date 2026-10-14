@@ -3,6 +3,21 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.27] - 2026-10-14
+
+Lila opens on a phone or tablet as a read-only viewer: the diagram with your fingers, what each
+element does, and the heat map of the last saved run. Simulation results are unchanged.
+
+### Added
+
+- **Viewer for phones and tablets (#653)**: on a phone the web app opens a read-only viewer
+  instead of the editor; on a tablet it is under View → Viewer mode, and `?visor` opens it
+  anywhere. It opens a `.lila` from the device's files (iOS no longer greys it out) or an example,
+  pans with one finger and zooms with a pinch, shows a tapped element's documentation, time,
+  resource and route split, and, for a `.lila` saved after simulating, the heat map and the KPIs
+  of its last run. Full editor (`?editor`) goes back to the editor. Nothing opened in the viewer
+  is saved.
+
 ## [1.0.0-beta.26] - 2026-10-14
 
 The File and View menus now open over the Simulate and Results bar. Simulation results are

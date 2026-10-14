@@ -3093,6 +3093,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
                 <span className="marca-menu" aria-hidden="true">{pulsado[r] ? '✓' : ''}</span>{S.app.regiones[r]}
               </button>
             ))}
+            {/* #653: the read-only viewer, for a tablet (phones open it on their own). */}
+            {!DESKTOP && <button type="button" onClick={() => location.assign('?visor')}><span className="marca-menu" aria-hidden="true" />{S.visor.modo}</button>}
           </div>
         </details>
       </header>
