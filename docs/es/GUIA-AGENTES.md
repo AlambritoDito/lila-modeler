@@ -94,7 +94,8 @@ atorados, como una unión paralela que espera ramas de una misma división exclu
 ### 3. `edit_process` y `get_process_outline`
 
 Para cambiar un proceso no lo crees otra vez: `edit_process` aplica una lista de operaciones
-(`add`, `connect`, `remove`, `rename`, `setType`, `moveToLane`, `addLane`) todas o ninguna, conserva
+(`add`, `connect`, `remove`, `rename`, `setType`, `moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`,
+`annotate`, `addDataObject`…) todas o ninguna, conserva
 cada id y todo lo que las operaciones no tocan (documentación, RACI, atributos, otros procesos).
 Mándala primero con `dryRun: true` y muéstrale los `changes` a la persona cuando la edición no sea
 trivial.
@@ -102,7 +103,9 @@ trivial.
 ```json
 { "name": "edit_process", "arguments": { "project": "tarjeta.lila", "dryRun": true, "operations": [
   { "op": "add", "step": { "id": "verificar", "name": "Verificar identidad", "duration": "5m" }, "after": "recibir" },
-  { "op": "rename", "id": "emitir", "name": "Emitir la tarjeta" } ] } }
+  { "op": "rename", "id": "emitir", "name": "Emitir la tarjeta" },
+  { "op": "addBoundary", "on": "consultar", "boundary": { "id": "buroCaido", "type": "timer", "duration": "30m",
+    "label": "Sin respuesta en 30 min", "to": "evaluar" } } ] } }
 ```
 
 **Después de cualquier edición el proceso sigue simulando.** Las entradas de escenario que ya no
@@ -230,21 +233,77 @@ aparece como una pestaña nueva. Si la persona tiene cambios sin guardar, la app
 | --- | --- |
 | `name` | El nombre del proceso (y el slug por defecto). |
 | `lanes` | Los carriles en orden. Opcional: sin él, se toman de los pasos. |
+| `starts` | Eventos de inicio opcionales: `{ id, name?, type?, lane? }`, `type` `none` (por defecto) o `timer`. Sin él, un inicio simple (`StartEvent`) lleva al primer paso. Con él, los ids de los inicios los pones tú (las llegadas del escenario usan esos ids), los pasos nombran el suyo con `from`, y cada inicio está en el `from` de exactamente un paso: para bifurcar, pon una compuerta después. `lane` sigue la regla de `steps[].lane` y por defecto es el carril de su paso. Cada inicio recibe las llegadas por defecto, así que dos inicios traen dos flujos de casos. Un inicio `timer` es notación: sus casos llegan por las llegadas del escenario en ese inicio, igual que en uno simple, no por un calendario del temporizador. |
 | `steps[].id` | El id BPMN. Los escenarios usan ese id, así que elige ids cortos y estables. |
 | `steps[].name` | La etiqueta. |
-| `steps[].type` | `task` (por defecto), `userTask`, `serviceTask`, `callActivity`, `xor`, `and`, `or`, `timer`, `subprocess`. |
+| `steps[].type` | `task` (por defecto), `userTask`, `serviceTask`, `sendTask`, `receiveTask`, `manualTask`, `scriptTask`, `businessRuleTask`, `callActivity`, `xor`, `and`, `or`, `eventGateway`, `timer`, `message`, `subprocess`. Las variantes de tarea simulan como `task`; el documento y el diagrama muestran lo que son. `message` (la espera de un mensaje) solo va después de un `eventGateway`, como una de sus ramas. |
 | `steps[].lane` | Por defecto, el carril del paso anterior. |
+| `steps[].from` | Con `starts`: el id o los ids de los inicios que llevan a este paso. Solo vale si viene `starts`; solo ids de inicio. |
 | `steps[].next` | El paso o los pasos que siguen cuando no es simplemente el siguiente de la lista (un regreso, una unión). |
-| `steps[].branches` | Solo compuertas: `{ label?, to, probability? }` o `{ label?, end: true, probability? }`. Las ramas XOR sin probabilidad se reparten lo que falta para 1. |
-| `steps[].end` | Este paso termina el proceso (se agrega un evento de fin después). |
-| `steps[].duration` | Segundos, `20m`, `1h30m`, `normal(20m, 5m)`, `triangular(1m, 2m, 5m)`, `exponential(mean=4m)`, o un objeto de distribución en segundos. |
+| `steps[].branches` | Solo compuertas: `{ label?, to, probability?, default? }` o `{ label?, end: true \| "terminate", probability?, default? }`. Las ramas XOR sin probabilidad se reparten lo que falta para 1. `default: true` marca el flujo por defecto de un `xor` o un `or`, uno por compuerta: en un `xor` no cambia el reparto (lo que falta para 1 sigue yendo a las ramas sin probabilidad); en un `or` es la salida de respaldo cuando no se toma ninguna otra. Toda salida de un `eventGateway` (sus ramas, `next` o el paso siguiente) va a un paso `timer` o `message` cuya única entrada es esa compuerta: ni el paso anterior de la lista, ni otro `next`, `to` o `from`, ni un evento de borde. Sus ramas no llevan `probability`, `default` ni `end`. Gana el primer evento que ocurre; una rama sin `duration` nunca se dispara, y si ninguna la tiene, los casos se quedan en la compuerta. |
+| `steps[].end` | `true`: este paso termina el proceso (se agrega un evento de fin después). `"terminate"`: un evento de fin de terminación, que termina el caso entero, con todos sus caminos en paralelo. |
+| `steps[].duration` | Segundos, `20m`, `1h30m`, `normal(20m, 5m)`, `triangular(1m, 2m, 5m)`, `exponential(mean=4m)`, o un objeto de distribución en segundos. En una tarea, su tiempo de proceso; en un `timer` o un `message`, cuánto falta para que ocurra. |
 | `steps[].resources` | Nombres, o `{ name, quantity }`. Con varios, `selection: "or"` toma cualquiera de ellos. |
+| `steps[].boundary` | Tareas (cualquier variante) y actividades de llamada, no subprocesos: plazos sobre el paso, `{ id, type: "timer", name?, label?, duration?, interrupting?, to \| end }`. `interrupting` (por defecto `true`) corta el paso; `false` lo deja corriendo y abre un camino en paralelo. `to` es el paso al que lleva el borde; `end` (`true` o `"terminate"`) termina ese camino con un evento de fin `EndEvent_<id del borde>`. `label` nombra el flujo que sale de él. La `duration` cuenta desde que el caso llega al paso, incluida la espera por recursos; sin ella el borde nunca se dispara. |
+| `steps[].notes` | Anotaciones de texto que cuelgan del paso, en orden; cada texto una vez por paso. |
+| `steps[].data` | Solo actividades (tareas, actividades de llamada, subprocesos): objetos de datos que el paso lee (`direction: "in"`) o escribe (`"out"`), `{ name, direction }`, cada nombre y dirección una vez por paso. Los pasos que nombran el mismo objeto lo comparten. |
 
-El orden de la lista es el flujo. Los eventos de inicio y fin se agregan solos; ids como
-`StartEvent`, `EndEvent_<paso>` y `Flow_<de>_<a>` son de Lila. `get_process_outline` devuelve el
-mismo formato en forma normal (cada carril nombrado, duraciones como objetos, probabilidades
-completas), así que un esquema va y vuelve igual. Las reglas completas están en
-[`MCP.md`](MCP.md#crear-un-proceso-desde-un-esquema).
+El orden de la lista es el flujo. Los eventos de fin se agregan solos, y también el de inicio salvo
+que venga `starts` (entonces los ids de los inicios son tuyos). Inicios, pasos y eventos de borde
+comparten un solo conjunto de ids, y `next` y `to` solo nombran pasos. Ids como `StartEvent`,
+`EndEvent_<paso>`, `EndEvent_<borde>` (el fin al que lleva un borde con `end`) y `Flow_<de>_<a>` son
+de Lila. `get_process_outline` devuelve el mismo formato en forma normal (cada carril nombrado,
+duraciones como objetos, probabilidades completas), así que un esquema va y vuelve igual. Las
+reglas completas están en [`MCP.md`](MCP.md#crear-un-proceso-desde-un-esquema).
+
+### Ejemplo: escalar a las 48 horas
+
+«Si el ajustador no ha decidido en 48 horas, el siniestro pasa a un supervisor; el ajustador sigue
+trabajando en él. Después le pedimos al cliente que confirme, y si no contesta en cinco días el
+siniestro se cierra.» Un plazo sobre una tarea es un temporizador de borde (`boundary`):
+`interrupting: false` porque el ajustador sigue trabajando mientras el supervisor lo revisa (`true`,
+el valor por defecto, le quitaría el siniestro al ajustador). «La respuesta o cinco días, lo que
+pase primero» es un `eventGateway` cuyas ramas son un paso `message` y un paso `timer`; el camino del
+temporizador termina con `"terminate"`, que cierra el caso entero, camino de la escalación
+incluido. Es `examples/outline/claim-escalation.json` (en inglés, como todos los ejemplos del repo):
+
+```json
+{ "name": "Claim handling",
+  "lanes": ["Customer service", "Adjuster", "Supervisor"],
+  "steps": [
+    { "id": "register", "name": "Register claim", "lane": "Customer service", "duration": "10m", "resources": ["Clerk"] },
+    { "id": "assess", "name": "Assess claim", "type": "userTask", "lane": "Adjuster",
+      "duration": "triangular(4h, 24h, 72h)", "resources": ["Adjuster"],
+      "boundary": [ { "id": "sla", "type": "timer", "name": "48 h", "duration": "48h", "interrupting": false,
+                      "label": "No decision in 48 h", "to": "escalate" } ] },
+    { "id": "covered", "type": "xor", "name": "Covered?",
+      "branches": [ { "label": "Yes", "to": "confirm", "probability": 0.8, "default": true },
+                    { "label": "No", "to": "reject" } ] },
+    { "id": "confirm", "name": "Ask the customer to confirm", "type": "sendTask", "lane": "Customer service", "duration": "5m" },
+    { "id": "reply", "type": "eventGateway", "name": "Customer replies?",
+      "branches": [ { "to": "confirmed" }, { "to": "deadline" } ] },
+    { "id": "confirmed", "type": "message", "name": "Confirmation received", "duration": "exponential(mean=2d)" },
+    { "id": "pay", "name": "Pay claim", "type": "serviceTask", "lane": "Adjuster", "duration": "1m", "end": true },
+    { "id": "deadline", "type": "timer", "name": "5 days", "lane": "Customer service", "duration": "5d", "end": "terminate" },
+    { "id": "reject", "name": "Notify rejection", "type": "sendTask", "lane": "Customer service", "duration": "5m", "end": true },
+    { "id": "escalate", "name": "Escalate to supervisor", "lane": "Supervisor", "duration": "30m", "resources": ["Supervisor"], "end": true } ] }
+```
+
+Las duraciones de `sla`, `confirmed` y `deadline` van al escenario base, nunca al XML: la
+`duration` de un paso `message` es lo que tarda el cliente en contestar. **Alarga la corrida antes
+de simularlo:** el escenario base corre una hora (`run.duration: 3600`), y en una hora ningún caso
+llega a un plazo de 48 horas, así que la escalación nunca se vería. Cambia primero `run.duration`,
+por ejemplo a 60 días, y después corre y exporta:
+
+```json
+{ "name": "patch_scenario", "arguments": { "project": "claims.lila", "scenario": "as-is",
+  "patch": [ { "op": "replace", "path": "/run/duration", "value": 5184000 } ] } }
+```
+
+Con un solo ajustador, casi todos los siniestros esperan más de 48 horas, así que el supervisor ve
+casi todos: la corrida lo dice en `elements.sla.completed` y `elements.escalate.completed`. Un caso
+termina donde termina su último camino, así que `byEndEvent` cuenta un siniestro en
+`EndEvent_pay`, no en `EndEvent_escalate`, cuando se pagó después de escalarse.
 
 ## Cuando una llamada falla
 
@@ -300,8 +359,9 @@ Haz una escritura a la vez por archivo y espera su respuesta; escribir en parale
   `edit_process` con `layout: true` reemplaza las posiciones puestas a mano en ese proceso;
   `layout: false` las conserva y coloca los pasos nuevos de forma simple. Mueve las cosas en la app
   cuando el dibujo importe.
-- **Las ediciones** solo alcanzan el proceso principal de un BPMN (el que lee el simulador), y no se
-  pueden borrar carriles.
+- **Las ediciones** solo alcanzan el proceso principal de un BPMN (el que lee el simulador).
+  `edit_process` no agrega eventos de inicio ni les cambia el tipo: ponlos en el esquema (`starts`)
+  o edítalos en la app.
 - **Del esquema al escenario** solo pasan `duration`, `resources` y la `probability` de las ramas.
   Llegadas, calendarios, costos y capacidades van por `patch_scenario` o por una hoja.
 - **Una corrida larga tarda lo suyo.** El servidor sigue respondiendo e informa cada replicación, y

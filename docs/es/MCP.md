@@ -103,7 +103,8 @@ mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
 - **`get_process_outline({ project, process?, locale? })`** (#97) — lee un proceso de un `.lila`
   como esquema: `{ file, slug, name, outline, warnings }`.
 - **`edit_process({ project, process?, operations, dryRun?, layout?, locale? })`** (#98) — aplica una
-  lista de operaciones (add, connect, remove, rename, setType, moveToLane, addLane) a un proceso de
+  lista de operaciones (add, connect, remove, rename, setType, moveToLane, addLane, removeLane,
+  moveLane, addBoundary, annotate, removeAnnotation, addDataObject, removeDataObject) a un proceso de
   un `.lila`, todas o ninguna. Devuelve `{ file, slug, name, dryRun, summary, changes, removed,
   scenarioRemovals, notes, warnings, outline }`. Ver [Editar un proceso](#editar-un-proceso).
 
@@ -350,20 +351,61 @@ incluidos), lo valida como `validate_bpmn` y lo escribe en el `.lila`. `lila pro
 ```
 
 - **El orden de la lista es el flujo**: cada paso sigue al anterior salvo que tenga `next` (un id,
-  o varios después de una compuerta), `branches` (solo compuertas: `{ label?, to, probability? }`,
-  o `{ label?, end: true, probability? }` para una rama que termina el proceso) o `end: true`. El
-  último paso termina el proceso. Los eventos de inicio y fin se añaden solos.
-- **`type`** es `task` por defecto; los demás son `userTask`, `serviceTask`, `callActivity`, `xor`,
-  `and`, `or`, `timer` (un evento intermedio de temporizador) y `subprocess` (un subproceso
-  embebido colapsado, con un inicio y un fin de paso dentro).
-- **Los ids de los pasos son los ids BPMN**, así que los escenarios se refieren a ellos. Deben ser
-  ids BPMN válidos y no chocar con los que Lila genera (`StartEvent`, `EndEvent_<paso>`, `Flow_…`,
-  `Lane_<n>`, `Process_…`, `<id>_di`).
+  o varios después de una compuerta), `branches` (solo compuertas: `{ label?, to, probability?,
+  default? }`, o `{ label?, end: true | "terminate", probability?, default? }` para una rama que
+  termina el proceso) o `end` (`true`, o `"terminate"` para un evento de fin de terminación, que
+  termina el caso entero, con todos sus caminos en paralelo). El último paso termina el proceso.
+  Los eventos de fin se añaden solos, y también el de inicio salvo que venga `starts`.
+- **`type`** es `task` por defecto; los demás son las variantes de tarea `userTask`, `serviceTask`,
+  `sendTask`, `receiveTask`, `manualTask`, `scriptTask` y `businessRuleTask` (simulan como `task`),
+  `callActivity`, las compuertas `xor`, `and`, `or` y `eventGateway`, las esperas `timer` (un evento
+  intermedio de temporizador) y `message` (un evento intermedio de mensaje), y `subprocess` (un
+  subproceso embebido colapsado, con un inicio y un fin de paso dentro).
+- **Flujos por defecto.** `default: true` marca una rama de un `xor` o de un `or` como su flujo por
+  defecto (uno por compuerta). En un `xor` no cambia el reparto: lo que falta para 1 sigue yendo a
+  las ramas sin probabilidad (R-XOR-2). En un `or` es la salida de respaldo cuando no se toma
+  ninguna otra rama (R-OR-3).
+- **La compuerta por eventos** (R-EVG-1). Toda salida de un `eventGateway` —sus ramas, `next` o el
+  paso siguiente— va a un paso `timer` o `message`, nunca a un fin, una tarea o una compuerta; así
+  que un `eventGateway` no puede ser el último paso, llevar `end` ni tener una rama con `end`. Cada
+  uno de esos pasos tiene a esa compuerta como única entrada: el paso anterior de la lista no debe
+  caer en él, y ningún otro `next`, `to`, `from`, evento de borde ni segunda compuerta puede llevar
+  a él. Un paso `message` solo vale ahí. Las ramas no llevan `probability` ni `default`: gana el
+  primer evento que ocurre. Una rama sin `duration` nunca se dispara (R-EVG-5), y si ninguna la
+  tiene, los casos se quedan en la compuerta (R-EVG-6).
+- **Inicios.** `starts: [{ id, name?, type?, lane? }]` (`type` `none` o `timer`) reemplaza al inicio
+  implícito; los ids de los inicios los pones tú. Cada inicio está en el `from` de exactamente un
+  paso (un inicio tiene un solo flujo de salida: para bifurcar, pon una compuerta después), y
+  `from` solo nombra inicios y solo existe con `starts`. El `lane` de un inicio sigue la regla del
+  de un paso y por defecto es el carril de su paso. `type: "timer"` es notación: los casos llegan
+  por las llegadas del escenario en ese inicio, igual que en uno simple (SEMANTICS §2), no por un
+  calendario del temporizador.
+- **Eventos de borde.** `boundary: [{ id, type: "timer", name?, label?, duration?, interrupting?, to | end }]`
+  en una tarea (cualquier variante) o una actividad de llamada; no en un subproceso (#639). `to`
+  nombra el paso al que lleva el evento; `end` (`true` o `"terminate"`) termina ese camino con el
+  evento de fin `EndEvent_<id del borde>`. `interrupting: false` deja la tarea corriendo y abre un
+  camino en paralelo; por defecto la corta. `label` nombra el flujo que sale de él. La `duration`
+  cuenta desde que el caso llega a la tarea, incluida la espera por recursos; sin ella el borde
+  nunca se dispara (R-BND-8). Un plazo más largo que la corrida (`run.duration` es 1 h por defecto)
+  tampoco se dispara: alarga la corrida con `patch_scenario`.
+- **Notas y datos.** `notes: [texto]` cuelga anotaciones de texto de un paso, en orden, cada texto
+  una vez por paso (uno repetido es un error). `data: [{ name, direction }]` conecta objetos de
+  datos a una actividad (una tarea, una actividad de llamada o un subproceso): `in`, la actividad lo
+  lee; `out`, lo escribe. Los pasos que nombran el mismo objeto lo comparten; un nombre y una
+  dirección aparecen una vez por paso.
+- **Ids.** Inicios, pasos y eventos de borde comparten un solo conjunto de ids: únicos, ids BPMN
+  válidos (NCName), y `next`/`to` solo nombran pasos (un `next` que nombra un inicio o un evento de
+  borde «no es el id de un paso»), `from` solo inicios. Los ids de los pasos son los ids BPMN, así
+  que los escenarios se refieren a ellos. Ningún id puede chocar con los que Lila genera
+  (`StartEvent` sin `starts`, `EndEvent_<paso>`, `EndEvent_<borde>`, `Flow_…`, `Lane_<n>`,
+  `Process_…`, `<id>_di`). Cuando dos ids generados chocarían (el segundo fin de `x` y el fin de un
+  paso `x_2`), el posterior toma el primer sufijo `_<n>` libre.
 - **`lane`** es por defecto el carril del paso anterior (el primero para el primer paso). Un carril
   que no está en `lanes` es un error si `lanes` viene, y se agrega en orden si no viene.
 - **El escenario base.** El proceso recibe `as-is.scenario.json`: las llegadas por defecto de la app
-  para un proceso nuevo (20 casos, uno por minuto), cada `duration` como `processingTime` (tareas)
-  o demora (temporizadores), cada entrada de `resources` (un nombre, o `{ name, quantity }`; el
+  para un proceso nuevo (20 casos, uno por minuto) en cada inicio, así que dos inicios traen dos
+  flujos de casos; cada `duration` como `processingTime` (de una tarea, y la demora de un `timer`,
+  un `message` o un evento de borde), cada entrada de `resources` (un nombre, o `{ name, quantity }`; el
   recurso se crea con la capacidad de su mayor pedido; con varios, `selection: "or"` toma
   cualquiera de ellos en vez de todos) y cada `probability` de rama como la
   probabilidad de su flujo. Las ramas de un XOR sin probabilidad se reparten lo que falta para 1.
@@ -386,25 +428,89 @@ incluidos), lo valida como `validate_bpmn` y lo escribe en el `.lila`. `lila pro
   atascado, y lo mismo un esquema cuyo modelo no valida (los errores del validador vuelven con
   sus códigos, en el paso del que hablan).
 - **`notes`** son los avisos propios de Lila sobre un esquema aceptado, como una unión paralela
-  (`and`) que espera ramas de una sola compuerta exclusiva (`xor`), donde los casos esperarían
-  para siempre.
+  (`and`) que espera ramas de una sola bifurcación exclusiva (un `xor`, un `eventGateway`, o una
+  tarea y su evento de borde que interrumpe), donde los casos esperarían para siempre.
 
 ```json
 { "name": "create_process", "arguments": { "project": "credit.lila", "outline": { "name": "Credit application", "lanes": ["Customer", "Analyst"], "steps": [ … ] } } }
 ```
 
-`get_process_outline` devuelve el esquema en **forma normal**: cada paso dice su carril, `type` se
-omite para `task`, `next` aparece solo cuando no es simplemente el paso siguiente, todo paso que
-termina el proceso lleva `end: true`, las salidas de las compuertas son `branches`, las duraciones
-son objetos de distribución en segundos y las probabilidades del XOR vienen completas. Es la forma
-que `create_process` devuelve como `outline`, así que un proceso va y vuelve igual. Duraciones,
-recursos y probabilidades (y la `selection` de recursos) salen del `as-is.scenario.json` del
-proceso cuando lo tiene. Para un proceso que Lila no generó, `warnings` dice una vez por tipo lo
-que el esquema deja fuera: otros pools, flujos de mensaje, los nombres de los eventos de inicio y
-fin, anotaciones, marcas de flujo por defecto, otros tipos de evento, carriles anidados y lo del
-escenario que un esquema no lleva (llegadas, calendarios, costos, capacidades y tipos de recurso,
-ruteo condicionado; el escenario no se toca). Un proceso sin nombre toma el del `.lila`, si no su
-id. Los pasos conservan el orden del documento.
+`get_process_outline` devuelve el esquema en **forma normal**: cada paso dice su carril, y también
+cada inicio; `type` se omite para `task`; `next` aparece solo cuando no es simplemente el paso
+siguiente; todo paso que termina el proceso lleva `end: true` (`"terminate"` para un evento de fin
+de terminación); las salidas de las compuertas son `branches` (un `eventGateway` siempre las
+tiene, aunque sea una sola) con `default: true` en el flujo por defecto de un `xor` o un `or`; las
+duraciones son objetos de distribución en segundos y las probabilidades del XOR vienen completas.
+`starts` se omite en el caso trivial —un solo inicio simple `StartEvent` sin nombre en el carril de
+su paso—, y entonces ese paso pasa a encabezar la lista (los demás conservan su orden) y ningún
+paso lleva `from`; así, `starts: [{ "id": "StartEvent" }]` con `from` en el tercer paso se
+normaliza al esquema sin `starts` cuyo primer paso es ese. Si no, se listan todos los inicios y
+los pasos conservan el orden del documento. `from` lista los inicios de un paso en el orden de
+`starts`, un id como texto y varios como lista (como `next`). `boundary` conserva su orden, con
+`interrupting` solo cuando es `false`. `notes` conserva su orden (al leer, el orden de las
+asociaciones en el documento). `data` lista primero las lecturas y luego las escrituras, cada grupo
+en su orden. Es la forma que `create_process` devuelve como `outline`, así que un proceso va y
+vuelve igual. Duraciones, recursos y probabilidades (y la `selection` de recursos) salen del
+`as-is.scenario.json` del proceso cuando lo tiene.
+
+Para un proceso que Lila no generó, la lectura nunca devuelve un esquema que `create_process`
+rechazaría: lo que un esquema no puede decir se deja fuera, y `warnings` lo dice una vez por tipo.
+Eso abarca otros pools, flujos de mensaje, los nombres de los eventos de fin y de los flujos que
+salen de un inicio, eventos de inicio que no son simples ni de temporizador y eventos de fin que no
+son simples ni de terminación (se leen como eventos simples), un inicio con varios flujos de
+salida (solo se conserva el primero), compuertas por eventos que el simulador no corre (R-EVG-1:
+una que instancia o una paralela, o una con una rama a algo que no sea un evento intermedio de
+temporizador o de mensaje con una entrada y una salida, como una tarea de recepción) y eventos de
+mensaje que no son rama de una (se dejan fuera con sus flujos), eventos de borde que no son de
+temporizador, y temporizadores de borde en un subproceso (#639), con un flujo de entrada o con
+varios de salida, las expresiones de tiempo del XML (`timeDuration`, `timeDate`, `timeCycle` de
+inicios de temporizador, pasos `timer` y temporizadores de borde: las duraciones viven en el
+escenario), marcas de flujo por defecto que no salen de un `xor` o un `or` (y las rotas),
+probabilidades de rama que un esquema no puede llevar (a la salida de un `and` o un
+`eventGateway`, o las de un `xor` que suman más de 1), grupos, anotaciones de texto que no cuelgan
+de un paso o sin texto, una anotación que repite una nota del mismo paso (se lee una vez),
+almacenes de datos, objetos de datos sin nombre, dos objetos de datos con el mismo nombre,
+asociaciones de datos con algo que no es una actividad, carriles anidados y lo del escenario que un
+esquema no lleva (llegadas, calendarios, costos, capacidades y tipos de recurso, ruteo
+condicionado; el escenario no se toca). Un proceso sin nombre toma el del `.lila`, si no su id.
+
+### Ejemplo: una escalación a las 48 horas
+
+`examples/outline/claim-escalation.json` (el esquema está en la [guía para agentes](GUIA-AGENTES.md#ejemplo-escalar-a-las-48-horas))
+modela «si el ajustador no ha decidido en 48 horas, interviene un supervisor» como un temporizador
+de borde que no interrumpe la tarea, y «el cliente confirma o, a los cinco días, se cierra el
+siniestro» como una compuerta por eventos entre un paso `message` y un paso `timer` que termina con
+`"terminate"`:
+
+```json
+{ "id": "assess", "name": "Assess claim", "type": "userTask", "lane": "Adjuster",
+  "duration": "triangular(4h, 24h, 72h)", "resources": ["Adjuster"],
+  "boundary": [ { "id": "sla", "type": "timer", "name": "48 h", "duration": "48h", "interrupting": false,
+                  "label": "No decision in 48 h", "to": "escalate" } ] }
+```
+
+El escenario base corre una hora (`run.duration` 3600 s), así que ningún caso llegaría nunca al
+plazo de 48 horas ni a la espera de cinco días: alarga la corrida con `patch_scenario` antes de
+`run_simulation`. Las cuatro llamadas, como las hace la prueba e2e `outline-constructs.e2e.test.ts`:
+
+```json
+{ "name": "create_process", "arguments": { "project": "claims.lila", "outline": { "name": "Claim handling", … } } }
+{ "name": "patch_scenario", "arguments": { "project": "claims.lila", "scenario": "as-is",
+  "patch": [ { "op": "replace", "path": "/run/duration", "value": 5184000 } ] } }
+{ "name": "run_simulation", "arguments": { "model": "claims.lila", "scenario": "as-is", "saveRun": true } }
+{ "name": "export_document", "arguments": { "project": "claims.lila", "format": "html", "saveTo": "claims.html" } }
+```
+
+El plazo es la entrada de escenario `elements.sla.processingTime`, nunca un `timeDuration` en el
+XML. `elements.sla.completed` cuenta los plazos que se dispararon. `byEndEvent` cuenta cada caso en
+el fin del camino que terminó al último, así que un siniestro escalado y luego pagado cuenta en
+`EndEvent_pay`. Para poner el mismo plazo en un proceso que ya existe, usa `addBoundary`:
+
+```json
+{ "name": "edit_process", "arguments": { "project": "claims.lila", "operations": [
+  { "op": "addBoundary", "on": "assess", "boundary": { "id": "sla", "type": "timer", "name": "48 h",
+    "duration": "48h", "interrupting": false, "label": "No decision in 48 h", "to": "escalate" } } ] } }
+```
 
 ## Herramientas de modelado para agentes
 
@@ -537,13 +643,20 @@ mismo desde una terminal.
 
 | Operación | Campos | Qué hace |
 | --- | --- | --- |
-| `add` | `step`, `after?` o `between?` | Agrega un paso. `step` es un paso de esquema sin sus conexiones: `{ id, name?, type?, lane?, duration?, resources? }`. Con `after: id`, el paso nuevo toma el flujo de salida de ese paso (se rechaza si tiene varios: usa `between`). Con `between: [from, to]`, va sobre el flujo from → to. El flujo donde cae conserva su id, nombre y probabilidad; un flujo nuevo sigue hasta el sucesor de antes. Sin ninguno de los dos, se agrega sin conectar. `lane` es, por defecto, el carril del paso al que sigue. |
-| `connect` | `from`, `to`, `label?`, `probability?`, `id?` | Agrega un flujo de secuencia (id `Flow_<from>_<to>` por defecto). `probability` solo a la salida de un gateway `xor` u `or`. |
-| `remove` | `id` | Quita un paso y reconecta: sus flujos de entrada van a su sucesor cuando tiene a lo sumo uno; un paso sin flujos de entrada pierde los de salida; un paso con varios de entrada y varios de salida (un split tras un join) se rechaza. Un paso con eventos de borde se rechaza. Los flujos de mensaje y asociaciones que cuelgan de él se van con él. También se puede quitar un flujo de secuencia. |
-| `rename` | `id`, `name` | Renombra cualquier elemento: paso, flujo, carril, pool, proceso. `""` borra el nombre. |
-| `setType` | `id`, `type` | Uno de los tipos del esquema. Se quedan el nombre, la documentación, los elementos de extensión y los flujos; un subproceso convertido en otra cosa pierde su contenido (va en `removed`). |
-| `moveToLane` | `id`, `lane` | Carril por nombre o id. |
+| `add` | `step`, `after?` o `between?` | Agrega un paso. `step` es un paso de esquema sin sus conexiones, eventos de borde, notas ni datos: `{ id, name?, type?, lane?, duration?, resources? }`, de cualquier tipo del esquema. Con `after: id`, el paso nuevo toma el flujo de salida de ese paso (se rechaza si tiene varios: usa `between`). Con `between: [from, to]`, va sobre el flujo from → to. El flujo donde cae conserva su id, nombre y probabilidad; un flujo nuevo sigue hasta el sucesor de antes. Sin ninguno de los dos, se agrega sin conectar. `lane` es, por defecto, el carril del paso al que sigue. |
+| `connect` | `from`, `to`, `label?`, `probability?`, `default?`, `id?` | Agrega un flujo de secuencia (id `Flow_<from>_<to>` por defecto). `probability` y `default: true` (el flujo por defecto de la compuerta) solo a la salida de un gateway `xor` u `or`; `default: true` se rechaza si la compuerta ya tiene flujo por defecto. Ninguna operación marca un flujo existente como el de por defecto ni le quita la marca: en una sola llamada, `connect` los mismos pasos otra vez (con `default: true` o sin él, y el `label` y la `probability` a conservar) y `remove` el flujo viejo, después de quitar el flujo por defecto actual de la compuerta si lo tiene; el flujo recibe un id nuevo. |
+| `remove` | `id` | Quita un paso y reconecta: sus flujos de entrada van a su sucesor cuando tiene a lo sumo uno; un paso sin flujos de entrada pierde los de salida; un paso con varios de entrada y varios de salida (un split tras un join) se rechaza. Un paso con eventos de borde se rechaza. Los flujos de mensaje y asociaciones que cuelgan de él se van con él, y también sus anotaciones de texto, sus asociaciones de datos y los objetos de datos que ya no usa nada más (van en el cambio). Un evento de fin que se queda sin flujo de entrada también se va (va en `removed`). También se puede quitar un flujo de secuencia, un evento de borde, una anotación de texto, un objeto o almacén de datos, un grupo o una asociación. |
+| `rename` | `id`, `name` | Renombra cualquier elemento: paso, flujo, carril, pool, proceso. Un carril también se puede nombrar por su nombre, cuando ningún elemento tiene ese id. `""` borra el nombre. |
+| `setType` | `id`, `type` | Uno de los tipos del esquema, o `end`/`terminate` para convertir un evento de fin en uno de terminación y de vuelta. Para esos dos, `id` es el del evento de fin (`EndEvent_<paso>` en un proceso que hizo Lila; el esquema no lo muestra de otro modo), o un paso que lleva a exactamente un evento de fin: entonces cambia ese fin, no el paso. `end`/`terminate` sobre otra cosa (ni un evento de fin ni un paso con exactamente un fin después) se rechaza. Se quedan el nombre, la documentación, los elementos de extensión y los flujos; un subproceso convertido en otra cosa pierde su contenido (va en `removed`). Un `xor` u `or` convertido en `and` o `eventGateway` pierde las probabilidades de sus flujos de salida (van en `scenarioRemovals`). |
+| `moveToLane` | `id`, `lane` | Carril por nombre o id. Los eventos de borde del paso, y los eventos de fin a los que llevan, se mueven con él. |
 | `addLane` | `name`, `id?`, `after?` o `before?` | Agrega un carril (abajo, por defecto). El primer carril de un proceso sin carriles contiene todos sus pasos, y un proceso sin pool recibe uno. |
+| `removeLane` | `lane`, `moveStepsTo?` | Quita un carril (por nombre o id). Un carril que tiene algún nodo —un paso, un inicio, un evento de fin, un evento de borde o su fin— necesita `moveStepsTo`, otro carril sin subcarriles que se los lleve. Un carril con subcarriles se rechaza. El único carril del proceso es la excepción: quitarlo quita el conjunto de carriles, sus nodos se quedan en el pool sin carriles y `moveStepsTo` no hace falta. |
+| `moveLane` | `lane`, `before` o `after` | Mueve un carril encima (`before`) o debajo (`after`) de un carril hermano; exactamente uno de los dos. |
+| `addBoundary` | `on`, `boundary` | Pega un temporizador de borde a una tarea (cualquier variante) o a una actividad de llamada, no a un subproceso. `boundary` es como en un esquema: `{ id, type: "timer", name?, label?, duration?, interrupting?, to \| end }`. Su `duration` va al escenario base. |
+| `annotate` | `on`, `text` | Cuelga una anotación de texto BPMN de un paso (se lee de vuelta como las `notes` del paso). El mismo texto en el mismo paso otra vez no cambia nada, así que `removeAnnotation` nunca es ambiguo. No confundir con `annotate_element`, que escribe la documentación, el RACI y los atributos (anotaciones `lila:`). |
+| `removeAnnotation` | `on`, `text` | Quita la anotación con ese texto que cuelga del paso, con su asociación (todas, en un modelo de fuera que la repite). |
+| `addDataObject` | `name`, `on`, `direction` | Conecta un objeto de datos a una actividad (una tarea, una actividad de llamada o un subproceso): `in`, la actividad lo lee; `out`, lo escribe. Si el proceso tiene un objeto con ese nombre se reutiliza; si no, se crea. |
+| `removeDataObject` | `name`, `on?` | Desconecta el objeto de datos de la actividad `on`, o de todas sin él. El objeto se va cuando ya nada lo usa. |
 
 - **Los ids no cambian.** Un paso renombrado conserva sus entradas de escenario, y uno con otro tipo
   también, en lo que siga aplicando. El `duration`, los `resources` y el `selection` de un paso
@@ -553,7 +666,8 @@ mismo desde una terminal.
 - **Después de editar, el proceso sigue simulando.** Las entradas de escenario que ya no aplican se
   quitan de todos los escenarios del proceso: la entrada completa de un elemento que la edición
   quitó, y los campos que un elemento con otro tipo ya no admite (recursos en un gateway, un
-  subproceso o un temporizador; una duración en un subproceso…). Nada se va en silencio:
+  subproceso o un temporizador; una duración en un subproceso…), y las probabilidades de los flujos
+  que salen de una compuerta que pasó a `and` o `eventGateway`. Nada se va en silencio:
   `scenarioRemovals` lista cada una como `{ scenario, id, removed, entry }`, con los campos quitados
   y sus valores anteriores, para que un agente los ponga en otro lado con `patch_scenario`; `notes`
   dice lo mismo en palabras, y un `dryRun` devuelve el mismo reporte. Después se valida cada
@@ -561,8 +675,8 @@ mismo desde una terminal.
   lista cada id que salió del modelo. `notes` avisa además de un XOR cuyas probabilidades de rama ya
   no suman 1, con los flujos a corregir.
 - **Lo que no se toca se queda**: documentación, anotaciones `lila:` (RACI, referencias, atributos
-  extendidos), extensiones de otros fabricantes, anotaciones de texto, objetos de datos, otros pools
-  y flujos de mensaje. Un modelo que el lector BPMN no puede leer completo se rechaza en vez de
+  extendidos), extensiones de otros fabricantes, las anotaciones de texto, objetos de datos y grupos
+  que ninguna operación nombra, otros pools y flujos de mensaje. Un modelo que el lector BPMN no puede leer completo se rechaza en vez de
   reescribirse con algo de menos.
 - **Maquetado.** Por defecto (`layout: true`) el proceso editado se maqueta de nuevo con el mismo
   maquetador y el mismo arreglo de carriles que `create_process`: se pierden las posiciones puestas a
@@ -572,7 +686,10 @@ mismo desde una terminal.
   conserva su lugar: un paso nuevo va a la derecha del paso al que sigue, en su carril (que crece una
   fila si está lleno), y solo se vuelven a trazar los flujos cuyos extremos cambiaron. Para hacer
   lugar a un paso insertado entre dos pasos muy juntos, lo que está a su derecha en ese pool se
-  corre a la derecha en un solo tanto; pools y carriles solo se ensanchan o se alargan.
+  corre a la derecha en un solo tanto; pools y carriles solo se ensanchan o se alargan, salvo con
+  `removeLane` y `moveLane`, que mueven bandas enteras: cada paso conserva su x y se vuelven a
+  trazar los flujos que cruzan de una banda a otra. Una anotación o un objeto de datos nuevo va
+  junto a su paso, sin tapar otra figura.
 - **Qué proceso**: `process` cuando el `.lila` tiene varios. Dentro de su BPMN, el proceso que lee el
   simulador (el ejecutable y no vacío); no se pueden editar pasos de otros pools.
 - La escritura es la misma escritura atómica y con candado que la de `patch_scenario`: si el archivo
@@ -1013,4 +1130,5 @@ el navegador y se queda en primer plano**: no lo lances desde un agente ni en CI
   posiciones a mano en él); un subproceso expandido queda colapsado, y los pools verticales (como
   los dibuja Bizagi) quedan horizontales. Con `layout: false` la colocación es simple: a la derecha
   del predecesor, en su carril; no desenreda cruces. Solo se puede editar el proceso principal del
-  BPMN, y los carriles anidados solo a través de sus carriles hoja.
+  BPMN, y los carriles anidados solo a través de sus carriles hoja. `edit_process` no agrega
+  eventos de inicio ni les cambia el tipo: ponlos en el esquema (`starts`) o cámbialos en la app.
