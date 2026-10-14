@@ -616,6 +616,48 @@ probador #575)*
 
 ---
 
+## ADR-032 — RM-01: el contrato del repositorio (objetos de catálogo, identidad, almacenamiento por objeto)
+
+**Estado:** Propuesta (RM-01, 2026-10-14). Decisiones técnicas tomadas; cuatro preguntas de producto
+para el dueño están en el contrato. Precisa ADR-012 y ADR-029; sustituye el `catalog.json` de
+ADR-013.
+
+ADR-029 fijó la dirección (un `.lila` puede contener una organización, un archivo por objeto de
+catálogo, referencias por id, `ProjectStore` por objeto con carga perezosa) y dejó abiertos los
+detalles. El lote A1 (catálogo, almacén por objeto, selectores, explorador) no puede empezar sin
+ellos, y equivocarse en la identidad o en el versionado obliga a reescribir después.
+`docs/es/REPOSITORY_CONTRACT.md` los fija:
+
+- **La versión 3** es la versión 2 más `catalog/<tipo>/<id>.json` y adjuntos direccionados por
+  contenido `attachments/<sha256>[.<ext>]`, y un `id` estable por proceso en el manifiesto. Se
+  escribe solo cuando existe un objeto de catálogo o un adjunto, y una vez leída como versión 3 se
+  queda en la 3. Las versiones de la app que leen la 1 y la 2 ya la rechazan con
+  `LILA-MANIFEST`/`E-MANIFEST`.
+- **Las entradas desconocidas se conservan** en vez de descartarse, en todas las versiones, porque
+  sus bytes ya no cruzan el IPC ni el espejo de `localStorage`. Las fases posteriores pueden añadir
+  `maps/` o `process.json` sin una versión nueva.
+- **Identidad:** ids de catálogo `<tipo>-<12 al azar de [0-9a-z]>` (gramática de slug, únicos en
+  todo el catálogo, adoptables los escritos a mano); ids de proceso en el manifiesto, distintos del
+  slug (una ruta) y de `bpmn:process@id` (la clave lógica de ADR-012, que comparten las versiones de
+  un proceso); las referencias entre modelos son `{ process, element }`. Las referencias sin resolver
+  se conservan y se muestran, nunca se inventan; borrar un objeto en uso se rechaza salvo que se
+  sustituya o se quiten sus referencias.
+- **Índice de usos derivado**, nunca persistido. **Almacenamiento:** `RepositoryStore` con lecturas
+  perezosas y commits de conjuntos de cambios con `baseRevision`; los adaptadores de carpeta,
+  archivo, IPC e IndexedDB mantienen las escrituras atómicas de hoy (`commitWithRollback`, temporal +
+  renombrado bajo `.lila.lock`) y sus comprobaciones de conflicto. La recuperación del escritorio
+  guarda el conjunto de cambios pendiente.
+- **Presupuestos de rendimiento** sobre un repositorio sintético con semilla (200 procesos, 5.000
+  objetos, 50.000 referencias) y dos máquinas de referencia, como objetivos que hay que medir.
+
+Consecuencias: no cambian la extensión BPMN, el esquema de escenarios ni los códigos de error
+existentes; A1 añade `E-OBJETO-EN-USO`, `E-REVISION` y `E-ADJUNTO`. El motor, la CLI y el MCP siguen
+funcionando sobre la versión 3 y deben llevar el catálogo, los adjuntos y las entradas conservadas
+sin cambios. El espejo de `localStorage` del navegador se sustituye por IndexedDB.
+`docs/PROJECT_FORMAT.md` y `docs/BPMN_EXTENSION.md` se actualizan junto con el código de A1.
+
+---
+
 ## Ver también
 
 - `LILA_MODELER_ESTRUCTURA.md` — documento de estructura completo (fuente de verdad de todas las ADR de este archivo).
@@ -623,5 +665,6 @@ probador #575)*
 - `docs/BPMN_EXTENSION.md` — implementación operativa de ADR-012 y ADR-014.
 - `docs/RESULTS_FORMAT.md` — implementación operativa de la parte de calendarios/utilización de ADR-016.
 - `docs/PROJECT_FORMAT.md` — implementación operativa de ADR-018 y ADR-027 (la carpeta de proyecto y el contenedor `.lila`).
+- `docs/es/REPOSITORY_CONTRACT.md` — contrato operativo de ADR-032 (repositorio versión 3, objetos de catálogo, identidad, almacenamiento por objeto).
 - `docs/DECISIONS-corpus-previo.md` — texto original de ADR-001 a ADR-008 (corpus previo, proyecto entonces llamado *Open Process Platform*).
 - `BACKLOG.md` — desglose en épicas y tickets por hito.

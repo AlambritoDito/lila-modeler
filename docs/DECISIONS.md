@@ -608,6 +608,43 @@ not enough, the `.exe` can become primary again without code changes; the SPA is
 
 ---
 
+## ADR-032 — RM-01: the repository contract (catalog objects, identity, per-object storage)
+
+**Status:** Proposed (RM-01, 2026-10-14). Technical decisions taken; four product questions for the
+owner are listed in the contract. Refines ADR-012 and ADR-029; supersedes ADR-013's `catalog.json`.
+
+ADR-029 set the direction — one `.lila` can hold an organization, one file per catalog object,
+references by id, `ProjectStore` per object with lazy loading — and left the details open. Lot A1
+(catalog, per-object store, selectors, explorer) cannot start without them, and getting identity
+or versioning wrong forces a rewrite later. `docs/REPOSITORY_CONTRACT.md` settles them:
+
+- **Version 3** is version 2 plus `catalog/<type>/<id>.json` and content-addressed
+  `attachments/<sha256>[.<ext>]`, and a stable `id` per process in the manifest. It is written only
+  when a catalog object or attachment exists, and once read as version 3 it stays version 3. Builds
+  that read versions 1 and 2 already refuse it with `LILA-MANIFEST`/`E-MANIFEST`.
+- **Unknown entries are preserved** instead of dropped, in every version, because their bytes no
+  longer cross IPC or the `localStorage` mirror. Later phases can add `maps/` or `process.json`
+  without a new version.
+- **Identity:** catalog ids `<type>-<12 random [0-9a-z]>` (slug grammar, unique across the catalog,
+  hand-typed ids adoptable); process ids in the manifest, distinct from the slug (a path) and from
+  `bpmn:process@id` (ADR-012's logical key, shared by versions of one process); cross-model
+  references are `{ process, element }`. Unresolved references are kept and shown, never invented;
+  deleting an object in use is refused unless replaced or its references removed.
+- **Derived usage index**, never persisted. **Storage:** `RepositoryStore` with lazy reads and
+  commits of change sets with `baseRevision`; folder, archive, IPC and IndexedDB adapters keep
+  today's atomic writes (`commitWithRollback`, temp + rename under `.lila.lock`) and conflict checks.
+  Desktop recovery stores the pending change set.
+- **Performance budgets** on a seeded synthetic repository (200 processes, 5,000 objects, 50,000
+  references) and two reference machines, as targets to measure.
+
+Consequences: no BPMN extension, scenario schema or existing error code changes; A1 adds
+`E-OBJETO-EN-USO`, `E-REVISION` and `E-ADJUNTO`. The engine, CLI and MCP keep working on version 3
+and must carry catalog, attachments and preserved entries through unchanged. The browser's
+`localStorage` mirror is replaced by IndexedDB. `docs/PROJECT_FORMAT.md` and
+`docs/BPMN_EXTENSION.md` are updated together with the A1 code.
+
+---
+
 ## See also
 
 - `LILA_MODELER_ESTRUCTURA.md` — the full structure document (source of truth for every ADR in this file).
@@ -615,5 +652,6 @@ not enough, the `.exe` can become primary again without code changes; the SPA is
 - `docs/BPMN_EXTENSION.md` — operational implementation of ADR-012 and ADR-014.
 - `docs/RESULTS_FORMAT.md` — operational implementation of the calendar/utilization part of ADR-016.
 - `docs/PROJECT_FORMAT.md` — operational implementation of ADR-018 and ADR-027 (the project folder and the `.lila` container).
+- `docs/REPOSITORY_CONTRACT.md` — operational contract of ADR-032 (repository version 3, catalog objects, identity, per-object storage).
 - `docs/DECISIONS-corpus-previo.md` — original text of ADR-001 through ADR-008 (earlier corpus, project then called *Open Process Platform*).
 - `BACKLOG.md` — breakdown into epics and tickets per milestone.
