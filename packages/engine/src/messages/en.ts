@@ -51,6 +51,12 @@ const EN_USAGE = `Usage: lila validate <file.bpmn|project.lila> [--process slug]
                              [--responsibility R|A|C|I:role ...] [--clear-responsibilities]
                              [--ref kind=id ...] [--attribute id=value ...] [--dry-run] [--json]
        lila process raci <project.lila> [--process slug] [--json|--csv]
+       lila process attribute define <project.lila> --name name --type text|number|list|date
+                                     --applies-to task|gateway|event|subProcess|lane|process
+                                     [--option value ...] [--default value] [--id id]
+                                     [--process slug] [--dry-run] [--json]
+       lila process attribute define <project.lila> --remove --id id|--name name --applies-to type
+       lila process attribute list <project.lila> [--process slug] [--json]
        lila scenario import <project.lila> <scenario> <sheet.xlsx|sheet.csv> [--process slug]
                             [--dry-run] [--json]
        lila scenario template <project.lila> <scenario> --out sheet.xlsx [--process slug] [--force]
@@ -69,6 +75,7 @@ Commands:
              edit: applies a list of operations to a process, all or none. See docs/CLI.md.
              annotate: writes an element's description, RACI, catalog references and extended
              attributes into the .lila. raci: prints the RACI matrix of the process document.
+             attribute: defines (or removes) an extended attribute, or lists them.
   scenario   import: applies a scenario sheet (.xlsx/.csv) to a scenario of the .lila, like the
              app's Import Excel/CSV. template: writes that sheet, filled in, for a person.
              show: prints a scenario as stored (or --resolved) with the validator's notes.
@@ -134,6 +141,14 @@ process annotate options:
   --ref kind=id     systemRef, documentRef, riskRef, controlRef, kpiRef, input or output;
                     repeatable; replaces the lists of the kinds given (kind= empties one).
   --attribute k=v   An extended attribute by id or name; repeatable; "k=" removes its value.
+  --dry-run         Shows the result without writing.
+
+process attribute define options:
+  --name, --type, --applies-to  The whole definition, every time; found by --id, else by name
+                    (any case) and --applies-to, else created with a new id.
+  --option v        A list's option; repeatable. --default v: what an element without a value shows.
+  --remove          Removes the definition and its values. Retyping, --applies-to or fewer
+                    options also remove the values that no longer fit; both list them.
   --dry-run         Shows the result without writing.
 
 scenario import options:
@@ -536,7 +551,7 @@ export const en: Catalog = {
       `Created process "${name}" (${slug}) in ${newFile ? 'the new file ' : ''}${file}: ${n(steps, 'step', 'steps')}, ${n(lanes, 'lane', 'lanes')}, base scenario as-is.scenario.json.`,
     processDryRun: (name, slug, file, steps, lanes, newFile) =>
       `Dry run: would create process "${name}" (${slug}) in ${newFile ? 'the new file ' : ''}${file}: ${n(steps, 'step', 'steps')}, ${n(lanes, 'lane', 'lanes')}. Nothing was written.`,
-    processUnknownSubcommand: (sub) => `unknown subcommand "${sub}"; use create, show, edit, annotate or raci.`,
+    processUnknownSubcommand: (sub) => `unknown subcommand "${sub}"; use create, show, edit, annotate, raci or attribute.`,
     processMissingOption: (option) => `missing ${option}.`,
     processShowHeader: (name, slug) => `Process "${name}" (${slug})`,
     processShowLanes: (lanes) => `Lanes: ${lanes}`,
