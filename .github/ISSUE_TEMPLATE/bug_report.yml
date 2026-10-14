@@ -71,9 +71,12 @@ body:
   - type: input
     id: environment
     attributes:
-      label: OS and Node.js version
-      description: Output of `node -v` and your operating system.
-      placeholder: e.g. macOS 14, Node 22.11.0
+      label: Environment
+      description: >
+        Your operating system and where you ran Lila: the desktop app, the web app (browser or
+        installed PWA), or the engine, CLI or MCP server (then also the output of `node -v`).
+        «Report a problem…» in the app fills this in.
+      placeholder: e.g. macOS 15.1 arm64 · desktop app, or macOS 14, Node 22.11.0
     validations:
       required: true
 
