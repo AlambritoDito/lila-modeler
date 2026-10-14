@@ -435,20 +435,26 @@ export class Diagram {
    * Moves everything of `plane` at or below `fromY` down by `dy`; pools and lanes across it grow, and
    * so do the shapes of the elements in `grow` (a lane whose bottom is `fromY`, say). A boundary
    * event moves when its host does, wherever it starts (QA of #661, round 3: one left in the lane
-   * its host had left was moved, then moved back by its host's delta). A sequence flow with an end
+   * its host had left was moved, then moved back by its host's delta), and with the bottom border of
+   * a sub-process that gets taller. A sequence flow with an end
    * that moved and an end point that did not (or the other way round) is routed again.
    */
   shiftDown(plane: El, fromY: number, dy: number, skip: ReadonlySet<El> = new Set(), grow: ReadonlySet<El> = new Set()): void {
     const elements = (plane['planeElement'] ?? []) as El[];
     const goes = (di: El | undefined): boolean =>
       di !== undefined && !skip.has(di) && !grow.has(di['bpmnElement']) && (di['bounds'] as Box).y >= fromY;
+    // A container across `fromY` (or in `grow`) does not move but gets taller: its bottom border moves.
+    const grows = (di: El): boolean =>
+      !skip.has(di) && (grow.has(di['bpmnElement']) || (this.isContainer(di) && (di['bounds'] as Box).y < fromY && bottom(di['bounds'] as Box) > fromY));
     // Decided before anything moves, so a host that moved first still takes its boundary events.
     const moving = new Set(
       elements.filter((di) => {
         if (di.$type !== 'bpmndi:BPMNShape') return false;
         const host = di['bpmnElement']?.['attachedToRef'] as El | undefined;
         const hostDi = host === undefined ? undefined : this.shapes.get(host.id);
-        return hostDi === undefined ? goes(di) : !skip.has(di) && goes(hostDi);
+        if (hostDi === undefined) return goes(di);
+        // QA of #661, round 4: a boundary event on the bottom border of a sub-process that gets taller goes down with it.
+        return !skip.has(di) && (goes(hostDi) || (grows(hostDi) && (di['bounds'] as Box).y >= fromY));
       }),
     );
     const ends: { flow: El; first: boolean; last: boolean }[] = [];
@@ -906,6 +912,24 @@ export function keepInBand(diagram: Diagram, plane: El, el: El, at: Box): void {
 }
 
 /**
+ * The data objects and stores of `dataAssociations` drawn in the band (lane, else pool) of at least
+ * one of the nodes they are linked to: what `placeArtifacts` keeps in a band when an edit takes it away.
+ */
+export function seatedData(diagram: Diagram, plane: El, dataAssociations: readonly El[]): Set<El> {
+  const out = new Set<El>();
+  for (const d of dataAssociations) {
+    const data = d.$type === 'bpmn:DataInputAssociation' ? ((d['sourceRef'] ?? []) as El[])[0] : (d['targetRef'] as El | undefined);
+    const box = data === undefined ? undefined : diagram.bounds(data.id);
+    const at = diagram.bounds((d['$parent'] as El).id);
+    if (data === undefined || box === undefined || at === undefined) continue;
+    const leaf = leafOf(bandsAround(plane, at));
+    const y = center(box).y;
+    if (leaf !== undefined && y >= leaf.y && y <= bottom(leaf)) out.add(data);
+  }
+  return out;
+}
+
+/**
  * #630: the text annotations, data objects and data stores of `process` (or of a sub-process, on
  * its own plane) that have no shape (a model that arrived without a diagram, or one an outline or
  * an edit just added, #638) get one next to the node they hang on: an annotation above and right of
@@ -914,7 +938,15 @@ export function keepInBand(diagram: Diagram, plane: El, el: El, at: Box): void {
  * pool) of its node (`keepInBand`, also one that moved with its node). Every association (plain or data)
  * without an edge whose two ends have a shape gets one, drawn straight.
  */
-export function placeArtifacts(diagram: Diagram, plane: El, process: El, nodes: readonly El[], associations: readonly El[], dataAssociations: readonly El[]): void {
+export function placeArtifacts(
+  diagram: Diagram,
+  plane: El,
+  process: El,
+  nodes: readonly El[],
+  associations: readonly El[],
+  dataAssociations: readonly El[],
+  seated: ReadonlySet<El> = new Set(),
+): void {
   const anchorOf = anchorsOf(nodes, associations, dataAssociations);
   const annotations = [...associations.flatMap((a) => [a['sourceRef'], a['targetRef']] as El[]), ...((process['artifacts'] ?? []) as El[])]
     .filter((el, i, all) => el !== undefined && el.$type === 'bpmn:TextAnnotation' && all.indexOf(el) === i);
@@ -942,27 +974,13 @@ export function placeArtifacts(diagram: Diagram, plane: El, process: El, nodes: 
     diagram.addShape(el, plane, freeSpot(diagram, plane, box, step));
   }
   // A data object or store that is new, moved, or hangs on a node that moved stays in its node's band;
-  // so does one in the band of none of the nodes it is linked to (QA of #661, round 3: a shared one
-  // left in the lane of a step that was removed).
-  const users = new Map<El, El[]>();
-  for (const d of dataAssociations) {
-    const data = d.$type === 'bpmn:DataInputAssociation' ? ((d['sourceRef'] ?? []) as El[])[0] : (d['targetRef'] as El | undefined);
-    if (data !== undefined) users.set(data, [...(users.get(data) ?? []), d['$parent'] as El]);
-  }
-  const stray = (el: El): boolean => {
-    const box = diagram.bounds(el.id);
-    if (box === undefined) return false;
-    const y = center(box).y;
-    const using = users.get(el) ?? [];
-    return using.length > 0 && using.every((node) => {
-      const at = diagram.bounds(node.id);
-      const leaf = at === undefined ? undefined : leafOf(bandsAround(plane, at));
-      return leaf !== undefined && (y < leaf.y || y > bottom(leaf));
-    });
-  };
+  // so does one that sat in the band of a node it is linked to when the edit began (`seated`) and no
+  // longer does (QA of #661, round 3: a shared one left in the lane of a step that was removed). One
+  // its author drew elsewhere (round 4) is left where it is.
+  const now = seatedData(diagram, plane, dataAssociations);
   for (const [el, anchor] of anchorOf) {
     const at = diagram.bounds(anchor.id);
-    if (at !== undefined && (diagram.moved.has(el.id) || diagram.moved.has(anchor.id) || stray(el))) keepInBand(diagram, plane, el, at);
+    if (at !== undefined && (diagram.moved.has(el.id) || diagram.moved.has(anchor.id) || (seated.has(el) && !now.has(el)))) keepInBand(diagram, plane, el, at);
   }
   if (orphans.length > 0) {
     const all = diagram.nodeShapes(plane).map((di) => di['bounds'] as Box);

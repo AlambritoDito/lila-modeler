@@ -48,7 +48,7 @@ import {
 import type { ParseBpmnOptions } from './parse.js';
 import { validateBpmnXml } from './validate-report.js';
 import type { ValidationResult } from './validate.js';
-import { Diagram, everything, is, placeArtifacts, relayout, type Box, type El, type Point } from './edit-layout.js';
+import { Diagram, everything, is, placeArtifacts, relayout, seatedData, type Box, type El, type Point } from './edit-layout.js';
 import { laneOfNode, lanesOf, LayoutError } from './layout.js';
 import { messages, type CliMessages, type Locale } from '../messages/index.js';
 import type { Distribution } from '../scenario.js';
@@ -1434,16 +1434,31 @@ class Editor {
    * and associations without an edge get one, on the plane of each container.
    */
   placeArtifacts(): void {
-    if (!this.diagram.hasDi) return;
+    for (const { plane, container, nodes, own, data } of this.artifactPlanes()) placeArtifacts(this.diagram, plane, container, nodes, own, data, this.seated);
+  }
+
+  /**
+   * The data objects and stores drawn in the band of a step that uses them before any operation runs
+   * (QA of #661, round 4): only those go back into a band when an edit takes them out of it.
+   */
+  readonly seated = new Set<El>();
+
+  noteSeated(): void {
+    for (const { plane, data } of this.artifactPlanes()) for (const el of seatedData(this.diagram, plane, data)) this.seated.add(el);
+  }
+
+  /** Each container (the process, its sub-processes) drawn on a plane, with its nodes, associations and data associations. */
+  artifactPlanes(): { plane: El; container: El; nodes: El[]; own: El[]; data: El[] }[] {
+    if (!this.diagram.hasDi) return [];
     const containers = [this.process, ...[...everything(this.process['flowElements'] ?? [])].filter((el) => el.$type === 'bpmn:SubProcess')];
     const associations = associationsOf(this.definitions, this.process);
-    for (const container of containers) {
+    return containers.flatMap((container) => {
       const plane = this.diagram.planeFor(container, this.process);
-      if (plane === undefined) continue;
+      if (plane === undefined) return [];
       const nodes = ((container['flowElements'] ?? []) as El[]).filter((el) => is(el, 'bpmn:FlowNode'));
       const own = container === this.process ? associations : ((container['artifacts'] ?? []) as El[]).filter((a) => a.$type === 'bpmn:Association');
-      placeArtifacts(this.diagram, plane, container, nodes, own, nodes.flatMap((n) => dataOf(n).map((d) => d.association)));
-    }
+      return [{ plane, container, nodes, own, data: nodes.flatMap((n) => dataOf(n).map((d) => d.association)) }];
+    });
   }
 
   addLane(op: Extract<Op, { op: 'addLane' }>, before: number): void {
@@ -1743,6 +1758,7 @@ export async function editBpmn(xml: string, operations: unknown, options: EditBp
 
   const editor = new Editor(moddle, definitions, process, C, options.scenario, options.scenarioName ?? 'as-is.scenario.json');
   editor.incremental = options.layout === false;
+  editor.noteSeated();
   editor.issues.push(...shapeIssues);
   for (const [index, op] of ops.entries()) {
     if (op === undefined) continue;

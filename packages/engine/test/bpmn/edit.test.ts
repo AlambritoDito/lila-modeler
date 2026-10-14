@@ -1579,3 +1579,133 @@ describe('QA of #661, round 3: boundaries stay on a host that moves up a lane, s
     await expectCleanImport(xml);
   });
 });
+
+/* ------------------------------------------------------------------ *
+ * QA of #661, round 4
+ * ------------------------------------------------------------------ */
+
+describe('QA of #661, round 4: edits that do not touch the data leave it where its author drew it; boundaries of a growing sub-process', () => {
+  /** The bounds of the data objects and stores, lanes and pools of `xml`. */
+  const frame = async (xml: string): Promise<Record<string, Box>> => {
+    const { shapes } = await di(xml);
+    return Object.fromEntries([...shapes].filter(([id]) => /^(DataObjectReference|DataStoreReference|DO_|DS_|Lane_|Participant_)/.test(id)));
+  };
+
+  test.each([
+    ['a rename of another step', { op: 'rename', id: 'b', name: 'Pay invoice' }],
+    ['a rename of the other lane', { op: 'rename', id: 'Lane_2', name: 'Rear' }],
+  ] as const)('layout: false, %s keeps a data object drawn in the lane below its step where it is', async (_, op) => {
+    const built = await outlineToBpmn({
+      name: 'Hand',
+      lanes: ['A', 'B'],
+      steps: [
+        { id: 'a', lane: 'A', data: [{ name: 'Doc', direction: 'out' }] },
+        { id: 'b', lane: 'B', end: true },
+      ],
+    });
+    const lane2 = (await di(built.xml)).shapes.get('Lane_2')!;
+    // Drawn by hand in B, as bpmn-js allows anywhere in the participant.
+    const hand = built.xml.replace(
+      /(bpmnElement="DataObjectReference_a"[^>]*>\s*<dc:Bounds x="[^"]*" y=")[^"]*"/,
+      `$1${lane2.y + 10}"`,
+    );
+    expect(hand).not.toBe(built.xml);
+    const edit = await editBpmn(hand, [op as EditOperation], { scenario: built.scenario, layout: false });
+    expect(await frame(edit.xml)).toEqual(await frame(hand));
+  });
+
+  test('layout: false, renames, adds and retypes elsewhere keep a data store drawn outside every pool where it is', async () => {
+    const xml = pedidoXml
+      .replace(
+        '<bpmn:outgoing>Flow_TomarPedido_ANDFork</bpmn:outgoing>\n    </bpmn:task>',
+        '<bpmn:outgoing>Flow_TomarPedido_ANDFork</bpmn:outgoing>\n      <bpmn:dataOutputAssociation id="DOA_Orders"><bpmn:targetRef>DS_Orders</bpmn:targetRef></bpmn:dataOutputAssociation>\n    </bpmn:task>\n    <bpmn:dataStoreReference id="DS_Orders" name="Orders" />',
+      )
+      .replace(
+        '<bpmndi:BPMNShape id="Task_TomarPedido_di" bpmnElement="Task_TomarPedido">',
+        '<bpmndi:BPMNShape id="DS_Orders_di" bpmnElement="DS_Orders"><dc:Bounds x="305" y="488" width="50" height="50" /></bpmndi:BPMNShape>\n      <bpmndi:BPMNEdge id="DOA_Orders_di" bpmnElement="DOA_Orders"><di:waypoint x="330" y="260" /><di:waypoint x="330" y="488" /></bpmndi:BPMNEdge>\n      <bpmndi:BPMNShape id="Task_TomarPedido_di" bpmnElement="Task_TomarPedido">',
+      );
+    expect(xml).toContain('id="DS_Orders_di"');
+    expect(xml).toContain('<bpmn:dataStoreReference id="DS_Orders"');
+    const before = await frame(xml);
+    expect(before['DS_Orders']).toEqual({ x: 305, y: 488, width: 50, height: 50 });
+    for (const op of [
+      { op: 'rename', id: 'Task_Revisar', name: 'Review the order' },
+      { op: 'annotate', on: 'Task_Revisar', text: 'Check twice' },
+      { op: 'setType', id: 'Task_Revisar', type: 'userTask' },
+      { op: 'add', after: 'Task_Revisar', step: { id: 'Task_Sellar', name: 'Stamp' } },
+    ]) {
+      const edit = await editBpmn(xml, [op as EditOperation], { scenario: pedidoScenario, layout: false });
+      expect((await frame(edit.xml))['DS_Orders'], JSON.stringify(op)).toEqual(before['DS_Orders']);
+    }
+  });
+
+  /** Lanes A (0..200) and B (200..400); the expanded sub-process sp of A crosses into B, with bt on its bottom border. */
+  const SUB = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Defs" targetNamespace="http://example.com/sub">
+  <bpmn:collaboration id="Collab">
+    <bpmn:participant id="P" name="Sub" processRef="Proc" />
+  </bpmn:collaboration>
+  <bpmn:process id="Proc" isExecutable="false">
+    <bpmn:laneSet id="LS">
+      <bpmn:lane id="Lane_A" name="A"><bpmn:flowNodeRef>s</bpmn:flowNodeRef><bpmn:flowNodeRef>t</bpmn:flowNodeRef><bpmn:flowNodeRef>sp</bpmn:flowNodeRef><bpmn:flowNodeRef>bt</bpmn:flowNodeRef></bpmn:lane>
+      <bpmn:lane id="Lane_B" name="B"><bpmn:flowNodeRef>e</bpmn:flowNodeRef><bpmn:flowNodeRef>e2</bpmn:flowNodeRef></bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="s"><bpmn:outgoing>f1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:task id="t" name="T"><bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f2</bpmn:outgoing></bpmn:task>
+    <bpmn:subProcess id="sp" name="Sp"><bpmn:incoming>f2</bpmn:incoming><bpmn:outgoing>f3</bpmn:outgoing>
+      <bpmn:startEvent id="ss"><bpmn:outgoing>g1</bpmn:outgoing></bpmn:startEvent>
+      <bpmn:task id="st" name="St"><bpmn:incoming>g1</bpmn:incoming><bpmn:outgoing>g2</bpmn:outgoing></bpmn:task>
+      <bpmn:endEvent id="se"><bpmn:incoming>g2</bpmn:incoming></bpmn:endEvent>
+      <bpmn:sequenceFlow id="g1" sourceRef="ss" targetRef="st" />
+      <bpmn:sequenceFlow id="g2" sourceRef="st" targetRef="se" />
+    </bpmn:subProcess>
+    <bpmn:boundaryEvent id="bt" attachedToRef="sp" cancelActivity="false"><bpmn:outgoing>f4</bpmn:outgoing><bpmn:timerEventDefinition id="bt_def"><bpmn:timeDuration>PT1H</bpmn:timeDuration></bpmn:timerEventDefinition></bpmn:boundaryEvent>
+    <bpmn:endEvent id="e"><bpmn:incoming>f3</bpmn:incoming></bpmn:endEvent>
+    <bpmn:endEvent id="e2"><bpmn:incoming>f4</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t" />
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="sp" />
+    <bpmn:sequenceFlow id="f3" sourceRef="sp" targetRef="e" />
+    <bpmn:sequenceFlow id="f4" sourceRef="bt" targetRef="e2" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D">
+    <bpmndi:BPMNPlane id="Plane" bpmnElement="Collab">
+      <bpmndi:BPMNShape id="P_di" bpmnElement="P" isHorizontal="true"><dc:Bounds x="0" y="0" width="900" height="400" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_A_di" bpmnElement="Lane_A" isHorizontal="true"><dc:Bounds x="30" y="0" width="870" height="200" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_B_di" bpmnElement="Lane_B" isHorizontal="true"><dc:Bounds x="30" y="200" width="870" height="200" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_di" bpmnElement="s"><dc:Bounds x="80" y="82" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_di" bpmnElement="t"><dc:Bounds x="150" y="60" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp_di" bpmnElement="sp" isExpanded="true"><dc:Bounds x="300" y="30" width="350" height="230" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ss_di" bpmnElement="ss"><dc:Bounds x="330" y="92" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_di" bpmnElement="st"><dc:Bounds x="410" y="70" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="se_di" bpmnElement="se"><dc:Bounds x="570" y="92" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="bt_di" bpmnElement="bt"><dc:Bounds x="450" y="242" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_di" bpmnElement="e"><dc:Bounds x="720" y="282" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e2_di" bpmnElement="e2"><dc:Bounds x="450" y="330" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="116" y="100" /><di:waypoint x="150" y="100" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="250" y="100" /><di:waypoint x="300" y="100" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="g1_di" bpmnElement="g1"><di:waypoint x="366" y="110" /><di:waypoint x="410" y="110" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="g2_di" bpmnElement="g2"><di:waypoint x="510" y="110" /><di:waypoint x="570" y="110" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><di:waypoint x="650" y="145" /><di:waypoint x="738" y="145" /><di:waypoint x="738" y="282" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4"><di:waypoint x="468" y="278" /><di:waypoint x="468" y="330" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+  test.each([
+    ['addLane Z after A', [{ op: 'addLane', name: 'Z', after: 'A' }]],
+    ['addDataObject on t, which makes A taller', [{ op: 'addDataObject', name: 'F', on: 't', direction: 'in' }]],
+  ] as const)('layout: false, %s: the boundary on the bottom border of an expanded sub-process that crosses the lane line stays on it', async (_, ops) => {
+    await expectCleanImport(SUB);
+    const edit = await editBpmn(SUB, ops as unknown as EditOperation[], { layout: false });
+    const { shapes, edges } = await di(edit.xml);
+    const sp = shapes.get('sp')!;
+    const bt = shapes.get('bt')!;
+    expect(sp.height, 'the sub-process grew').toBeGreaterThan(230);
+    expect(bt.y + bt.height / 2, `${JSON.stringify(bt)} on ${JSON.stringify(sp)}`).toBe(sp.y + sp.height);
+    expect(bt.x).toBe(450);
+    const f4 = edges.get('f4')!;
+    const within = (p: { x: number; y: number }, b: Box): boolean => p.x >= b.x - 1 && p.x <= b.x + b.width + 1 && p.y >= b.y - 1 && p.y <= b.y + b.height + 1;
+    expect(within(f4[0]!, bt), JSON.stringify(f4)).toBe(true);
+    expect(within(f4[f4.length - 1]!, shapes.get('e2')!), JSON.stringify(f4)).toBe(true);
+  });
+});
