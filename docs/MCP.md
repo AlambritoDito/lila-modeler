@@ -3,7 +3,7 @@
 > Read this in: [Español](es/MCP.md)
 
 `packages/mcp` (`@lila-modeler/mcp`) provides a stdio [MCP](https://modelcontextprotocol.io) server
-backed by `@lila-modeler/engine`. Its eighteen tools reuse the CLI validation and simulation pipeline — see
+backed by `@lila-modeler/engine`. Its twenty tools reuse the CLI validation and simulation pipeline — see
 [`docs/CLI.md`](CLI.md) for the same pipeline driven from a terminal instead of an MCP client.
 
 For the whole flow an agent follows — interview, outline, scenario, run, document, and seeing the
@@ -76,19 +76,26 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
   `{ file, process, scenario, sheet, dryRun, written, tables, changes, issues }`.
 - **`export_scenario_template({ project, process?, scenario, saveTo, overwrite?, locale? })`**
   writes that sheet as `.xlsx`, filled in. Returns `{ file, project, process, scenario }`.
-- **`create_project({ path, name, bpmn, scenarios?, overwrite?, locale? })`** creates a new `.lila`
+- **`create_project({ path, name, bpmn, scenarios?, overwrite?, allowUnsimulatable?, locale? })`** creates a new `.lila`
   from a BPMN you already have (an agent that starts from steps uses `create_process`) and
-  scenarios. Returns `{ file, name, processId, laidOut, warnings, scenarios }`.
+  scenarios. Returns `{ file, name, processId, laidOut, warnings, notes, scenarios }`.
 - **`get_project({ project, locale? })`** lists what a `.lila` holds, writing nothing: its
   processes, their scenarios and their saved runs, current or stale. Returns
   `{ file, name, formatVersion, processes }`.
 - **`get_scenario({ project, process?, scenario, resolved?, locale? })`** reads one scenario as
   stored, or resolved through `extends`, with the validator's notes, writing nothing. Returns
   `{ file, process, entry, revision, resolved, scenario, runnable, notes }`.
+- **`get_process_bpmn({ project, process?, locale? })`** reads the BPMN XML of one process as
+  stored, writing nothing. Returns `{ file, process, processId, revision, xml }`.
+- **`put_process_bpmn({ project, process?, bpmn, mode, name?, layout?, allowUnsimulatable?, dryRun?, locale? })`**
+  adds a BPMN as a new process of an existing `.lila` (`mode: "add"`) or replaces the model of
+  one (`mode: "replace"`). Returns `{ file, mode, slug, name, processId, revision, dryRun,
+  laidOut, summary, scenarioRemovals, notes, warnings, slugs }`.
 
 The three export tools are described in [App-free exports](#app-free-exports); the five after
-them in [Modelling tools for agents](#modelling-tools-for-agents); the last two in
-[Reading a project](#reading-a-project).
+them in [Modelling tools for agents](#modelling-tools-for-agents); `get_project` and
+`get_scenario` in [Reading a project](#reading-a-project); the last two in
+[Raw BPMN of a process](#raw-bpmn-of-a-process).
 
 Every tool that takes a model also takes a `.lila` project; see [A `.lila` as input](#a-lila-as-input).
 
@@ -182,6 +189,61 @@ nothing either (#627), but it is not meant for reading.
 
 ```json
 { "name": "get_scenario", "arguments": { "project": "credit.lila", "scenario": "as-is", "resolved": true } }
+```
+
+## Raw BPMN of a process
+
+`get_process_bpmn` and `put_process_bpmn` (#632) read and write the BPMN of one process of a
+`.lila` as XML, through the same codec and lock as every other tool: the way to bring in a model
+drawn elsewhere (a Bizagi export, say) as another process of a project, or to hand a process to a
+BPMN tool and take it back. `lila process export-bpmn` and `lila process import` (`docs/CLI.md`) do
+the same from a terminal.
+
+- **`get_process_bpmn`** returns the model exactly as stored: `xml`, its `revision`, and
+  `processId`, the `bpmn:process` the project simulates (as `get_project` lists it). It writes
+  nothing.
+- **`put_process_bpmn`** takes `bpmn` as inline XML (it starts with `<`) or a path to a `.bpmn`,
+  and validates it as `create_project` does: a model with validation errors is refused.
+  - **`mode: "add"`** adds it as a new process of a `.lila` that exists (to start a new file, use
+    `create_project`); a version 1 project becomes a repository. Its slug is `process`, or comes
+    from `name`, else from its pool's name, its process's name or the file's name; a slug already
+    in the file is refused. It gets an `as-is.scenario.json` as the app gives a new process: 20
+    arrivals one minute apart on each start event and a minute of work on each task, ready to
+    run and to patch.
+  - **`mode: "replace"`** replaces the model of the process `process` (implicit when the `.lila`
+    holds one). It keeps its name (`name` is refused here) and its scenarios; its revision goes up,
+    so its saved runs are stale. The `lila:` annotations (RACI, references, extended attributes)
+    and documentation are those of the new model: the old ones go with the old model. Scenario
+    entries that no longer apply — those of an element the new model does not have, and the fields
+    an element that changed type can no longer take — are removed and listed in
+    `scenarioRemovals`, `{ scenario, id, removed, entry }`, exactly as `edit_process` lists them,
+    and `notes` says the same in words. If a scenario still gets an error it did not have with the
+    old model, the call is refused.
+  - **`allowUnsimulatable: true`** keeps a model the simulator cannot run — message or signal
+    events, collaborations, loops, a diagram drawn for documentation — the way the app saves one.
+    Any validation error is accepted, and so is a scenario error on replace; each comes back in
+    `notes` (`does not simulate: E-NOSOP: …`). A file that is not XML, not BPMN or has no
+    `bpmn:process` is still refused. Nothing marks the process: «does not simulate» is what
+    `get_scenario` says (`runnable: false`, the errors in its `notes`) and `run_simulation`
+    refuses it, until the model is fixed.
+  - **`layout`** (default `true`) draws a model without a diagram (no `bpmndi` shapes) with the
+    auto-layout of `create_project` (`laidOut: true`); `false` keeps it as given.
+  - The write is the atomic, locked write of `patch_scenario`: if the file changed on disk since
+    it was read, the call is refused (`E-CAMBIO-EXTERNO`) and nothing is lost. Every other
+    process stays byte for byte. `dryRun` checks everything and writes nothing.
+
+```json
+{ "name": "put_process_bpmn", "arguments": { "project": "credit.lila", "mode": "add",
+  "bpmn": "examples/bizagi-exports/bizagi-miwg-A.1.0-roundtrip.bpmn", "name": "MIWG A.1.0" } }
+```
+
+```json
+{ "name": "get_process_bpmn", "arguments": { "project": "credit.lila", "process": "miwg-a-1-0" } }
+```
+
+```json
+{ "name": "put_process_bpmn", "arguments": { "project": "credit.lila", "process": "miwg-a-1-0", "mode": "replace",
+  "bpmn": "miwg-edited.bpmn", "allowUnsimulatable": true, "dryRun": true } }
 ```
 
 ## App-free exports
@@ -356,7 +418,9 @@ written. `dryRun: true` answers what would change and writes nothing.
 - **`export_scenario_template`** is the app's «Download template»: hand it to a person, then
   import what comes back. An existing `saveTo` is refused unless `overwrite`.
 - **`create_project`** takes `bpmn` as inline XML (it starts with `<`) or a path to a `.bpmn`.
-  A model with validation errors is refused. `scenarios` are `[{ "name", "scenario" }]`, saved
+  A model with validation errors is refused, unless `allowUnsimulatable: true` (#632): then it is
+  kept as a diagram that does not simulate, and its errors come back in `notes` (see
+  [Raw BPMN of a process](#raw-bpmn-of-a-process)). `scenarios` are `[{ "name", "scenario" }]`, saved
   as `<name>.scenario.json`; a scenario with neither `model` nor `extends` gets
   `"model": "model.bpmn"`, and one that names another model is refused. A scenario that cannot
   run yet is a draft: it is saved, and comes back with `runnable: false` and its `errors`. The
