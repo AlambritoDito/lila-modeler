@@ -430,6 +430,7 @@ export interface CliMessages {
   editRemoveBoundary: (id: string, boundaries: string) => string;
   editCannotRemove: (id: string, type: string) => string;
   editBoundaryNeedsActivity: (id: string, boundaries: string) => string;
+  editNotOneEnd: (id: string, ends: string) => string;
   editLaneUnknown: (lane: string, lanes: string) => string;
   editLaneAmbiguous: (lane: string, ids: string) => string;
   editLaneOutsideProcess: (id: string) => string;
@@ -442,6 +443,7 @@ export interface CliMessages {
   editPositionLane: (lane: string) => string;
   editAdded: (id: string, type: string, position: string) => string;
   editConnected: (from: string, to: string, flow: string) => string;
+  editBoundaryAdded: (id: string, host: string, interrupting: boolean, target: string) => string;
   editRemovedFlow: (id: string) => string;
   editRemovedStep: (id: string, reconnected: string, also: string) => string;
   editAlsoRemoved: (ids: string) => string;

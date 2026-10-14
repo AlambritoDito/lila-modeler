@@ -17,8 +17,9 @@
  *
  * Ids never change: a renamed or retyped element keeps its scenario entries. Durations, resources
  * and branch probabilities given in `add` and `connect` go into the base scenario passed in
- * `scenario` (as in `create_process`). Scenario entries of removed elements are not deleted: the
- * caller reports them.
+ * `scenario` (as in `create_process`). Scenario entries that no longer apply (of removed elements,
+ * and the fields a retyped one cannot take) are left to the caller, which removes and reports them
+ * (`project-fs/edit.ts`).
  *
  * Browser-safe, like `outline.ts`.
  */
@@ -237,7 +238,10 @@ export interface BpmnEdit {
   readonly warnings: ValidationResult['warnings'];
   /** Things worth a look that are not errors (branch probabilities that no longer add up to 1…). */
   readonly notes: readonly string[];
-  /** Ids of the elements whose type changed: their scenario entries may no longer apply. */
+  /**
+   * Ids of the elements whose type changed, and of the flows out of an xor/or that became something
+   * else: their scenario entries may no longer apply.
+   */
   readonly retyped: readonly string[];
   /** Element id → index of the last operation that touched it, to attribute later problems. */
   readonly touched: ReadonlyMap<string, number>;
@@ -595,8 +599,6 @@ class Editor {
 
   apply(op: Op): void {
     const before = this.issues.length;
-    const stub = notImplemented(op);
-    if (stub !== undefined) return this.issue(stub, NOT_IMPLEMENTED);
     switch (op.op) {
       case 'add':
         return this.add(op, before);
@@ -612,9 +614,10 @@ class Editor {
         return this.moveToLane(op);
       case 'addLane':
         return this.addLane(op, before);
+      case 'addBoundary':
+        return this.addBoundary(op, before);
       case 'removeLane':
       case 'moveLane':
-      case 'addBoundary':
       case 'annotate':
       case 'removeAnnotation':
       case 'addDataObject':
@@ -673,7 +676,7 @@ class Editor {
 
     let duration: Distribution | undefined;
     if (step.duration !== undefined) {
-      if (!WORK.has(type) && type !== 'timer') this.issue('step.duration', this.C.outlineFieldNotApplicable(step.id, 'duration', type));
+      if (!WORK.has(type) && type !== 'timer' && type !== 'message') this.issue('step.duration', this.C.outlineFieldNotApplicable(step.id, 'duration', type));
       duration = parseDuration(step.duration as string | number | Distribution) ?? undefined;
       if (duration === undefined) {
         const text = typeof step.duration === 'string' ? step.duration : JSON.stringify(step.duration);
@@ -692,7 +695,7 @@ class Editor {
 
     const attrs: Record<string, unknown> = { id: step.id };
     if (step.name !== undefined && step.name !== '') attrs['name'] = step.name;
-    if (type === 'timer') attrs['eventDefinitions'] = [this.create('bpmn:TimerEventDefinition', { id: this.uniqueId(`TimerEventDefinition_${step.id}`) })];
+    if (type === 'timer' || type === 'message') attrs['eventDefinitions'] = [this.eventDefinition(type, step.id)];
     const el = this.create(BPMN_TYPE[type], attrs);
     el['$parent'] = container;
     this.used.add(step.id);
@@ -751,8 +754,14 @@ class Editor {
       }
       if (this.scenario === undefined) this.issue('probability', this.C.editNeedsScenario('probability', this.scenarioName));
     }
+    if (op.default === true && from !== undefined) {
+      if (!is(from, 'bpmn:ExclusiveGateway') && !is(from, 'bpmn:InclusiveGateway')) {
+        this.issue('default', this.C.outlineFieldNotApplicable(op.from, 'default', typeName(from)));
+      } else if (from['default'] !== undefined) this.issue('default', this.C.outlineManyDefaults(op.from));
+    }
     if (this.issues.length > before || from === undefined || to === undefined) return;
     const flow = this.newFlow(from, to, { id: op.id, name: op.label });
+    if (op.default === true) from['default'] = flow;
     this.touch(from, to);
     if (op.probability !== undefined) this.scenarioElement(flow.id)!['probability'] = op.probability;
     this.change(this.C.editConnected(op.from, op.to, flow.id));
@@ -763,8 +772,10 @@ class Editor {
     if (el === undefined) return this.issue('id', this.C.editUnknownId(op.id));
     if (!this.inProcess(el)) return this.issue('id', this.C.editOtherProcess(op.id, this.process.id));
     if (el.$type === 'bpmn:SequenceFlow') {
+      const target = el['targetRef'] as El | undefined;
       this.deleteFlow(el);
-      return this.change(this.C.editRemovedFlow(op.id));
+      const also = this.dropOrphanEnds([target]);
+      return this.change(this.C.editRemovedFlow(op.id) + (also.length > 0 ? this.C.editAlsoRemoved(also.join(', ')) : ''));
     }
     if (!is(el, 'bpmn:FlowNode')) return this.issue('id', this.C.editCannotRemove(op.id, el.$type));
     const boundaries = ((el['$parent']['flowElements'] ?? []) as El[]).filter((b) => b['attachedToRef'] === el);
@@ -789,7 +800,27 @@ class Editor {
     }
     for (const flow of [...ins, ...outs]) this.touch(flow['sourceRef'], flow['targetRef']);
     const also = this.deleteNode(el);
+    // An end event left with no way in goes too (the end of a removed boundary event, of a step
+    // that had no incoming flow…).
+    also.push(...this.dropOrphanEnds(outs.map((f) => f['targetRef'] as El)));
     this.change(this.C.editRemovedStep(op.id, reconnected.join(', '), also.join(', ')));
+  }
+
+  /** Removes the end events of `candidates` that have no incoming flow any more; returns what went. */
+  dropOrphanEnds(candidates: (El | undefined)[]): string[] {
+    const gone: string[] = [];
+    for (const end of new Set(candidates)) {
+      if (end === undefined || !is(end, 'bpmn:EndEvent') || !((end['$parent']?.['flowElements'] ?? []) as El[]).includes(end)) continue;
+      if (this.incoming(end).length > 0) continue;
+      gone.push(end.id, ...this.deleteNode(end));
+    }
+    return gone;
+  }
+
+  /** A new timer or message event definition for the event `owner`. */
+  eventDefinition(type: 'timer' | 'message' | 'terminate', owner: string): El {
+    const name = { timer: 'TimerEventDefinition', message: 'MessageEventDefinition', terminate: 'TerminateEventDefinition' }[type];
+    return this.create(`bpmn:${name}`, { id: this.uniqueId(`${name}_${owner}`) });
   }
 
   rename(op: Extract<Op, { op: 'rename' }>): void {
@@ -803,6 +834,7 @@ class Editor {
   }
 
   setType(op: Extract<Op, { op: 'setType' }>): void {
+    if (op.type === 'end' || op.type === 'terminate') return this.setEndType(op.id, op.type);
     const el = this.node(op.id, 'id');
     if (el === undefined) return;
     if (is(el, 'bpmn:BoundaryEvent')) return this.issue('id', this.C.editNotAStep(op.id, el.$type));
@@ -830,11 +862,8 @@ class Editor {
       replacement['set'](name, Array.isArray(value) ? [...value] : value);
     }
     Object.assign(replacement['$attrs'] ?? {}, el['$attrs'] ?? {});
-    if (op.type === 'timer') {
-      replacement['eventDefinitions'] = isTimer(el)
-        ? el['eventDefinitions']
-        : [this.create('bpmn:TimerEventDefinition', { id: this.uniqueId(`TimerEventDefinition_${el.id}`) })];
-    }
+    if (op.type === 'timer') replacement['eventDefinitions'] = isTimer(el) ? el['eventDefinitions'] : [this.eventDefinition('timer', el.id)];
+    if (op.type === 'message') replacement['eventDefinitions'] = [this.eventDefinition('message', el.id)];
     replacement['$parent'] = container;
 
     // What was inside a sub-process goes with it.
@@ -884,7 +913,98 @@ class Editor {
     if (is(replacement, 'bpmn:Gateway')) this.gateways.add(replacement);
     this.touch(replacement);
     if (!this.retyped.includes(replacement.id)) this.retyped.push(replacement.id);
+    // Out of anything but an xor or an or, a branch probability no longer applies: the flows are
+    // listed with the retyped ids so their probabilities leave the scenarios (scenarioRemovals).
+    const choice = (x: El): boolean => is(x, 'bpmn:ExclusiveGateway') || is(x, 'bpmn:InclusiveGateway');
+    if (choice(el) && !choice(replacement)) {
+      for (const flow of this.outgoing(replacement)) if (!this.retyped.includes(flow.id)) this.retyped.push(flow.id);
+    }
     this.change(this.C.editRetyped(op.id, from, op.type) + (also.length > 0 ? this.C.editAlsoRemoved(also.join(', ')) : ''));
+  }
+
+  /**
+   * `setType` to `end` or `terminate`: `id` is an end event, or a step that leads to exactly one end
+   * event (the outline does not show the ids of the ends).
+   */
+  setEndType(id: string, type: 'end' | 'terminate'): void {
+    const el = this.node(id, 'id');
+    if (el === undefined) return;
+    let end = el;
+    if (!is(el, 'bpmn:EndEvent')) {
+      const ends = this.outgoing(el).map((f) => f['targetRef'] as El).filter((t) => is(t, 'bpmn:EndEvent'));
+      if (ends.length !== 1) return this.issue('id', this.C.editNotOneEnd(id, ends.map((t) => t.id).join(', ')));
+      end = ends[0]!;
+    }
+    const definitions = (end['eventDefinitions'] ?? []) as El[];
+    const terminate = definitions.some((d) => d.$type === 'bpmn:TerminateEventDefinition');
+    const from = terminate ? 'terminate' : 'end';
+    if (from === type && definitions.length === (terminate ? 1 : 0)) return this.change(this.C.editRetyped(end.id, from, type));
+    for (const d of definitions) if (typeof d.id === 'string') this.free(d.id);
+    if (type === 'terminate') end['eventDefinitions'] = [this.eventDefinition('terminate', end.id)];
+    else delete end['eventDefinitions'];
+    this.touch(end);
+    this.change(this.C.editRetyped(end.id, from, type));
+  }
+
+  /** Attaches a boundary timer to a task or call activity (as in an outline). */
+  addBoundary(op: Extract<Op, { op: 'addBoundary' }>, before: number): void {
+    const b = op.boundary;
+    const host = this.node(op.on, 'on');
+    if (host !== undefined && (!is(host, 'bpmn:Task') && !is(host, 'bpmn:CallActivity'))) {
+      this.issue('on', this.C.outlineFieldNotApplicable(op.on, 'boundary', typeName(host)));
+    }
+    this.checkNewId(b.id, 'boundary.id');
+    let target: El | undefined;
+    if (b.to !== undefined) {
+      target = this.node(b.to, 'boundary.to');
+      if (target !== undefined && (is(target, 'bpmn:StartEvent') || is(target, 'bpmn:BoundaryEvent'))) this.issue('boundary.to', this.C.editToStart(b.to));
+      if (target !== undefined && host !== undefined && target['$parent'] !== host['$parent']) this.issue('boundary.to', this.C.editOtherContainer(op.on, b.to));
+    }
+    let duration: Distribution | undefined;
+    if (b.duration !== undefined) {
+      duration = parseDuration(b.duration as string | number | Distribution) ?? undefined;
+      if (duration === undefined) {
+        const text = typeof b.duration === 'string' ? b.duration : JSON.stringify(b.duration);
+        this.issue('boundary.duration', this.C.outlineBadDuration(b.id, text));
+      }
+      if (this.scenario === undefined) this.issue('boundary.duration', this.C.editNeedsScenario('duration', this.scenarioName));
+    }
+    if (this.issues.length > before || host === undefined) return;
+
+    const container = host['$parent'] as El;
+    const attrs: Record<string, unknown> = { id: b.id, attachedToRef: host, eventDefinitions: [this.eventDefinition('timer', b.id)] };
+    if (b.name !== undefined && b.name !== '') attrs['name'] = b.name;
+    if (b.interrupting === false) attrs['cancelActivity'] = false;
+    const boundary = this.create('bpmn:BoundaryEvent', attrs);
+    boundary['$parent'] = container;
+    this.used.add(b.id);
+    const elements = container['flowElements'] as El[];
+    elements.splice(elements.indexOf(host) + 1, 0, boundary);
+    const lane = container === this.process ? laneOfNode(this.process, host) : undefined;
+    const inLane = (el: El): void => {
+      if (lane !== undefined) for (const l of this.laneChain(lane)) ((l['flowNodeRef'] ??= []) as El[]).push(el);
+    };
+    inLane(boundary);
+    const plane = this.diagram.hasDi && this.incremental ? this.diagram.planeFor(container, this.process) : undefined;
+    const hostBox = this.diagram.bounds(host.id);
+    if (plane !== undefined && hostBox !== undefined) {
+      // On the host's bottom border, right of the boundary events already there.
+      const taken = elements.filter((e) => e !== boundary && e['attachedToRef'] === host).length;
+      this.diagram.addShape(boundary, plane, { x: hostBox.x + hostBox.width - 54 - taken * 40, y: hostBox.y + hostBox.height - 18, width: 36, height: 36 });
+    }
+    if (target === undefined) {
+      const end = this.create('bpmn:EndEvent', { id: this.uniqueId(`EndEvent_${b.id}`) });
+      if (b.end === 'terminate') end['eventDefinitions'] = [this.eventDefinition('terminate', end.id)];
+      end['$parent'] = container;
+      elements.splice(elements.indexOf(boundary) + 1, 0, end);
+      inLane(end);
+      if (plane !== undefined) this.diagram.place(end, plane, { anchor: boundary, lane, pool: container === this.process ? this.participant : undefined });
+      target = end;
+    }
+    this.newFlow(boundary, target, { name: b.label });
+    this.touch(host, boundary, target);
+    if (duration !== undefined) this.scenarioElement(b.id)!['processingTime'] = duration;
+    this.change(this.C.editBoundaryAdded(b.id, op.on, b.interrupting !== false, target.id));
   }
 
   moveToLane(op: Extract<Op, { op: 'moveToLane' }>): void {
@@ -895,12 +1015,14 @@ class Editor {
     if (el['$parent'] !== this.process) return this.issue('id', this.C.editLaneOutsideProcess(op.id));
     // The end events the outline made for this step (`EndEvent_<id>`, `EndEvent_<id>_2`, …) go with it
     // while nothing else leads to them.
-    const own = `EndEvent_${el.id}`;
-    const ends = this.outgoing(el)
-      .map((f) => f['targetRef'] as El)
-      .filter((t) => is(t, 'bpmn:EndEvent') && t.id.startsWith(own) && /^(_\d+)?$/.test(t.id.slice(own.length)))
-      .filter((t) => this.incoming(t).every((f) => f['sourceRef'] === el));
-    const moving = [el, ...ends];
+    const attached = ((this.process['flowElements'] ?? []) as El[]).filter((b) => b['attachedToRef'] === el);
+    const ownEnd = (source: El) => (t: El): boolean => {
+      const base = `EndEvent_${source.id}`;
+      return is(t, 'bpmn:EndEvent') && t.id.startsWith(base) && /^(_\d+)?$/.test(t.id.slice(base.length)) && this.incoming(t).every((f) => f['sourceRef'] === source);
+    };
+    // The boundary events go with their host, and so do the ends they lead to (`EndEvent_<boundary>`).
+    const ends = [el, ...attached].flatMap((source) => this.outgoing(source).map((f) => f['targetRef'] as El).filter(ownEnd(source)));
+    const moving = [el, ...attached, ...ends];
     for (const { lane: l } of lanesOf(this.process)) {
       if (Array.isArray(l['flowNodeRef'])) l['flowNodeRef'] = (l['flowNodeRef'] as El[]).filter((n) => !moving.includes(n));
     }
@@ -908,9 +1030,8 @@ class Editor {
 
     const before = this.incremental ? this.diagram.bounds(el.id) : undefined;
     const from = before === undefined ? undefined : { x: before.x, y: before.y };
-    if (this.incremental) for (const node of moving) this.diagram.moveIntoLane(node, lane, this.participant);
+    if (this.incremental) for (const node of [el, ...ends]) this.diagram.moveIntoLane(node, lane, this.participant);
     const after = this.diagram.bounds(el.id);
-    const attached = ((this.process['flowElements'] ?? []) as El[]).filter((b) => b['attachedToRef'] === el);
     if (from !== undefined && after !== undefined) {
       for (const b of attached) {
         const box = this.diagram.bounds(b.id);
@@ -997,19 +1118,10 @@ class Editor {
  * ------------------------------------------------------------------ */
 
 /**
- * Lote Q contract commit (#631/#638): the reader accepts the new operations and fields, the editor
- * does not yet. Each use is refused at its path until the implementation lands.
+ * Lote Q (#638): the reader accepts the lane and artifact operations, the editor does not yet. Each
+ * use is refused until the implementation lands.
  */
-const NOT_IMPLEMENTED = 'not implemented yet (#631/#638).';
-const NEW_TYPES: ReadonlySet<string> = new Set([
-  'sendTask', 'receiveTask', 'manualTask', 'scriptTask', 'businessRuleTask', 'eventGateway', 'message', 'end', 'terminate',
-]);
-function notImplemented(op: Op): string | undefined {
-  if (op.op === 'add' && op.step.type !== undefined && NEW_TYPES.has(op.step.type)) return 'step.type';
-  if (op.op === 'setType' && NEW_TYPES.has(op.type)) return 'type';
-  if (op.op === 'connect' && op.default !== undefined) return 'default';
-  return undefined;
-}
+const NOT_IMPLEMENTED = 'not implemented yet (#638).';
 
 const OP_KEYS: Readonly<Record<Op['op'], readonly string[]>> = {
   add: ['op', 'step', 'after', 'between'],

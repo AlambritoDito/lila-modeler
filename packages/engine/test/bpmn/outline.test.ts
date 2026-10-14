@@ -19,7 +19,7 @@ import {
 } from '../../src/bpmn/outline.js';
 import { validateBpmnXml } from '../../src/bpmn/validate-report.js';
 import { parseScenario, validateScenario } from '../../src/scenario.js';
-import { CREDIT, ORDER } from '../fixtures/outlines.js';
+import { CONSTRUCTS, CREDIT, ORDER } from '../fixtures/outlines.js';
 
 interface Box {
   x: number;
@@ -65,7 +65,8 @@ async function expectLaidOut(xml: string): Promise<void> {
   for (let i = 0; i < laneBoxes.length; i++) {
     for (let j = i + 1; j < laneBoxes.length; j++) expect(overlaps(laneBoxes[i]!, laneBoxes[j]!)).toBe(false);
   }
-  const nodes = [...shapes].filter(([id]) => !['bpmn:Participant', 'bpmn:Lane'].includes(types.get(id)!));
+  // Boundary events sit on their host's border by design (#631).
+  const nodes = [...shapes].filter(([id]) => !['bpmn:Participant', 'bpmn:Lane', 'bpmn:BoundaryEvent'].includes(types.get(id)!));
   for (let i = 0; i < nodes.length; i++) {
     for (let j = i + 1; j < nodes.length; j++) {
       expect(overlaps(nodes[i]![1], nodes[j]![1]), `${nodes[i]![0]} overlaps ${nodes[j]![0]}`).toBe(false);
@@ -200,7 +201,8 @@ describe('bpmnToOutline', () => {
   </bpmn:process>
 </bpmn:definitions>`;
     const { outline, warnings } = await bpmnToOutline(xml);
-    expect(outline).toEqual({ name: 'Foreign', steps: [{ id: 't', name: 'T', end: true }] });
+    // A start that is not the trivial `StartEvent` is listed; a manual task keeps its type (#631).
+    expect(outline).toEqual({ name: 'Foreign', starts: [{ id: 's' }], steps: [{ id: 't', name: 'T', type: 'manualTask', from: 's', end: true }] });
     expect(warnings).toHaveLength(3);
     expect(warnings[0]).toContain('m (bpmn:IntermediateThrowEvent)');
   });
@@ -542,23 +544,10 @@ describe('the outline reader: starts, terminate, default flows, new types, bound
     );
   });
 
-  test('the hand reader accepts them too: no shape issue, only the not-yet-built ones', async () => {
+  test('the hand reader accepts them too: no shape issue, only the not-yet-built ones (#638)', async () => {
     const issues = await refusedWith(ESCALATION);
     expect(issues.every((i) => i.message.startsWith('not implemented yet'))).toBe(true);
-    expect(issues.map((i) => i.path)).toEqual([
-      'starts',
-      'steps[0].type',
-      'steps[0].from',
-      'steps[0].notes',
-      'steps[1].boundary',
-      'steps[1].data',
-      'steps[2].branches[0].default',
-      'steps[2].branches[1].end',
-      'steps[3].type',
-      'steps[4].type',
-      'steps[5].type',
-      'steps[6].end',
-    ]);
+    expect(issues.map((i) => i.path)).toEqual(['steps[0].notes', 'steps[1].data']);
   });
 
   test('every malformed new field, at its path, at once', async () => {
@@ -782,9 +771,7 @@ describe('the contract rules of the new constructs (#631, #638)', () => {
 });
 
 describe('the trivial start and the exclusive splits of the new constructs (#631 contract review)', () => {
-  // Enabled with the build of `starts` and of the event gateway (they are refused as not
-  // implemented yet in the contract commit).
-  test.skip('starts: [{ id: "StartEvent" }] to a step further down is the trivial start: its step moves to the head', async () => {
+  test('starts: [{ id: "StartEvent" }] to a step further down is the trivial start: its step moves to the head', async () => {
     const outline = {
       name: 'X',
       starts: [{ id: 'StartEvent' }],
@@ -803,7 +790,7 @@ describe('the trivial start and the exclusive splits of the new constructs (#631
     expect(reading.outline).toEqual(normal);
   });
 
-  test.skip('a parallel join of the branches of an event gateway is flagged like one behind an xor', async () => {
+  test('a parallel join of the branches of an event gateway is flagged like one behind an xor', async () => {
     const built = await outlineToBpmn({
       name: 'X',
       steps: [
@@ -878,5 +865,188 @@ describe('the reader never returns an outline normalizeOutline refuses, and says
     );
     // A terminate end is an outline construct, not a loss.
     expect(warnings.some((w) => w.startsWith('E2:'))).toBe(false);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * #631: each construct is built, validates, and reads back the same with no warning
+ * ------------------------------------------------------------------ */
+
+describe('the #631 constructs round-trip with no warning', () => {
+  async function roundTrip(outline: unknown) {
+    const built = await outlineToBpmn(outline);
+    const parsed = parseScenario(built.scenario);
+    expect(parsed.success, JSON.stringify(parsed.error?.issues)).toBe(true);
+    const { ir, errors } = await validateBpmnXml(built.xml);
+    expect(errors).toEqual([]);
+    expect(validateScenario(parsed.data!, ir).filter((p) => p.severity === 'error')).toEqual([]);
+    const reading = await bpmnToOutline(built.xml, { scenario: built.scenario as unknown as Record<string, unknown> });
+    expect(reading.warnings).toEqual([]);
+    expect(reading.outline).toEqual(normalizeOutline(outline));
+    expect(reading.outline).toEqual(built.outline);
+    return { built, ir, elements: built.scenario['elements'] as Record<string, any> };
+  }
+
+  test.each(Object.entries(CONSTRUCTS))('%s', async (_label, outline) => {
+    await roundTrip(outline);
+  });
+
+  test('task variants keep their BPMN element and simulate as tasks', async () => {
+    const { built, ir } = await roundTrip(CONSTRUCTS['task variants']);
+    for (const type of ['sendTask', 'receiveTask', 'manualTask', 'scriptTask', 'businessRuleTask']) expect(built.xml).toContain(`<bpmn:${type} `);
+    expect(['send', 'receive', 'manual', 'script', 'rule'].map((id) => ir.nodes[id]!.type)).toEqual(['task', 'task', 'task', 'task', 'task']);
+  });
+
+  test('terminate ends: on a step and on a branch', async () => {
+    const { built, ir } = await roundTrip(CONSTRUCTS['terminate ends']);
+    expect(ir.nodes['EndEvent_fast']!.type).toBe('terminate');
+    expect(ir.nodes['EndEvent_check']!.type).toBe('terminate');
+    expect(ir.nodes['EndEvent_check_2']!.type).toBe('end');
+    expect(built.outline.steps.find((s) => s.id === 'check')!.branches).toEqual([
+      { end: 'terminate', label: 'Abort', probability: 0.5 },
+      { end: true, label: 'Done', probability: 0.5 },
+    ]);
+  });
+
+  test('starts: two streams of arrivals, a timer start, each start in its lane', async () => {
+    const { built, elements } = await roundTrip(CONSTRUCTS['starts and a timer start']);
+    expect(built.xml).toMatch(/<bpmn:startEvent id="nightly" name="Every night">\s*<bpmn:outgoing>[^<]+<\/bpmn:outgoing>\s*<bpmn:timerEventDefinition/);
+    expect(elements['walkIn']).toEqual({ triggerCount: 20, interTriggerTimer: { type: 'constant', value: 60 } });
+    expect(elements['nightly']).toEqual(elements['walkIn']);
+    expect(elements['StartEvent']).toBeUndefined();
+    const { lanes } = await geometry(built.xml);
+    expect(lanes.get('Lane_1')).toContain('walkIn');
+    expect(lanes.get('Lane_2')).toContain('nightly');
+    expect(built.outline.starts).toEqual([
+      { id: 'walkIn', name: 'Customer walks in', lane: 'Front' },
+      { id: 'nightly', name: 'Every night', type: 'timer', lane: 'Back' },
+    ]);
+  });
+
+  test('default flows of an xor and an or', async () => {
+    const { built, ir } = await roundTrip(CONSTRUCTS['default flows']);
+    expect(built.xml).toContain('<bpmn:exclusiveGateway id="kind" default="Flow_kind_review">');
+    expect(built.xml).toContain('<bpmn:inclusiveGateway id="extras" default="Flow_extras_mail">');
+    expect(ir.flows['Flow_kind_review']!.isDefault).toBe(true);
+    expect(ir.flows['Flow_extras_mail']!.isDefault).toBe(true);
+  });
+
+  test('boundary timers: cancelActivity="false" only when they do not interrupt, their delay in the scenario', async () => {
+    const { built, ir, elements } = await roundTrip(CONSTRUCTS['boundary timers']);
+    expect(built.xml).toMatch(/<bpmn:boundaryEvent id="late" cancelActivity="false" attachedToRef="work">/);
+    expect(built.xml).toMatch(/<bpmn:boundaryEvent id="cut" attachedToRef="work">/);
+    expect(built.xml).toMatch(/<bpmn:boundaryEvent id="hang" attachedToRef="call">/);
+    expect(built.xml).not.toContain('timeDuration');
+    expect(ir.nodes['late']).toMatchObject({ type: 'timer', attachedTo: 'work', interrupting: false });
+    expect(ir.nodes['cut']!.interrupting).not.toBe(false);
+    expect(elements['late']).toEqual({ processingTime: { type: 'constant', value: 1200 } });
+    expect(elements['cut']).toEqual({ processingTime: { type: 'constant', value: 2400 } });
+    expect(ir.nodes['EndEvent_cut']!.type).toBe('terminate');
+    // Each boundary event sits on its host's bottom border.
+    const { shapes } = await geometry(built.xml);
+    for (const [b, host] of [['late', 'work'], ['cut', 'work'], ['hang', 'call']] as const) {
+      const box = shapes.get(b)!;
+      const h = shapes.get(host)!;
+      expect(box.y + box.height / 2, b).toBeCloseTo(h.y + h.height, 0);
+    }
+  });
+
+  test('boundary events in a lane sit in the lane of their host, and so do their ends', async () => {
+    const built = await outlineToBpmn({
+      name: 'X',
+      lanes: ['A', 'B'],
+      steps: [
+        { id: 'a', lane: 'B', duration: '1h', boundary: [{ id: 'sla', type: 'timer', duration: '30m', end: true }] },
+        { id: 'b', lane: 'A', end: true },
+      ],
+    });
+    const { lanes } = await geometry(built.xml);
+    expect(lanes.get('Lane_2')).toEqual(expect.arrayContaining(['a', 'sla', 'EndEvent_sla']));
+    await expectLaidOut(built.xml);
+  });
+
+  test('the event gateway: a message and a timer branch, their delays in the scenario', async () => {
+    const { built, ir, elements } = await roundTrip(CONSTRUCTS['event gateway']);
+    expect(built.xml).toContain('<bpmn:eventBasedGateway id="wait" name="Reply?">');
+    expect(built.xml).toMatch(/<bpmn:intermediateCatchEvent id="answer" name="Answer">[\s\S]*?<bpmn:messageEventDefinition/);
+    expect(ir.nodes['wait']!.type).toBe('eventGateway');
+    expect(elements['answer']).toEqual({ processingTime: { type: 'exponential', mean: 1200 } });
+    expect(elements['timeout']).toEqual({ processingTime: { type: 'constant', value: 1800 } });
+  });
+
+  test('the claim escalation example (examples/outline/claim-escalation.json) and the docs fixture', async () => {
+    const repo = fileURLToPath(new URL('../../../../', import.meta.url));
+    const example = JSON.parse(readFileSync(`${repo}examples/outline/claim-escalation.json`, 'utf8'));
+    const { built } = await roundTrip(example);
+    expect(built.notes).toEqual([]);
+    expect(built.outline.steps.find((s) => s.id === 'assess')!.boundary).toEqual([
+      { id: 'sla', type: 'timer', name: '48 h', label: 'No decision in 48 h', duration: { type: 'constant', value: 172800 }, interrupting: false, to: 'escalate' },
+    ]);
+    await expectLaidOut(built.xml);
+  });
+
+  test('a task with an interrupting boundary is an exclusive split for a parallel join', async () => {
+    const built = await outlineToBpmn({
+      name: 'X',
+      steps: [
+        { id: 'a', boundary: [{ id: 'cut', type: 'timer', duration: '1h', to: 'b' }, { id: 'soft', type: 'timer', duration: '2h', interrupting: false, to: 'c' }] },
+        { id: 'j', type: 'and', end: true },
+        { id: 'b', next: 'j' },
+        { id: 'c', end: true },
+      ],
+    });
+    expect(built.notes).toEqual([
+      'parallel join "j" waits for branches of the exclusive gateway "a", which only ever takes one: cases would wait there forever. Use an xor (or or) join.',
+    ]);
+  });
+});
+
+describe('what the reader still leaves out of the new constructs, with a warning (#631)', () => {
+  const doc = (body: string): string => `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="https://example.org">
+  <bpmn:process id="P" name="P" isExecutable="true">
+    ${body}
+  </bpmn:process>
+</bpmn:definitions>`;
+
+  test('timer expressions in the XML are said lost (durations live in the scenario)', async () => {
+    const { outline, warnings } = await bpmnToOutline(
+      doc(`<bpmn:startEvent id="s"><bpmn:timerEventDefinition><bpmn:timeCycle>R/P1D</bpmn:timeCycle></bpmn:timerEventDefinition></bpmn:startEvent>
+    <bpmn:task id="a" /><bpmn:boundaryEvent id="b" attachedToRef="a"><bpmn:timerEventDefinition><bpmn:timeDuration>PT1H</bpmn:timeDuration></bpmn:timerEventDefinition></bpmn:boundaryEvent>
+    <bpmn:intermediateCatchEvent id="t"><bpmn:timerEventDefinition><bpmn:timeDate>2026-01-01</bpmn:timeDate></bpmn:timerEventDefinition></bpmn:intermediateCatchEvent>
+    <bpmn:endEvent id="e" />
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="a" /><bpmn:sequenceFlow id="f2" sourceRef="a" targetRef="t" />
+    <bpmn:sequenceFlow id="f3" sourceRef="t" targetRef="e" /><bpmn:sequenceFlow id="f4" sourceRef="b" targetRef="e" />`),
+    );
+    expect(warnings).toEqual([
+      'timer expressions in the BPMN are not part of the outline (durations live in the scenario) and were left out: s, t, b.',
+    ]);
+    expect(outline.starts).toEqual([{ id: 's', type: 'timer' }]);
+    expect(outline.steps[0]!.boundary).toEqual([{ id: 'b', type: 'timer', end: true }]);
+  });
+
+  test('an instantiating event gateway, a boundary on a sub-process, a lone message catch event', async () => {
+    const { outline, warnings } = await bpmnToOutline(
+      doc(`<bpmn:startEvent id="StartEvent" /><bpmn:eventBasedGateway id="g" instantiate="true" />
+    <bpmn:intermediateCatchEvent id="m1"><bpmn:messageEventDefinition /></bpmn:intermediateCatchEvent>
+    <bpmn:intermediateCatchEvent id="t1"><bpmn:timerEventDefinition /></bpmn:intermediateCatchEvent>
+    <bpmn:subProcess id="sp" /><bpmn:boundaryEvent id="b" attachedToRef="sp"><bpmn:timerEventDefinition /></bpmn:boundaryEvent>
+    <bpmn:intermediateCatchEvent id="m2"><bpmn:messageEventDefinition /></bpmn:intermediateCatchEvent>
+    <bpmn:endEvent id="e" />
+    <bpmn:sequenceFlow id="f1" sourceRef="StartEvent" targetRef="sp" /><bpmn:sequenceFlow id="f2" sourceRef="sp" targetRef="g" />
+    <bpmn:sequenceFlow id="f3" sourceRef="g" targetRef="m1" /><bpmn:sequenceFlow id="f4" sourceRef="g" targetRef="t1" />
+    <bpmn:sequenceFlow id="f5" sourceRef="m1" targetRef="m2" /><bpmn:sequenceFlow id="f6" sourceRef="t1" targetRef="e" />
+    <bpmn:sequenceFlow id="f7" sourceRef="m2" targetRef="e" /><bpmn:sequenceFlow id="f8" sourceRef="b" targetRef="e" />`),
+    );
+    expect(warnings).toEqual(
+      expect.arrayContaining([
+        'g (bpmn:EventBasedGateway) has no outline equivalent and was left out.',
+        'b (bpmn:BoundaryEvent) has no outline equivalent and was left out.',
+        'm1 (bpmn:IntermediateCatchEvent) has no outline equivalent and was left out.',
+        'm2 (bpmn:IntermediateCatchEvent) has no outline equivalent and was left out.',
+      ]),
+    );
+    expect(() => normalizeOutline(outline)).not.toThrow();
+    expect(outline.steps.map((s) => s.id)).toEqual(['sp', 't1']);
   });
 });

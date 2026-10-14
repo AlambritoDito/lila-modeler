@@ -83,6 +83,13 @@ const NOT_APPLICABLE = new Set(['E-CAMPO-NO-APLICA', 'E-SUBPROC-PARAMETRO', 'E-T
 function inapplicable(id: string, entry: Record<string, unknown>, ir: ProcessIR, context: Record<string, unknown>): string[] | null {
   const fields = new Set<string>();
   let current = { ...entry };
+  // A branch probability only applies out of an xor or an or (#631: an xor retyped to an and or an
+  // eventGateway); the validator lets it pass elsewhere, so it is checked here.
+  const flow = Object.hasOwn(ir.flows, id) ? ir.flows[id] : undefined;
+  if (flow !== undefined && 'probability' in current && !['xor', 'or'].includes(ir.nodes[flow.from]?.type ?? '')) {
+    fields.add('probability');
+    delete current['probability'];
+  }
   for (let round = 0; round < 3; round++) {
     const parsed = parseScenario({ ...context, elements: { [id]: current } });
     if (!parsed.success) return [...fields];

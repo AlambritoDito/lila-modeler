@@ -543,9 +543,9 @@ export const en: Catalog = {
       `parallel join "${join}" waits for branches of the exclusive gateway "${split}", which only ever takes one: cases would wait there forever. Use an xor (or or) join.`,
     outlineDroppedPools: (names) => `other pools are not part of the outline and were left out: ${names}.`,
     outlineDroppedMessageFlows: (count) => `${n(count, 'message flow is', 'message flows are')} not part of the outline and ${count === 1 ? 'was' : 'were'} left out.`,
-    outlineDroppedEventNames: (events) => `start and end events are implicit in an outline; their names were left out: ${events}.`,
+    outlineDroppedEventNames: (events) => `end events are implicit in an outline; their names were left out: ${events}.`,
     outlineDroppedArtifacts: (count) => `${n(count, 'annotation, group or association is', 'annotations, groups or associations are')} not part of the outline and ${count === 1 ? 'was' : 'were'} left out.`,
-    outlineDroppedDefaults: (ids) => `default-flow marks are not part of the outline and were left out: ${ids}.`,
+    outlineDroppedDefaults: (ids) => `default-flow marks out of anything but an xor or an or, and broken ones, are not part of the outline and were left out: ${ids}.`,
     outlineDroppedFlowNames: (flows) => `the names of flows out of a start event are not part of the outline and were left out: ${flows}.`,
     outlineMergedNotes: (notes) => `text annotations that repeat a note of the same step were read once: ${notes}.`,
     outlineDroppedTimerExpressions: (ids) =>
@@ -596,6 +596,8 @@ export const en: Catalog = {
     editCannotRemove: (id, type) => `"${id}" is a ${type}; only steps and sequence flows can be removed.`,
     editBoundaryNeedsActivity: (id, boundaries) =>
       `"${id}" has boundary events attached (${boundaries}); only a task, call activity or sub-process can hold them.`,
+    editNotOneEnd: (id, ends) =>
+      `"${id}" is neither an end event nor a step that leads to exactly one (${ends === '' ? 'it leads to none' : `it leads to ${ends}`}); give the id of the end event.`,
     editLaneUnknown: (lane, lanes) =>
       lanes === '' ? `there is no lane "${lane}": the process has no lanes; add one with addLane.` : `there is no lane "${lane}"; the lanes are: ${lanes}.`,
     editLaneAmbiguous: (lane, ids) => `several lanes are named "${lane}" (${ids}); use the lane id.`,
@@ -611,6 +613,8 @@ export const en: Catalog = {
     editPositionLane: (lane) => `in lane "${lane}"`,
     editAdded: (id, type, position) => `added ${type} "${id}" ${position}`,
     editConnected: (from, to, flow) => `connected "${from}" → "${to}" (${flow})`,
+    editBoundaryAdded: (id, host, interrupting, target) =>
+      `attached the ${interrupting ? 'interrupting' : 'non-interrupting'} boundary timer "${id}" to "${host}" → ${target}`,
     editRemovedFlow: (id) => `removed flow "${id}"`,
     editRemovedStep: (id, reconnected, also) =>
       `removed "${id}"${reconnected === '' ? '' : `; reconnected ${reconnected}`}${also === '' ? '' : `; also removed ${also}`}`,

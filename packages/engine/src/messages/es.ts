@@ -549,9 +549,9 @@ export const es: Catalog = {
       `la unión paralela "${join}" espera ramas de la compuerta exclusiva "${split}", que solo toma una: los casos esperarían ahí para siempre. Usa una unión xor (u or).`,
     outlineDroppedPools: (names) => `los otros pools no forman parte del esquema y se omitieron: ${names}.`,
     outlineDroppedMessageFlows: (count) => `${n(count, 'flujo de mensaje no forma', 'flujos de mensaje no forman')} parte del esquema y ${count === 1 ? 'se omitió' : 'se omitieron'}.`,
-    outlineDroppedEventNames: (events) => `los eventos de inicio y fin son implícitos en un esquema; se omitieron sus nombres: ${events}.`,
+    outlineDroppedEventNames: (events) => `los eventos de fin son implícitos en un esquema; se omitieron sus nombres: ${events}.`,
     outlineDroppedArtifacts: (count) => `${n(count, 'anotación, grupo o asociación no forma', 'anotaciones, grupos o asociaciones no forman')} parte del esquema y ${count === 1 ? 'se omitió' : 'se omitieron'}.`,
-    outlineDroppedDefaults: (ids) => `las marcas de flujo por defecto no forman parte del esquema y se omitieron: ${ids}.`,
+    outlineDroppedDefaults: (ids) => `las marcas de flujo por defecto que no salen de un xor o un or, y las rotas, no forman parte del esquema y se omitieron: ${ids}.`,
     outlineDroppedFlowNames: (flows) => `los nombres de los flujos que salen de un evento de inicio no forman parte del esquema y se omitieron: ${flows}.`,
     outlineMergedNotes: (notes) => `las anotaciones de texto que repiten una nota del mismo paso se leyeron una sola vez: ${notes}.`,
     outlineDroppedTimerExpressions: (ids) =>
@@ -602,6 +602,8 @@ export const es: Catalog = {
     editCannotRemove: (id, type) => `"${id}" es un ${type}; solo se pueden quitar pasos y flujos de secuencia.`,
     editBoundaryNeedsActivity: (id, boundaries) =>
       `"${id}" tiene eventos de borde (${boundaries}); solo una tarea, actividad de llamada o subproceso puede llevarlos.`,
+    editNotOneEnd: (id, ends) =>
+      `"${id}" no es un evento de fin ni un paso que lleve a uno solo (${ends === '' ? 'no lleva a ninguno' : `lleva a ${ends}`}); indica el id del evento de fin.`,
     editLaneUnknown: (lane, lanes) =>
       lanes === '' ? `no hay un carril "${lane}": el proceso no tiene carriles; agrega uno con addLane.` : `no hay un carril "${lane}"; los carriles son: ${lanes}.`,
     editLaneAmbiguous: (lane, ids) => `varios carriles se llaman "${lane}" (${ids}); usa el id del carril.`,
@@ -617,6 +619,8 @@ export const es: Catalog = {
     editPositionLane: (lane) => `en el carril "${lane}"`,
     editAdded: (id, type, position) => `agregado ${type} "${id}" ${position}`,
     editConnected: (from, to, flow) => `conectado "${from}" → "${to}" (${flow})`,
+    editBoundaryAdded: (id, host, interrupting, target) =>
+      `adjuntado a "${host}" el temporizador de borde ${interrupting ? 'que interrumpe' : 'que no interrumpe'} "${id}" → ${target}`,
     editRemovedFlow: (id) => `quitado el flujo "${id}"`,
     editRemovedStep: (id, reconnected, also) =>
       `quitado "${id}"${reconnected === '' ? '' : `; reconectado ${reconnected}`}${also === '' ? '' : `; también se quitó ${also}`}`,

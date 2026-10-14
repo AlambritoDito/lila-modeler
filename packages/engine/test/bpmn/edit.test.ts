@@ -601,7 +601,7 @@ describe('the operations reader: addBoundary, lanes, annotations, data objects, 
     expect(EditOperationsSchema.safeParse(ops).success).toBe(true);
   });
 
-  test('well-formed ones pass the reader: only the not-yet-built ones are refused', async () => {
+  test('well-formed ones pass the reader: only the not-yet-built ones (#638) are refused', async () => {
     const { xml, scenario } = await credit();
     const error = await refused(
       xml,
@@ -621,10 +621,6 @@ describe('the operations reader: addBoundary, lanes, annotations, data objects, 
     );
     expect(error.issues.every((i) => i.message.startsWith('not implemented yet'))).toBe(true);
     expect(error.issues.map((i) => [i.op, i.path])).toEqual([
-      [0, 'step.type'],
-      [1, 'type'],
-      [2, 'default'],
-      [3, 'op'],
       [4, 'op'],
       [5, 'op'],
       [6, 'op'],
@@ -687,5 +683,208 @@ describe('the operations reader: addBoundary, lanes, annotations, data objects, 
     });
     expect(error.message).toContain('operations[0].before: indica "before" o "after": el carril junto al que va.');
     expect(error.message).toContain('operations[1].direction: debe ser uno de in, out.');
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * Lote Q (#631): the new step types, end types, default flows and boundary timers
+ * ------------------------------------------------------------------ */
+
+/** The lane (by id) whose `flowNodeRef` lists `id`. */
+async function laneOfNode(xml: string, id: string): Promise<string | undefined> {
+  const { rootElement } = await BpmnModdle().fromXML(xml);
+  const lanes = (rootElement as any).rootElements.find((e: any) => e.$type === 'bpmn:Process').laneSets?.[0]?.lanes ?? [];
+  return lanes.find((l: any) => (l.flowNodeRef ?? []).some((n: any) => n.id === id))?.id;
+}
+
+describe.each([true, false])('the #631 operations (layout %s)', (layout) => {
+  test('add and setType take the task variants, and setType turns an end into a terminate end and back', async () => {
+    const { xml, scenario } = await credit();
+    const edit = await editBpmn(
+      xml,
+      [
+        { op: 'add', step: { id: 'mail', name: 'Send receipt', type: 'sendTask', duration: '1m' }, after: 'receive' },
+        { op: 'setType', id: 'check', type: 'businessRuleTask' },
+        { op: 'setType', id: 'issue', type: 'terminate' },
+        { op: 'setType', id: 'EndEvent_reject', type: 'terminate' },
+        { op: 'setType', id: 'reject', type: 'end' },
+      ],
+      { scenario, layout },
+    );
+    expect(await errorsOf(edit.xml)).toEqual([]);
+    expect(edit.changes.map((c) => c.message).slice(2)).toEqual([
+      '"EndEvent_issue": end → terminate',
+      '"EndEvent_reject": end → terminate',
+      '"EndEvent_reject": terminate → end',
+    ]);
+    const reading = await bpmnToOutline(edit.xml, { scenario: edit.scenario as Record<string, unknown> });
+    expect(reading.warnings).toEqual([]);
+    expect(reading.outline.steps.map((s) => [s.id, s.type, s.end])).toEqual([
+      ['receive', undefined, undefined],
+      ['mail', 'sendTask', undefined],
+      ['check', 'businessRuleTask', undefined],
+      ['ok', 'xor', undefined],
+      ['issue', undefined, 'terminate'],
+      ['reject', undefined, true],
+    ]);
+    expect(reading.outline.steps[1]!.duration).toEqual({ type: 'constant', value: 60 });
+    // A step that does not lead to exactly one end is refused.
+    const bad = await refused(xml, [{ op: 'setType', id: 'ok', type: 'terminate' }], { layout });
+    expect(bad.issues[0]).toMatchObject({ op: 0, path: 'id', message: '"ok" is neither an end event nor a step that leads to exactly one (it leads to none); give the id of the end event.' });
+  });
+
+  test('connect with default: the new flow is the default of an xor/or; a second one, or out of a task, is refused', async () => {
+    const { xml, scenario } = await credit();
+    const edit = await editBpmn(xml, [{ op: 'connect', from: 'ok', to: 'check', label: 'Retry', default: true }], { scenario, layout });
+    expect(await errorsOf(edit.xml)).toEqual([]);
+    expect(edit.xml).toContain('<bpmn:exclusiveGateway id="ok" name="Approved?" default="Flow_ok_check">');
+    const branches = (await outlineOf(edit.xml, scenario)).steps.find((s) => s.id === 'ok')!.branches;
+    expect(branches).toContainEqual({ to: 'check', label: 'Retry', default: true });
+    const bad = await refused(
+      edit.xml,
+      [
+        { op: 'connect', from: 'ok', to: 'reject', default: true },
+        { op: 'connect', from: 'check', to: 'reject', default: true },
+      ],
+      { layout },
+    );
+    expect(bad.issues.map((i) => [i.op, i.path, i.message])).toEqual([
+      [0, 'default', 'gateway "ok": only one branch can be the default ("default": true).'],
+      [1, 'default', 'step "check": "default" does not apply to a task.'],
+    ]);
+  });
+
+  test('setType of an xor to an and lists its outgoing flows as retyped (their probabilities no longer apply)', async () => {
+    const { xml, scenario } = await credit();
+    const edit = await editBpmn(xml, [{ op: 'setType', id: 'ok', type: 'and' }], { scenario, layout });
+    expect(edit.retyped).toEqual(['ok', 'Flow_ok_issue', 'Flow_ok_reject']);
+  });
+
+  test('addBoundary: a non-interrupting deadline to a step, its delay in the base scenario, in the lane of its host', async () => {
+    const { xml, scenario } = await credit();
+    const edit = await editBpmn(
+      xml,
+      [{ op: 'addBoundary', on: 'check', boundary: { id: 'sla', type: 'timer', name: '48 h', label: 'Late', duration: '48h', interrupting: false, to: 'reject' } }],
+      { scenario, layout },
+    );
+    expect(await errorsOf(edit.xml)).toEqual([]);
+    expect(edit.changes[0]!.message).toBe('attached the non-interrupting boundary timer "sla" to "check" → reject');
+    expect(edit.xml).toMatch(/<bpmn:boundaryEvent id="sla" name="48 h" cancelActivity="false" attachedToRef="check">/);
+    expect((edit.scenario?.elements as Record<string, unknown>)['sla']).toEqual({ processingTime: { type: 'constant', value: 172800 } });
+    expect(await laneOfNode(edit.xml, 'sla')).toBe(await laneOfNode(edit.xml, 'check'));
+    const reading = await bpmnToOutline(edit.xml, { scenario: edit.scenario as Record<string, unknown> });
+    expect(reading.warnings).toEqual([]);
+    expect(reading.outline.steps.find((s) => s.id === 'check')!.boundary).toEqual([
+      { id: 'sla', type: 'timer', name: '48 h', label: 'Late', duration: { type: 'constant', value: 172800 }, interrupting: false, to: 'reject' },
+    ]);
+    // On the host's border in the diagram.
+    const { shapes } = await di(edit.xml);
+    const host = shapes.get('check')!;
+    const b = shapes.get('sla')!;
+    expect(b.y + b.height / 2).toBeCloseTo(host.y + host.height, 0);
+    expect(b.x).toBeGreaterThanOrEqual(host.x - b.width / 2);
+    expect(b.x + b.width).toBeLessThanOrEqual(host.x + host.width + b.width / 2);
+  });
+
+  test('addBoundary with an end: an interrupting timer to a terminate end EndEvent_<boundary>', async () => {
+    const { xml, scenario } = await credit();
+    const edit = await editBpmn(xml, [{ op: 'addBoundary', on: 'check', boundary: { id: 'cut', type: 'timer', duration: '1h', end: 'terminate' } }], {
+      scenario,
+      layout,
+    });
+    expect(await errorsOf(edit.xml)).toEqual([]);
+    expect(edit.xml).toMatch(/<bpmn:boundaryEvent id="cut" attachedToRef="check">/);
+    expect(await laneOfNode(edit.xml, 'EndEvent_cut')).toBe(await laneOfNode(edit.xml, 'check'));
+    const reading = await bpmnToOutline(edit.xml, { scenario: edit.scenario as Record<string, unknown> });
+    expect(reading.warnings).toEqual([]);
+    expect(reading.outline.steps.find((s) => s.id === 'check')!.boundary).toEqual([
+      { id: 'cut', type: 'timer', duration: { type: 'constant', value: 3600 }, end: 'terminate' },
+    ]);
+  });
+
+  test('addBoundary refusals: not on a gateway, an unknown target, a bad duration, a taken id, no scenario for the duration', async () => {
+    const { xml, scenario } = await credit();
+    const bad = await refused(
+      xml,
+      [
+        { op: 'addBoundary', on: 'ok', boundary: { id: 'b1', type: 'timer', end: true } },
+        { op: 'addBoundary', on: 'check', boundary: { id: 'b2', type: 'timer', to: 'ghost' } },
+        { op: 'addBoundary', on: 'check', boundary: { id: 'b3', type: 'timer', duration: 'soon', end: true } },
+        { op: 'addBoundary', on: 'check', boundary: { id: 'issue', type: 'timer', end: true } },
+      ],
+      { scenario, layout },
+    );
+    expect(bad.issues.map((i) => [i.op, i.path])).toEqual([
+      [0, 'on'],
+      [1, 'boundary.to'],
+      [2, 'boundary.duration'],
+      [3, 'boundary.id'],
+    ]);
+    const noScenario = await refused(xml, [{ op: 'addBoundary', on: 'check', boundary: { id: 'b', type: 'timer', duration: '1h', end: true } }], { layout });
+    expect(noScenario.issues[0]).toMatchObject({ op: 0, path: 'boundary.duration' });
+  });
+
+  test('remove a boundary event: the end it led to goes too; so does the end left behind by a removed flow', async () => {
+    const { xml, scenario } = await credit();
+    const withBoundary = await editBpmn(xml, [{ op: 'addBoundary', on: 'check', boundary: { id: 'cut', type: 'timer', duration: '1h', end: true } }], {
+      scenario,
+      layout,
+    });
+    const edit = await editBpmn(withBoundary.xml, [{ op: 'remove', id: 'cut' }], { layout });
+    expect(await errorsOf(edit.xml)).toEqual([]);
+    expect(edit.removed).toEqual(['Flow_cut_EndEvent_cut', 'cut', 'EndEvent_cut']);
+    expect(edit.changes[0]!.message).toBe('removed "cut"; also removed EndEvent_cut');
+    expect(edit.xml).not.toContain('EndEvent_cut');
+    // A flow into an end: the end has no way in left and goes.
+    const flow = await editBpmn(xml, [{ op: 'remove', id: 'Flow_reject_EndEvent_reject' }, { op: 'setType', id: 'reject', type: 'task' }, { op: 'connect', from: 'reject', to: 'issue' }], { layout });
+    expect(flow.removed).toEqual(['Flow_reject_EndEvent_reject', 'EndEvent_reject']);
+  });
+
+  test('moveToLane takes the boundary events of the step and the ends they lead to', async () => {
+    const { xml, scenario } = await credit();
+    const edit = await editBpmn(
+      xml,
+      [
+        { op: 'addBoundary', on: 'check', boundary: { id: 'cut', type: 'timer', duration: '1h', end: true } },
+        { op: 'addBoundary', on: 'check', boundary: { id: 'late', type: 'timer', interrupting: false, to: 'reject' } },
+        { op: 'moveToLane', id: 'check', lane: 'Customer' },
+      ],
+      { scenario, layout },
+    );
+    expect(await errorsOf(edit.xml)).toEqual([]);
+    for (const id of ['check', 'cut', 'EndEvent_cut', 'late']) expect(await laneOfNode(edit.xml, id), id).toBe('Lane_1');
+    const { shapes } = await di(edit.xml);
+    const lane = shapes.get('Lane_1')!;
+    for (const id of ['check', 'EndEvent_cut']) {
+      const box = shapes.get(id)!;
+      expect(box.y, id).toBeGreaterThanOrEqual(lane.y);
+      expect(box.y + box.height, id).toBeLessThanOrEqual(lane.y + lane.height);
+    }
+    const host = shapes.get('check')!;
+    for (const id of ['cut', 'late']) expect(shapes.get(id)!.y + 18, id).toBeCloseTo(host.y + host.height, 0);
+    const reading = await bpmnToOutline(edit.xml, { scenario: edit.scenario as Record<string, unknown> });
+    expect(reading.warnings).toEqual([]);
+  });
+
+  test('add an event gateway with a message and a timer branch, connected by hand', async () => {
+    const { xml, scenario } = await credit();
+    const edit = await editBpmn(
+      xml,
+      [
+        { op: 'add', step: { id: 'wait', type: 'eventGateway', name: 'Reply?' }, between: ['ok', 'reject'] },
+        { op: 'add', step: { id: 'answer', type: 'message', name: 'Answer', duration: '1d' }, between: ['wait', 'reject'] },
+        { op: 'add', step: { id: 'late', type: 'timer', name: '5 days', duration: '5d' } },
+        { op: 'connect', from: 'wait', to: 'late' },
+        { op: 'connect', from: 'late', to: 'reject' },
+      ],
+      { scenario, layout },
+    );
+    expect(await errorsOf(edit.xml)).toEqual([]);
+    const reading = await bpmnToOutline(edit.xml, { scenario: edit.scenario as Record<string, unknown> });
+    expect(reading.warnings).toEqual([]);
+    const step = (id: string) => reading.outline.steps.find((s) => s.id === id);
+    expect(step('wait')).toMatchObject({ type: 'eventGateway', branches: [{ to: 'answer' }, { to: 'late' }] });
+    expect(step('answer')).toMatchObject({ type: 'message', duration: { type: 'constant', value: 86400 } });
+    expect(step('late')).toMatchObject({ type: 'timer', duration: { type: 'constant', value: 432000 } });
   });
 });

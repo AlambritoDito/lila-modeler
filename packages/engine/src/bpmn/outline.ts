@@ -357,10 +357,22 @@ interface Successor {
   probability?: number | undefined;
   /** The default flow of an xor/or. */
   default?: boolean | undefined;
+  /** With `to: END`: the end is a terminate end event. */
+  terminate?: boolean | undefined;
   /** The flow's id, when read from a BPMN. */
   id?: string | undefined;
   /** Where the outline named it, for issues (`steps[2].branches[0].to`). */
   path?: string | undefined;
+}
+/** A boundary timer on a step: its one way out is `to` (a step, or `END`). */
+interface GraphBoundary {
+  id: string;
+  name: string;
+  label?: string | undefined;
+  duration?: Distribution | undefined;
+  interrupting: boolean;
+  to: string | typeof END;
+  terminate?: boolean | undefined;
 }
 interface GraphStep {
   id: string;
@@ -371,10 +383,21 @@ interface GraphStep {
   duration?: Distribution | undefined;
   resources?: { name: string; quantity: number }[] | undefined;
   selection?: 'and' | 'or' | undefined;
+  boundary?: GraphBoundary[] | undefined;
+}
+/** A start event and the one step it leads to. */
+interface GraphStart {
+  id: string;
+  name: string;
+  timer: boolean;
+  lane?: string | undefined;
+  to: string;
 }
 interface Graph {
   name: string;
   lanes: string[];
+  /** Absent: one plain start `StartEvent` before the first step. */
+  starts?: GraphStart[] | undefined;
   steps: GraphStep[];
 }
 
@@ -709,26 +732,15 @@ function readOutline(input: unknown, C: CliMessages, issues: OutlineIssue[]): Ra
 }
 
 /**
- * Lote Q contract commit (#631/#638): the reader accepts the new constructs, the build does not
- * yet. Each use is refused at its path until the implementation lands.
+ * Lote Q (#638): the reader accepts notes and data, the build does not yet. Each use is refused at
+ * its path until the implementation lands.
  */
-const NOT_IMPLEMENTED = 'not implemented yet (#631/#638).';
-const NEW_STEP_TYPES: ReadonlySet<OutlineStepType> = new Set([
-  'sendTask', 'receiveTask', 'manualTask', 'scriptTask', 'businessRuleTask', 'eventGateway', 'message',
-]);
+const NOT_IMPLEMENTED = 'not implemented yet (#638).';
 function notImplemented(outline: RawOutline, issues: OutlineIssue[]): void {
-  const stub = (path: string): void => void issues.push({ path, message: NOT_IMPLEMENTED });
-  if (outline.starts !== undefined) stub('starts');
   outline.steps.forEach((step, index) => {
-    const at = `steps[${index}]`;
-    if (step.type !== undefined && NEW_STEP_TYPES.has(step.type)) stub(`${at}.type`);
-    if (step.from !== undefined) stub(`${at}.from`);
-    if (step.end === 'terminate') stub(`${at}.end`);
-    step.branches?.forEach((b, k) => {
-      if (b.end === 'terminate') stub(`${at}.branches[${k}].end`);
-      if (b.default !== undefined) stub(`${at}.branches[${k}].default`);
-    });
-    for (const field of ['boundary', 'notes', 'data'] as const) if (step[field] !== undefined) stub(`${at}.${field}`);
+    for (const field of ['notes', 'data'] as const) {
+      if (step[field] !== undefined) issues.push({ path: `steps[${index}].${field}`, message: NOT_IMPLEMENTED });
+    }
   });
 }
 
@@ -820,7 +832,7 @@ function toGraph(input: unknown, C: CliMessages): Graph {
     }
 
     let succ: Successor[];
-    if (ends(step.end)) succ = [{ to: END, path: at(index, 'end') }];
+    if (ends(step.end)) succ = [{ to: END, terminate: step.end === 'terminate' || undefined, path: at(index, 'end') }];
     else if (step.branches !== undefined) {
       succ = step.branches.map((b, k) => {
         if (ends(b.end) === (b.to !== undefined)) {
@@ -835,7 +847,14 @@ function toGraph(input: unknown, C: CliMessages): Graph {
           issues.push({ path: at(index, `branches[${k}].probability`), message: C.outlineFieldNotApplicable(step.id, 'probability', type) });
         }
         const path = at(index, `branches[${k}].${b.to === undefined ? 'end' : 'to'}`);
-        return { to: b.to ?? END, label: b.label, probability: b.probability, default: b.default === true || undefined, path };
+        return {
+          to: b.to ?? END,
+          label: b.label,
+          probability: b.probability,
+          default: b.default === true || undefined,
+          terminate: (b.to === undefined && b.end === 'terminate') || undefined,
+          path,
+        };
       });
       if (step.branches.filter((b) => b.default === true).length > 1) {
         issues.push({ path: at(index, 'branches'), message: C.outlineManyDefaults(step.id) });
@@ -884,16 +903,30 @@ function toGraph(input: unknown, C: CliMessages): Graph {
     if (step.selection !== undefined && (step.resources === undefined || !WORK.has(type))) {
       issues.push({ path: at(index, 'selection'), message: C.outlineFieldNotApplicable(step.id, 'selection', type) });
     }
+    let boundary: GraphBoundary[] | undefined;
     if (step.boundary !== undefined) {
       // A task (any variant) or a call activity; a sub-process is #639.
       if (!WORK.has(type)) issues.push({ path: at(index, 'boundary'), message: C.outlineFieldNotApplicable(step.id, 'boundary', type) });
-      step.boundary.forEach((b, k) => {
+      boundary = step.boundary.map((b, k): GraphBoundary => {
         const bat = at(index, `boundary[${k}]`);
         if (b.to !== undefined && !ids.has(b.to)) issues.push({ path: `${bat}.to`, message: C.outlineUnknownTarget(step.id, b.to) });
-        if (b.duration !== undefined && parseDuration(b.duration as string | number | Distribution) === null) {
-          const shown = typeof b.duration === 'string' ? b.duration : JSON.stringify(b.duration);
-          issues.push({ path: `${bat}.duration`, message: C.outlineBadDuration(b.id, shown) });
+        let delay: Distribution | undefined;
+        if (b.duration !== undefined) {
+          delay = parseDuration(b.duration as string | number | Distribution) ?? undefined;
+          if (delay === undefined) {
+            const shown = typeof b.duration === 'string' ? b.duration : JSON.stringify(b.duration);
+            issues.push({ path: `${bat}.duration`, message: C.outlineBadDuration(b.id, shown) });
+          }
         }
+        return {
+          id: b.id,
+          name: b.name ?? '',
+          label: b.label,
+          duration: delay,
+          interrupting: b.interrupting !== false,
+          to: b.to ?? END,
+          terminate: (b.to === undefined && b.end === 'terminate') || undefined,
+        };
       });
     }
     if (step.data !== undefined) {
@@ -916,7 +949,7 @@ function toGraph(input: unknown, C: CliMessages): Graph {
       });
     }
 
-    return { id: step.id, name: step.name ?? '', type, lane, succ, duration, resources: step.resources, selection: step.selection };
+    return { id: step.id, name: step.name ?? '', type, lane, succ, duration, resources: step.resources, selection: step.selection, boundary };
   });
 
   // The event gateway (R-EVG-1): every way out (a branch, `next` or the following step) goes to a
@@ -969,23 +1002,49 @@ function toGraph(input: unknown, C: CliMessages): Graph {
   if (issues.length > 0) fail(C, issues);
   // Lanes named only further down the list: the steps before them go to the first lane.
   if (lanes.length > 0) for (const step of steps) step.lane ??= lanes[0];
-  return { name: outline.name, lanes, steps };
+  // Each start goes to the lane of its step unless it names one.
+  const starts = outline.starts?.map((start): GraphStart => {
+    const to = ledBy.get(start.id)![0]!;
+    return { id: start.id, name: start.name ?? '', timer: start.type === 'timer', lane: start.lane ?? byId.get(to)!.lane, to };
+  });
+  return { name: outline.name, lanes, starts, steps };
+}
+
+/** How a path that ends is written: `true`, or `"terminate"` for a terminate end event. */
+const endOf = (s: { terminate?: boolean | undefined }): NormalEnd => (s.terminate === true ? 'terminate' : true);
+
+/**
+ * The trivial start (see the header): one plain start `StartEvent` with no name, in the lane of its
+ * step. The outline leaves it out and puts its step first.
+ */
+function trivialStart(graph: Graph): GraphStart | undefined {
+  const only = graph.starts?.length === 1 ? graph.starts[0]! : undefined;
+  if (only === undefined || only.id !== START_ID || only.name !== '' || only.timer) return undefined;
+  const step = graph.steps.find((s) => s.id === only.to);
+  return step !== undefined && (graph.lanes.length === 0 || only.lane === step.lane) ? only : undefined;
 }
 
 function toNormal(graph: Graph): NormalOutline {
-  const steps = graph.steps.map((step, index): NormalStep => {
+  // The order of the steps only matters for the implicit start: `next` is written whenever the
+  // successor is not the following step, so moving the trivial start's step first changes nothing.
+  const trivial = trivialStart(graph);
+  const ordered = trivial === undefined ? graph.steps : [...graph.steps].sort((a, b) => Number(b.id === trivial.to) - Number(a.id === trivial.to));
+  const starts = graph.starts !== undefined && graph.starts.length > 0 && trivial === undefined ? graph.starts : undefined;
+  const steps = ordered.map((step, index): NormalStep => {
     const out: NormalStep = { id: step.id };
     if (step.name !== '') out.name = step.name;
     if (step.type !== 'task') out.type = step.type;
     if (graph.lanes.length > 0 && step.lane !== undefined) out.lane = step.lane;
+    const from = (starts ?? []).filter((s) => s.to === step.id).map((s) => s.id);
+    if (from.length > 0) out.from = from.length === 1 ? from[0]! : from;
 
-    const following = graph.steps[index + 1]?.id;
+    const following = ordered[index + 1]?.id;
     const decorated = step.succ.some((s) => s.label !== undefined || s.probability !== undefined || s.default === true);
     const toSteps = step.succ.filter((s): s is Successor & { to: string } => s.to !== END);
     // An eventGateway always lists its branches, even a single one: its targets are branch targets.
     if (GATEWAYS.has(step.type) && (step.type === 'eventGateway' || step.succ.length > 1 || decorated)) {
       out.branches = step.succ.map((s) => {
-        const branch: NormalBranch = s.to === END ? { end: true } : { to: s.to };
+        const branch: NormalBranch = s.to === END ? { end: endOf(s) } : { to: s.to };
         if (s.label !== undefined && s.label !== '') branch.label = s.label;
         if (s.probability !== undefined) branch.probability = round9(s.probability);
         if (s.default === true) branch.default = true;
@@ -993,7 +1052,7 @@ function toNormal(graph: Graph): NormalOutline {
       });
     } else if (toSteps.length === 0) {
       // Only the end, or no successor at all (a dead end in a foreign BPMN): never "the next one".
-      out.end = true;
+      out.end = step.succ.some((s) => s.terminate === true) ? 'terminate' : true;
     } else if (toSteps.length === 1 && toSteps[0]!.to === following) {
       // the implicit successor
     } else if (toSteps.length === 1) out.next = toSteps[0]!.to;
@@ -1004,9 +1063,33 @@ function toNormal(graph: Graph): NormalOutline {
       out.resources = step.resources.map((r) => (r.quantity === 1 ? r.name : { name: r.name, quantity: r.quantity }));
     }
     if (step.selection !== undefined) out.selection = step.selection;
+    if (step.boundary !== undefined && step.boundary.length > 0) {
+      out.boundary = step.boundary.map((b) => {
+        const boundary: NormalBoundary = { id: b.id, type: 'timer' };
+        if (b.name !== '') boundary.name = b.name;
+        if (b.label !== undefined && b.label !== '') boundary.label = b.label;
+        if (b.duration !== undefined) boundary.duration = b.duration;
+        if (!b.interrupting) boundary.interrupting = false;
+        if (b.to === END) boundary.end = endOf(b);
+        else boundary.to = b.to;
+        return boundary;
+      });
+    }
     return out;
   });
-  return graph.lanes.length > 0 ? { name: graph.name, lanes: [...graph.lanes], steps } : { name: graph.name, steps };
+  const normal = { name: graph.name } as NormalOutline;
+  if (graph.lanes.length > 0) normal.lanes = [...graph.lanes];
+  if (starts !== undefined) {
+    normal.starts = starts.map((s) => {
+      const start: NormalStart = { id: s.id };
+      if (s.name !== '') start.name = s.name;
+      if (s.timer) start.type = 'timer';
+      if (graph.lanes.length > 0 && s.lane !== undefined) start.lane = s.lane;
+      return start;
+    });
+  }
+  normal.steps = steps;
+  return normal;
 }
 
 /** Checks `input` and returns its normal form (see the header). Throws `OutlineError`. */
@@ -1053,8 +1136,12 @@ export interface OutlineBpmn {
  */
 function joinNotes(graph: Graph, C: CliMessages): string[] {
   const incoming = new Map<string, string[]>();
-  for (const step of graph.steps) for (const s of step.succ) if (s.to !== END) (incoming.get(s.to) ?? incoming.set(s.to, []).get(s.to)!).push(step.id);
+  const wayIn = (to: string, from: string): void => void (incoming.get(to) ?? incoming.set(to, []).get(to)!).push(from);
+  for (const step of graph.steps) for (const s of step.succ) if (s.to !== END) wayIn(s.to, step.id);
+  // The path out of a boundary event comes from its host: the host is where the paths split.
+  for (const step of graph.steps) for (const b of step.boundary ?? []) if (b.to !== END) wayIn(b.to, step.id);
   const byId = new Map(graph.steps.map((step) => [step.id, step]));
+  const splits = (id: string): boolean => GATEWAYS.has(byId.get(id)!.type) || (byId.get(id)!.boundary ?? []).length > 0;
   const notes: string[] = [];
   for (const join of graph.steps) {
     const from = incoming.get(join.id) ?? [];
@@ -1062,13 +1149,16 @@ function joinNotes(graph: Graph, C: CliMessages): string[] {
     const origins = from.map((id) => {
       let current = id;
       const seen = new Set<string>();
-      while (!GATEWAYS.has(byId.get(current)!.type) && (incoming.get(current) ?? []).length === 1 && !seen.has(current)) {
+      while (!splits(current) && (incoming.get(current) ?? []).length === 1 && !seen.has(current)) {
         seen.add(current);
         current = incoming.get(current)![0]!;
       }
       return current;
     });
-    const exclusive = (id: string): boolean => byId.get(id)!.type === 'xor' || byId.get(id)!.type === 'eventGateway';
+    const exclusive = (id: string): boolean => {
+      const step = byId.get(id)!;
+      return step.type === 'xor' || step.type === 'eventGateway' || (step.boundary ?? []).some((b) => b.interrupting);
+    };
     const split = origins.find((id, i) => exclusive(id) && origins.indexOf(id) !== i);
     if (split !== undefined) notes.push(C.outlineXorAndJoin(join.id, split));
   }
@@ -1112,24 +1202,33 @@ function buildSemantic(graph: Graph, processId: string, C: CliMessages): Built {
   const moddle = BpmnModdle({ lila });
   const create = (type: string, attrs: Record<string, unknown> = {}): El => moddle.create(type, attrs) as El;
 
-  // Ids Lila generates must not clash with a step id, nor with the `<id>_di` of the diagram.
-  const fixed = new Set<string>(['Definitions_1', processId, START_ID, 'Collaboration_1', 'Participant_1', 'LaneSet_1']);
+  // Ids Lila generates must not clash with an id of the outline (a start, a step, a boundary event),
+  // nor with the `<id>_di` of the diagram.
+  const fixed = new Set<string>(['Definitions_1', processId, 'Collaboration_1', 'Participant_1', 'LaneSet_1']);
+  if (graph.starts === undefined) fixed.add(START_ID);
   graph.lanes.forEach((_, i) => fixed.add(`Lane_${i + 1}`));
   for (const step of graph.steps) {
     if (step.type === 'subprocess') for (const part of ['start', 'end', 'flow']) fixed.add(`${step.id}_${part}`);
   }
   const generated = new Set<string>(fixed);
-  for (const step of graph.steps) for (let k = 1; k <= endCount(step); k++) generated.add(endId(step.id, k));
+  for (const step of graph.steps) {
+    for (let k = 1; k <= endCount(step); k++) generated.add(endId(step.id, k));
+    for (const b of step.boundary ?? []) if (b.to === END) generated.add(endId(b.id));
+  }
   const issues: OutlineIssue[] = [];
-  const stepIds = new Set(graph.steps.map((s) => s.id));
-  graph.steps.forEach((step, index) => {
-    const base = step.id.endsWith('_di') ? step.id.slice(0, -3) : undefined;
-    const clash =
-      generated.has(step.id) ||
-      /^(Flow|BPMNPlane|BPMNDiagram)_/.test(step.id) ||
-      (base !== undefined && (stepIds.has(base) || generated.has(base)));
-    if (clash) issues.push({ path: `steps[${index}].id`, message: C.outlineReservedId(step.id) });
-  });
+  const own: { id: string; path: string }[] = [
+    ...(graph.starts ?? []).map((start, i) => ({ id: start.id, path: `starts[${i}].id` })),
+    ...graph.steps.flatMap((step, index) => [
+      { id: step.id, path: `steps[${index}].id` },
+      ...(step.boundary ?? []).map((b, k) => ({ id: b.id, path: `steps[${index}].boundary[${k}].id` })),
+    ]),
+  ];
+  const ownIds = new Set(own.map((o) => o.id));
+  for (const { id, path } of own) {
+    const base = id.endsWith('_di') ? id.slice(0, -3) : undefined;
+    const clash = generated.has(id) || /^(Flow|BPMNPlane|BPMNDiagram)_/.test(id) || (base !== undefined && (ownIds.has(base) || generated.has(base)));
+    if (clash) issues.push({ path, message: C.outlineReservedId(id) });
+  }
   if (issues.length > 0) fail(C, issues);
 
   const process = create('bpmn:Process', { id: processId, name: graph.name, isExecutable: false, flowElements: [] });
@@ -1141,13 +1240,21 @@ function buildSemantic(graph: Graph, processId: string, C: CliMessages): Built {
     if (lane !== undefined) laneOf.set(el.id, lane);
     return el;
   };
+  const definition = (type: string): El[] => [create(type)];
 
   const first = graph.steps[0]!;
-  add(create('bpmn:StartEvent', { id: START_ID }), first.lane);
+  const starts: GraphStart[] = graph.starts ?? [{ id: START_ID, name: '', timer: false, lane: first.lane, to: first.id }];
+  for (const start of starts) {
+    const attrs: Record<string, unknown> = { id: start.id };
+    if (start.name !== '') attrs['name'] = start.name;
+    if (start.timer) attrs['eventDefinitions'] = definition('bpmn:TimerEventDefinition');
+    add(create('bpmn:StartEvent', attrs), start.lane);
+  }
   for (const step of graph.steps) {
     const attrs: Record<string, unknown> = { id: step.id };
     if (step.name !== '') attrs['name'] = step.name;
-    if (step.type === 'timer') attrs['eventDefinitions'] = [create('bpmn:TimerEventDefinition')];
+    if (step.type === 'timer') attrs['eventDefinitions'] = definition('bpmn:TimerEventDefinition');
+    if (step.type === 'message') attrs['eventDefinitions'] = definition('bpmn:MessageEventDefinition');
     const el = add(create(BPMN_TYPE[step.type], attrs), step.lane);
     if (step.type === 'subprocess') {
       // The simulator flattens an embedded sub-process through its start and end (SEMANTICS § 4):
@@ -1160,21 +1267,32 @@ function buildSemantic(graph: Graph, processId: string, C: CliMessages): Built {
       el['flowElements'] = [start, end, flow];
     }
   }
+  // Boundary timers sit in the lane of their host; `cancelActivity="false"` only when they do not
+  // interrupt it (the attribute's default is true).
+  for (const step of graph.steps) {
+    for (const b of step.boundary ?? []) {
+      const attrs: Record<string, unknown> = { id: b.id, attachedToRef: nodes.get(step.id), eventDefinitions: definition('bpmn:TimerEventDefinition') };
+      if (b.name !== '') attrs['name'] = b.name;
+      if (!b.interrupting) attrs['cancelActivity'] = false;
+      add(create('bpmn:BoundaryEvent', attrs), step.lane);
+    }
+  }
   // The end ids, allocated so they never clash with each other: the second end of `x` and the first
   // of a step `x_2` are both `EndEvent_x_2`, so the later one takes a free suffix (`EndEvent_x_2_2`).
-  const used = new Set<string>([...fixed, ...stepIds]);
+  const used = new Set<string>([...fixed, ...ownIds]);
   const endsOf = new Map<string, string[]>();
+  const newEnd = (base: string, terminate: boolean | undefined, lane: string | undefined): string => {
+    const id = freeId(`EndEvent_${base}`, used);
+    add(create('bpmn:EndEvent', terminate === true ? { id, eventDefinitions: definition('bpmn:TerminateEventDefinition') } : { id }), lane);
+    return id;
+  };
   for (const step of graph.steps) {
-    const own: string[] = [];
-    for (let k = 1; k <= endCount(step); k++) {
-      own.push(freeId(`EndEvent_${step.id}`, used));
-      add(create('bpmn:EndEvent', { id: own.at(-1)! }), step.lane);
-    }
-    endsOf.set(step.id, own);
+    endsOf.set(step.id, step.succ.filter((s) => s.to === END).map((s) => newEnd(step.id, s.terminate, step.lane)));
+    for (const b of step.boundary ?? []) if (b.to === END) endsOf.set(b.id, [newEnd(b.id, b.terminate, step.lane)]);
   }
   for (const id of generated) used.add(id);
   const flows: Built['flows'] = [];
-  const connect = (source: El, target: El, label?: string, probability?: number): void => {
+  const connect = (source: El, target: El, label?: string, probability?: number): El => {
     const id = flowId(source.id, target.id, used);
     const attrs: Record<string, unknown> = { id, sourceRef: source, targetRef: target };
     if (label !== undefined && label !== '') attrs['name'] = label;
@@ -1183,13 +1301,18 @@ function buildSemantic(graph: Graph, processId: string, C: CliMessages): Built {
     (target['incoming'] ??= []).push(flow);
     process['flowElements'].push(flow);
     flows.push({ id, source: source.id, probability });
+    return flow;
   };
-  connect(nodes.get(START_ID)!, nodes.get(first.id)!);
+  for (const start of starts) connect(nodes.get(start.id)!, nodes.get(start.to)!);
   for (const step of graph.steps) {
     let ended = 0;
     for (const s of step.succ) {
       const target = s.to === END ? nodes.get(endsOf.get(step.id)![ended++]!)! : nodes.get(s.to)!;
-      connect(nodes.get(step.id)!, target, s.label, s.probability);
+      const flow = connect(nodes.get(step.id)!, target, s.label, s.probability);
+      if (s.default === true) nodes.get(step.id)!['default'] = flow;
+    }
+    for (const b of step.boundary ?? []) {
+      connect(nodes.get(b.id)!, nodes.get(b.to === END ? endsOf.get(b.id)![0]! : b.to)!, b.label);
     }
   }
 
@@ -1221,7 +1344,9 @@ function buildSemantic(graph: Graph, processId: string, C: CliMessages): Built {
 function baseScenario(graph: Graph, built: Built): ScenarioDocument {
   const resources: Record<string, { name: string; capacity: number }> = {};
   const idOf = new Map<string, string>();
-  const elements: Record<string, Record<string, unknown>> = { [START_ID]: { ...DEFAULT_ARRIVALS } };
+  // Each start gets the default arrivals: two starts bring two streams of cases.
+  const elements: Record<string, Record<string, unknown>> = {};
+  for (const start of graph.starts ?? [{ id: START_ID }]) elements[start.id] = { ...DEFAULT_ARRIVALS };
   for (const step of graph.steps) {
     const element: Record<string, unknown> = {};
     if (step.duration !== undefined) element['processingTime'] = step.duration;
@@ -1240,6 +1365,8 @@ function baseScenario(graph: Graph, built: Built): ScenarioDocument {
     }
     if (step.selection !== undefined) element['selection'] = step.selection;
     if (Object.keys(element).length > 0) elements[step.id] = element;
+    // A boundary timer's deadline is its delay (R-BND): never in the XML.
+    for (const b of step.boundary ?? []) if (b.duration !== undefined) elements[b.id] = { processingTime: b.duration };
   }
   for (const flow of built.flows) if (flow.probability !== undefined) elements[flow.id] = { probability: flow.probability };
   return {
@@ -1302,22 +1429,10 @@ export async function outlineToBpmn(outline: unknown, options: OutlineToBpmnOpti
  * BPMN → outline
  * ------------------------------------------------------------------ */
 
-const OUTLINE_TYPE: Readonly<Record<string, OutlineStepType>> = {
-  'bpmn:Task': 'task',
-  'bpmn:UserTask': 'userTask',
-  'bpmn:ServiceTask': 'serviceTask',
-  'bpmn:CallActivity': 'callActivity',
-  'bpmn:ExclusiveGateway': 'xor',
-  'bpmn:ParallelGateway': 'and',
-  'bpmn:InclusiveGateway': 'or',
-  'bpmn:SubProcess': 'subprocess',
-  // Other task flavours keep their behaviour in the simulator (all are tasks, R-PERF-1).
-  'bpmn:ManualTask': 'task',
-  'bpmn:ScriptTask': 'task',
-  'bpmn:BusinessRuleTask': 'task',
-  'bpmn:SendTask': 'task',
-  'bpmn:ReceiveTask': 'task',
-};
+/** The step type of a BPMN element; intermediate catch events go by their event definition. */
+const OUTLINE_TYPE: Readonly<Record<string, OutlineStepType>> = Object.fromEntries(
+  (Object.entries(BPMN_TYPE) as [OutlineStepType, string][]).filter(([type]) => type !== 'timer' && type !== 'message').map(([type, bpmn]) => [bpmn, type]),
+);
 
 export interface BpmnToOutlineOptions {
   locale?: Locale | undefined;
@@ -1375,9 +1490,13 @@ function record(value: unknown): Record<string, any> {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, any>) : {};
 }
 
+/** The `$type`s of the event definitions of `el`. */
+const definitionsOf = (el: El): string[] => ((el['eventDefinitions'] ?? []) as El[]).map((d) => d.$type);
+
 /**
- * Reads the first process of `xml` (the pool's, when there is a collaboration) as an outline. The
- * start event and the end events become implicit; steps keep the document order.
+ * Reads the first process of `xml` (the pool's, when there is a collaboration) as an outline, in
+ * normal form (see the header): the end events become implicit, and so does the start in the
+ * trivial case; the steps keep the document order.
  */
 export async function bpmnToOutline(xml: string, options: BpmnToOutlineOptions = {}): Promise<OutlineReading> {
   const C = messages(options.locale ?? 'en').cli;
@@ -1418,77 +1537,139 @@ export async function bpmnToOutline(xml: string, options: BpmnToOutlineOptions =
   const resourceDefs = record(scenario['resources']);
 
   const flowElements = (process['flowElements'] ?? []) as El[];
+  const byId = new Map(flowElements.map((el) => [el.id, el]));
   const kept = new Map<string, OutlineStepType>();
-  const ends = new Set<string>();
+  /** end event id → how it ends a path */
+  const ends = new Map<string, NormalEnd>();
   const starts: El[] = [];
+  const boundaries: El[] = [];
   for (const el of flowElements) {
     if (el.$type === 'bpmn:SequenceFlow') continue;
+    const definitions = definitionsOf(el);
     if (el.$type === 'bpmn:StartEvent') starts.push(el);
-    else if (el.$type === 'bpmn:EndEvent') ends.add(el.id);
-    else if (
-      el.$type === 'bpmn:IntermediateCatchEvent' &&
-      ((el['eventDefinitions'] ?? []) as El[]).some((d) => d.$type === 'bpmn:TimerEventDefinition')
+    else if (el.$type === 'bpmn:EndEvent') ends.set(el.id, definitions.includes('bpmn:TerminateEventDefinition') ? 'terminate' : true);
+    else if (el.$type === 'bpmn:BoundaryEvent') boundaries.push(el);
+    else if (el.$type === 'bpmn:IntermediateCatchEvent' && definitions.includes('bpmn:TimerEventDefinition')) kept.set(el.id, 'timer');
+    else if (el.$type === 'bpmn:IntermediateCatchEvent' && definitions.length === 1 && definitions[0] === 'bpmn:MessageEventDefinition') {
+      kept.set(el.id, 'message');
+    } else if (
+      el.$type === 'bpmn:EventBasedGateway' &&
+      // R-EVG-1: only an exclusive gateway that does not instantiate the process.
+      (el['instantiate'] === true || (el['eventGatewayType'] !== undefined && el['eventGatewayType'] !== 'Exclusive'))
     ) {
-      kept.set(el.id, 'timer');
+      warnings.push(C.outlineUnsupported(el.id, el.$type));
     } else if (OUTLINE_TYPE[el.$type] !== undefined) kept.set(el.id, OUTLINE_TYPE[el.$type]!);
     else warnings.push(C.outlineUnsupported(el.id, el.$type));
   }
-  for (const extra of starts.slice(1)) warnings.push(C.outlineUnsupported(extra.id, extra.$type));
   // Triggers the outline has no word for read as plain events, with a warning. A timer start and a
   // terminate end are outline constructs (#631), not losses.
-  const triggers = (el: El, read: string): string[] =>
-    ((el['eventDefinitions'] ?? []) as El[]).map((d) => d.$type).filter((t) => t !== read);
-  for (const el of flowElements) {
-    const dropped =
-      el === starts[0] ? triggers(el, 'bpmn:TimerEventDefinition') : ends.has(el.id) ? triggers(el, 'bpmn:TerminateEventDefinition') : [];
+  for (const el of [...starts, ...flowElements.filter((e) => ends.has(e.id))]) {
+    const read = el.$type === 'bpmn:StartEvent' ? 'bpmn:TimerEventDefinition' : 'bpmn:TerminateEventDefinition';
+    const dropped = definitionsOf(el).filter((t) => t !== read);
     if (dropped.length > 0) warnings.push(C.outlineDroppedTrigger(el.id, dropped.join(', ')));
   }
-  const namedEvents = flowElements.filter(
-    (el) => (el === starts[0] || ends.has(el.id)) && typeof el['name'] === 'string' && el['name'] !== '',
-  );
-  if (namedEvents.length > 0) warnings.push(C.outlineDroppedEventNames(namedEvents.map((el) => `${el.id} "${el['name']}"`).join(', ')));
-  const defaults = flowElements.filter((el) => el['default'] !== undefined).map((el) => el.id);
-  if (defaults.length > 0) warnings.push(C.outlineDroppedDefaults(defaults.join(', ')));
+  const namedEnds = flowElements.filter((el) => ends.has(el.id) && typeof el['name'] === 'string' && el['name'] !== '');
+  if (namedEnds.length > 0) warnings.push(C.outlineDroppedEventNames(namedEnds.map((el) => `${el.id} "${el['name']}"`).join(', ')));
 
+  const sequenceFlows = flowElements.filter((el) => el.$type === 'bpmn:SequenceFlow');
+  const outOf = (el: El): El[] => sequenceFlows.filter((f) => f['sourceRef'] === el && f['targetRef'] !== undefined);
+  const flowName = (flow: El): string | undefined => (flow['name'] as string | undefined) || undefined;
+
+  // Boundary timers on a task (any variant) or a call activity, with one way out and no way in.
+  const keptBoundaries = new Map<string, GraphBoundary[]>();
+  const readBoundaries = new Set<El>();
+  for (const b of boundaries) {
+    const host = b['attachedToRef'] as El | undefined;
+    const outs = outOf(b);
+    const target = outs[0]?.['targetRef'] as El | undefined;
+    const ok =
+      host !== undefined &&
+      WORK.has(kept.get(host.id)!) &&
+      definitionsOf(b).length === 1 &&
+      definitionsOf(b)[0] === 'bpmn:TimerEventDefinition' &&
+      outs.length === 1 &&
+      target !== undefined &&
+      (kept.has(target.id) || ends.has(target.id)) &&
+      !sequenceFlows.some((f) => f['targetRef'] === b);
+    if (!ok) {
+      warnings.push(C.outlineUnsupported(b.id, b.$type));
+      continue;
+    }
+    readBoundaries.add(b);
+    const delay = record(elements[b.id])['processingTime'];
+    const boundary: GraphBoundary = {
+      id: b.id,
+      name: (b['name'] as string | undefined) ?? '',
+      label: flowName(outs[0]!),
+      duration: delay === undefined ? undefined : parseDuration(delay) ?? undefined,
+      interrupting: b['cancelActivity'] !== false,
+      to: ends.has(target!.id) ? END : target!.id,
+      terminate: ends.get(target!.id) === 'terminate' || undefined,
+    };
+    (keptBoundaries.get(host!.id) ?? keptBoundaries.set(host!.id, []).get(host!.id)!).push(boundary);
+  }
+
+  // A start leads to one step: further flows out of it, and the names of its flows, are not carried.
+  const graphStarts: GraphStart[] = [];
+  const startIds = new Set<string>();
+  for (const start of starts) {
+    const outs = outOf(start);
+    const target = outs[0]?.['targetRef'] as El | undefined;
+    if (target === undefined || !kept.has(target.id)) {
+      warnings.push(C.outlineUnsupported(start.id, start.$type));
+      continue;
+    }
+    if (outs.length > 1) warnings.push(C.outlineStartManyFlows(start.id, outs.slice(1).map((f) => f.id).join(', ')));
+    const named = outs.filter((f) => flowName(f) !== undefined);
+    if (named.length > 0) warnings.push(C.outlineDroppedFlowNames(named.map((f) => `${f.id} "${f['name']}"`).join(', ')));
+    startIds.add(start.id);
+    graphStarts.push({
+      id: start.id,
+      name: (start['name'] as string | undefined) ?? '',
+      timer: definitionsOf(start).includes('bpmn:TimerEventDefinition'),
+      lane: laneOf.get(start.id) ?? laneOf.get(target.id),
+      to: target.id,
+    });
+  }
+
+  // The flows out of the steps; the rest is said lost (flows of starts and boundary events were read above).
   const flowsFrom = new Map<string, El[]>();
-  for (const flow of flowElements.filter((el) => el.$type === 'bpmn:SequenceFlow')) {
+  for (const flow of sequenceFlows) {
     const source = flow['sourceRef'] as El | undefined;
     const target = flow['targetRef'] as El | undefined;
-    if (source === undefined || target === undefined) continue;
-    const known = (id: string): boolean => kept.has(id) || ends.has(id) || id === starts[0]?.id;
-    if (!known(source.id) || !known(target.id) || (starts.length > 0 && starts.slice(1).some((s) => s.id === source.id))) {
+    if (source !== undefined && (starts.includes(source) || boundaries.includes(source))) {
+      if (!startIds.has(source.id) && !readBoundaries.has(source)) warnings.push(C.outlineLostFlow(flow.id));
+      continue;
+    }
+    if (source === undefined || target === undefined || !kept.has(source.id) || !(kept.has(target.id) || ends.has(target.id))) {
       warnings.push(C.outlineLostFlow(flow.id));
       continue;
     }
     (flowsFrom.get(source.id) ?? flowsFrom.set(source.id, []).get(source.id)!).push(flow);
   }
 
-  // A start leads to one step: further flows out of it, and the names of its flows, are not carried.
-  const startFlows = flowsFrom.get(starts[0]?.id ?? '') ?? [];
-  if (startFlows.length > 1) warnings.push(C.outlineStartManyFlows(starts[0]!.id, startFlows.slice(1).map((f) => f.id).join(', ')));
-  const namedStartFlows = startFlows.filter((f) => typeof f['name'] === 'string' && f['name'] !== '');
-  if (namedStartFlows.length > 0) warnings.push(C.outlineDroppedFlowNames(namedStartFlows.map((f) => `${f.id} "${f['name']}"`).join(', ')));
-
-  // The start's target leads the list; the rest keep the document order.
-  const order = [...kept.keys()];
-  const firstId = startFlows[0]?.['targetRef']?.id as string | undefined;
-  if (firstId !== undefined && kept.has(firstId)) order.splice(order.indexOf(firstId), 1), order.unshift(firstId);
-
   // Branch probabilities the outline would refuse are left out with a warning, never read: those on
-  // flows that do not leave an xor or an or, and those of an xor that add up to more than 1.
+  // flows that do not leave an xor or an or, and those of an xor that add up to more than 1. So are
+  // default-flow marks out of anything but an xor or an or, and broken ones.
   const droppedProbabilities: string[] = [];
-  const steps: GraphStep[] = order.map((id) => {
-    const el = flowElements.find((e) => e.id === id)!;
+  const droppedDefaults: string[] = [];
+  const steps: GraphStep[] = [...kept.keys()].map((id) => {
+    const el = byId.get(id)!;
     const type = kept.get(id)!;
-    const succ: Successor[] = (flowsFrom.get(id) ?? []).map((flow) => {
+    const choice = type === 'xor' || type === 'or';
+    const outs = flowsFrom.get(id) ?? [];
+    if (el['default'] !== undefined && !(choice && outs.includes(el['default']))) droppedDefaults.push(id);
+    const succ: Successor[] = outs.map((flow) => {
       const target = flow['targetRef'].id as string;
       const probability = record(elements[flow.id])['probability'];
       const read = typeof probability === 'number' && probability >= 0 && probability <= 1;
-      if (typeof probability === 'number' && !(read && (type === 'xor' || type === 'or'))) droppedProbabilities.push(flow.id);
+      if (typeof probability === 'number' && !(read && choice)) droppedProbabilities.push(flow.id);
       return {
         to: ends.has(target) ? END : target,
-        label: (flow['name'] as string | undefined) || undefined,
-        probability: read && (type === 'xor' || type === 'or') ? probability : undefined,
+        terminate: ends.get(target) === 'terminate' || undefined,
+        label: flowName(flow),
+        probability: read && choice ? probability : undefined,
+        default: (choice && el['default'] === flow) || undefined,
         id: flow.id,
       };
     });
@@ -1507,13 +1688,87 @@ export async function bpmnToOutline(xml: string, options: BpmnToOutlineOptions =
         })
       : undefined;
     const selection = element['selection'] === 'and' || element['selection'] === 'or' ? (element['selection'] as 'and' | 'or') : undefined;
-    return { id, name: (el['name'] as string | undefined) ?? '', type, lane: laneOf.get(id), succ, duration, resources, selection };
+    return { id, name: (el['name'] as string | undefined) ?? '', type, lane: laneOf.get(id), succ, duration, resources, selection, boundary: keptBoundaries.get(id) };
   });
+  if (droppedDefaults.length > 0) warnings.push(C.outlineDroppedDefaults(droppedDefaults.join(', ')));
   if (droppedProbabilities.length > 0) warnings.push(C.outlineDroppedProbabilities(droppedProbabilities.join(', ')));
-  const outside = scenarioOutside(scenario, starts.map((el) => el.id), steps);
-  if (outside.length > 0) warnings.push(C.outlineScenarioOutside(outside.join(',')));
+  const kinds = scenarioOutside(scenario, graphStarts.map((s) => s.id), steps);
+  if (kinds.length > 0) warnings.push(C.outlineScenarioOutside(kinds.join(',')));
 
+  const graph: Graph = { name: '', lanes, starts: graphStarts, steps };
+  eventGatewayRule(graph, C, warnings);
+  // Durations live in the scenario: timer expressions of the timers the outline keeps are said lost.
+  const timers = [
+    ...starts.filter((el) => (graph.starts ?? []).some((start) => start.id === el.id)),
+    ...graph.steps.filter((step) => step.type === 'timer').map((step) => byId.get(step.id)!),
+    ...[...readBoundaries].filter((b) => graph.steps.some((step) => step.boundary?.some((g) => g.id === b.id))),
+  ];
+  const expressions = timers
+    .filter((el) => ((el['eventDefinitions'] ?? []) as El[]).some((d) => ['timeDuration', 'timeDate', 'timeCycle'].some((k) => d[k] !== undefined)))
+    .map((el) => el.id);
+  if (expressions.length > 0) warnings.push(C.outlineDroppedTimerExpressions(expressions.join(', ')));
   // Bizagi exports often have no names at all: the process id is still a name (QA of #553).
-  const name = (participant?.['name'] as string | undefined) || (process['name'] as string | undefined) || options.name || process.id;
-  return { outline: toNormal({ name, lanes, steps }), warnings };
+  graph.name = (participant?.['name'] as string | undefined) || (process['name'] as string | undefined) || options.name || process.id;
+  return { outline: toNormal(graph), warnings };
+}
+
+/**
+ * R-EVG-1 on a reading: every way out of an event gateway goes to a timer or message step whose only
+ * way in is that gateway, and a message step only follows one. What breaks the rule is left out with
+ * a warning, repeatedly: the flows of a gateway that go elsewhere (and the gateway, when none is
+ * left), and the message steps that follow anything else (with their flows).
+ */
+function eventGatewayRule(graph: Graph, C: CliMessages, warnings: string[]): void {
+  const removeStep = (step: GraphStep): void => {
+    warnings.push(C.outlineUnsupported(step.id, BPMN_TYPE[step.type]));
+    graph.steps.splice(graph.steps.indexOf(step), 1);
+    for (const other of graph.steps) {
+      other.succ = other.succ.filter((s) => {
+        if (s.to !== step.id) return true;
+        if (s.id !== undefined) warnings.push(C.outlineLostFlow(s.id));
+        return false;
+      });
+      other.boundary = other.boundary?.filter((b) => {
+        if (b.to === step.id) warnings.push(C.outlineUnsupported(b.id, 'bpmn:BoundaryEvent'));
+        return b.to !== step.id;
+      });
+      if (other.boundary?.length === 0) delete other.boundary;
+    }
+    graph.starts = graph.starts?.filter((start) => {
+      if (start.to === step.id) warnings.push(C.outlineUnsupported(start.id, 'bpmn:StartEvent'));
+      return start.to !== step.id;
+    });
+  };
+  for (let changed = true; changed; ) {
+    changed = false;
+    const waysIn = new Map<string, string[]>();
+    const wayIn = (to: string, from: string): void => void (waysIn.get(to) ?? waysIn.set(to, []).get(to)!).push(from);
+    for (const start of graph.starts ?? []) wayIn(start.to, start.id);
+    for (const step of graph.steps) for (const s of step.succ) if (s.to !== END) wayIn(s.to, step.id);
+    for (const step of graph.steps) for (const b of step.boundary ?? []) if (b.to !== END) wayIn(b.to, b.id);
+    const byId = new Map(graph.steps.map((step) => [step.id, step]));
+    for (const step of [...graph.steps]) {
+      if (step.type === 'message') {
+        const from = waysIn.get(step.id) ?? [];
+        if (from.length !== 1 || byId.get(from[0]!)?.type !== 'eventGateway') {
+          removeStep(step);
+          changed = true;
+          break;
+        }
+      }
+      if (step.type === 'eventGateway') {
+        const fit = (s: Successor): boolean => {
+          const target = s.to === END ? undefined : byId.get(s.to);
+          return target !== undefined && (target.type === 'timer' || target.type === 'message') && (waysIn.get(target.id) ?? []).length === 1;
+        };
+        const bad = step.succ.filter((s) => !fit(s));
+        if (bad.length === 0) continue;
+        for (const s of bad) if (s.id !== undefined) warnings.push(C.outlineLostFlow(s.id));
+        step.succ = step.succ.filter(fit);
+        if (step.succ.length === 0) removeStep(step);
+        changed = true;
+        break;
+      }
+    }
+  }
 }
