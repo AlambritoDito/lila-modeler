@@ -3,7 +3,7 @@
 > Leer en: [English](../MCP.md)
 
 `packages/mcp` (`@lila-modeler/mcp`) es un servidor [MCP](https://modelcontextprotocol.io) por stdio sobre
-`@lila-modeler/engine`, sin lógica propia: dieciocho tools, sobre el mismo pipeline de validación y
+`@lila-modeler/engine`, sin lógica propia: veinte tools, sobre el mismo pipeline de validación y
 simulación que la CLI — ver [`docs/es/CLI.md`](CLI.md) para ese mismo pipeline manejado desde una
 terminal en vez de un cliente MCP.
 
@@ -118,19 +118,26 @@ mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
   `{ file, process, scenario, sheet, dryRun, written, tables, changes, issues }`.
 - **`export_scenario_template({ project, process?, scenario, saveTo, overwrite?, locale? })`** —
   escribe esa hoja como `.xlsx`, rellenada. Devuelve `{ file, project, process, scenario }`.
-- **`create_project({ path, name, bpmn, scenarios?, overwrite?, locale? })`** — crea un `.lila`
+- **`create_project({ path, name, bpmn, scenarios?, overwrite?, allowUnsimulatable?, locale? })`** — crea un `.lila`
   nuevo a partir de un BPMN que ya existe (un agente que parte de pasos usa `create_process`) y
-  escenarios. Devuelve `{ file, name, processId, laidOut, warnings, scenarios }`.
+  escenarios. Devuelve `{ file, name, processId, laidOut, warnings, notes, scenarios }`.
 - **`get_project({ project, locale? })`** (#628) — lista lo que tiene un `.lila` sin escribir nada:
   sus procesos, sus escenarios y sus corridas guardadas, vigentes u obsoletas. Devuelve
   `{ file, name, formatVersion, processes }`.
 - **`get_scenario({ project, process?, scenario, resolved?, locale? })`** (#628) — lee un escenario
   como está guardado, o resuelto por `extends`, con las notas del validador, sin escribir nada.
   Devuelve `{ file, process, entry, revision, resolved, scenario, runnable, notes }`.
+- **`get_process_bpmn({ project, process?, locale? })`** (#632) — lee el XML BPMN de un proceso
+  como está guardado, sin escribir nada. Devuelve `{ file, process, processId, revision, xml }`.
+- **`put_process_bpmn({ project, process?, bpmn, mode, name?, layout?, allowUnsimulatable?, dryRun?, locale? })`**
+  (#632) — añade un BPMN como proceso nuevo de un `.lila` que ya existe (`mode: "add"`) o
+  reemplaza el modelo de uno (`mode: "replace"`). Devuelve `{ file, mode, slug, name, processId,
+  revision, dryRun, laidOut, summary, scenarioRemovals, notes, warnings, slugs }`.
 
 Las tres de exportación se explican en [Exportar sin la app](#exportar-sin-la-app); las cinco
-siguientes en [Herramientas de modelado para agentes](#herramientas-de-modelado-para-agentes); las
-dos últimas en [Leer un proyecto](#leer-un-proyecto).
+siguientes en [Herramientas de modelado para agentes](#herramientas-de-modelado-para-agentes);
+`get_project` y `get_scenario` en [Leer un proyecto](#leer-un-proyecto); las dos últimas en
+[El BPMN de un proceso](#el-bpmn-de-un-proceso).
 
 Toda tool que recibe un modelo acepta también un proyecto `.lila`: ver
 [Un `.lila` como entrada](#un-lila-como-entrada).
@@ -208,6 +215,61 @@ escribe nada (#627), pero no es para leer.
 
 ```json
 { "name": "get_scenario", "arguments": { "project": "credito.lila", "scenario": "as-is", "resolved": true } }
+```
+
+## El BPMN de un proceso
+
+`get_process_bpmn` y `put_process_bpmn` (#632) leen y escriben como XML el BPMN de un proceso de
+un `.lila`, por el mismo códec y el mismo candado que las demás tools: es la forma de traer un
+modelo dibujado en otro lado (una exportación de Bizagi, por ejemplo) como otro proceso de un
+proyecto, o de pasarle un proceso a una herramienta BPMN y recibirlo de vuelta. `lila process
+export-bpmn` y `lila process import` (`docs/es/CLI.md`) hacen lo mismo desde una terminal.
+
+- **`get_process_bpmn`** devuelve el modelo tal como está guardado: `xml`, su `revision` y
+  `processId`, el `bpmn:process` que simula el proyecto (como lo lista `get_project`). No escribe
+  nada.
+- **`put_process_bpmn`** recibe `bpmn` como XML (empieza por `<`) o como ruta a un `.bpmn`, y lo
+  valida como `create_project`: un modelo con errores de validación se rechaza.
+  - **`mode: "add"`** lo añade como proceso nuevo de un `.lila` que ya existe (para empezar un
+    archivo nuevo, usa `create_project`); un proyecto versión 1 pasa a ser un repositorio. Su slug
+    es `process`, o sale de `name`, si no del nombre de su pool, del de su proceso o del del
+    archivo; un slug que ya está en el archivo se rechaza. Recibe un `as-is.scenario.json` como el
+    que la app le da a un proceso nuevo: 20 llegadas con un minuto entre ellas en cada evento de
+    inicio y un minuto de trabajo en cada tarea, listo para correr y para parchear.
+  - **`mode: "replace"`** reemplaza el modelo del proceso `process` (implícito si el `.lila` tiene
+    uno). Conserva su nombre (aquí `name` se rechaza) y sus escenarios; su revisión sube, así que
+    sus corridas guardadas quedan obsoletas. Las anotaciones `lila:` (RACI, referencias, atributos
+    extendidos) y la documentación son las del modelo nuevo: las viejas se van con el modelo
+    viejo. Las entradas de escenario que ya no aplican — las de un elemento que el modelo nuevo no
+    tiene y los campos que un elemento que cambió de tipo ya no admite — se quitan y se listan en
+    `scenarioRemovals`, `{ scenario, id, removed, entry }`, igual que en `edit_process`, y `notes`
+    lo dice con palabras. Si aun así un escenario tiene un error que con el modelo viejo no tenía,
+    la llamada se rechaza.
+  - **`allowUnsimulatable: true`** guarda un modelo que el simulador no puede correr — eventos de
+    mensaje o señal, colaboraciones, ciclos, un diagrama dibujado para documentar — como lo guarda
+    la app. Acepta cualquier error de validación, y en un reemplazo también un error de escenario;
+    cada uno vuelve en `notes` (`no se simula: E-NOSOP: …`). Un archivo que no es XML, no es BPMN
+    o no tiene `bpmn:process` se sigue rechazando. Nada marca el proceso: «no se simula» es lo que
+    dice `get_scenario` (`runnable: false`, con los errores en sus `notes`) y `run_simulation` lo
+    rechaza, hasta que se arregle el modelo.
+  - **`layout`** (por defecto `true`) dibuja un modelo sin diagrama (sin formas `bpmndi`) con el
+    maquetado automático de `create_project` (`laidOut: true`); `false` lo deja como llegó.
+  - La escritura es la misma escritura atómica y con candado de `patch_scenario`: si el archivo
+    cambió en disco desde que se leyó, la llamada se rechaza (`E-CAMBIO-EXTERNO`) y no se pierde
+    nada. Los demás procesos quedan byte a byte. `dryRun` comprueba todo y no escribe nada.
+
+```json
+{ "name": "put_process_bpmn", "arguments": { "project": "credito.lila", "mode": "add",
+  "bpmn": "examples/bizagi-exports/bizagi-miwg-A.1.0-roundtrip.bpmn", "name": "MIWG A.1.0", "locale": "es" } }
+```
+
+```json
+{ "name": "get_process_bpmn", "arguments": { "project": "credito.lila", "process": "miwg-a-1-0" } }
+```
+
+```json
+{ "name": "put_process_bpmn", "arguments": { "project": "credito.lila", "process": "miwg-a-1-0", "mode": "replace",
+  "bpmn": "miwg-editado.bpmn", "allowUnsimulatable": true, "dryRun": true } }
 ```
 
 ## Exportar sin la app
@@ -380,7 +442,9 @@ cambiaría y no escribe nada.
 - **`export_scenario_template`** es «Descargar plantilla» de la app: dásela a una persona e importa
   lo que devuelva. Un `saveTo` que ya existe se rechaza salvo con `overwrite`.
 - **`create_project`** recibe `bpmn` como XML (empieza por `<`) o como ruta a un `.bpmn`. Un modelo
-  con errores de validación se rechaza. `scenarios` son `[{ "name", "scenario" }]`, guardados como
+  con errores de validación se rechaza, salvo con `allowUnsimulatable: true` (#632): entonces se
+  guarda como diagrama que no se simula y sus errores vuelven en `notes` (ver
+  [El BPMN de un proceso](#el-bpmn-de-un-proceso)). `scenarios` son `[{ "name", "scenario" }]`, guardados como
   `<name>.scenario.json`; un escenario sin `model` ni `extends` recibe `"model": "model.bpmn"`, y
   uno que nombra otro modelo se rechaza. Un escenario que todavía no puede correr es un borrador:
   se guarda y vuelve con `runnable: false` y sus `errors`. El archivo se escribe entero o nada, y

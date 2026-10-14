@@ -260,6 +260,53 @@ npx lila scenario show examples/pedido.lila to-be-3-cajeros --resolved
 ```
 Exit code: `0`.
 
+## `process export-bpmn` and `process import` (#632)
+
+The raw BPMN of one process of a `.lila`, out and in — the MCP tools `get_process_bpmn` and
+`put_process_bpmn` ([`docs/MCP.md`](MCP.md#raw-bpmn-of-a-process)):
+
+- `lila process export-bpmn -p <project.lila>` prints the model of the process as stored, or
+  writes it to `--out file.bpmn` (an existing file is refused unless `--force`). It writes nothing
+  into the `.lila`.
+- `lila process import -p <project.lila> --bpmn <file.bpmn>` adds the BPMN (a Bizagi export, say)
+  as a new process of the `.lila`, which must exist; a version 1 project becomes a repository.
+  The slug is `--process`, or comes from `--name`, else from the pool's, the process's or the
+  file's name; one already in the file exits `1`. The new process gets an `as-is.scenario.json`
+  with the app's defaults (20 arrivals a minute apart, a minute per task). With `--replace` it
+  replaces the model of the process `--process` instead: the revision goes up (saved runs go
+  stale), the annotations are the new model's, scenario entries that no longer apply are removed
+  and printed as notes, and a scenario error the old model did not have exits `1`.
+
+A model with validation errors exits `1` and writes nothing, unless `--allow-unsimulatable`: then
+it is kept as a diagram that does not simulate, its errors printed as notes. A file that is not
+BPMN is always refused. A model without a diagram is laid out unless `--no-layout`. The write is
+the `.lila`'s atomic, locked write (see [A `.lila` as input](#a-lila-as-input-466)), every other
+process unchanged; `--dry-run` writes nothing; `--json` prints the result object of
+`put_process_bpmn`: `{ file, mode, slug, name, processId, revision, dryRun, laidOut, summary,
+scenarioRemovals, notes, warnings, slugs }`.
+
+```bash
+npx lila process export-bpmn -p examples/pedido.lila --out results/pedido.bpmn
+```
+Exit code: `0`.
+
+```bash
+npx lila process import -p examples/pedido.lila --bpmn examples/bizagi-exports/bizagi-miwg-A.1.0-roundtrip.bpmn --dry-run
+```
+Exit code: `0`.
+
+```text
+Dry run: would add process "bizagi-miwg-A.1.0-roundtrip" (bizagi-miwg-a-1-0-roundtrip) to /…/examples/pedido.lila. Nothing was written.
+```
+
+A.3.0 has boundary events the simulator does not support, so it is refused unless
+`--allow-unsimulatable`:
+
+```bash
+npx lila process import -p examples/pedido.lila --bpmn examples/bizagi-exports/bizagi-miwg-A.3.0-roundtrip.bpmn --dry-run
+```
+Exit code: `1`.
+
 ## `mcp`
 
 Starts the MCP server (`@lila-modeler/mcp`) over stdio, for an MCP client to launch — not something you
