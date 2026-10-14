@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: 'Publish the reviewed demo (requires GitHub Pages configured for Actions)'
+        description: 'Publish the reviewed site (requires GitHub Pages configured for Actions)'
         type: boolean
         default: false
 
