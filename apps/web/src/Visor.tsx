@@ -101,6 +101,7 @@ export function Visor({ inicial }: { inicial: ProjectDocument | null }): React.J
   const S = useStrings();
   const caja = useRef<HTMLDivElement>(null);
   const archivo = useRef<HTMLInputElement>(null);
+  const aviso = useRef<HTMLDialogElement>(null);
   const [visor, setVisor] = useState<NavigatedViewer | null>(null);
   const [doc, setDoc] = useState<ProjectDocument>(() => inicial ?? proyectoDeEjemplo('pedido'));
   const [indice, setIndice] = useState(0);
@@ -136,6 +137,8 @@ export function Visor({ inicial }: { inicial: ProjectDocument | null }): React.J
     });
     setVisor(v);
     finishStartup();
+    // Every visit says what this is: the mobile version, limited, the full system is on a computer.
+    aviso.current?.showModal?.();
     return () => { soltar(); v.destroy(); };
   }, []);
 
@@ -175,6 +178,11 @@ export function Visor({ inicial }: { inicial: ProjectDocument | null }): React.J
 
   return (
     <div className="visor">
+      <dialog ref={aviso} className="visor-aviso" aria-labelledby="visor-aviso-titulo">
+        <h2 id="visor-aviso-titulo">{S.visor.avisoTitulo}</h2>
+        <p>{S.visor.avisoTexto}</p>
+        <form method="dialog"><button type="submit" className="boton">{S.visor.avisoOk}</button></form>
+      </dialog>
       <div className="visor-barra">
         <button type="button" className="boton" onClick={() => archivo.current?.click()}>{S.bienvenida.abrirLila}</button>
         {/* No `accept`: iOS greys out an extension it does not know, and .lila is one. */}

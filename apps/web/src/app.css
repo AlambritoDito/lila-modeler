@@ -5125,3 +5125,7 @@ button.gcal-uso-fila:hover {
 .visor-tipo { margin: 0; color: var(--fg-muted); }
 .visor-doc { white-space: pre-wrap; }
 .visor .c6-kpi-paren { display: none; }
+.visor-aviso { box-sizing: border-box; max-width: min(360px, calc(100vw - 32px)); padding: 20px; color: var(--fg-primary); background: var(--bg-elevated); border: 1px solid var(--border-strong); }
+.visor-aviso::backdrop { background: rgb(0 0 0 / 0.6); }
+.visor-aviso h2 { margin: 0 0 8px; font-size: 18px; }
+.visor-aviso .boton { width: 100%; min-height: 44px; font-size: 16px; }

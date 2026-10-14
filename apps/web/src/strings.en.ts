@@ -2191,5 +2191,8 @@ export const en = {
   visor: {
     modo: 'Viewer mode',
     editor: 'Full editor',
+    avisoTitulo: "You're viewing the mobile version",
+    avisoTexto: 'It is limited: it only shows the processes. Use Lila Modeler from a computer for the full system.',
+    avisoOk: 'Got it',
   },
 } as const;

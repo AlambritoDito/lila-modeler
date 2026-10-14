@@ -9,6 +9,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { processesOf } from '@lila-modeler/engine/project';
 import { abrirVisor, pasoGesto, Visor } from './Visor';
 import { EJEMPLOS, proyectoDeEjemplo } from './ejemplos';
+import { en as T } from './strings.en';
 
 vi.mock('bpmn-js/lib/NavigatedViewer', () => ({
   default: class {
@@ -53,6 +54,8 @@ it('lists the examples and, for a repository, its processes', async () => {
   const procesos = container.querySelector<HTMLSelectElement>('.visor-procesos')!;
   expect([...procesos.options].map((o) => o.text)).toEqual(['Pedido', 'Cola']);
   expect(container.querySelector<HTMLSelectElement>('.visor-ejemplos')!.options).toHaveLength(EJEMPLOS.length + 1);
+  // The mobile notice is there on every visit.
+  expect(container.querySelector('.visor-aviso h2')!.textContent).toBe(T.visor.avisoTitulo);
   // Nothing in the gallery carries a run, so there is no heat map to show.
   expect(container.querySelector<HTMLInputElement>('.visor-calor input')!.disabled).toBe(true);
 });

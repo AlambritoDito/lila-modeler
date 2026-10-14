@@ -2139,5 +2139,8 @@ export const es: Strings = {
   visor: {
     modo: 'Modo visor',
     editor: 'Editor completo',
+    avisoTitulo: 'Estás viendo la versión móvil',
+    avisoTexto: 'Está limitada: solo muestra los procesos. Usa Lila Modeler desde una computadora para el sistema completo.',
+    avisoOk: 'Entendido',
   },
 };
