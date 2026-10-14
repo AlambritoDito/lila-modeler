@@ -1,6 +1,7 @@
 /**
- * Texts of the agent tools of #99, #403 and #514 (annotate an element, the RACI matrix, a scenario
- * sheet as a tool, creating a `.lila`), English and Spanish, shared by the CLI and the MCP server.
+ * Texts of the agent tools of #99, #403, #514 and #628 (annotate an element, the RACI matrix, a
+ * scenario sheet as a tool, creating a `.lila`, the read-only inventory), English and Spanish,
+ * shared by the CLI and the MCP server.
  *
  * Their own file, like `sheets.ts`: none of them is an `E-*`/`W-*` code, and keeping them out of
  * `en.ts`/`es.ts` keeps the main catalog to the problems of a model or a scenario.
@@ -57,6 +58,17 @@ export interface AgentToolMessages {
   templateWritten: (file: string) => string;
   outRequired: () => string;
   newEntry: () => string;
+  // `lila project show` / `lila scenario show` (#628)
+  projectShowHeader: (name: string, file: string, version: number) => string;
+  projectShowProcess: (slug: string, name: string, processId: string, revision: number, elements: number | null) => string;
+  projectShowScenarios: (count: number) => string;
+  projectShowRuns: (count: number) => string;
+  projectShowRevision: (revision: number) => string;
+  projectShowExtends: (parent: string) => string;
+  projectShowRun: (replications: number, start: string | null, current: boolean) => string;
+  scenarioShowHeader: (entry: string, slug: string, revision: number, resolved: boolean) => string;
+  scenarioShowNotes: (count: number) => string;
+  scenarioShowRunnable: (runnable: boolean) => string;
 }
 
 /** Extended-attribute element types (`appliesTo`), as the app's attribute dialog names them. */
@@ -121,6 +133,19 @@ const en: AgentToolMessages = {
   templateWritten: (file) => `Template: ${file}`,
   outRequired: () => 'needs --out <file.xlsx>.',
   newEntry: () => 'new',
+  projectShowHeader: (name, file, version) => `Project "${name}" (${file}), format version ${version}`,
+  projectShowProcess: (slug, name, processId, revision, elements) =>
+    `Process ${slug} "${name}": ${processId}, model revision ${revision}, ${elements === null ? 'model unreadable' : `${elements} ${elements === 1 ? 'element' : 'elements'}`}`,
+  projectShowScenarios: (count) => `  ${count} ${count === 1 ? 'scenario' : 'scenarios'}${count === 0 ? '' : ':'}`,
+  projectShowRuns: (count) => `  ${count} saved ${count === 1 ? 'run' : 'runs'}${count === 0 ? '' : ':'}`,
+  projectShowRevision: (revision) => `revision ${revision}`,
+  projectShowExtends: (parent) => `extends ${parent}`,
+  projectShowRun: (replications, start, current) =>
+    `${replications} ${replications === 1 ? 'replication' : 'replications'}${start === null ? '' : `, start ${start}`}, ${current ? 'current' : 'stale'}`,
+  scenarioShowHeader: (entry, slug, revision, resolved) =>
+    `Scenario ${entry} of process ${slug}, revision ${revision}${resolved ? ', resolved' : ', as stored'}:`,
+  scenarioShowNotes: (count) => `${count} ${count === 1 ? 'note' : 'notes'} from the validator:`,
+  scenarioShowRunnable: (runnable) => (runnable ? 'It can run.' : 'It cannot run as it is: see the errors above.'),
 };
 
 const es: AgentToolMessages = {
@@ -177,6 +202,19 @@ const es: AgentToolMessages = {
   templateWritten: (file) => `Plantilla: ${file}`,
   outRequired: () => 'necesita --out <archivo.xlsx>.',
   newEntry: () => 'nuevo',
+  projectShowHeader: (name, file, version) => `Proyecto "${name}" (${file}), formato versión ${version}`,
+  projectShowProcess: (slug, name, processId, revision, elements) =>
+    `Proceso ${slug} "${name}": ${processId}, revisión del modelo ${revision}, ${elements === null ? 'modelo ilegible' : `${elements} ${elements === 1 ? 'elemento' : 'elementos'}`}`,
+  projectShowScenarios: (count) => `  ${count} ${count === 1 ? 'escenario' : 'escenarios'}${count === 0 ? '' : ':'}`,
+  projectShowRuns: (count) => `  ${count} ${count === 1 ? 'corrida guardada' : 'corridas guardadas'}${count === 0 ? '' : ':'}`,
+  projectShowRevision: (revision) => `revisión ${revision}`,
+  projectShowExtends: (parent) => `hereda de ${parent}`,
+  projectShowRun: (replications, start, current) =>
+    `${replications} ${replications === 1 ? 'réplica' : 'réplicas'}${start === null ? '' : `, inicio ${start}`}, ${current ? 'vigente' : 'obsoleta'}`,
+  scenarioShowHeader: (entry, slug, revision, resolved) =>
+    `Escenario ${entry} del proceso ${slug}, revisión ${revision}${resolved ? ', resuelto' : ', como está guardado'}:`,
+  scenarioShowNotes: (count) => `${count} ${count === 1 ? 'nota' : 'notas'} del validador:`,
+  scenarioShowRunnable: (runnable) => (runnable ? 'Se puede correr.' : 'No se puede correr así: mira los errores de arriba.'),
 };
 
 export const AGENT_TOOL_MESSAGES: Readonly<Record<Locale, AgentToolMessages>> = { en, es };

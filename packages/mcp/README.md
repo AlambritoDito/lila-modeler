@@ -52,14 +52,19 @@ accepts `locale: "en" | "es"`.
 
 ## Tools
 
-Sixteen tools: `validate_bpmn`, `describe_process`, `run_simulation`, `compare_scenarios`,
+Eighteen tools: `validate_bpmn`, `describe_process`, `run_simulation`, `compare_scenarios`,
 `patch_scenario`, `create_process`, `get_process_outline`, `edit_process`, `export_diagram`,
 `export_document`, `export_results`, `annotate_element`, `get_raci_matrix`,
-`import_scenario_sheet`, `export_scenario_template`, `create_project`.
+`import_scenario_sheet`, `export_scenario_template`, `create_project`, `get_project`,
+`get_scenario`.
 
 All file paths are read and written on the disk of the machine that runs the server; relative
-paths resolve against the server's working directory, so prefer absolute paths. Simulation is
-synchronous and there is no cancellation.
+paths resolve against the server's working directory, so prefer absolute paths. Simulation answers
+with a summary unless `detail: "full"`, reports progress per replication and can be cancelled.
+
+The server also offers the agent guide, the outline and scenario formats and the scenario JSON Schema
+as resources (`lila://guide`, `lila://outline-format`, `lila://scenario-format`,
+`lila://scenario-schema`), and the prompt `interview-to-process`.
 
 Tool contracts, examples and limits:
 [docs/MCP.md](https://github.com/AlambritoDito/lila-modeler/blob/main/docs/MCP.md). The

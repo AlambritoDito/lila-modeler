@@ -298,3 +298,19 @@ describe('#519 — Spanish messages contain no English field names', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe('#630 — counts take the singular for one', () => {
+  test('create_process, edit_process and the outline notes in both locales', () => {
+    expect(es.cli.processCreated('P', 'p', 'f.lila', 1, 1, false)).toContain(': 1 paso, 1 carril, escenario');
+    expect(es.cli.processDryRun('P', 'p', 'f.lila', 2, 3, false)).toContain(': 2 pasos, 3 carriles.');
+    expect(en.cli.processCreated('P', 'p', 'f.lila', 1, 1, false)).toContain(': 1 step, 1 lane, base');
+    expect(en.cli.processDryRun('P', 'p', 'f.lila', 2, 0, false)).toContain(': 2 steps, 0 lanes.');
+    expect(es.cli.processEdited('P', 'p', 'f.lila', 1, 1)).toContain(': 1 operación, 1 elemento quitado.');
+    expect(en.cli.processEdited('P', 'p', 'f.lila', 1, 0)).toContain(': 1 operation, 0 elements removed.');
+    expect(es.cli.editRemoveAmbiguous('x', 1, 2)).toContain('con 1 flujo de entrada y 2 de salida');
+    expect(es.cli.outlineDroppedMessageFlows(1)).toBe('1 flujo de mensaje no forma parte del esquema y se omitió.');
+    expect(en.cli.outlineDroppedArtifacts(1)).toBe('1 annotation, group or association is not part of the outline and was left out.');
+    expect(es.codes['W-MSGFLOW']('Process_1', 1)).toBe('Process_1: se ignoró 1 flujo de mensaje (bpmn:messageFlow).');
+    expect(en.codes['W-MSGFLOW']('Process_1', 2)).toBe('Process_1: 2 message flows (bpmn:messageFlow) were ignored.');
+  });
+});

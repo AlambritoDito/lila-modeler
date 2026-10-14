@@ -12,12 +12,16 @@ sintética `packages/mcp/test/fixtures/entrevista-tarjeta.txt`. El paso 8 necesi
 escritorio, así que se comprueba a mano con `tools/agent-live-check.mjs`.
 
 El servidor es su propio paquete de npm y se arranca con `npx -y @lila-modeler/mcp`; cómo
-registrarlo en cada cliente está en [`MCP.md`](MCP.md#instalación).
+registrarlo en cada cliente está en [`MCP.md`](MCP.md#instalación). Un cliente que solo tiene MCP lee
+esta guía como el recurso `lila://guide` (los formatos son `lila://outline-format`,
+`lila://scenario-format` y `lila://scenario-schema`), y el prompt `interview-to-process` arranca el
+flujo de abajo con una entrevista ([`MCP.md`](MCP.md#recursos-y-prompt)).
 
 ## El flujo
 
 | Paso | Tool | CLI |
 | --- | --- | --- |
+| 0. El archivo ya existe: leer lo que tiene | `get_project`, `get_scenario` | `lila project show`, `lila scenario show` |
 | 1. Leer la entrevista, escribir un esquema | (el agente) | |
 | 2. Crear el proceso | `create_process` | `lila process create` |
 | 3. Corregirlo | `edit_process`, `get_process_outline` | `lila process edit`, `lila process show` |
@@ -36,6 +40,21 @@ Dos reglas dan forma al flujo:
 - **Todo es el `.lila`.** El servidor no guarda estado. Cada tool lee el archivo, hace su trabajo y,
   si escribe, escribe el archivo completo de forma atómica. La app de escritorio que lo tiene
   abierto lo recarga sola.
+
+### 0. Un `.lila` que ya existe: `get_project`
+
+Cuando el `.lila` ya existe, empieza aquí, no por la entrevista:
+
+```json
+{ "name": "get_project", "arguments": { "project": "tarjeta.lila" } }
+```
+
+Lista los procesos (su `slug` es lo que recibe `process` cuando hay varios), los escenarios de cada
+uno con su revisión y su `extends`, y las corridas guardadas, vigentes (`current`) u obsoletas. No
+escribe nada. `get_scenario` lee un escenario, como está guardado o con `resolved: true`, con las
+`notes` del validador; lee un escenario con ella antes de parchearlo, nunca con un `patch_scenario`
+de solo `test`. Después sigue el paso de abajo que la persona pidió: un proceso nuevo (paso 2), una
+corrección (paso 3), números nuevos (paso 5) o una corrida nueva (paso 6).
 
 ### 1. De la entrevista al esquema
 
@@ -94,7 +113,8 @@ imprimirá el documento. Las dos son opcionales; el documento sale mejor con ell
 ### 5. El escenario
 
 El escenario base `as-is.scenario.json` empieza con los valores por defecto de la app (20 casos,
-uno por minuto, una corrida de una hora) más lo que traía el esquema. Completa el resto con un solo
+uno por minuto, una corrida de una hora) más lo que traía el esquema (`get_scenario` con
+`resolved: true` lo muestra, con las rutas que usa un patch). Completa el resto con un solo
 `patch_scenario` (JSON Patch, validado antes de escribir nada):
 
 ```json
@@ -126,11 +146,15 @@ antes → después; `issues`, las filas que no pudo aplicar).
 { "name": "run_simulation", "arguments": { "model": "tarjeta.lila", "scenario": "as-is", "seed": 42, "replications": 10, "saveRun": true } }
 ```
 
-La respuesta es el `RunResult` (`structuredContent`, [`RESULTS_FORMAT.md`](RESULTS_FORMAT.md)) más
-un segundo bloque de texto `{ "savedRun": { "id", … } }`. La corrida queda guardada en el `.lila`
-igual que la guarda la app, así que la app la muestra como la corrida vigente y las exportaciones
-la usan. Usa una `seed` fija para que la persona pueda reproducir los números; usa
-`compare_scenarios` para comparar AS-IS y TO-BE.
+La respuesta es un resumen de la corrida, de pocos KB: `process`, `bottlenecks`, la utilización, la
+espera y el costo de cada recurso, los elementos que más esperan (`topWaits`) y los avisos
+agrupados; `detail: "full"` devuelve el `RunResult` completo ([`RESULTS_FORMAT.md`](RESULTS_FORMAT.md)),
+que es grande. Un segundo bloque de texto dice `{ "savedRun": { "id", … } }`. La corrida queda
+guardada completa en el `.lila`, igual que la guarda la app, así que la app la muestra como la
+corrida vigente y las exportaciones la usan. Usa una `seed` fija para que la persona pueda
+reproducir los números; usa `compare_scenarios` para comparar AS-IS y TO-BE (su resumen conserva las
+filas del proceso y de los recursos y las diferencias significativas). Una corrida larga informa su
+progreso por replicación y se puede cancelar.
 
 ### 7. Exportaciones
 
@@ -254,5 +278,6 @@ Haz una escritura a la vez por archivo y espera su respuesta; escribir en parale
   pueden borrar carriles.
 - **Del esquema al escenario** solo pasan `duration`, `resources` y la `probability` de las ramas.
   Llegadas, calendarios, costos y capacidades van por `patch_scenario` o por una hoja.
-- **La simulación es síncrona** en el servidor: una corrida larga lo bloquea hasta terminar. Usa
-  pocas réplicas mientras iteras.
+- **Una corrida larga tarda lo suyo.** El servidor sigue respondiendo e informa cada replicación, y
+  una llamada cancelada detiene la corrida, pero la corrida en sí no es más rápida. Usa pocas
+  réplicas mientras iteras.

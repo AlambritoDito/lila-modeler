@@ -794,14 +794,22 @@ class Editor {
     const lane = this.lane(op.lane, 'lane');
     if (el === undefined || lane === undefined) return;
     if (el['$parent'] !== this.process) return this.issue('id', this.C.editLaneOutsideProcess(op.id));
+    // The end events the outline made for this step (`EndEvent_<id>`, `EndEvent_<id>_2`, …) go with it
+    // while nothing else leads to them.
+    const own = `EndEvent_${el.id}`;
+    const ends = this.outgoing(el)
+      .map((f) => f['targetRef'] as El)
+      .filter((t) => is(t, 'bpmn:EndEvent') && t.id.startsWith(own) && /^(_\d+)?$/.test(t.id.slice(own.length)))
+      .filter((t) => this.incoming(t).every((f) => f['sourceRef'] === el));
+    const moving = [el, ...ends];
     for (const { lane: l } of lanesOf(this.process)) {
-      if (Array.isArray(l['flowNodeRef'])) l['flowNodeRef'] = (l['flowNodeRef'] as El[]).filter((n) => n !== el);
+      if (Array.isArray(l['flowNodeRef'])) l['flowNodeRef'] = (l['flowNodeRef'] as El[]).filter((n) => !moving.includes(n));
     }
-    for (const l of this.laneChain(lane)) ((l['flowNodeRef'] ??= []) as El[]).push(el);
+    for (const l of this.laneChain(lane)) ((l['flowNodeRef'] ??= []) as El[]).push(...moving);
 
     const before = this.incremental ? this.diagram.bounds(el.id) : undefined;
     const from = before === undefined ? undefined : { x: before.x, y: before.y };
-    if (this.incremental) this.diagram.moveIntoLane(el, lane, this.participant);
+    if (this.incremental) for (const node of moving) this.diagram.moveIntoLane(node, lane, this.participant);
     const after = this.diagram.bounds(el.id);
     const attached = ((this.process['flowElements'] ?? []) as El[]).filter((b) => b['attachedToRef'] === el);
     if (from !== undefined && after !== undefined) {
@@ -810,11 +818,11 @@ class Editor {
         if (box !== undefined) this.diagram.setBounds(b.id, { ...box, x: box.x + after.x - from.x, y: box.y + after.y - from.y });
       }
     }
-    for (const node of [el, ...attached]) {
+    for (const node of [el, ...attached, ...ends]) {
       for (const flow of [...this.incoming(node), ...this.outgoing(node)]) this.diagram.routeFlow(flow);
       this.diagram.rerouteAround(node.id, this.links());
     }
-    this.touch(el, lane);
+    this.touch(el, lane, ...ends);
     this.change(this.C.editMoved(op.id, (lane['name'] as string | undefined) ?? lane.id));
   }
 
@@ -1011,6 +1019,28 @@ function readOperations(input: unknown, C: CliMessages, issues: EditIssue[]): (O
 function fail(C: CliMessages, issues: EditIssue[], wrap: (detail: string) => string = C.editInvalid): never {
   const line = (i: EditIssue): string => `  ${i.op === null ? '' : `operations[${i.op}].`}${i.path}: ${i.message}`;
   throw new EditError(wrap(issues.map(line).join('\n')), issues);
+}
+
+/**
+ * #630: a model with no diagram (no `bpmndi` shape) gets one, drawn by the same layout as
+ * `editBpmn` with `layout: true`, for the main process (`processId`, else the document-order
+ * rule). Returns `undefined` when the model already has a diagram, has no process to draw, or
+ * holds content the BPMN reader cannot write back whole. Throws `LayoutError` when the layouter
+ * cannot place it.
+ */
+export async function layoutMissingDiagram(xml: string, options: { processId?: string | undefined; locale?: Locale | undefined } = {}): Promise<string | undefined> {
+  const moddle = BpmnModdle({ lila });
+  const { rootElement, warnings } = await moddle.fromXML(xml);
+  // Writing back what the reader could not take whole would lose it: such a model stays as it is.
+  if (warnings.length > 0) return undefined;
+  const definitions = rootElement as unknown as El;
+  const process = mainProcess(definitions, options.processId);
+  if (process === undefined) return undefined;
+  const editor = new Editor(moddle, definitions, process, messages(options.locale ?? 'en').cli, undefined, 'as-is.scenario.json');
+  if (editor.diagram.hasDi || ((process['flowElements'] ?? []) as El[]).length === 0) return undefined;
+  await relayout({ definitions, process, participant: editor.participant, pool: editor.pool, diagram: editor.diagram });
+  const { xml: out } = await moddle.toXML(rootElement, { format: true });
+  return marcarExportador(out);
 }
 
 /**
