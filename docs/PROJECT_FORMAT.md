@@ -18,7 +18,8 @@ A project can hold **several processes** (ADR-029, #498). With one, it is the ve
 below, unchanged; with two or more, it is a version 2 *repository* where each process keeps that
 same layout under `processes/<slug>/` (see [Version 2](#version-2-the-repository)). The rest of
 ADR-029 — catalog objects, maps, attachments, a per-object store — is not part of the format yet;
-the [organizational roadmap](ROADMAP.md) says in what order it is planned.
+the [organizational roadmap](ROADMAP.md) says in what order it is planned, and [the repository
+contract](REPOSITORY_CONTRACT.md) defines version 3.
 
 ## Layout
 

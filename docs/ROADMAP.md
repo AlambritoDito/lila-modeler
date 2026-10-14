@@ -14,7 +14,7 @@ not guarantee that any particular engine can execute it.
 
 ## 1. Evidence and capability gaps
 
-Baseline: source inspected at commit `3c3ae07` (v1.0.0-beta.25) on 2026-10-14, plus the state of
+Baseline: source inspected at commit `7dd61e2` (v1.0.0-beta.26) on 2026-10-14, plus the state of
 the referenced GitHub issues on that date. This is a static code and contract review, not a new
 installed-app smoke test or a fresh run of the simulation suite. The existing backlog records
 intent and must not be used alone as proof of implementation.
@@ -47,7 +47,7 @@ Phase numbers below are roadmap phases, not the historical M0–M6 milestones.
 | Organization and resources | Partial: simulation pools, B4 | Units, roles, positions, people, partners, resources, cost centres | 3 / catalog | Show ownership and explicitly link a role to a simulation pool |
 | Risk and control management | Partial: references only, B2 | Risk/control catalogs and groups, maps, assessments, heatmaps, treatments | 4 / catalog and maps | Trace a risk to controls, owner and evidence |
 | Control objectives and requirements | Planned, B7 | Coverage and compliance relationships | 4 / risk/control objects | List requirements without supporting controls |
-| Documents and attachments | Partial: references and an exported process document; archive drops unknown entries, B1/B2/B3 | File storage, metadata and portable attachments | 2 / v2 storage | Attachment bytes survive archive and folder round trips |
+| Documents and attachments | Partial: references and an exported process document; archive drops unknown entries, B1/B2/B3 | File storage, metadata and portable attachments | 2 / version 3 storage | Attachment bytes survive archive and folder round trips |
 | KPIs, maturity and improvement | Partial: KPI references and simulation, B2/B6 | Targets, observations, initiatives, goals, SIPOC and Ishikawa | 5 / Insights and relationships | A result identifies source, date and measurement kind |
 | Impact and dependency analysis | Planned, B7 | Cross-model traversal and saved analysis views | 5 / reverse index | An application change lists affected tasks and processes |
 | Document, IT and product maps | Planned, B7 | Products/components; applications/services/interfaces/operations/nodes | 6 / model type registry | One application is reused in process and IT maps |
@@ -65,7 +65,7 @@ Phase numbers below are roadmap phases, not the historical M0–M6 milestones.
 
 | Phase | Deliverable | Gate / backlog |
 | --- | --- | --- |
-| **1 — Repository foundation** | Per-object storage, catalog entries, explorer, identity and relationship index (the multi-process v2 container and tabs already exist) | ORG-1; keep v1/v2 output byte-identical and each process's scenarios/runs isolated |
+| **1 — Repository foundation** | Per-object storage, catalog entries, explorer, identity and relationship index (the multi-process v2 container and tabs already exist) | ORG-1; keep v1/v2 output byte-identical (plus unknown entries now preserved, REPOSITORY_CONTRACT.md § 1.4) and each process's scenarios/runs isolated |
 | **2 — Documentation workspace** | Initial roles/units/systems/documents catalog; attachments; selectors; editable tables; RACI; initial Insights | E15, ORG-2, ORG-3, ORG-6; first usable milestone below |
 | **3 — Process and organization architecture** | Process landscapes, value chains, organization charts and organizational resources | ORG-4 and LILA-096; map navigation and explicit simulation linkage |
 | **4 — Risks and controls** | Catalogs/groups, maps, inherent/residual assessment, heatmap, objectives, requirements, evidence and treatment | ORG-5; coverage can be inspected from both process and risk |
@@ -86,8 +86,8 @@ other scopes.
 
 ADONIS code starts after Lote R closes the agent epic #527 (Lote P shipped in beta.25, Lote Q is
 in progress, Lote R comes next). The RM-01 contract, documentation only, is
-[`REPOSITORY_CONTRACT.md`](REPOSITORY_CONTRACT.md), recorded as ADR-032 (proposed until the owner
-answers its open questions) in [DECISIONS.md](DECISIONS.md). Proposed delivery lots:
+[`REPOSITORY_CONTRACT.md`](REPOSITORY_CONTRACT.md), recorded as ADR-032 (accepted on 2026-10-14
+with the owner's decisions) in [DECISIONS.md](DECISIONS.md). Proposed delivery lots:
 
 | Lot | Scope | Phase |
 | --- | --- | --- |
@@ -108,12 +108,15 @@ path to ADONIS, and does not gate these lots.
   them. Model placement is not a second copy of the object. References support reverse lookup.
 - **Identity:** cross-model element references include model identity, version context and BPMN
   element ID. Names and paths are not keys. Importing two models with equal element IDs must not
-  merge them. Freeze the exact identity/version representation in RM-01 before implementation.
+  merge them. References are `{ process, element }` with a reserved `version` member
+  (REPOSITORY_CONTRACT.md § 3.3).
 - **Compatibility:** already true for processes: v1 opens as a one-process repository without
-  rewriting its files, and a one-process project is still saved as v1, byte for byte. Keep that
-  when adding objects: content that needs repository features (a catalog, attachments) requires a
-  v2 save. Builds up to 1.0.0-beta.14 reject v2; never claim that a v1 reader preserves catalogs
-  or attachments.
+  rewriting its files, and a one-process project is still saved as v1, byte for byte (plus unknown
+  entries now preserved, REPOSITORY_CONTRACT.md § 1.4). Keep that when adding objects: content that
+  needs repository features (a catalog, attachments) requires a version 3 save
+  (REPOSITORY_CONTRACT.md § 1.3). Builds 1.0.0-beta.15 and later refuse version 3
+  (`LILA-MANIFEST`/`E-MANIFEST`); builds up to beta.14 refuse versions 2 and 3. Never claim that a
+  v1 reader preserves catalogs or attachments.
 - **Canonical data:** BPMN retains diagram and element annotations; catalog objects live in
   `catalog/<type>/<id>.json` (superseding the proposed monolithic `catalog.json`). Maps, analyses
   and dashboard definitions use versioned documents. Indexes and displayed aggregates are derived.
@@ -128,7 +131,7 @@ path to ADONIS, and does not gate these lots.
 - **Resource linkage:** RACI roles and simulation pools remain different concepts with an explicit
   link. A responsibility never creates capacity, cost or availability automatically.
 - **Attachments:** define supported entries, limits, integrity and recovery before adding files
-  to v2. Preserve bytes across archive/folder adapters; do not reuse v1's unknown-entry dropping
+  to version 3. Preserve bytes across archive/folder adapters; do not reuse v1's unknown-entry dropping
   for supported attachments. Runs remain optional when sharing.
 - **Insights:** process/object dashboards are reading and analysis views. Every metric records
   whether it is manually assessed, simulated or observed, with source/date and applicable units.
@@ -144,8 +147,9 @@ path to ADONIS, and does not gate these lots.
 - **Design:** preserve approved branding and themes; use original Lila UI, not copied vendor
   assets. Keep English/Spanish UI catalogs aligned. Public examples are synthetic.
 
-Before the first milestone, RM-01 must extend the shipped v2 manifest with objects and settle
-reference identity, the storage/revision interface, attachment rules and failure recovery. Later phases get separate contracts for map
+Before the first milestone, RM-01 defines repository version 3 (process ids, catalog, attachments)
+on top of the shipped v2 layout and settles reference identity, the storage/revision interface,
+attachment rules and failure recovery. Later phases get separate contracts for map
 types, risk scoring, KPI observations, DMN, release workflow, collaboration and connectors. These
 are explicitly deferred specifications, not choices silently delegated to a first-milestone PR.
 No runtime API, scenario schema or public error code changes in this documentation delivery.

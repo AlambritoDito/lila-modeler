@@ -1,10 +1,10 @@
 # Investigación de modelado organizacional
 
-> Read this in: [English](../../research/README.md).
+> Leer en: [English](../../research/README.md).
 
 Investigación solicitada el 2026-09-26 para precisar el [roadmap organizacional](../ROADMAP.md)
 de Lila. Las fuentes de proveedores y proyectos se leyeron en esa fecha; lo que se afirma del estado
-de Lila se revisó contra el commit `3c3ae07` (v1.0.0-beta.25) el 2026-10-14. Cubre ADONIS y alternativas open source en tres áreas complementarias. No modifica el
+de Lila se revisó contra el commit `7dd61e2` (v1.0.0-beta.26) el 2026-10-14. Cubre ADONIS y alternativas open source en tres áreas complementarias. No modifica el
 roadmap aprobado, autoriza dependencias ni implementa funciones del producto.
 
 | Investigación | Preguntas |

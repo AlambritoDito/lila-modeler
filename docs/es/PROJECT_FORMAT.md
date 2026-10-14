@@ -19,7 +19,8 @@ Un proyecto puede tener **varios procesos** (ADR-029, #498). Con uno es la dispo
 versión 1 de abajo, sin cambios; con dos o más es un *repositorio* versión 2 en el que cada proceso
 conserva esa misma disposición dentro de `processes/<slug>/` (ver [Versión 2](#versión-2-el-repositorio)).
 El resto de la ADR-029 —objetos de catálogo, mapas, adjuntos, un almacén por objeto— todavía no
-forma parte del formato; el [roadmap organizacional](ROADMAP.md) dice en qué orden está planeado.
+forma parte del formato; el [roadmap organizacional](ROADMAP.md) dice en qué orden está planeado, y [el contrato del
+repositorio](REPOSITORY_CONTRACT.md) define la versión 3.
 
 ## Disposición
 

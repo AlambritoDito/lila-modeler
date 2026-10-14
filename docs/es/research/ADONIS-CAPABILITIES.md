@@ -1,6 +1,6 @@
 # Investigación de capacidades públicas de ADONIS para la hoja de ruta de Lila Modeler
 
-> Read this in: [English](../../research/ADONIS-CAPABILITIES.md).
+> Leer en: [English](../../research/ADONIS-CAPABILITIES.md).
 
 Revisado el 2026-09-26. Este es un estudio documental de material público de BOC Group, principalmente del manual de usuario de la **Biblioteca de Aplicación BPMS de ADONIS 17.1**. No es una auditoría de una instalación con licencia, una prueba de compatibilidad ni una exportación completa del metamodelo del proveedor. La [documentación BOC 19.0](https://docs.boc-group.com/adonis/en/docs/19.0/user_manual/mty-000000/) y la [página de novedades 19.0](https://www.boc-group.com/en/adonis/whats-new/) muestran material específico de versiones posteriores; no debe combinarse información de distintas versiones para afirmar que una edición concreta tiene todas esas funciones. La [hoja de ruta de Lila](../ROADMAP.md) ya cubre la mayoría de las familias generales que se describen aquí. Esta nota aporta evidencia más precisa y preguntas para pruebas de aceptación, sin cambiar los compromisos de la hoja de ruta.
 

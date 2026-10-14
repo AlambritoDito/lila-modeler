@@ -1,6 +1,6 @@
 # Roadmap: de la simulación de procesos al repositorio organizacional
 
-> Read this in: [English](../ROADMAP.md).
+> Leer en: [English](../ROADMAP.md).
 
 **Dirección aprobada, 2026-09-26; evidencia actualizada el 2026-10-14. Implementación pendiente
 salvo las bases identificadas abajo.** En GitHub se sigue como la épica #497.
@@ -15,7 +15,7 @@ cualquier motor pueda ejecutarlo.
 
 ## 1. Evidencia y brechas funcionales
 
-Base revisada: código del commit `3c3ae07` (v1.0.0-beta.25), el 2026-10-14, más el estado de los
+Base revisada: código del commit `7dd61e2` (v1.0.0-beta.26), el 2026-10-14, más el estado de los
 issues de GitHub citados en esa fecha. Es una revisión estática de código y contratos, no una
 nueva prueba de la app instalada ni una ejecución reciente de las pruebas de simulación. El
 backlog registra intención y no demuestra por sí solo implementación.
@@ -48,7 +48,7 @@ no son los hitos históricos M0–M6.
 | Organización y recursos | Parcial: pools de simulación, B4 | Unidades, roles, puestos, personas, socios, recursos, centros de coste | 3 / catálogo | Mostrar responsables y enlazar explícitamente rol y pool |
 | Riesgos y controles | Parcial: solo referencias, B2 | Catálogos y agrupaciones, mapas, evaluaciones, matriz de calor, tratamientos | 4 / catálogo y mapas | Recorrer riesgo → controles → responsable → evidencia |
 | Objetivos de control y requisitos | Planeado, B7 | Relaciones de cobertura y cumplimiento | 4 / riesgos y controles | Listar requisitos sin controles asociados |
-| Documentos y adjuntos | Parcial: referencias y documento del proceso exportado; el contenedor descarta entradas desconocidas, B1/B2/B3 | Archivos, metadatos y adjuntos portables | 2 / almacenamiento v2 | Conservar bytes al pasar de archivo a carpeta y viceversa |
+| Documentos y adjuntos | Parcial: referencias y documento del proceso exportado; el contenedor descarta entradas desconocidas, B1/B2/B3 | Archivos, metadatos y adjuntos portables | 2 / almacenamiento versión 3 | Conservar bytes al pasar de archivo a carpeta y viceversa |
 | KPIs, madurez y mejora | Parcial: referencias KPI y simulación, B2/B6 | Metas, observaciones, iniciativas, objetivos, SIPOC e Ishikawa | 5 / Insights y relaciones | Cada resultado identifica fuente, fecha y tipo de medición |
 | Impacto y dependencias | Planeado, B7 | Recorrido entre modelos y análisis guardados | 5 / índice inverso | Un cambio de aplicación muestra tareas y procesos afectados |
 | Mapas documentales, TI y productos | Planeado, B7 | Productos/componentes; aplicaciones/servicios/interfaces/operaciones/nodos | 6 / registro de tipos | Reutilizar una aplicación en proceso y mapa TI |
@@ -66,7 +66,7 @@ no son los hitos históricos M0–M6.
 
 | Fase | Entrega | Criterio / backlog |
 | --- | --- | --- |
-| **1 — Repositorio** | Almacenamiento por objeto, entradas de catálogo, explorador, identidad e índice de relaciones (el contenedor v2 de varios procesos y las pestañas ya existen) | ORG-1; salida v1/v2 idéntica byte a byte y escenarios/corridas aislados por proceso |
+| **1 — Repositorio** | Almacenamiento por objeto, entradas de catálogo, explorador, identidad e índice de relaciones (el contenedor v2 de varios procesos y las pestañas ya existen) | ORG-1; salida v1/v2 idéntica byte a byte (más las entradas desconocidas, que ahora se conservan, REPOSITORY_CONTRACT.md § 1.4) y escenarios/corridas aislados por proceso |
 | **2 — Documentación** | Catálogo inicial de roles/unidades/sistemas/documentos; adjuntos; selectores; tablas editables; RACI; Insights iniciales | E15, ORG-2, ORG-3, ORG-6; primer hito usable descrito abajo |
 | **3 — Arquitectura organizacional** | Mapas de procesos, cadenas de valor, organigramas y recursos organizacionales | ORG-4 y LILA-096; navegación y enlace explícito con simulación |
 | **4 — Riesgos y controles** | Catálogos/agrupaciones, mapas, evaluación inherente/residual, matriz de calor, objetivos, requisitos, evidencias y tratamiento | ORG-5; inspeccionar cobertura desde proceso y riesgo |
@@ -87,8 +87,8 @@ existen con otro alcance.
 
 El código ADONIS empieza cuando el Lote R cierre la épica de agentes #527 (el Lote P salió en
 beta.25, el Lote Q está en curso y el R va después). El contrato RM-01, solo documentación, es
-[`REPOSITORY_CONTRACT.md`](REPOSITORY_CONTRACT.md), registrado como ADR-032 (propuesta hasta que el
-dueño responda sus preguntas abiertas) en [DECISIONS.md](DECISIONS.md). Lotes de entrega propuestos:
+[`REPOSITORY_CONTRACT.md`](REPOSITORY_CONTRACT.md), registrado como ADR-032 (aceptada el 2026-10-14
+con las decisiones del dueño) en [DECISIONS.md](DECISIONS.md). Lotes de entrega propuestos:
 
 | Lote | Alcance | Fase |
 | --- | --- | --- |
@@ -109,12 +109,15 @@ un paso del camino a ADONIS, y no condiciona estos lotes.
   posición en un mapa no crea una copia. Las relaciones permiten consulta inversa.
 - **Identidad:** referencias entre modelos incluyen identidad de modelo, contexto de versión e
   ID BPMN. Nombres y rutas no son claves. Dos modelos con iguales IDs de elemento no se fusionan.
-  RM-01 fija la representación exacta de identidad/versión antes de implementar.
+  Las referencias son `{ process, element }` con un miembro `version` reservado
+  (REPOSITORY_CONTRACT.md § 3.3).
 - **Compatibilidad:** ya se cumple para procesos: v1 se abre como repositorio de un proceso sin
-  reescribir archivos, y un proyecto de un solo proceso se sigue guardando como v1, byte a byte.
-  Mantenerlo al añadir objetos: el contenido que requiere funciones de repositorio (catálogo,
-  adjuntos) exige guardar v2. Las versiones hasta 1.0.0-beta.14 rechazan v2; no se promete que un
-  lector v1 conserve catálogos ni adjuntos.
+  reescribir archivos, y un proyecto de un solo proceso se sigue guardando como v1, byte a byte
+  (más las entradas desconocidas, que ahora se conservan, REPOSITORY_CONTRACT.md § 1.4). Mantenerlo
+  al añadir objetos: el contenido que requiere funciones de repositorio (catálogo, adjuntos) exige
+  guardar la versión 3 (REPOSITORY_CONTRACT.md § 1.3). Las versiones 1.0.0-beta.15 y posteriores
+  rechazan la versión 3 (`LILA-MANIFEST`/`E-MANIFEST`); las versiones hasta beta.14 rechazan las
+  versiones 2 y 3. No se promete que un lector v1 conserve catálogos ni adjuntos.
 - **Datos canónicos:** BPMN conserva diagrama y anotaciones; objetos en
   `catalog/<tipo>/<id>.json`, sustituyendo el `catalog.json` monolítico propuesto. Mapas, análisis
   y definiciones de paneles usan documentos versionados. Índices y agregados son derivados.
@@ -128,7 +131,7 @@ un paso del camino a ADONIS, y no condiciona estos lotes.
 - **Recursos:** roles RACI y pools conservan significados distintos y un enlace explícito.
   Una responsabilidad no genera automáticamente capacidad, coste ni disponibilidad.
 - **Adjuntos:** definir entradas admitidas, límites, integridad y recuperación antes de agregarlos
-  a v2. Conservar bytes entre archivo y carpeta; no aplicar a adjuntos soportados el descarte de
+  a la versión 3. Conservar bytes entre archivo y carpeta; no aplicar a adjuntos soportados el descarte de
   entradas desconocidas de v1. Las corridas siguen siendo opcionales al compartir.
 - **Insights:** vistas de lectura y análisis. Cada indicador distingue evaluación manual,
   simulación u observación, con fuente/fecha y unidades aplicables. Ausencia no es cero; las
@@ -144,8 +147,9 @@ un paso del camino a ADONIS, y no condiciona estos lotes.
 - **Diseño:** conservar marca y temas aprobados; interfaz propia de Lila sin copiar activos del
   proveedor. Catálogos inglés/español alineados y ejemplos públicos sintéticos.
 
-Antes del primer hito, RM-01 amplía con objetos el manifiesto v2 ya existente y fija identidad de referencias, interfaz de almacenamiento/
-revisiones, reglas de adjuntos y recuperación. Las demás fases especificarán contratos de mapas,
+Antes del primer hito, RM-01 define la versión 3 del repositorio (ids de proceso, catálogo,
+adjuntos) sobre la disposición v2 ya publicada y fija identidad de referencias, interfaz de
+almacenamiento/revisiones, reglas de adjuntos y recuperación. Las demás fases especificarán contratos de mapas,
 evaluación de riesgos, observaciones KPI, DMN, liberación, colaboración y conectores. Son
 especificaciones diferidas explícitamente, no decisiones ocultas para el PR del primer hito.
 Esta entrega documental no cambia APIs de ejecución, escenarios ni códigos públicos de error.

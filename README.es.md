@@ -263,10 +263,13 @@ El inglés es el idioma base; las versiones en español viven en `docs/es/`.
 - [`MCP.md`](docs/es/MCP.md) — el servidor MCP y sus dieciocho tools.
 - [`THEMES.md`](docs/es/THEMES.md) — el formato de tema.
 - [`DECISIONS.md`](docs/es/DECISIONS.md) — registros de decisiones de arquitectura (ADR-001 …
-  ADR-031).
+  ADR-032).
 - [`ROADMAP.md`](docs/es/ROADMAP.md) — el roadmap organizacional: repositorio, catálogo, tablas,
   RACI, Insights, mapas, riesgos y gobierno planeados; brechas actuales y aceptación por fases
   (notas de investigación en [`docs/es/research/`](docs/es/research/README.md)).
+- [`REPOSITORY_CONTRACT.md`](docs/es/REPOSITORY_CONTRACT.md) — el contrato del repositorio (RM-01,
+  ADR-032): versión 3 con objetos de catálogo, identidad, adjuntos y almacenamiento por objeto,
+  planeada.
 - [`BIZAGI_PARITY.md`](docs/es/BIZAGI_PARITY.md) — checklist de comportamiento de referencia y
   diferencias documentadas.
 - [`COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md) — guía pantalla por pantalla para
@@ -286,8 +289,10 @@ El inglés es el idioma base; las versiones en español viven en `docs/es/`.
 
 Épicas abiertas, en [GitHub Issues](https://github.com/AlambritoDito/lila-modeler/issues?q=is%3Aopen+label%3Aepic):
 
-- **#335** — semántica pendiente para la paridad numérica con Bizagi: eventos de mensaje, de borde
-  y basados en eventos, saturación, denominador de utilización.
+- **#124** — cobertura BPMN extra: adaptadores BPSim y QBP, y construcciones fuera del perfil
+  soportado (start/completion quantity, eventos de borde, de mensaje y de señal, compuerta basada en
+  eventos); para el simulador, #639: multi-instancia, bucles, eventos de borde de error, eventos de
+  borde en subprocesos, eventos de mensaje y de lanzamiento.
 - **#336** — confianza y adopción: guía de inicio, firma y notarización (#109), publicación de
   `@lila-modeler/engine` en npm (#48), validación de usabilidad.
 - **#125** — servidor autoalojado. **#130** — minería de procesos (parámetros desde logs de

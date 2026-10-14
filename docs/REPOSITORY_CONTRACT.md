@@ -2,12 +2,13 @@
 
 > Read this in: [Español](es/REPOSITORY_CONTRACT.md).
 
-**Status:** contract for lot A1 (catalog, per-object store, selectors, explorer), ADR-032. Nothing
+**Status:** accepted on 2026-10-14 (ADR-032); the contract for lot A1 (catalog, per-object store,
+selectors, explorer). Nothing
 in this document is implemented yet unless it says "today". It extends
 [the project format](PROJECT_FORMAT.md) (versions 1 and 2, which stay exactly as they are) and
 settles what [ADR-029](DECISIONS.md) left open: the version 3 layout, object identity, references,
-the storage interface, attachments, failure recovery and performance budgets. Section 10 lists
-the only questions that need the owner. The delivery order is in the [roadmap](ROADMAP.md).
+the storage interface, attachments, failure recovery and performance budgets. Section 10 records
+the owner's decisions on the product questions. The delivery order is in the [roadmap](ROADMAP.md).
 
 The words **must**, **must not** and **may** are normative. "The app" means the web app and the
 desktop app alike; "the engine" means `@lila-modeler/engine` (and through it the CLI and the MCP
@@ -65,13 +66,32 @@ index is derived on open, as ADR-029 requires. Putting the catalog in the manife
 object edit touch the one file every other edit also touches, which is exactly the merge conflict
 that one file per object is meant to avoid.
 
+**Optional `limits`.** A repository may change the attachment limits of § 6 for itself:
+
+```json
+"limits": { "attachmentBytes": 52428800, "repositoryBytes": 524288000 }
+```
+
+- `attachmentBytes` is the largest attachment that may be added; `repositoryBytes` is the largest
+  total of all attachment entries of the repository. Both are optional; a missing member, or a
+  missing `limits`, means the default: 20 MB (20,971,520 bytes) and 200 MB (209,715,200 bytes).
+- Each member must be a positive integer no larger than `Number.MAX_SAFE_INTEGER`. An invalid value
+  is reported in `problems`, the default applies, and the value is written back as found until
+  someone sets a valid one; the manifest is still read.
+- The app changes it from the repository's settings. Larger limits are the repository's choice:
+  they make saving a `.lila` slower and the browser heavier, and the budgets of § 9 are measured with
+  the defaults.
+- **Lowering a limit never removes anything.** Attachments already in the repository stay, open and
+  save as before in both containers; only adding a new attachment that would exceed a limit is
+  refused (`E-ADJUNTO`).
+
 ### 1.3 Which version is written
 
 | The repository has | Written as |
 | --- | --- |
-| One process, no catalog object, no attachment | Version 1, byte for byte as today |
-| Two or more processes, no catalog object, no attachment | Version 2, as today |
-| Any catalog object or attachment, **or it was read as version 3** | Version 3 |
+| One process, nothing that needs version 3 | Version 1, byte for byte as today (plus unknown entries now preserved, § 1.4) |
+| Two or more processes, nothing that needs version 3 | Version 2, as today (plus unknown entries now preserved, § 1.4) |
+| Any catalog object, attachment or `limits` member, or any entry under a reserved name of § 1.1 (`maps/`, `analysis/`, `dashboards/`, `records/`, `processes/<slug>/process.json`), **or it was read as version 3** | Version 3 |
 
 - **Version 3 is written only when needed, and then it stays.** Unlike the version 2 → version 1
   step of `docs/PROJECT_FORMAT.md` (#517), a repository read as version 3 is saved as version 3
@@ -89,7 +109,7 @@ that one file per object is meant to avoid.
 
 ### 1.4 Older readers and unknown entries
 
-Older builds refuse version 3 cleanly; nothing has to change in them:
+Older builds refuse version 3 cleanly, with one exception below; nothing has to change in them:
 
 - Builds that read versions 1 and 2 (1.0.0-beta.15 up to today) refuse any `version` above 2:
   `decodeLila` peeks at the manifest before looking for a model and throws `LILA-MANIFEST`
@@ -97,7 +117,13 @@ Older builds refuse version 3 cleanly; nothing has to change in them:
   (`readRepositoryManifestOf` in `packages/engine/src/project-fs/projectIO.ts`) throws
   `E-MANIFEST`. They never get to drop the catalog on a save.
 - Builds that only read version 1 (up to 1.0.0-beta.14) refuse it as they refuse version 2: no root
-  `model.bpmn` (`E-NO-MODEL`, `E-SIN-MODELO`).
+  `model.bpmn` (`LILA-NO-MODEL`, shown as `E-NO-MODEL` on the desktop; `E-SIN-MODELO` for a folder).
+- The exception: in builds 1.0.0-beta.15 to beta.26, `isRepositoryProcessFolder` (`projectIO.ts`)
+  swallows the `E-MANIFEST` of a version 3 parent. Opening a version 3 repository's
+  `processes/<slug>/` folder (or its `model.bpmn`) directly therefore reads it as a standalone
+  version 1 project, and saving it may write a nested `processes/<slug>/lila-project.json`. The
+  repository itself is not damaged; A1 reports such a nested `lila-project.json` as an unknown entry
+  and keeps it as is.
 
 **Unknown entries are preserved, no longer dropped.** Today an archive entry outside the layout is
 reported and not written back (`decodeLila`, `decodeRepository`), because its bytes could not
@@ -120,6 +146,9 @@ This is what lets later phases add `maps/` or `process.json` **without a new ver
 reader that does not understand them keeps them. A later addition takes a new `version` only if an
 older reader editing around it would corrupt it — the rule of `PROJECT_FORMAT.md` § Versioning
 ("anything that would make a reader misread a file takes a new version") is unchanged.
+Anything a later phase writes must force version 3, so no reader that drops it can open the file:
+builds 1.0.0-beta.15 to beta.26 drop unknown entries when they save a `.lila` (`decodeLila`,
+`decodeRepository`).
 
 ### 1.5 Canonical order
 
@@ -168,7 +197,8 @@ final newline, like scenarios:
 | `document` | `ownerRef?`: role id; `url?`; `attachment?`: § 6 | Document or data (`lila:documentRef`, `lila:input`, `lila:output`). |
 
 Ownership points at a role, not at a person or a unit: a responsibility is held by a role, and the
-role's unit gives the department. Persons and positions come later.
+role's unit gives the department. Persons and positions come later. Document control fields
+(code, version, status) wait for phase 7 governance (§ 2.5, § 10).
 
 Examples (synthetic data, [examples policy](EXAMPLES_POLICY.md)):
 
@@ -243,7 +273,9 @@ Examples (synthetic data, [examples policy](EXAMPLES_POLICY.md)):
 
 Listed so A1 does not take their names; their fields belong to later contracts: `position`,
 `person`, `risk`, `control`, `control-objective`, `requirement`, `kpi`, `product`, `partner`,
-`resource`, `cost-centre`, `goal`, `initiative`.
+`resource`, `cost-centre`, `goal`, `initiative`. Reserved `document` fields, for phase 7
+document control: `code`, `version`, `status`; A1 writers do not create them and preserve them like
+any unknown field.
 
 ## 3. References
 
@@ -288,8 +320,9 @@ model in one repository; the logical key stays what interchange, imports and the
 context (§ 3.3) use.
 
 A call activity keeps naming its target by BPMN process id in `calledElement`, the standard
-attribute; resolution stays as today (#461), and two processes declaring the same BPMN process id
-are reported as an ambiguity, not resolved by guess.
+attribute. Today (#461) the first other process that declares that id wins (`findIndex` in
+`apps/web/src/App.tsx`); A1 changes that: two processes declaring the same BPMN process id are
+reported as an ambiguity, not resolved by guess.
 
 ### 3.3 References to an element of another model
 
@@ -373,12 +406,19 @@ folder, keyed by each model's content hash), never a file inside it.
 | Attachment bytes | Only when opened, exported or copied to another container | Yes |
 | Preserved unknown entries | Never parsed; their bytes stay where the container is held (§ 5.3) | Yes |
 
+A1 may keep whole-document IPC and whole-repository autosave with attachment bytes excluded (staged
+by hash); per-object IPC and change-set recovery are adopted only when the § 9 budgets fail, as this
+table already allows for models. What A1 must not do is put attachment bytes or preserved entries
+in the document that crosses IPC or reaches the browser's storage.
+
 ### 5.2 Interface sketch
 
 This is a sketch for A1 to implement, not code that exists. It replaces the six-method `ProjectStore`
-of `apps/web/src/store/ProjectStore.ts` and the whole-document `openProject`/`saveProject` of
-`ProjectSessionStore`; the session methods that are not about content (`setDirty`, `listRecents`,
-`openRecent`, `onExternalChange`, `forget`, `importBpmn`, `openHandle`…) stay as they are.
+of `apps/web/src/store/ProjectStore.ts` and, in `ProjectSessionStore`, `openProject`/`saveProject`/
+`createProject`/`openRecent`/`openHandle`/`reload` (which return a head instead of a
+`ProjectDocument`) and the synchronous `restoreSession` (async, read from IndexedDB); `setDirty`,
+`listRecents`, `onExternalChange`, `forget`, `importBpmn`, `occupiedSlugs`, `undoOpen` and
+`onSaveRequested` stay.
 
 ```ts
 type CatalogType = string; // 'role' | 'unit' | 'system' | 'document' | a type this build does not know
@@ -467,15 +507,18 @@ the object file (§ 2.1).
   browser for its own copy). `open` reads the ZIP directory and inflates the manifest and the
   catalog; other entries are inflated on demand (`fflate`'s `unzipSync` takes a filter). The holder
   keeps the archive's bytes, so `commit` builds the new archive from the changed entries plus every
-  untouched entry copied as it was (stored attachments without recompression), under the existing
+  untouched entry with its content kept byte for byte (attachments are stored, so they are not
+  recompressed), under the existing
   `.lila.lock`. The engine codec gains this shape: the document it decodes no longer drops what it
   does not interpret; it keeps those entries' bytes beside the document, never inside it, and
   `encodeLila` writes them back. Today `writeLilaScenario` and every agent write re-encode the
   whole document; with this change they carry the catalog, attachments and preserved entries through
   unchanged without knowing about them.
 - **Desktop IPC** (`apps/desktop/src/bridge.ts`, `main.ts`). The main process holds the open
-  container (path, snapshots and, for an archive, its bytes). The renderer asks for the head, a
-  process, a run or an attachment, and sends change sets; the whole repository never crosses IPC.
+  container (path, snapshots and, for an archive, its bytes). In the target design the renderer asks
+  for the head, a process, a run or an attachment, and sends change sets, so the whole repository
+  never crosses IPC; A1 may still send the whole document both ways, without attachment bytes or
+  preserved entries (§ 5.1).
   Every handler keeps today's guards (`isTrustedSender` in `ipcGuards.ts`, the authorized path), and
   arguments are layout identities — process ids, `<type>/<id>`, sha256 — validated against their
   grammar, never free paths. An attachment added from disk is read by the main process from the
@@ -531,25 +574,40 @@ the object file (§ 2.1).
   read (open, export, copy into another container). A mismatch is reported (`problems`), the entry
   is kept as is, and the app refuses to open it. A missing entry is shown as "not included in this
   copy", which is a normal state (see sharing below), not corruption.
-- **Limits (proposed, § 10):** at most 20 MB per attachment and 200 MB of attachments per
-  repository, in the folder and in the archive alike, so that any folder can be saved as a `.lila`
-  and the browser can build the archive in memory. An attachment over the limit is refused when added
-  (`E-ADJUNTO`); a repository found over the limit opens normally and can be saved as a folder,
-  while saving it as a `.lila` explains which limit is exceeded.
-- **Types (proposed, § 10):** an allowlist of document and image formats — `pdf`, `docx`, `xlsx`,
-  `pptx`, `odt`, `ods`, `odp`, `txt`, `md`, `csv`, `png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`.
-  Whatever the decision, the app never executes an attachment: it opens it with the operating
-  system only when its extension is on the allowlist, previews only raster images, and treats `svg`
-  as an opaque file (an SVG can carry script).
+- **Limits (owner's decision, § 10):** by default 20 MB per attachment and 200 MB of attachments per
+  repository, in the folder and in the archive alike, configurable per repository in the manifest's
+  `limits` (§ 1.2). An attachment over a limit is refused when added (`E-ADJUNTO`). A repository
+  over its limits (a limit lowered afterwards, a merge, a hand edit) opens and saves normally in both
+  containers: limits refuse new attachments and never delete or drop existing ones.
+- **Types (owner's decision, § 10):** only this allowlist of document and image formats; any other
+  extension, or none, is refused when added (`E-ADJUNTO`). The list belongs to the app version, not
+  to the repository.
+
+  | Extensions | `mediaType` |
+  | --- | --- |
+  | `pdf` | `application/pdf` |
+  | `doc`, `docx` | `application/msword`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document` |
+  | `xls`, `xlsx` | `application/vnd.ms-excel`, `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
+  | `ppt`, `pptx` | `application/vnd.ms-powerpoint`, `application/vnd.openxmlformats-officedocument.presentationml.presentation` |
+  | `odt`, `ods`, `odp` | `application/vnd.oasis.opendocument.text`, `…spreadsheet`, `…presentation` |
+  | `txt`, `md`, `csv` | `text/plain`, `text/markdown`, `text/csv` |
+  | `png`, `jpg`/`jpeg`, `gif`, `webp` | `image/png`, `image/jpeg`, `image/gif`, `image/webp` |
+  | `svg` | `image/svg+xml` |
+
+  The app never executes an attachment: it opens it with the operating system only when its
+  extension is on the list, previews only `png`, `jpg`/`jpeg`, `gif` and `webp`, and treats `svg` as
+  an opaque file (an SVG can carry script). An attachment already in a repository whose extension is
+  not on the list (a hand edit, a newer build) is kept and listed, and can be exported, but is not
+  opened.
 - **Before Save:** a staged attachment lives outside the repository — the desktop copies it into the
   app's data folder when it is added, the browser keeps it in IndexedDB — so a crash before Save
   does not lose it and the original file may be moved meanwhile. A successful commit or a discard
   removes the staged copy.
 - **Round trip:** folder ↔ archive is the same path and the same bytes; `unzip` and `zip -r` keep
   working (§ 1.5). Copying between containers verifies each hash.
-- **Sharing:** runs stay optional in a shared copy (ADR-029). A copy for sharing may also leave out
-  attachment bytes when the user asks; the documents keep their metadata and show the file as not
-  included. Attachments are never left out silently.
+- **Sharing (owner's decision, § 10):** a shared copy includes attachments by default. Runs stay
+  optional (ADR-029). The user may explicitly leave attachment bytes out; the documents then keep
+  their metadata and show the file as not included. Attachments are never left out silently.
 
 ## 7. Failure recovery
 
@@ -557,8 +615,9 @@ the object file (§ 2.1).
   destination aside to `.prev-*`, renames the new ones in, rolls back in reverse order on failure,
   and leaves `lila-recovery.json` with `E-RECUPERACION-PENDIENTE` when even the rollback fails. A
   version 3 commit uses it unchanged, in this order: new attachments first (new names, never
-  overwrite anything, so a crash leaves at most an unreferenced attachment), then objects, process
-  files, removals, and **the manifest last**, as the version 2 upgrade already does. Readers ignore
+  overwrite anything, so a crash leaves at most an unreferenced attachment), then objects and
+  process files, then the manifest, and the removals last — the order the version 2 save already uses
+  (QA of #511), so a crash leaves the old manifest pointing at files that still exist. Readers ignore
   `*.tmp-*` and `*.prev-*`.
 - **Archive.** `writeLilaFile` writes a temporary file next to the destination and renames it over
   the old one inside the `.lila.lock` (`withLilaLock`): the archive on disk is always the old one or
@@ -567,29 +626,33 @@ the object file (§ 2.1).
   `createWritable`'s swap on close, or a download.
 - **Autosave and recovery (desktop, #459).** Today the renderer encodes the whole project as a `.lila`
   and sends its bytes to `lila:writeRecovery`, which writes `userData/recovery.lila` atomically
-  (`apps/desktop/src/recovery.ts`). With a repository that would mean re-encoding hundreds of
-  megabytes every few seconds, so the copy becomes **the pending change set**: the renderer sends
-  the same `ChangeSet` it would commit, and the main process writes `recovery.lila` as a ZIP with
-  `lila-recovery.json` (`{ "version": 1, "source": <path or null>, "container": "folder" | "lila",
-  "base": <the snapshot of the source when it was read>, "deleted": [<paths>] }`) and the changed
-  entries at their layout paths; staged attachments are referenced by hash. The one-file rule stays:
-  the copy existing is the signal, and it is removed when the document stops being dirty.
+  (`apps/desktop/src/recovery.ts`). **A1 keeps that**, with attachment bytes and preserved entries
+  left out: the copy names attachments by hash, staged ones stay in the staging folder (§ 6), and on
+  restore the main process takes attachment bytes and preserved entries from the staging folder and
+  the source. If the source is gone, an attachment that only it held shows as not included. The
+  one-file rule stays: the copy existing is the signal, and it is removed when the document stops
+  being dirty. A leftover `recovery.lila` from an older build is a complete project and restores as
+  today.
+- **Fallback design, only if the § 9 autosave budget fails:** the copy becomes **the pending change
+  set**. The renderer sends the same `ChangeSet` it would commit, and the main process writes
+  `userData/recovery-changes.zip` with an `autosave.json` marker (`{ "version": 1, "source": <path
+  or null>, "container": "folder" | "lila", "base": <the snapshot of the source when it was read>,
+  "deleted": [<paths>] }`) and the changed entries at their layout paths. It reuses neither
+  `lila-recovery.json`, which already means a failed rollback (`E-RECUPERACION-PENDIENTE`), nor
+  `recovery.lila`; older builds never read it.
   - **Restore** reopens the source and applies the change set, and the repository opens dirty. If
     the source is gone or changed under a touched entry, the change set is applied to what is there
     now and the result opens as a new, unsaved repository that must be saved with Save As — the user's
     work is never thrown away and never silently merged into a file that moved on.
   - A never-saved repository has no source: its change set is the whole repository, so it restores
     by itself.
-  - A `recovery.lila` written by an older build has no `lila-recovery.json`; it is a complete
-    project and is restored as today.
-  - In the browser, the IndexedDB working copy is the recovery: it is written on every change.
+- **Browser recovery.** The IndexedDB working copy is the recovery: it is written on every change.
 
 ## 8. Compatibility
 
 - **Versions 1 and 2 open unchanged**, folder and archive, and an open/save round trip without
   changes still gives back the same bytes (plus, now, the unknown entries that used to be dropped,
-  § 1.4). They are rewritten as version 3 only when a catalog object or an attachment is added
-  (§ 1.3).
+  § 1.4). They are rewritten as version 3 only when something listed in § 1.3 needs it.
 - **The engine, the CLI and the MCP server keep working on a version 3 repository.** They read and
   write it through the same codec (`decodeLila`/`encodeLila`, `openLilaProcess`, `writeLilaProject`
   in `packages/engine/src/project-fs/input.ts`). Every tool that does not know about the catalog —
@@ -598,7 +661,8 @@ the object file (§ 2.1).
   entries byte for byte. `annotate_element` keeps writing ids exactly as given: it does not check them
   against the catalog, and an id that matches no object is an unresolved reference like any other.
   `get_project` reports `formatVersion: 3`. Acceptance for A1 includes a round trip of a version 3
-  fixture through each writing tool, comparing every non-touched entry.
+  fixture through each writing MCP tool and CLI command, including the process rename and delete
+  that Lote R adds (#634, MCP and CLI), comparing every non-touched entry.
 - **`--process` / `process`** keep taking the slug. Because version 3 never falls back to version 1,
   the slug of a lone process no longer changes under an agent. Tools that take a process may also
   accept the process id later; not needed for A1.
@@ -612,9 +676,9 @@ the object file (§ 2.1).
   `E-REVISION` (stale `baseRevision`, § 5.4) and `E-ADJUNTO` (attachment refused by size or type,
   § 6), with their engine counterparts in the explicit map of `lilaFile.ts`. The existing codes keep
   their meaning.
-- Documents that still describe the monolithic `catalog.json` of ADR-013
-  (`docs/BPMN_EXTENSION.md` § 2) and the "reported and dropped" rule (`docs/PROJECT_FORMAT.md`) are
-  updated by A1 together with the code, so that they never describe something that is not built.
+- `docs/BPMN_EXTENSION.md` already points references at the per-object catalog and says they are
+  not checked yet. The "reported and dropped" rule of `docs/PROJECT_FORMAT.md` is updated by A1
+  together with the code, so that it never describes something that is not built.
 
 ## 9. Performance budgets
 
@@ -660,22 +724,18 @@ single IPC message except an explicit attachment read exceeds 8 MB. A budget tha
 finding for the A1 tickets, not a reason to change this contract silently; the measured values,
 hardware and fixture are recorded in the ticket that closes the performance acceptance.
 
-## 10. Open questions for the owner
+## 10. Owner decisions (2026-10-14)
 
 Everything else in this document is a technical, reversible decision taken with its reason. These
-four are product decisions:
+four product questions were decided by the owner:
 
-1. **Attachment types.** Should attachments be restricted to the allowlist of § 6 (documents and
-   images), or may users attach any file? The allowlist keeps a shared `.lila` from carrying
-   executables; any file is more flexible for evidence and annexes.
-2. **Attachment size.** Are 20 MB per file and 200 MB per repository right? Larger limits make
-   saving a `.lila` slower and the browser heavier; ADONIS documents a configurable limit (the
-   manual mentions up to 50 MB per file).
-3. **Document control fields.** Should A1's `document` type already carry a document code, version
-   and status (ISO-style document control), or do those wait for governance (phase 7)? The proposal
-   is to wait: local status proves no approval.
-4. **Sharing defaults.** When sharing a copy, runs are optional (ADR-029). Should the default copy
-   include attachments (proposed) or leave them out like a lighter "diagram-only" copy?
+1. **Attachment types:** only the allowlist of document and image formats in § 6.
+2. **Attachment size:** 20 MB per attachment and 200 MB per repository are the defaults, configurable
+   per repository in the manifest's `limits` (§ 1.2). Lowering a limit refuses new attachments and
+   never deletes existing ones.
+3. **Document control:** code, version and status (ISO-style document control) wait for phase 7
+   governance; they are reserved (§ 2.5) and not part of A1.
+4. **Sharing:** a shared copy includes attachments by default (§ 6); runs stay optional.
 
 ## Where the code will be
 

@@ -2,13 +2,13 @@
 
 > Leer en: [English](../REPOSITORY_CONTRACT.md).
 
-**Estado:** contrato para el lote A1 (catálogo, almacén por objeto, selectores, explorador),
-ADR-032. Nada de este documento está implementado salvo lo que dice «hoy». Amplía
+**Estado:** aceptado el 2026-10-14 (ADR-032); el contrato del lote A1 (catálogo, almacén por
+objeto, selectores, explorador). Nada de este documento está implementado salvo lo que dice «hoy». Amplía
 [el formato de proyecto](PROJECT_FORMAT.md) (versiones 1 y 2, que se quedan exactamente como están)
 y fija lo que [ADR-029](DECISIONS.md) dejó abierto: la disposición de la versión 3, la identidad de
 los objetos, las referencias, la interfaz de almacenamiento, los adjuntos, la recuperación ante
-fallos y los presupuestos de rendimiento. La sección 10 reúne las únicas preguntas que necesitan al
-dueño. El orden de entrega está en el [roadmap](ROADMAP.md).
+fallos y los presupuestos de rendimiento. La sección 10 recoge las decisiones del dueño sobre las
+preguntas de producto. El orden de entrega está en el [roadmap](ROADMAP.md).
 
 **Debe**, **no debe** y **puede** son normativos. «La app» es la app web y la de escritorio por
 igual; «el motor» es `@lila-modeler/engine` (y, a través de él, la CLI y el servidor MCP).
@@ -66,13 +66,33 @@ se deriva al abrir, como exige ADR-029. Poner el catálogo en el manifiesto har�
 un objeto tocara el único archivo que también tocan todas las demás, que es justo el conflicto de
 mezcla que un archivo por objeto quiere evitar.
 
+**`limits` opcional.** Un repositorio puede cambiar para sí los límites de adjuntos de § 6:
+
+```json
+"limits": { "attachmentBytes": 52428800, "repositoryBytes": 524288000 }
+```
+
+- `attachmentBytes` es el adjunto más grande que se puede añadir; `repositoryBytes` es el total
+  máximo de todas las entradas de adjuntos del repositorio. Los dos son opcionales; un miembro
+  ausente, o la ausencia de `limits`, significa el valor por defecto: 20 MB (20.971.520 bytes) y
+  200 MB (209.715.200 bytes).
+- Cada miembro debe ser un entero positivo no mayor que `Number.MAX_SAFE_INTEGER`. Un valor inválido
+  se informa en `problems`, se aplica el valor por defecto y el valor se vuelve a escribir tal como
+  se encontró hasta que alguien ponga uno válido; el manifiesto se sigue leyendo.
+- La app lo cambia desde los ajustes del repositorio. Límites mayores son decisión del repositorio:
+  hacen más lento guardar un `.lila` y más pesado el navegador, y los presupuestos de § 9 se miden
+  con los valores por defecto.
+- **Bajar un límite nunca quita nada.** Los adjuntos que ya están en el repositorio se quedan, y se
+  abren y se guardan como antes en los dos contenedores; solo se rechaza añadir un adjunto nuevo que
+  superaría un límite (`E-ADJUNTO`).
+
 ### 1.3 Qué versión se escribe
 
 | El repositorio tiene | Se escribe como |
 | --- | --- |
-| Un proceso, ningún objeto de catálogo, ningún adjunto | Versión 1, byte a byte como hoy |
-| Dos o más procesos, ningún objeto de catálogo, ningún adjunto | Versión 2, como hoy |
-| Algún objeto de catálogo o adjunto, **o se leyó como versión 3** | Versión 3 |
+| Un proceso, nada que necesite la versión 3 | Versión 1, byte a byte como hoy (más las entradas desconocidas, que ahora se conservan, § 1.4) |
+| Dos o más procesos, nada que necesite la versión 3 | Versión 2, como hoy (más las entradas desconocidas, que ahora se conservan, § 1.4) |
+| Algún objeto de catálogo, adjunto o miembro `limits`, o alguna entrada bajo un nombre reservado de § 1.1 (`maps/`, `analysis/`, `dashboards/`, `records/`, `processes/<slug>/process.json`), **o se leyó como versión 3** | Versión 3 |
 
 - **La versión 3 se escribe solo cuando hace falta, y después se queda.** A diferencia del paso de
   versión 2 a versión 1 de `docs/PROJECT_FORMAT.md` (#517), un repositorio leído como versión 3 se
@@ -92,7 +112,8 @@ mezcla que un archivo por objeto quiere evitar.
 
 ### 1.4 Lectores anteriores y entradas desconocidas
 
-Las versiones anteriores de la app rechazan la versión 3 limpiamente; no hay que tocarlas:
+Las versiones anteriores de la app rechazan la versión 3 limpiamente, con una excepción más abajo;
+no hay que tocarlas:
 
 - Las que leen las versiones 1 y 2 (de 1.0.0-beta.15 hasta hoy) rechazan cualquier `version` mayor
   que 2: `decodeLila` mira el manifiesto antes de buscar un modelo y lanza `LILA-MANIFEST`
@@ -100,7 +121,14 @@ Las versiones anteriores de la app rechazan la versión 3 limpiamente; no hay qu
   (`readRepositoryManifestOf` en `packages/engine/src/project-fs/projectIO.ts`) lanza
   `E-MANIFEST`. Nunca llegan a descartar el catálogo al guardar.
 - Las que solo leen la versión 1 (hasta 1.0.0-beta.14) la rechazan igual que a la versión 2: no hay
-  `model.bpmn` en la raíz (`E-NO-MODEL`, `E-SIN-MODELO`).
+  `model.bpmn` en la raíz (`LILA-NO-MODEL`, que el escritorio muestra como `E-NO-MODEL`;
+  `E-SIN-MODELO` para una carpeta).
+- La excepción: en las versiones de 1.0.0-beta.15 a beta.26, `isRepositoryProcessFolder`
+  (`projectIO.ts`) se traga el `E-MANIFEST` de un padre de versión 3. Por eso abrir directamente la
+  carpeta `processes/<slug>/` de un repositorio de versión 3 (o su `model.bpmn`) la lee como un
+  proyecto de versión 1 independiente, y guardarla puede escribir un
+  `processes/<slug>/lila-project.json` anidado. El repositorio en sí no se daña; A1 informa ese
+  `lila-project.json` anidado como entrada desconocida y lo conserva tal cual.
 
 **Las entradas desconocidas se conservan; ya no se descartan.** Hoy una entrada del archivo fuera
 de la disposición se informa y no se vuelve a escribir (`decodeLila`, `decodeRepository`), porque
@@ -124,7 +152,9 @@ Esto es lo que permite a fases posteriores añadir `maps/` o `process.json` **si
 nueva**: un lector de la versión 3 que no los entiende los conserva. Un añadido posterior toma una
 `version` nueva solo si un lector anterior que edita a su alrededor lo corrompería: la regla de
 `PROJECT_FORMAT.md` § Versiones («lo que haría que un lector malinterpretara un archivo toma una
-versión nueva») no cambia.
+versión nueva») no cambia. Todo lo que escriba una fase posterior debe forzar la versión 3, para que
+ningún lector que lo descarte pueda abrir el archivo: las versiones de 1.0.0-beta.15 a beta.26
+descartan las entradas desconocidas al guardar un `.lila` (`decodeLila`, `decodeRepository`).
 
 ### 1.5 Orden canónico
 
@@ -174,7 +204,8 @@ línea final, como los escenarios:
 | `document` | `ownerRef?`: id de rol; `url?`; `attachment?`: § 6 | Documento o dato (`lila:documentRef`, `lila:input`, `lila:output`). |
 
 El responsable apunta a un rol, no a una persona ni a una unidad: una responsabilidad la tiene un
-rol, y la unidad del rol da el departamento. Personas y puestos llegan después.
+rol, y la unidad del rol da el departamento. Personas y puestos llegan después. Los campos de
+control documental (código, versión, estado) esperan a la gobernanza de la fase 7 (§ 2.5, § 10).
 
 Ejemplos (datos sintéticos, [política de ejemplos](EXAMPLES_POLICY.md)):
 
@@ -251,7 +282,9 @@ Ejemplos (datos sintéticos, [política de ejemplos](EXAMPLES_POLICY.md)):
 
 Listados para que A1 no ocupe sus nombres; sus campos son de contratos posteriores: `position`,
 `person`, `risk`, `control`, `control-objective`, `requirement`, `kpi`, `product`, `partner`,
-`resource`, `cost-centre`, `goal`, `initiative`.
+`resource`, `cost-centre`, `goal`, `initiative`. Campos reservados de `document`, para el control
+documental de la fase 7: `code`, `version`, `status`; los escritores de A1 no los crean y los
+conservan como cualquier campo desconocido.
 
 ## 3. Referencias
 
@@ -297,8 +330,9 @@ repositorio, donde las dos versiones pueden convivir (fase 7). El id de proceso 
 intercambio, las importaciones y el futuro contexto de versión (§ 3.3).
 
 Una actividad de llamada sigue nombrando su destino por el id del proceso BPMN en `calledElement`,
-el atributo estándar; la resolución sigue como hoy (#461), y dos procesos que declaran el mismo id
-de proceso BPMN se informan como ambigüedad, sin resolverlos a ciegas.
+el atributo estándar. Hoy (#461) gana el primer otro proceso que declara ese id (`findIndex` en
+`apps/web/src/App.tsx`); A1 lo cambia: dos procesos que declaran el mismo id de proceso BPMN se
+informan como ambigüedad, sin resolverlos a ciegas.
 
 ### 3.3 Referencias a un elemento de otro modelo
 
@@ -384,13 +418,20 @@ como clave), nunca un archivo dentro de él.
 | Bytes de los adjuntos | Solo al abrirlos, exportarlos o copiarlos a otro contenedor | Sí |
 | Entradas desconocidas conservadas | Nunca se interpretan; sus bytes se quedan donde está el contenedor (§ 5.3) | Sí |
 
+A1 puede mantener el IPC de documento completo y el autoguardado del repositorio entero sin los bytes
+de los adjuntos (preparados y nombrados por hash); el IPC por objeto y la recuperación por conjunto
+de cambios se adoptan solo cuando fallan los presupuestos de § 9, como esta tabla ya permite para
+los modelos. Lo que A1 no debe hacer es poner bytes de adjuntos ni entradas conservadas en el
+documento que cruza el IPC o llega al almacenamiento del navegador.
+
 ### 5.2 Esbozo de la interfaz
 
 Es un esbozo para que A1 lo implemente, no código que exista. Sustituye al `ProjectStore` de seis
-métodos de `apps/web/src/store/ProjectStore.ts` y al `openProject`/`saveProject` de documento
-completo de `ProjectSessionStore`; los métodos de sesión que no tratan del contenido (`setDirty`,
-`listRecents`, `openRecent`, `onExternalChange`, `forget`, `importBpmn`, `openHandle`…) se quedan
-como están.
+métodos de `apps/web/src/store/ProjectStore.ts` y, en `ProjectSessionStore`, a `openProject`/
+`saveProject`/`createProject`/`openRecent`/`openHandle`/`reload` (que devuelven una cabecera en vez
+de un `ProjectDocument`) y al `restoreSession` síncrono (asíncrono, leído de IndexedDB); `setDirty`,
+`listRecents`, `onExternalChange`, `forget`, `importBpmn`, `occupiedSlugs`, `undoOpen` y
+`onSaveRequested` se quedan.
 
 ```ts
 type CatalogType = string; // 'role' | 'unit' | 'system' | 'document' | un tipo que esta versión no conoce
@@ -480,16 +521,17 @@ si sus resultados están desfasados); las revisiones de los objetos viven en el 
   `lilaFile.ts`/`input.ts`; el navegador para su propia copia). `open` lee el directorio del ZIP e
   infla el manifiesto y el catálogo; las demás entradas se inflan a demanda (`unzipSync` de `fflate`
   acepta un filtro). Quien tiene el archivo abierto conserva sus bytes, así que `commit` construye el
-  archivo nuevo con las entradas cambiadas más cada entrada no tocada copiada tal cual (los adjuntos,
-  sin recomprimir), bajo el `.lila.lock` que ya existe. El códec del motor adopta esta forma: el
+  archivo nuevo con las entradas cambiadas más cada entrada no tocada con su contenido conservado
+  byte a byte (los adjuntos van sin comprimir, así que no se recomprimen), bajo el `.lila.lock` que ya existe. El códec del motor adopta esta forma: el
   documento que decodifica ya no descarta lo que no interpreta; guarda los bytes de esas entradas
   junto al documento, nunca dentro, y `encodeLila` los vuelve a escribir. Hoy `writeLilaScenario` y
   todas las escrituras de los agentes recodifican el documento entero; con este cambio llevan el
   catálogo, los adjuntos y las entradas conservadas sin cambios y sin saber que existen.
 - **IPC del escritorio** (`apps/desktop/src/bridge.ts`, `main.ts`). El proceso principal guarda el
-  contenedor abierto (ruta, instantáneas y, para un archivo, sus bytes). El renderer pide la
-  cabecera, un proceso, una corrida o un adjunto, y envía conjuntos de cambios; el repositorio entero
-  nunca cruza el IPC. Cada manejador conserva las guardias de hoy (`isTrustedSender` en
+  contenedor abierto (ruta, instantáneas y, para un archivo, sus bytes). En el diseño de destino el
+  renderer pide la cabecera, un proceso, una corrida o un adjunto, y envía conjuntos de cambios, así
+  que el repositorio entero nunca cruza el IPC; A1 todavía puede enviar el documento entero en los
+  dos sentidos, sin bytes de adjuntos ni entradas conservadas (§ 5.1). Cada manejador conserva las guardias de hoy (`isTrustedSender` en
   `ipcGuards.ts`, la ruta autorizada), y los argumentos son identidades de la disposición (ids de
   proceso, `<tipo>/<id>`, sha256) validadas contra su gramática, nunca rutas libres. Un adjunto
   añadido desde disco lo lee el proceso principal desde la ruta que devolvió el diálogo nativo
@@ -548,26 +590,42 @@ si sus resultados están desfasados); las revisiones de los objetos viven en el 
   (abrir, exportar, copiar a otro contenedor). Una discrepancia se informa (`problems`), la entrada se
   conserva tal cual y la app se niega a abrirla. Una entrada ausente se muestra como «no incluido en
   esta copia», que es un estado normal (ver compartir, abajo), no una corrupción.
-- **Límites (propuestos, § 10):** como mucho 20 MB por adjunto y 200 MB de adjuntos por repositorio,
-  en la carpeta y en el archivo por igual, para que cualquier carpeta pueda guardarse como `.lila` y
-  el navegador pueda construir el archivo en memoria. Un adjunto por encima del límite se rechaza al
-  añadirlo (`E-ADJUNTO`); un repositorio que ya lo supera se abre con normalidad y puede guardarse
-  como carpeta, y al guardarlo como `.lila` se explica qué límite se supera.
-- **Tipos (propuestos, § 10):** una lista permitida de formatos de documento e imagen: `pdf`,
-  `docx`, `xlsx`, `pptx`, `odt`, `ods`, `odp`, `txt`, `md`, `csv`, `png`, `jpg`, `jpeg`, `gif`,
-  `webp`, `svg`. Se decida lo que se decida, la app nunca ejecuta un adjunto: lo abre con el sistema
-  operativo solo si su extensión está en la lista, solo previsualiza imágenes de mapa de bits, y trata
-  `svg` como archivo opaco (un SVG puede llevar código).
+- **Límites (decisión del dueño, § 10):** por defecto 20 MB por adjunto y 200 MB de adjuntos por
+  repositorio, en la carpeta y en el archivo por igual, configurables por repositorio en el `limits`
+  del manifiesto (§ 1.2). Un adjunto por encima de un límite se rechaza al añadirlo (`E-ADJUNTO`).
+  Un repositorio por encima de sus límites (un límite bajado después, una mezcla, una edición a mano)
+  se abre y se guarda con normalidad en los dos contenedores: los límites rechazan adjuntos nuevos y
+  nunca borran ni descartan los que ya hay.
+- **Tipos (decisión del dueño, § 10):** solo esta lista permitida de formatos de documento e imagen;
+  cualquier otra extensión, o ninguna, se rechaza al añadirla (`E-ADJUNTO`). La lista es de la
+  versión de la app, no del repositorio.
+
+  | Extensiones | `mediaType` |
+  | --- | --- |
+  | `pdf` | `application/pdf` |
+  | `doc`, `docx` | `application/msword`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document` |
+  | `xls`, `xlsx` | `application/vnd.ms-excel`, `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
+  | `ppt`, `pptx` | `application/vnd.ms-powerpoint`, `application/vnd.openxmlformats-officedocument.presentationml.presentation` |
+  | `odt`, `ods`, `odp` | `application/vnd.oasis.opendocument.text`, `…spreadsheet`, `…presentation` |
+  | `txt`, `md`, `csv` | `text/plain`, `text/markdown`, `text/csv` |
+  | `png`, `jpg`/`jpeg`, `gif`, `webp` | `image/png`, `image/jpeg`, `image/gif`, `image/webp` |
+  | `svg` | `image/svg+xml` |
+
+  La app nunca ejecuta un adjunto: lo abre con el sistema operativo solo si su extensión está en la
+  lista, solo previsualiza `png`, `jpg`/`jpeg`, `gif` y `webp`, y trata `svg` como archivo opaco (un
+  SVG puede llevar código). Un adjunto que ya está en un repositorio con una extensión fuera de la
+  lista (una edición a mano, una versión más nueva) se conserva y se lista, y se puede exportar, pero
+  no se abre.
 - **Antes de Guardar:** un adjunto preparado vive fuera del repositorio (el escritorio lo copia a la
   carpeta de datos de la app al añadirlo, el navegador lo guarda en IndexedDB), así que un cierre
   inesperado antes de Guardar no lo pierde y el archivo original puede moverse entretanto. Un commit
   con éxito o un descarte borran la copia preparada.
 - **Ida y vuelta:** carpeta ↔ archivo es la misma ruta y los mismos bytes; `unzip` y `zip -r` siguen
   funcionando (§ 1.5). Copiar entre contenedores verifica cada hash.
-- **Compartir:** las corridas siguen siendo opcionales en una copia compartida (ADR-029). Una copia
-  para compartir también puede dejar fuera los bytes de los adjuntos si el usuario lo pide; los
-  documentos conservan sus metadatos y muestran el archivo como no incluido. Los adjuntos nunca se
-  quedan fuera en silencio.
+- **Compartir (decisión del dueño, § 10):** una copia compartida incluye los adjuntos por defecto.
+  Las corridas siguen siendo opcionales (ADR-029). El usuario puede dejar fuera explícitamente los
+  bytes de los adjuntos; entonces los documentos conservan sus metadatos y muestran el archivo como no
+  incluido. Los adjuntos nunca se quedan fuera en silencio.
 
 ## 7. Recuperación ante fallos
 
@@ -576,8 +634,9 @@ si sus resultados están desfasados); las revisiones de los objetos viven en el 
   `lila-recovery.json` con `E-RECUPERACION-PENDIENTE` cuando falla hasta el deshacer. Un commit de la
   versión 3 lo usa sin cambios, en este orden: primero los adjuntos nuevos (nombres nuevos, nunca
   pisan nada, así que un cierre inesperado deja como mucho un adjunto sin referencias), después los
-  objetos, los archivos de procesos, las retiradas y **el manifiesto al final**, como ya hace el paso
-  a la versión 2. Los lectores ignoran `*.tmp-*` y `*.prev-*`.
+  objetos y los archivos de procesos, luego el manifiesto, y las retiradas al final: el orden que ya
+  usa el guardado de la versión 2 (QA de #511), así que un cierre inesperado deja el manifiesto
+  antiguo apuntando a archivos que todavía existen. Los lectores ignoran `*.tmp-*` y `*.prev-*`.
 - **Archivo `.lila`.** `writeLilaFile` escribe un archivo temporal junto al destino y lo renombra
   encima del antiguo dentro del `.lila.lock` (`withLilaLock`): el archivo en disco es siempre el
   antiguo o el nuevo. No cambia nada.
@@ -585,14 +644,20 @@ si sus resultados están desfasados); las revisiones de los objetos viven en el 
   intercambio de `createWritable` al cerrar, o una descarga.
 - **Autoguardado y recuperación (escritorio, #459).** Hoy el renderer codifica el proyecto entero
   como `.lila` y envía sus bytes a `lila:writeRecovery`, que escribe `userData/recovery.lila` de forma
-  atómica (`apps/desktop/src/recovery.ts`). Con un repositorio eso sería recodificar cientos de
-  megabytes cada pocos segundos, así que la copia pasa a ser **el conjunto de cambios pendiente**: el
-  renderer envía el mismo `ChangeSet` que confirmaría, y el proceso principal escribe
-  `recovery.lila` como un ZIP con `lila-recovery.json` (`{ "version": 1, "source": <ruta o null>,
-  "container": "folder" | "lila", "base": <la instantánea del origen al leerlo>, "deleted":
-  [<rutas>] }`) y las entradas cambiadas en sus rutas de la disposición; los adjuntos preparados se
-  referencian por hash. La regla de un solo archivo se mantiene: que exista la copia es la señal, y se
-  borra cuando el documento deja de tener cambios sin guardar.
+  atómica (`apps/desktop/src/recovery.ts`). **A1 lo mantiene**, sin los bytes de los adjuntos ni las
+  entradas conservadas: la copia nombra los adjuntos por hash, los preparados se quedan en la carpeta
+  de preparación (§ 6), y al restaurar el proceso principal toma los bytes de los adjuntos y las
+  entradas conservadas de la carpeta de preparación y del origen. Si el origen ya no está, un adjunto
+  que solo tenía él se muestra como no incluido. La regla de un solo archivo se mantiene: que exista
+  la copia es la señal, y se borra cuando el documento deja de tener cambios sin guardar. Un
+  `recovery.lila` que quede de una versión anterior es un proyecto completo y se restaura como hoy.
+- **Diseño de reserva, solo si falla el presupuesto de autoguardado de § 9:** la copia pasa a ser
+  **el conjunto de cambios pendiente**. El renderer envía el mismo `ChangeSet` que confirmaría, y el
+  proceso principal escribe `userData/recovery-changes.zip` con una marca `autosave.json`
+  (`{ "version": 1, "source": <ruta o null>, "container": "folder" | "lila", "base": <la instantánea
+  del origen al leerlo>, "deleted": [<rutas>] }`) y las entradas cambiadas en sus rutas de la
+  disposición. No reutiliza `lila-recovery.json`, que ya significa un deshacer fallido
+  (`E-RECUPERACION-PENDIENTE`), ni `recovery.lila`; las versiones anteriores nunca lo leen.
   - **Restaurar** vuelve a abrir el origen y aplica el conjunto de cambios, y el repositorio se abre
     con cambios sin guardar. Si el origen ya no está o cambió bajo una entrada tocada, el conjunto de
     cambios se aplica a lo que haya ahora y el resultado se abre como repositorio nuevo sin guardar,
@@ -600,16 +665,13 @@ si sus resultados están desfasados); las revisiones de los objetos viven en el 
     silencio con un archivo que siguió su camino.
   - Un repositorio que nunca se guardó no tiene origen: su conjunto de cambios es el repositorio
     entero, así que se restaura por sí solo.
-  - Un `recovery.lila` escrito por una versión anterior no tiene `lila-recovery.json`; es un proyecto
-    completo y se restaura como hoy.
-  - En el navegador, la copia de trabajo de IndexedDB es la recuperación: se escribe en cada cambio.
+- **Recuperación en el navegador.** La copia de trabajo de IndexedDB es la recuperación: se escribe en cada cambio.
 
 ## 8. Compatibilidad
 
 - **Las versiones 1 y 2 se abren sin cambios**, carpeta y archivo, y abrir y guardar sin cambios
   sigue devolviendo los mismos bytes (más, ahora, las entradas desconocidas que antes se descartaban,
-  § 1.4). Solo se reescriben como versión 3 cuando se añade un objeto de catálogo o un adjunto
-  (§ 1.3).
+  § 1.4). Solo se reescriben como versión 3 cuando algo de lo que lista § 1.3 lo necesita.
 - **El motor, la CLI y el servidor MCP siguen funcionando sobre un repositorio de versión 3.** Lo
   leen y lo escriben con el mismo códec (`decodeLila`/`encodeLila`, `openLilaProcess`,
   `writeLilaProject` en `packages/engine/src/project-fs/input.ts`). Toda herramienta que no sabe del
@@ -618,8 +680,9 @@ si sus resultados están desfasados); las revisiones de los objetos viven en el 
   entradas conservadas byte a byte. `annotate_element` sigue escribiendo los ids tal como se los dan:
   no los comprueba contra el catálogo, y un id que no coincide con ningún objeto es una referencia sin
   resolver como cualquier otra. `get_project` informa `formatVersion: 3`. La aceptación de A1 incluye
-  una ida y vuelta de un repositorio de versión 3 de prueba por cada herramienta que escribe,
-  comparando cada entrada no tocada.
+  una ida y vuelta de un repositorio de versión 3 de prueba por cada herramienta MCP y cada
+  comando de la CLI que escribe, incluidos el renombrado y el borrado de procesos que añade el Lote R
+  (#634, MCP y CLI), comparando cada entrada no tocada.
 - **`--process` / `process`** siguen tomando el slug. Como la versión 3 nunca vuelve a la 1, el slug
   de un proceso solitario ya no cambia bajo los pies de un agente. Las herramientas que toman un
   proceso podrán aceptar también el id de proceso más adelante; A1 no lo necesita.
@@ -633,9 +696,9 @@ si sus resultados están desfasados); las revisiones de los objetos viven en el 
   `E-REVISION` (`baseRevision` desfasada, § 5.4) y `E-ADJUNTO` (adjunto rechazado por tamaño o tipo,
   § 6), con sus equivalentes del motor en el mapa explícito de `lilaFile.ts`. Los códigos que ya
   existen conservan su significado.
-- Los documentos que aún describen el `catalog.json` monolítico de ADR-013
-  (`docs/BPMN_EXTENSION.md` § 2) y la regla de «se informa y se descarta» (`docs/PROJECT_FORMAT.md`)
-  los actualiza A1 junto con el código, para que nunca describan algo que no está construido.
+- `docs/BPMN_EXTENSION.md` ya apunta las referencias al catálogo por objeto y dice que todavía no se
+  comprueban. La regla de «se informa y se descarta» de `docs/PROJECT_FORMAT.md` la actualiza A1
+  junto con el código, para que nunca describa algo que no está construido.
 
 ## 9. Presupuestos de rendimiento
 
@@ -683,23 +746,19 @@ presupuesto que no se cumple es un hallazgo para los tickets de A1, no un motivo
 contrato en silencio; los valores medidos, el hardware y el repositorio se anotan en el ticket que
 cierra la aceptación de rendimiento.
 
-## 10. Preguntas abiertas para el dueño
+## 10. Decisiones del dueño (2026-10-14)
 
-Todo lo demás de este documento es una decisión técnica y reversible, tomada con su razón. Estas
-cuatro son decisiones de producto:
+Todo lo demás de este documento es una decisión técnica y reversible, tomada con su razón. El dueño
+decidió estas cuatro preguntas de producto:
 
-1. **Tipos de adjunto.** ¿Se limitan los adjuntos a la lista permitida de § 6 (documentos e
-   imágenes), o se puede adjuntar cualquier archivo? La lista evita que un `.lila` compartido lleve
-   ejecutables; cualquier archivo da más flexibilidad para evidencias y anexos.
-2. **Tamaño de los adjuntos.** ¿Valen 20 MB por archivo y 200 MB por repositorio? Límites mayores
-   hacen más lento guardar un `.lila` y más pesado el navegador; ADONIS documenta un límite
-   configurable (el manual habla de hasta 50 MB por archivo).
-3. **Campos de control documental.** ¿El tipo `document` de A1 debe llevar ya código, versión y
-   estado de documento (control documental al estilo ISO), o eso espera a la gobernanza (fase 7)? La
-   propuesta es esperar: un estado local no prueba ninguna aprobación.
-4. **Qué se comparte por defecto.** Al compartir una copia, las corridas son opcionales (ADR-029).
-   ¿La copia por defecto incluye los adjuntos (propuesta) o los deja fuera, como una copia más ligera
-   de «solo diagramas»?
+1. **Tipos de adjunto:** solo la lista permitida de formatos de documento e imagen de § 6.
+2. **Tamaño de los adjuntos:** 20 MB por adjunto y 200 MB por repositorio son los valores por
+   defecto, configurables por repositorio en el `limits` del manifiesto (§ 1.2). Bajar un límite
+   rechaza adjuntos nuevos y nunca borra los que ya hay.
+3. **Control documental:** código, versión y estado (control documental al estilo ISO) esperan a la
+   gobernanza de la fase 7; quedan reservados (§ 2.5) y no forman parte de A1.
+4. **Compartir:** una copia compartida incluye los adjuntos por defecto (§ 6); las corridas siguen
+   siendo opcionales.
 
 ## Dónde estará el código
 

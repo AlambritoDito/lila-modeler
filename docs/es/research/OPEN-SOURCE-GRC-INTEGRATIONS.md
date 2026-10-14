@@ -1,6 +1,6 @@
 # Integraciones GRC de código abierto y de ejecución: investigación para Lila Modeler
 
-> Read this in: [English](../../research/OPEN-SOURCE-GRC-INTEGRATIONS.md).
+> Leer en: [English](../../research/OPEN-SOURCE-GRC-INTEGRATIONS.md).
 
 **Fecha de revisión:** 2026-09-26. **Estado:** insumo de investigación y diseño, no implementación ni afirmación de paridad con un proveedor. El [roadmap](../ROADMAP.md) sitúa riesgos y controles en la fase 4, gobierno en la fase 7 y adaptadores externos de ejecución en la fase 8. Los contratos de repositorio y relaciones de las fases 1–2 son prerrequisitos. La [decisión de licencias](../DECISIONS.md#adr-020--licencias) prohíbe código AGPL, LGPL y Camunda License en `packages/*`. Estudiar un producto, intercambiar datos con un servicio operado por separado y reutilizar su código son decisiones distintas. Un proceso separado no resuelve por sí solo las obligaciones de licencia; hay que revisar la distribución y el despliegue concretos antes de entregar una integración.
 

@@ -554,7 +554,8 @@ y antes se fija el contrato por objeto (RM-01) en su propia ADR.
 
 Las referencias entre modelos necesitan contexto de modelo/versión e ID BPMN. Abrir v1 no lo
 reescribe; el contenido que requiere funciones de repositorio más allá de varios procesos
-(catálogo, adjuntos) se guarda como v2. Los adjuntos soportados requieren reglas explícitas de
+(catálogo, adjuntos) se guarda como versión 3 (ADR-032); las versiones que leen la 1 y la 2 lo
+rechazan. Los adjuntos soportados requieren reglas explícitas de
 almacenamiento y conservación; el contenedor actual, versión 1 o 2, descarta lo que queda fuera de
 su layout. Las consultas documentales cubren todo BPMN, incluidos elementos fuera del perfil
 simulable. Un rol RACI no aporta implícitamente capacidad, coste ni calendario. Insights distingue
@@ -565,7 +566,7 @@ El roadmap incluye modelado de decisiones futuro. DMN requiere una ADR de format
 de implementar; no modifica implícitamente la decisión de intercambio limitado a BPMN. La ejecución
 de workflows sigue externa, con adaptadores/API/MCP verificados. Propietario/estado local no es
 aprobación autenticada. RM-01 fija identidad de objetos, revisiones, representación de adjuntos,
-almacenamiento diferido y recuperación sobre el manifiesto versión 2. Los contratos de modelos,
+almacenamiento diferido y recuperación como repositorio versión 3 (ADR-032). Los contratos de modelos,
 riesgos, indicadores, liberación y colaboración se especifican en sus fases correspondientes.
 
 ---
@@ -643,9 +644,9 @@ probador #575)*
 
 ## ADR-032 — RM-01: el contrato del repositorio (objetos de catálogo, identidad, almacenamiento por objeto)
 
-**Estado:** Propuesta (RM-01, 2026-10-14). Decisiones técnicas tomadas; cuatro preguntas de producto
-para el dueño están en el contrato. Precisa ADR-012 y ADR-029; sustituye el `catalog.json` de
-ADR-013.
+**Estado:** Aceptada (2026-10-14; las decisiones del dueño están en § 10 del contrato). Precisa
+ADR-012 y ADR-029; sustituye el `catalog.json` de ADR-013; sustituye la regla de ADR-027 de
+descartar las entradas desconocidas (§ 1.4 del contrato).
 
 ADR-029 fijó la dirección (un `.lila` puede contener una organización, un archivo por objeto de
 catálogo, referencias por id, `ProjectStore` por objeto con carga perezosa) y dejó abiertos los
@@ -655,8 +656,8 @@ ellos, y equivocarse en la identidad o en el versionado obliga a reescribir desp
 
 - **La versión 3** es la versión 2 más `catalog/<tipo>/<id>.json` y adjuntos direccionados por
   contenido `attachments/<sha256>[.<ext>]`, y un `id` estable por proceso en el manifiesto. Se
-  escribe solo cuando existe un objeto de catálogo o un adjunto, y una vez leída como versión 3 se
-  queda en la 3. Las versiones de la app que leen la 1 y la 2 ya la rechazan con
+  escribe solo cuando existe un objeto de catálogo, un adjunto o una entrada bajo un nombre
+  reservado, y una vez leída como versión 3 se queda en la 3. Las versiones de la app que leen la 1 y la 2 ya la rechazan con
   `LILA-MANIFEST`/`E-MANIFEST`.
 - **Las entradas desconocidas se conservan** en vez de descartarse, en todas las versiones, porque
   sus bytes ya no cruzan el IPC ni el espejo de `localStorage`. Las fases posteriores pueden añadir
@@ -670,8 +671,13 @@ ellos, y equivocarse en la identidad o en el versionado obliga a reescribir desp
 - **Índice de usos derivado**, nunca persistido. **Almacenamiento:** `RepositoryStore` con lecturas
   perezosas y commits de conjuntos de cambios con `baseRevision`; los adaptadores de carpeta,
   archivo, IPC e IndexedDB mantienen las escrituras atómicas de hoy (`commitWithRollback`, temporal +
-  renombrado bajo `.lila.lock`) y sus comprobaciones de conflicto. La recuperación del escritorio
-  guarda el conjunto de cambios pendiente.
+  renombrado bajo `.lila.lock`) y sus comprobaciones de conflicto. A1 puede mantener el IPC de
+  documento completo y el autoguardado del repositorio entero sin los bytes de los adjuntos; el IPC
+  por objeto y la recuperación por conjunto de cambios se adoptan solo si fallan los presupuestos.
+- **Decisiones del dueño (2026-10-14):** adjuntos solo de una lista permitida de formatos de
+  documento e imagen; 20 MB por adjunto y 200 MB por repositorio por defecto, configurables por
+  repositorio en el manifiesto (`limits`); el control documental ISO (código, versión, estado)
+  espera a la fase 7; las copias compartidas incluyen los adjuntos por defecto.
 - **Presupuestos de rendimiento** sobre un repositorio sintético con semilla (200 procesos, 5.000
   objetos, 50.000 referencias) y dos máquinas de referencia, como objetivos que hay que medir.
 
@@ -679,7 +685,8 @@ Consecuencias: no cambian la extensión BPMN, el esquema de escenarios ni los c�
 existentes; A1 añade `E-OBJETO-EN-USO`, `E-REVISION` y `E-ADJUNTO`. El motor, la CLI y el MCP siguen
 funcionando sobre la versión 3 y deben llevar el catálogo, los adjuntos y las entradas conservadas
 sin cambios. El espejo de `localStorage` del navegador se sustituye por IndexedDB.
-`docs/PROJECT_FORMAT.md` y `docs/BPMN_EXTENSION.md` se actualizan junto con el código de A1.
+`docs/BPMN_EXTENSION.md` ya apunta las referencias al catálogo por objeto; `docs/PROJECT_FORMAT.md`
+se actualiza junto con el código de A1.
 
 ---
 

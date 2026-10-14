@@ -6,7 +6,7 @@ Fecha: 2026-09-03. Complementa `LILA_MODELER_ESTRUCTURA.md` (decisiones, diseño
 
 **Dónde se gestiona**: en GitHub Issues del repo privado `AlambritoDito/lila-modeler`. El número de issue coincide con el id del ticket (`LILA-026` = `#26`); las 20 épicas son los issues `#112`–`#131` con su lista de tareas; los hitos M0–M6 son milestones. Este archivo es la fuente que generó los issues; si cambia el alcance, se edita aquí y se actualiza el issue, no al revés.
 
-## Ampliación organizacional — 2026-09-26 (revisada 2026-10-14, base `3c3ae07`)
+## Ampliación organizacional — 2026-09-26 (revisada 2026-10-14, base `7dd61e2`, beta.26)
 
 Dirección aprobada: [roadmap completo y matriz de brechas](docs/es/ROADMAP.md); épica GitHub
 #497 (etiqueta `later`). Primero repositorio local, catálogo, tablas, RACI e Insights (fases 1–2);
@@ -15,8 +15,8 @@ ecosistema en fase 8. M6 ya no bloquea el repositorio ni el catálogo local. Las
 renumeran M0–M6.
 
 **Orden**: el código ADONIS empieza cuando el Lote R cierre la épica de agentes #527 (Lote P
-mezclado en beta.25; Q en curso; R después). El contrato RM-01 (solo documentación) se redacta en
-paralelo como `docs/REPOSITORY_CONTRACT.md` + ADR-032. Lotes propuestos: A0 contrato · A1 almacén
+mezclado en beta.25; Q en curso; R después). El contrato RM-01 (solo documentación) es
+`docs/REPOSITORY_CONTRACT.md` + ADR-032, aceptada el 2026-10-14 con las decisiones del dueño. Lotes propuestos: A0 contrato · A1 almacén
 por objeto + catálogo (roles, unidades, sistemas, documentos) + selectores + explorador · A2 tabla
 + matriz RACI agregada + Insights · A3 mapas/cadenas de valor + organigrama + enlace rol↔pool ·
 A4 riesgos/controles · A5 KPIs, Ishikawa, SIPOC, impacto · después fases 6–8. #639 (simulador:
@@ -620,8 +620,8 @@ Tickets más gruesos a propósito: se desglosan cuando llegue su turno.
 
 Consume el contrato por objeto de RM-01/RM-02. No es prerrequisito de E15 ni del repositorio
 local. Conservar los IDs siguientes; ampliar REST, almacenamiento y RemoteStore a los objetos
-v2 y adjuntos. La aceptación incluye carpeta → servidor → carpeta sin pérdidas. Los tamaños
-históricos de esta sección no estiman el alcance v2.
+del repositorio versión 3 y adjuntos. La aceptación incluye carpeta → servidor → carpeta sin pérdidas. Los tamaños
+históricos de esta sección no estiman el alcance del repositorio.
 
 #### LILA-083 · `packages/server` con REST `/api/v1`
 - Tamaño L · Depende de LILA-029, LILA-038
@@ -791,7 +791,7 @@ fijan al iniciar cada fase, no se inventan en el primer hito. Tamaños pendiente
 constituyen compromisos de fecha.
 
 Lotes propuestos: **A0** RM-01 · **A1** RM-02, RM-03, RM-05, LILA-092, LILA-093, RM-14 (objetos
-documento; los bytes de adjuntos pueden pasar a A2 según el contrato) · **A2** RM-04, RM-06,
+documento y bytes de adjuntos, obligatorios en A1 según el contrato § 5.1) · **A2** RM-04, RM-06,
 LILA-094, LILA-095, RM-07, RM-08 · **A3** RM-09, RM-10, LILA-096 · **A4** RM-11 · **A5** RM-12,
 RM-13 · después ORG-7 (fase 6), ORG-8/E13/E14 (fase 7) y ORG-9/E16–E18 (fase 8).
 
@@ -803,10 +803,11 @@ un solo proceso, pestañas por proceso y escenarios/corridas por proceso.
 
 #### RM-01 · Contrato del repositorio por objeto e identidad (lote A0)
 - Depende de ADR-029; leer CONTRIBUTING y contratos antes de cambiar código.
-- Se redacta en paralelo como `docs/REPOSITORY_CONTRACT.md` (+ `docs/es/`) y ADR-032.
-- Qué: ampliar el manifiesto v2 existente con objetos de catálogo, referencias con
-  modelo/versión/ID BPMN, revisiones, list/read/write por objeto, adjuntos, límites y recuperación;
-  conservar las reglas actuales de guardado v1/v2 y de slugs.
+- Hecho como `docs/REPOSITORY_CONTRACT.md` (+ `docs/es/`) y ADR-032, aceptada el 2026-10-14.
+- Qué: definir la versión 3 del repositorio sobre la disposición v2 existente (ids de proceso,
+  objetos de catálogo, adjuntos), referencias `{ process, element }` con `version` reservado,
+  revisiones, list/read/write por objeto, adjuntos, límites y recuperación; conservar las reglas
+  actuales de guardado v1/v2 y de slugs.
 - Aceptación: fixtures v1/v2, colisiones de IDs, versión no soportada y fallo de guardado;
   decidir presupuestos de rendimiento con hardware y dataset sintético identificados.
 - Superficies: formato de proyecto, tipos compartidos, ProjectStore y contratos IPC.
@@ -815,9 +816,12 @@ un solo proceso, pestañas por proceso y escenarios/corridas por proceso.
 - Depende de RM-01.
 - Ya existe: lector/escritor v2 de varios procesos (carpeta y `.lila`), abrir v1 sin reescribir.
 - Qué: `ProjectStore` por objeto con carga diferida (hoy la sesión guarda el `ProjectDocument`
-  entero), navegador con persistencia apta para objetos/bytes, IPC de escritorio por objeto;
+  entero), navegador con persistencia apta para objetos/bytes (IndexedDB), IPC de escritorio por
+  objeto solo si fallan los presupuestos (A1 puede mantener el documento entero sin bytes de
+  adjuntos ni entradas conservadas, contrato § 5.1);
   lectura/escritura de `catalog/` sin descartarlo como entrada desconocida.
-- Aceptación: los casos v1/v2 actuales siguen idénticos byte a byte; un repositorio con catálogo
+- Aceptación: los casos v1/v2 actuales siguen idénticos byte a byte (más las entradas
+  desconocidas, que ahora se conservan, contrato § 1.4); un repositorio con catálogo (versión 3)
   se guarda y reabre en web/escritorio; fallos no destruyen la última versión recuperable.
 
 #### RM-03 · Índice de identidad, relaciones y usos
@@ -910,7 +914,8 @@ un solo proceso, pestañas por proceso y escenarios/corridas por proceso.
 - Qué: metadatos, propietario, tipo, entradas/salidas/referencias y archivos gestionados;
   representación de bytes y límites definidos en RM-01.
 - Aceptación: archivo → carpeta → archivo conserva bytes y referencias; archivo faltante o límite
-  excedido produce diagnóstico recuperable; no aplicar descarte v1 a entradas v2 soportadas.
+  excedido produce diagnóstico recuperable; no aplicar el descarte de entradas desconocidas a
+  las entradas soportadas de la versión 3.
 
 #### RM-15 · Publicación documental y portal
 - Depende de LILA-091, RM-14.

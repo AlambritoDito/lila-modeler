@@ -53,7 +53,7 @@ All of them (except `versionTag`, see below) go inside `bpmn:extensionElements` 
 
 | Element | Attributes | What it documents | Points to |
 |---|---|---|---|
-| `lila:responsibility` | `type` (`R`\|`A`\|`C`\|`I`), `roleRef` | The element's RACI matrix: one row per responsible-party/role combination. An element can have several `lila:responsibility` (several roles, or the same role with a different `type`, which doesn't make sense but is not validated as an error — it's a warning). | `roleRef` → id in the role catalog (`catalog.json`, see ADR-013). |
+| `lila:responsibility` | `type` (`R`\|`A`\|`C`\|`I`), `roleRef` | The element's RACI matrix: one row per responsible-party/role combination. An element can have several `lila:responsibility` (several roles, or the same role with a different `type`, which doesn't make sense but is not validated as an error — it's a warning). | `roleRef` → id of a role object (`catalog/role/<id>.json`, see [the repository contract](REPOSITORY_CONTRACT.md)). |
 | `lila:systemRef` | `ref` | System/application involved in the element. | id in the system catalog. |
 | `lila:documentRef` | `ref` | Document associated with the element (input, output, or just a general reference). | id in the document catalog. |
 | `lila:riskRef` | `ref` | Risk associated with the element. | id in the risk catalog. |
@@ -63,7 +63,7 @@ All of them (except `versionTag`, see below) go inside `bpmn:extensionElements` 
 | `lila:output` | `ref` | Document/data the element produces. | id in the document catalog. |
 | `lila:versionTag` | `value` | See section 4 (process key). The only element that does **not** hang off a flow element — it hangs off `bpmn:process`. | — (free-form value, no catalog reference). |
 
-All references (`roleRef`, and the `ref` of `systemRef`/`documentRef`/`riskRef`/`controlRef`/`kpiRef`/`input`/`output`) point to ids in the catalog (`catalog.json`, outside the `.bpmn` — ADR-013). A dangling reference (an id that does not exist in the catalog) is a **lint warning**, not a validation error — the catalog can be filled in after the diagram.
+All references (`roleRef`, and the `ref` of `systemRef`/`documentRef`/`riskRef`/`controlRef`/`kpiRef`/`input`/`output`) point to catalog object ids. The catalog lives outside the `.bpmn`, one file per object, `catalog/<type>/<id>.json` (ADR-032, [the repository contract](REPOSITORY_CONTRACT.md)), not the monolithic `catalog.json` of ADR-013. Today no catalog exists and references are not checked. Once the catalog lands (lot A1), a reference whose id matches no object is kept as it is and reported as a **warning** (LILA-095, #95) — never an error, and never invented: the catalog can be filled in after the diagram.
 
 `versionTag` goes as a child of `bpmn:process`'s `bpmn:extensionElements` (not of `bpmn:definitions` nor of a task):
 
@@ -329,7 +329,7 @@ Implementation notes (not normative, resolved in the ticket that creates the rea
 </bpmn:definitions>
 ```
 
-Correspondence with the referenced catalog (`catalog.json`, outside this document — see `SCENARIO_FORMAT.md`/`LILA_MODELER_ESTRUCTURA.md` section 5 for its location): `rol-1`, `rol-2`, `sys-crm`, `doc-solicitud`, `doc-solicitud-revisada`, and `kpi-tiempo-revision` are ids that must exist there; if they don't, `validate(ir)` emits a dangling-reference warning for each one, not an error.
+Correspondence with the referenced catalog (one file per object, `catalog/<type>/<id>.json`, outside this document — see [the repository contract](REPOSITORY_CONTRACT.md)): `rol-1`, `rol-2`, `sys-crm`, `doc-solicitud`, `doc-solicitud-revisada`, and `kpi-tiempo-revision` are ids of catalog objects. Today no catalog exists and nothing checks them; once the catalog lands (lot A1), each one that matches no object is kept and reported as a warning (LILA-095, #95), never an error and never invented.
 
 ---
 

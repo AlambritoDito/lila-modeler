@@ -4,7 +4,7 @@
 
 Research commissioned on 2026-09-26 to refine Lila's [organizational roadmap](../ROADMAP.md).
 Vendor and project sources were read on that date; statements about Lila's own status were
-rechecked against commit `3c3ae07` (v1.0.0-beta.25) on 2026-10-14.
+rechecked against commit `7dd61e2` (v1.0.0-beta.26) on 2026-10-14.
 The work covers ADONIS and open-source alternatives in three complementary areas. It does not
 change the accepted roadmap, approve a dependency, or implement product features.
 
