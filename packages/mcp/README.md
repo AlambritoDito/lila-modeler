@@ -52,9 +52,9 @@ accepts `locale: "en" | "es"`.
 
 ## Tools
 
-Eighteen tools: `validate_bpmn`, `describe_process`, `run_simulation`, `compare_scenarios`,
+Nineteen tools: `validate_bpmn`, `describe_process`, `run_simulation`, `compare_scenarios`,
 `patch_scenario`, `create_process`, `get_process_outline`, `edit_process`, `export_diagram`,
-`export_document`, `export_results`, `annotate_element`, `get_raci_matrix`,
+`export_document`, `export_results`, `annotate_element`, `define_attribute`, `get_raci_matrix`,
 `import_scenario_sheet`, `export_scenario_template`, `create_project`, `get_project`,
 `get_scenario`.
 

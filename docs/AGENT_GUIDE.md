@@ -107,6 +107,20 @@ imported from Bizagi; `warnings` says what an outline cannot carry.
 attributes of one element by its BPMN id. `get_raci_matrix` returns the matrix the document will
 print. Both are optional; the document is better with them.
 
+An extended attribute (an SLA, a risk level…) has to be defined before an element can have a
+value for it. `define_attribute` defines it once per element type, with the rules of the app's
+dialog, and `get_project` lists what each process defines:
+
+```json
+{ "name": "define_attribute", "arguments": { "project": "card.lila", "name": "Risk level", "type": "list",
+  "appliesTo": "task", "options": ["Low", "Medium", "High"] } }
+```
+
+Then `annotate_element` fills it in by name, `"attributes": { "Risk level": "High" }`, and the
+process document prints it under the element. Calling `define_attribute` again with the same
+definition changes nothing; retyping it or taking options away removes the values that no longer
+fit, and `removedValues` says which.
+
 ### 5. The scenario
 
 The base scenario `as-is.scenario.json` starts with the app's defaults (20 cases, one a minute, a
