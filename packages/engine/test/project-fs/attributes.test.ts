@@ -154,6 +154,21 @@ describe('defineLilaAttribute', () => {
     expect(annotations['Process_Cliente']?.attributeDefinitions).toBeUndefined();
   });
 
+  test.each(['Participant_Cliente', 'Task_Revisar'])('a copy on %s is consolidated once; repeating the call changes nothing', async (owner) => {
+    const stray = { id: 'Attr_p', name: 'P', type: 'text', appliesTo: 'task' };
+    await withModel((xml) => annotateElement(xml, owner, { attributeDefinitions: [stray] }));
+    const request = { file, name: 'B', type: 'text', appliesTo: 'task' } as const;
+    const first = await defineLilaAttribute(request);
+    expect(first).toMatchObject({ changed: true, written: true });
+    const xml = await modelXml();
+    expect(xml.match(/id="Attr_p"/g)).toHaveLength(1);
+    expect((await readAnnotations(xml))[owner]?.attributeDefinitions).toBeUndefined();
+    const bytes = readFileSync(file);
+    const again = await defineLilaAttribute(request);
+    expect(again).toMatchObject({ changed: false, written: false, definitions: first.definitions });
+    expect(readFileSync(file).equals(bytes)).toBe(true);
+  });
+
   test.each([
     ['en', { name: 'SLA', type: 'number' }, /^pass the whole definition of the attribute: name, type and appliesTo/],
     ['en', { remove: true, name: 'SLA' }, /^to remove an attribute, pass its id, or its name and appliesTo\.$/],

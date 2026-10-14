@@ -328,8 +328,9 @@ function keepExtensions(el: ModdleElement, keep: (value: ModdleElement) => boole
 /**
  * Replaces every `lila:attributeDefinition` of the diagram with `definitions` (#633), the way the
  * app's attribute dialog saves them (`guardarDefiniciones`): written on the `bpmn:collaboration`
- * when there is one, else on the first `bpmn:process`, and removed from every other root element,
- * so copies left elsewhere are consolidated. The `lila:attributeValue`s `dropValue` picks, anywhere
+ * when there is one, else on the first `bpmn:process`, and removed from every other element of the
+ * diagram (participants and flow nodes included, which `readAnnotations` also reads), so copies left
+ * elsewhere are consolidated. The `lila:attributeValue`s `dropValue` picks, anywhere
  * in the diagram, are removed with them. Everything else stays as it was. Throws
  * `AnnotationContentLossError` where `annotateElement` would.
  */
@@ -344,10 +345,10 @@ export async function writeAttributeDefinitions(
   const roots = (root.rootElements ?? []).filter((el) => el.$type === 'bpmn:Collaboration' || el.$type === 'bpmn:Process');
   const host = roots.find((el) => el.$type === 'bpmn:Collaboration') ?? roots[0];
   if (host === undefined) throw new Error('the file has no bpmn:process to hold the attribute definitions.');
-  for (const el of roots) keepExtensions(el, (value) => value.$type !== DEFINITION_TYPE);
   for (const el of walk(root)) {
     keepExtensions(el, (value) =>
-      value.$type !== VALUE_TYPE || !dropValue({ elementId: el.id, ref: value.ref ?? '', value: value.value ?? '' }));
+      value.$type !== DEFINITION_TYPE &&
+      (value.$type !== VALUE_TYPE || !dropValue({ elementId: el.id, ref: value.ref ?? '', value: value.value ?? '' })));
   }
   if (definitions.length > 0) {
     const created = definitions.map((definition) => createDefinition(moddle, definition));
