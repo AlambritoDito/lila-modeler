@@ -5,6 +5,9 @@ All notable changes to Lila Modeler are documented here. The format follows
 
 ## [1.0.0-beta.26] - 2026-10-14
 
+The File and View menus now open over the Simulate and Results bar. Simulation results are
+unchanged.
+
 ### Fixed
 
 - **File and View menus over the Simulate/Results bar (#650)**: in Simulate and Results the
