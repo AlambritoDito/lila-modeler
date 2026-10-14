@@ -63,11 +63,9 @@ jobs:
       - name: Publish to npm (explicit owner action only)
         if: env.PUBLISH_NPM == 'true'
         # A prerelease version (1.0.0-beta.1) goes to the `beta` dist-tag; a stable version goes
-        # to `latest`. While `latest` itself is still a prerelease (the beta line before 1.0.0),
-        # it follows the newest one too, so `npx @lila-modeler/mcp` without `@beta` is current;
-        # once a stable version is out, a beta never moves `latest` again. Moving it needs
-        # «Allow npm dist-tag» on each package's trusted publisher. Publication is only possible
-        # from a dispatch on a `v*` tag.
+        # to `latest`. Moving `latest` along the beta line is the next step, on purpose: it can
+        # fail (npm dist-tag answers E401 under OIDC) and must never keep a package from being
+        # published (#649). Publication is only possible from a dispatch on a `v*` tag.
         # The engine goes first: @lila-modeler/mcp pins the same engine version, so it must exist
         # on the registry before the server that depends on it (ADR-030).
         run: |
@@ -84,18 +82,42 @@ jobs:
               echo "Publishing $package@$version with dist-tag $tag"
               npm publish --workspace "$package" --provenance --access public --tag "$tag"
             fi
-            # Outside the loop's skip on purpose: a rerun also repairs a `latest` that did not move.
-            latest=$(npm view "$package" dist-tags.latest 2>/dev/null || true)
-            if [ "$tag" != latest ] && case "$latest" in ''|*-*) true;; *) false;; esac; then
-              echo "Moving $package latest from ${latest:-nothing} to $version (no stable version yet)"
-              # A fresh publish can take minutes to become visible to the registry's other endpoints.
-              for attempt in 1 2 3 4 5 6 7 8 9 10; do
-                npm dist-tag add "$package@$version" latest && break
-                [ "$attempt" = 10 ] && exit 1
-                sleep 60
-              done
+          done
+      - name: Move latest during the beta line (never fails the job)
+        if: env.PUBLISH_NPM == 'true'
+        # While `latest` is itself a prerelease (the beta line before 1.0.0), it follows the newest
+        # beta too, so `npx @lila-modeler/mcp` without `@beta` is current; once a stable version is
+        # out, a beta never moves `latest` again. npm dist-tag does not always authenticate through
+        # OIDC trusted publishing (E401 even with «Allow npm dist-tag»), so a failure here is only
+        # a warning with the command to run by hand (2FA). A rerun also retries this step.
+        run: |
+          version=$(node -p "require('./packages/engine/package.json').version")
+          case "$version" in
+            *-*) ;;
+            *) echo "$version is stable: the publish step already put it on latest"; exit 0;;
+          esac
+          for package in @lila-modeler/engine @lila-modeler/mcp; do
+            latest=$(npm view "$package" dist-tags.latest --prefer-online 2>/dev/null || true)
+            case "$latest" in
+              "$version") echo "$package latest is already $version"; continue;;
+              ''|*-*) ;;
+              *) echo "$package latest is the stable $latest; a beta does not move it"; continue;;
+            esac
+            echo "Moving $package latest from ${latest:-nothing} to $version (no stable version yet)"
+            moved=false
+            # A fresh publish can take a while to become visible to the registry's other endpoints.
+            for attempt in 1 2 3; do
+              if npm dist-tag add "$package@$version" latest; then
+                moved=true
+                break
+              fi
+              if [ "$attempt" != 3 ]; then sleep 30; fi
+            done
+            if [ "$moved" != true ]; then
+              echo "::warning title=latest not moved::$package@$version is published, but npm dist-tag add failed 3 times (E401 is usual under OIDC). Move latest by hand with 2FA: npm dist-tag add $package@$version latest"
             fi
           done
+          exit 0
       - name: Report that publication was skipped
         if: env.PUBLISH_NPM != 'true'
         run: |
