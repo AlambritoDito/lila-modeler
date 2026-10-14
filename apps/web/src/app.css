@@ -5109,3 +5109,26 @@ button.gcal-uso-fila:hover {
 }
 .app.modo-resultados .zona-modelo > .c5-tiempo .c5-reloj { flex-shrink: 0; }
 .app.modo-resultados .zona-modelo > .c5-tiempo .c5-deslizador { flex: 1 1 60px; }
+
+/* #653: the read-only viewer for phones and tablets (`Visor.tsx`). */
+.visor { display: flex; flex-direction: column; height: 100vh; height: 100dvh; background: var(--bg-surface); }
+.visor-barra { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px; border-bottom: 1px solid var(--border); }
+/* 16px: iOS zooms into a smaller field; 44px: the touch target. */
+.visor-barra select, .visor-barra .boton, .visor-calor { font-size: 16px; min-height: 44px; max-width: 100%; }
+.visor-calor, .visor-barra a.boton { display: inline-flex; align-items: center; gap: 6px; }
+.visor-barra a.boton { text-decoration: none; }
+/* Without it the browser pinch-zooms the page and cancels the pointers the gestures read. */
+.visor-lienzo { flex: 1; min-height: 0; background: var(--canvas-bg); touch-action: none; }
+/* In the flow, not fixed: the canvas shrinks and the bpmn.io mark stays in sight. */
+.visor-hoja { max-height: 50%; overflow: auto; margin: 0; padding: 12px 16px; background: var(--bg-elevated); border-top: 1px solid var(--border-strong); }
+.visor-hoja h2 { margin: 0 44px 2px 0; font-size: 18px; }
+.visor-hoja dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
+.visor-hoja dd { margin: 0; }
+.visor-cerrar { float: right; min-width: 44px; min-height: 44px; }
+.visor-tipo { margin: 0; color: var(--fg-muted); }
+.visor-doc { white-space: pre-wrap; }
+.visor .c6-kpi-paren { display: none; }
+.visor-aviso { box-sizing: border-box; max-width: min(360px, calc(100vw - 32px)); padding: 20px; color: var(--fg-primary); background: var(--bg-elevated); border: 1px solid var(--border-strong); }
+.visor-aviso::backdrop { background: rgb(0 0 0 / 0.6); }
+.visor-aviso h2 { margin: 0 0 8px; font-size: 18px; }
+.visor-aviso .boton { width: 100%; min-height: 44px; font-size: 16px; }

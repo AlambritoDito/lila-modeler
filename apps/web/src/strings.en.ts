@@ -2189,4 +2189,12 @@ export const en = {
     /** The end of the replay on the time bar: one word, with the whole sentence in its title. */
     finCorto: 'End',
   },
+  /** #653: the read-only viewer for phones and tablets (`Visor.tsx`). */
+  visor: {
+    modo: 'Viewer mode',
+    editor: 'Full editor',
+    avisoTitulo: "You're viewing the mobile version",
+    avisoTexto: 'It is limited: it only shows the processes. Use Lila Modeler from a computer for the full system.',
+    avisoOk: 'Got it',
+  },
 } as const;

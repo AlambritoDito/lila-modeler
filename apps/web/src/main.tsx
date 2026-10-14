@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { failStartup } from './startup';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { abrirVisor, Visor } from './Visor';
 import { BrowserStore } from './store/BrowserStore';
 import { DesktopStore } from './store/DesktopStore';
 import pedido from '../../../examples/pedido/model.bpmn?raw';
@@ -20,6 +21,10 @@ import '@fontsource/jetbrains-mono/700.css';
 // Único punto de elección BrowserStore/DesktopStore (OP-01).
 const desktop = typeof window.lila !== 'undefined';
 const store = desktop ? new DesktopStore() : new BrowserStore(new Map([['pedido', { xml: pedido, name: 'model.bpmn' }]]));
+// #653: a phone (or `?visor`) gets the read-only viewer, which only reads the saved session.
+const visor = !desktop && abrirVisor(location.search, Math.min(screen.width, screen.height));
 createRoot(document.getElementById('root')!, { onUncaughtError: (error) => { console.error(error); failStartup(); } }).render(
-  <StrictMode><App store={store} bpmnFilesEnabled={!desktop} /></StrictMode>,
+  <StrictMode>{visor
+    ? <Visor inicial={(store as BrowserStore).restoreSession()} />
+    : <App store={store} bpmnFilesEnabled={!desktop} />}</StrictMode>,
 );
