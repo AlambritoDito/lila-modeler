@@ -16,7 +16,7 @@ element does, and the heat map of the last saved run. Simulation results are unc
   pans with one finger and zooms with a pinch, shows a tapped element's documentation, time,
   resource and route split, and, for a `.lila` saved after simulating, the heat map and the KPIs
   of its last run. Full editor (`?editor`) goes back to the editor. Nothing opened in the viewer
-  is saved. On every visit a notice says it is the limited mobile version and that the full
+  is saved. The first time, a notice says it is the limited mobile version and that the full
   system is on a computer.
 
 ## [1.0.0-beta.26] - 2026-10-14

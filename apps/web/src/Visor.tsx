@@ -95,6 +95,9 @@ function engancharGestos(contenedor: HTMLElement, canvas: Canvas): () => void {
   return () => { tamano.disconnect(); for (const [nombre, f] of eventos) contenedor.removeEventListener(nombre, f, true); };
 }
 
+/** Set once the mobile notice was closed (button or Esc): it only shows on the first visit. */
+export const AVISO_VISTO = 'lila.avisoMovil';
+
 interface Elegido { id: string; nombre: string; tipo: string; documentacion: string }
 
 export function Visor({ inicial }: { inicial: ProjectDocument | null }): React.JSX.Element {
@@ -137,8 +140,10 @@ export function Visor({ inicial }: { inicial: ProjectDocument | null }): React.J
     });
     setVisor(v);
     finishStartup();
-    // Every visit says what this is: the mobile version, limited, the full system is on a computer.
-    aviso.current?.showModal?.();
+    // The first visit says what this is: the mobile version, limited, the full system is on a computer.
+    let visto = false;
+    try { visto = localStorage.getItem(AVISO_VISTO) !== null; } catch { /* Browser storage can be disabled. */ }
+    if (!visto) aviso.current?.showModal?.();
     return () => { soltar(); v.destroy(); };
   }, []);
 
@@ -178,7 +183,8 @@ export function Visor({ inicial }: { inicial: ProjectDocument | null }): React.J
 
   return (
     <div className="visor">
-      <dialog ref={aviso} className="visor-aviso" aria-labelledby="visor-aviso-titulo">
+      <dialog ref={aviso} className="visor-aviso" aria-labelledby="visor-aviso-titulo"
+        onClose={() => { try { localStorage.setItem(AVISO_VISTO, '1'); } catch { /* shown again next time */ } }}>
         <h2 id="visor-aviso-titulo">{S.visor.avisoTitulo}</h2>
         <p>{S.visor.avisoTexto}</p>
         <form method="dialog"><button type="submit" className="boton">{S.visor.avisoOk}</button></form>

@@ -7,7 +7,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { processesOf } from '@lila-modeler/engine/project';
-import { abrirVisor, pasoGesto, Visor } from './Visor';
+import { abrirVisor, AVISO_VISTO, pasoGesto, Visor } from './Visor';
 import { EJEMPLOS, proyectoDeEjemplo } from './ejemplos';
 import { en as T } from './strings.en';
 
@@ -58,4 +58,19 @@ it('lists the examples and, for a repository, its processes', async () => {
   expect(container.querySelector('.visor-aviso h2')!.textContent).toBe(T.visor.avisoTitulo);
   // Nothing in the gallery carries a run, so there is no heat map to show.
   expect(container.querySelector<HTMLInputElement>('.visor-calor input')!.disabled).toBe(true);
+});
+
+it('the mobile notice opens on the first visit only', async () => {
+  const showModal = vi.fn();
+  HTMLDialogElement.prototype.showModal = showModal;
+  localStorage.removeItem(AVISO_VISTO);
+  await act(async () => root.render(<Visor inicial={null} />));
+  expect(showModal).toHaveBeenCalled();
+  await act(async () => { container.querySelector('dialog')!.dispatchEvent(new Event('close')); });
+  expect(localStorage.getItem(AVISO_VISTO)).toBe('1');
+  await act(async () => root.unmount());
+  showModal.mockClear();
+  root = createRoot(container);
+  await act(async () => root.render(<Visor inicial={null} />));
+  expect(showModal).not.toHaveBeenCalled();
 });

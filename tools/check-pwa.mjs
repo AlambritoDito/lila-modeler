@@ -13,7 +13,8 @@
  *      of that very file are checked, and no download happens.
  *   5. Offline: with the static server stopped, a reload still opens the editor.
  *   6. The phone viewer (#653), still offline, on a 390×844 touch screen: the app opens the
- *      viewer and not the editor, with the «limited mobile version» notice, an example opens, a tap on a task opens its sheet, nothing
+ *      viewer and not the editor, with the «limited mobile version» notice the first time only,
+ *      an example opens, a tap on a task opens its sheet, nothing
  *      scrolls sideways, a pinch zooms the diagram, a `.lila` with a run saved by `lila run --save`
  *      opens through the file input and shows its heat map and KPIs, and `?editor` gets the
  *      editor back.
@@ -234,6 +235,9 @@ async function main() {
     if (process.env.LILA_VISOR_SHOT) writeFileSync(process.env.LILA_VISOR_SHOT.replace(/\.png$/, '-aviso.png'), Buffer.from((await cdp.send('Page.captureScreenshot')).data, 'base64'));
     await evaluate(`document.querySelector('.visor-aviso button').click()`);
     await waitFor(`!document.querySelector('.visor-aviso').open`, 'the notice closed');
+    await reload();
+    await waitFor(`!!document.querySelector('.visor .djs-container svg [data-element-id]')`, 'the viewer again', 30_000);
+    check('the notice only shows the first time', await evaluate(`!document.querySelector('.visor-aviso').open`));
     const elegir = (id) => evaluate(`(() => { const s = document.querySelector('.visor-ejemplos'); s.value = ${JSON.stringify(id)};
       s.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
     await elegir('mm3');
