@@ -8,7 +8,7 @@
  * El `id` BPMN es la única clave: `annotateElement` localiza el elemento por su `id`, nunca
  * por su nombre.
  */
-import { BpmnModdle, type ModdleElement } from 'bpmn-moddle';
+import { BpmnModdle, type Moddle, type ModdleElement } from 'bpmn-moddle';
 import lila from './lila.moddle.json' with { type: 'json' };
 import type { AttributeDefinition, AttributeValue } from './attributes.js';
 
@@ -61,6 +61,14 @@ const VERSION_TAG_TYPE = moddleType('versionTag');
 const DEFINITION_TYPE = moddleType('attributeDefinition');
 const VALUE_TYPE = moddleType('attributeValue');
 
+function createDefinition(moddle: Moddle, { options, ...definition }: AttributeDefinition): ModdleElement {
+  // `default` goes in as text: see `readDefinition`.
+  return moddle.create(DEFINITION_TYPE, {
+    ...definition,
+    ...(options === undefined ? {} : { options: options.map((value) => moddle.create(moddleType('option'), { value })) }),
+  });
+}
+
 function readDefinition(value: ModdleElement): AttributeDefinition {
   const options = (value.options ?? []).map((option) => option.value ?? '');
   // `default` is typed as the gateway's default flow; on a `lila:attributeDefinition` it is text.
@@ -108,8 +116,13 @@ function* walk(el: ModdleElement): Generator<ModdleElement> {
  */
 function assertNoContentLoss(warnings: readonly unknown[]): void {
   if (warnings.length === 0) return;
+  // bpmn-moddle's warnings are plain `{ message, element, … }` objects, not `Error`s (#633: they
+  // used to print as "[object Object]").
   const detail = warnings
-    .map((w) => (w instanceof Error ? w.message : String(w)))
+    .map((w) => {
+      const message: unknown = w instanceof Error ? w.message : (w as { message?: unknown } | null)?.message;
+      return typeof message === 'string' ? message : String(w);
+    })
     .join('; ');
   throw new AnnotationContentLossError(detail);
 }
@@ -283,17 +296,7 @@ export async function annotateElement(
     if (annotations.versionTag !== undefined && annotations.versionTag !== '') {
       added.push(moddle.create(VERSION_TAG_TYPE, { value: annotations.versionTag }));
     }
-    for (const { options, ...definition } of annotations.attributeDefinitions ?? []) {
-      // `default` goes in as text: see `readDefinition`.
-      added.push(
-        moddle.create(DEFINITION_TYPE, {
-          ...definition,
-          ...(options === undefined
-            ? {}
-            : { options: options.map((value) => moddle.create(moddleType('option'), { value })) }),
-        }),
-      );
-    }
+    for (const definition of annotations.attributeDefinitions ?? []) added.push(createDefinition(moddle, definition));
     for (const attribute of annotations.attributes ?? []) {
       added.push(moddle.create(VALUE_TYPE, { ...attribute }));
     }
@@ -304,5 +307,53 @@ export async function annotateElement(
   }
 
   const { xml: out } = await moddle.toXML(definitions, { format: true });
+  return out;
+}
+
+/** A `lila:attributeValue` and the id of the element that holds it. */
+export interface HeldAttributeValue extends AttributeValue {
+  elementId: string;
+}
+
+/** Keeps the `extensionElements` values `keep` picks; one left empty by this goes away. */
+function keepExtensions(el: ModdleElement, keep: (value: ModdleElement) => boolean): void {
+  const values = el.extensionElements?.values;
+  if (values === undefined) return;
+  const kept = values.filter(keep);
+  if (kept.length === values.length) return;
+  if (kept.length === 0) delete el.extensionElements;
+  else el.extensionElements!.values = kept;
+}
+
+/**
+ * Replaces every `lila:attributeDefinition` of the diagram with `definitions` (#633), the way the
+ * app's attribute dialog saves them (`guardarDefiniciones`): written on the `bpmn:collaboration`
+ * when there is one, else on the first `bpmn:process`, and removed from every other root element,
+ * so copies left elsewhere are consolidated. The `lila:attributeValue`s `dropValue` picks, anywhere
+ * in the diagram, are removed with them. Everything else stays as it was. Throws
+ * `AnnotationContentLossError` where `annotateElement` would.
+ */
+export async function writeAttributeDefinitions(
+  xml: string,
+  definitions: readonly AttributeDefinition[],
+  dropValue: (value: HeldAttributeValue) => boolean = () => false,
+): Promise<string> {
+  const moddle = BpmnModdle({ lila });
+  const { rootElement: root, warnings } = await moddle.fromXML(xml);
+  assertNoContentLoss(warnings);
+  const roots = (root.rootElements ?? []).filter((el) => el.$type === 'bpmn:Collaboration' || el.$type === 'bpmn:Process');
+  const host = roots.find((el) => el.$type === 'bpmn:Collaboration') ?? roots[0];
+  if (host === undefined) throw new Error('the file has no bpmn:process to hold the attribute definitions.');
+  for (const el of roots) keepExtensions(el, (value) => value.$type !== DEFINITION_TYPE);
+  for (const el of walk(root)) {
+    keepExtensions(el, (value) =>
+      value.$type !== VALUE_TYPE || !dropValue({ elementId: el.id, ref: value.ref ?? '', value: value.value ?? '' }));
+  }
+  if (definitions.length > 0) {
+    const created = definitions.map((definition) => createDefinition(moddle, definition));
+    if (host.extensionElements === undefined) host.extensionElements = moddle.create('bpmn:ExtensionElements', { values: created });
+    else host.extensionElements.values = [...(host.extensionElements.values ?? []), ...created];
+  }
+  const { xml: out } = await moddle.toXML(root, { format: true });
   return out;
 }
