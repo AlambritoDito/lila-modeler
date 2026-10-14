@@ -504,11 +504,20 @@ class Editor {
     }
     this.definitions['diagrams'] = diagrams.filter((d) => !gone.has(d['plane']?.['bpmnElement']));
     this.diagram.index();
+    // Its notes go too: a text annotation left with no association would hang on nothing (#638).
+    const notes = new Set<El>();
     for (const link of this.links()) {
       if (gone.has(link['sourceRef']) || gone.has(link['targetRef'])) {
         this.deleteLink(link);
         also.push(link.id);
+        for (const end of [link['sourceRef'], link['targetRef']] as (El | undefined)[]) {
+          if (end?.$type === 'bpmn:TextAnnotation' && !gone.has(end)) notes.add(end);
+        }
       }
+    }
+    for (const note of notes) {
+      if (this.associations().some((a) => a['sourceRef'] === note || a['targetRef'] === note)) continue;
+      also.push(...this.removeArtifact(note));
     }
     this.free(node.id);
     this.removed.push(node.id);
@@ -1123,9 +1132,12 @@ class Editor {
     const plane = this.diagram.hasDi && this.incremental ? this.diagram.planeFor(container, this.process) : undefined;
     const hostBox = this.diagram.bounds(host.id);
     if (plane !== undefined && hostBox !== undefined) {
-      // On the host's bottom border, right of the boundary events already there.
-      const taken = elements.filter((e) => e !== boundary && e['attachedToRef'] === host).length;
-      this.diagram.addShape(boundary, plane, { x: hostBox.x + hostBox.width - 54 - taken * 40, y: hostBox.y + hostBox.height - 18, width: 36, height: 36 });
+      // On the host's border, clear of the boundary events already there (wherever they were drawn).
+      const others = elements
+        .filter((e) => e !== boundary && e['attachedToRef'] === host)
+        .map((e) => this.diagram.bounds(e.id))
+        .filter((box) => box !== undefined);
+      this.diagram.addShape(boundary, plane, this.diagram.boundarySpot(hostBox, others));
     }
     if (target === undefined) {
       const end = this.create('bpmn:EndEvent', { id: this.uniqueId(`EndEvent_${b.id}`) });
@@ -1326,10 +1338,13 @@ class Editor {
     const right = Math.max(...boxes.map((b) => b!.x + b!.width));
     const bandOf = (p: Point): El | undefined =>
       p.x < left || p.x > right ? undefined : order.find((l) => p.y >= bands.get(l)!.y && p.y < bands.get(l)!.y + bands.get(l)!.height);
+    // The lanes above the siblings stay: their centre lies in one of the siblings' bands.
+    const ancestors = new Set<El>();
+    for (let l = order[0]?.['$parent']?.['$parent'] as El | undefined; l?.$type === 'bpmn:Lane'; l = l['$parent']?.['$parent']) ancestors.add(l);
     const cross: El[] = [];
     for (const di of (plane['planeElement'] ?? []) as El[]) {
       const el = di['bpmnElement'] as El | undefined;
-      if (el === undefined || is(el, 'bpmn:Participant')) continue;
+      if (el === undefined || is(el, 'bpmn:Participant') || ancestors.has(el)) continue;
       if (di.$type === 'bpmndi:BPMNShape') {
         const b = di['bounds'] as Box;
         const lane = bandOf({ x: b.x + b.width / 2, y: b.y + b.height / 2 });

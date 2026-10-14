@@ -1241,3 +1241,100 @@ describe('the #638 refusals', () => {
     expect(error.message).toContain('operations[1].name: el proceso no tiene un objeto de datos llamado "File".');
   });
 });
+
+/* ------------------------------------------------------------------ *
+ * QA of #661, round 1
+ * ------------------------------------------------------------------ */
+
+describe('QA of #661: boundary events, nested lanes and notes with the incremental layout', () => {
+  /** Whether the centre of `b` lies on the bottom or the top border of `host`. */
+  const onBorder = (b: Box, host: Box): boolean => {
+    const cx = b.x + b.width / 2;
+    const cy = b.y + b.height / 2;
+    return cx >= host.x && cx <= host.x + host.width && (Math.abs(cy - (host.y + host.height)) < 1 || Math.abs(cy - host.y) < 1);
+  };
+  const apart = (a: Box, b: Box): boolean => a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+  const timer = (id: string, more: Record<string, unknown>) => ({ op: 'addBoundary', on: 'work', boundary: { id, type: 'timer', duration: '30m', ...more } }) as EditOperation;
+
+  test.each([
+    ['in one call', 1],
+    ['in two calls', 2],
+  ])('two addBoundary on one host (layout: false, %s): each stays on its host, clear of the other', async (_, calls) => {
+    const built = await outlineToBpmn({ name: 'D', steps: [{ id: 'work', name: 'Work', duration: '1h', end: true }] });
+    const ops = [timer('warn', { interrupting: false, end: true }), timer('cut', { end: 'terminate' })];
+    let { xml, scenario } = built as { xml: string; scenario: ScenarioDocument | undefined };
+    for (const batch of calls === 1 ? [ops] : ops.map((op) => [op])) ({ xml, scenario } = await editBpmn(xml, batch, { scenario, layout: false }));
+    expect(await errorsOf(xml)).toEqual([]);
+    await expectCleanImport(xml);
+    const { shapes, edges } = await di(xml);
+    const host = shapes.get('work')!;
+    for (const id of ['warn', 'cut']) expect(onBorder(shapes.get(id)!, host), id).toBe(true);
+    expect(apart(shapes.get('warn')!, shapes.get('cut')!)).toBe(true);
+    // Each boundary's flow leaves from the boundary itself.
+    for (const id of ['warn', 'cut']) {
+      const b = shapes.get(id)!;
+      const [first] = edges.get(`Flow_${id}_EndEvent_${id}`)!;
+      expect(first!.x >= b.x - 1 && first!.x <= b.x + b.width + 1 && first!.y >= b.y - 1 && first!.y <= b.y + b.height + 1, id).toBe(true);
+    }
+    expect((await bpmnToOutline(xml, { scenario: scenario as Record<string, unknown> })).warnings).toEqual([]);
+  });
+
+  test('four boundaries on one host (layout: false) all stay on it', async () => {
+    const built = await outlineToBpmn({ name: 'D', lanes: ['A'], steps: [{ id: 'work', lane: 'A', duration: '1h', end: true }] });
+    const ops = ['b1', 'b2', 'b3', 'b4'].map((id) => timer(id, { end: true }));
+    const edit = await editBpmn(built.xml, ops, { scenario: built.scenario, layout: false });
+    const { shapes } = await di(edit.xml);
+    const ids = ['b1', 'b2', 'b3', 'b4'];
+    for (const id of ids) expect(onBorder(shapes.get(id)!, shapes.get('work')!), id).toBe(true);
+    for (const a of ids) for (const b of ids) if (a < b) expect(apart(shapes.get(a)!, shapes.get(b)!), `${a} ${b}`).toBe(true);
+  });
+
+  test('a boundary added (layout: false) next to one create_process drew (the 48 h example) does not overlap it', async () => {
+    const example = JSON.parse(readFileSync(`${repo}examples/outline/claim-escalation.json`, 'utf8'));
+    const built = await outlineToBpmn(example);
+    const edit = await editBpmn(
+      built.xml,
+      [{ op: 'addBoundary', on: 'assess', boundary: { id: 'late', type: 'timer', duration: '72h', end: true } }],
+      { scenario: built.scenario, layout: false },
+    );
+    const { shapes } = await di(edit.xml);
+    for (const id of ['sla', 'late']) expect(onBorder(shapes.get(id)!, shapes.get('assess')!), id).toBe(true);
+    expect(apart(shapes.get('sla')!, shapes.get('late')!)).toBe(true);
+  });
+
+  test('moveLane among sub-lanes (layout: false) keeps the parent lane in the pool', async () => {
+    const drawn = await editBpmn(NESTED_LANES, [{ op: 'rename', id: 'Field', name: 'Field' }], { layout: true });
+    const edit = await editBpmn(drawn.xml, [{ op: 'moveLane', lane: 'Back', before: 'Desk' }], { layout: false });
+    expect(await errorsOf(edit.xml)).toEqual([]);
+    await expectCleanImport(edit.xml);
+    const { shapes } = await di(edit.xml);
+    const [pool, office, back, desk, field] = ['Pool', 'Office', 'Back', 'Desk', 'Field'].map((id) => shapes.get(id)!);
+    expect(office!.y).toBe(pool!.y);
+    expect(back!.y).toBe(office!.y);
+    expect(desk!.y).toBe(back!.y + back!.height);
+    expect(office!.height).toBe(back!.height + desk!.height);
+    expect(field!.y).toBe(office!.y + office!.height);
+    expect(field!.y + field!.height).toBe(pool!.y + pool!.height);
+    const inside = (id: string, lane: Box): boolean => {
+      const b = shapes.get(id)!;
+      return b.y >= lane.y && b.y + b.height <= lane.y + lane.height;
+    };
+    expect(inside('b', back!)).toBe(true);
+    expect(inside('a', desk!)).toBe(true);
+    expect(inside('c', field!)).toBe(true);
+  });
+
+  test.each([true, false])('removing a step takes its notes with it (layout %s)', async (layout) => {
+    const { xml, scenario } = await credit();
+    const noted = await editBpmn(xml, [{ op: 'annotate', on: 'check', text: 'Two signatures' }, { op: 'annotate', on: 'ok', text: 'Policy 7' }], { scenario, layout });
+    const edit = await editBpmn(noted.xml, [{ op: 'remove', id: 'check' }], { scenario, layout });
+    expect(edit.changes[0]!.message).toContain('TextAnnotation_check');
+    expect(edit.removed).toEqual(expect.arrayContaining(['check', 'Association_check', 'TextAnnotation_check']));
+    expect(edit.xml).not.toContain('TextAnnotation_check');
+    expect(edit.xml).toContain('TextAnnotation_ok');
+    await expectCleanImport(edit.xml);
+    const reading = await bpmnToOutline(edit.xml, { scenario: scenario as Record<string, unknown> });
+    expect(reading.warnings).toEqual([]);
+    expect(reading.outline.steps.find((s) => s.id === 'ok')?.notes).toEqual(['Policy 7']);
+  });
+});

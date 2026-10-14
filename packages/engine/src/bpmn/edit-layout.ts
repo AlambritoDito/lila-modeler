@@ -374,25 +374,56 @@ export class Diagram {
 
   /**
    * Makes `dx` of room at `fromX` in `plane`, between `top` and `bottom`: what starts right of it
-   * moves right, and the pools, lanes and expanded sub-processes it crosses get wider.
+   * moves right, and the pools, lanes and expanded sub-processes it crosses get wider. A boundary
+   * event moves with its host, wherever it starts.
    */
   makeRoom(plane: El, fromX: number, dx: number, band: { top: number; bottom: number }): void {
     const inBand = (b: Box): boolean => b.y < band.bottom && bottom(b) > band.top;
+    // A host that moves has x ≥ fromX before and after it moves, so this holds during the loop too.
+    const moves = (b: Box): boolean => inBand(b) && b.x >= fromX;
+    const hostBox = (di: El): Box | undefined => {
+      const host = di['bpmnElement']?.['attachedToRef'] as El | undefined;
+      return host === undefined ? undefined : this.bounds(host.id);
+    };
+    // Boundary events that do not go the way their own x says: their flows are routed again.
+    const odd = new Set<El>();
     for (const di of (plane['planeElement'] ?? []) as El[]) {
       if (!this.owns(di['bpmnElement'])) continue;
       if (di.$type === 'bpmndi:BPMNShape') {
         const b = di['bounds'] as Box;
-        if (!inBand(b)) continue;
-        if (b.x >= fromX) {
+        const host = hostBox(di);
+        const go = host === undefined ? moves(b) : moves(host);
+        if (host !== undefined && go !== moves(b)) odd.add(di['bpmnElement']);
+        if (go) {
           b.x += dx;
           if (di['label']?.['bounds'] !== undefined) di['label']['bounds'].x += dx;
           this.moved.add(di['bpmnElement'].id);
-        } else if (this.isContainer(di) && right(b) > fromX) b.width += dx;
+        } else if (inBand(b) && this.isContainer(di) && right(b) > fromX) b.width += dx;
       } else if (di.$type === 'bpmndi:BPMNEdge') {
         for (const p of (di['waypoint'] ?? []) as Point[]) if (p.x >= fromX && p.y >= band.top && p.y <= band.bottom) p.x += dx;
         if (di['label']?.['bounds'] !== undefined && di['label']['bounds'].x >= fromX) di['label']['bounds'].x += dx;
       }
     }
+    if (odd.size === 0) return;
+    for (const di of (plane['planeElement'] ?? []) as El[]) {
+      const flow = di['bpmnElement'] as El | undefined;
+      if (di.$type === 'bpmndi:BPMNEdge' && flow?.$type === 'bpmn:SequenceFlow' && odd.has(flow['sourceRef'])) this.routeFlow(flow);
+    }
+  }
+
+  /**
+   * Where a new boundary event of `host` goes: on its bottom border, then on its top one, right to
+   * left, clear of `others` (the boundary events already on it); on a crowded host, where it
+   * overlaps the fewest.
+   */
+  boundarySpot(host: Box, others: readonly Box[]): Box {
+    const spots: Box[] = [];
+    for (const y of [bottom(host) - 18, host.y - 18]) {
+      for (let cx = right(host) - 36; cx >= host.x + 18; cx -= 40) spots.push({ x: cx - 18, y, width: 36, height: 36 });
+    }
+    if (spots.length === 0) spots.push({ x: center(host).x - 18, y: bottom(host) - 18, width: 36, height: 36 });
+    const clashes = (s: Box): number => others.filter((o) => overlaps(o, s, 2)).length;
+    return spots.reduce((best, s) => (clashes(s) < clashes(best) ? s : best));
   }
 
   /**
