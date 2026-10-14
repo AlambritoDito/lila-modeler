@@ -60,7 +60,8 @@ cambio de bytes en una edición del catálogo e impediría deduplicar.
 ```
 
 Es el manifiesto de la versión 2 (`RepositoryManifest` en `packages/engine/src/project/lila.ts`)
-con un añadido: cada proceso tiene un **`id`**, su identidad estable (§ 3.2). No se lista nada más:
+con dos añadidos: cada proceso tiene un **`id`**, su identidad estable (§ 3.2), y un `limits`
+opcional (abajo). No se lista nada más:
 los objetos de catálogo y los adjuntos se descubren listando sus carpetas, y el índice id → archivo
 se deriva al abrir, como exige ADR-029. Poner el catálogo en el manifiesto haría que cada edición de
 un objeto tocara el único archivo que también tocan todas las demás, que es justo el conflicto de
@@ -76,7 +77,8 @@ mezcla que un archivo por objeto quiere evitar.
   máximo de todas las entradas de adjuntos del repositorio. Los dos son opcionales; un miembro
   ausente, o la ausencia de `limits`, significa el valor por defecto: 20 MB (20.971.520 bytes) y
   200 MB (209.715.200 bytes).
-- Cada miembro debe ser un entero positivo no mayor que `Number.MAX_SAFE_INTEGER`. Un valor inválido
+- Cada miembro debe ser un entero positivo no mayor que 4.294.967.295, el mayor tamaño que cabe en
+  un `.lila` (el escritor del archivo no tiene ZIP64). Un valor inválido
   se informa en `problems`, se aplica el valor por defecto y el valor se vuelve a escribir tal como
   se encontró hasta que alguien ponga uno válido; el manifiesto se sigue leyendo.
 - La app lo cambia desde los ajustes del repositorio. Límites mayores son decisión del repositorio:
@@ -127,7 +129,7 @@ no hay que tocarlas:
   (`projectIO.ts`) se traga el `E-MANIFEST` de un padre de versión 3. Por eso abrir directamente la
   carpeta `processes/<slug>/` de un repositorio de versión 3 (o su `model.bpmn`) la lee como un
   proyecto de versión 1 independiente, y guardarla puede escribir un
-  `processes/<slug>/lila-project.json` anidado. El repositorio en sí no se daña; A1 informa ese
+  `processes/<slug>/lila-project.json` anidado. El repositorio en sí no se daña, pero las corridas de ese proceso no se marcan obsoletas; A1 informa ese
   `lila-project.json` anidado como entrada desconocida y lo conserva tal cual.
 
 **Las entradas desconocidas se conservan; ya no se descartan.** Hoy una entrada del archivo fuera
@@ -598,14 +600,15 @@ si sus resultados están desfasados); las revisiones de los objetos viven en el 
   nunca borran ni descartan los que ya hay.
 - **Tipos (decisión del dueño, § 10):** solo esta lista permitida de formatos de documento e imagen;
   cualquier otra extensión, o ninguna, se rechaza al añadirla (`E-ADJUNTO`). La lista es de la
-  versión de la app, no del repositorio.
+  versión de la app, no del repositorio. Los formatos antiguos de Office (`doc`, `xls`, `ppt`) quedan
+  fuera porque pueden llevar macros; añadirlos después cambia la lista, no el formato.
 
   | Extensiones | `mediaType` |
   | --- | --- |
   | `pdf` | `application/pdf` |
-  | `doc`, `docx` | `application/msword`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document` |
-  | `xls`, `xlsx` | `application/vnd.ms-excel`, `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
-  | `ppt`, `pptx` | `application/vnd.ms-powerpoint`, `application/vnd.openxmlformats-officedocument.presentationml.presentation` |
+  | `docx` | `application/vnd.openxmlformats-officedocument.wordprocessingml.document` |
+  | `xlsx` | `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
+  | `pptx` | `application/vnd.openxmlformats-officedocument.presentationml.presentation` |
   | `odt`, `ods`, `odp` | `application/vnd.oasis.opendocument.text`, `…spreadsheet`, `…presentation` |
   | `txt`, `md`, `csv` | `text/plain`, `text/markdown`, `text/csv` |
   | `png`, `jpg`/`jpeg`, `gif`, `webp` | `image/png`, `image/jpeg`, `image/gif`, `image/webp` |
@@ -737,7 +740,7 @@ navegador o de Electron, el repositorio y la semilla, y da la mediana y el p95 d
 | Tabla de objetos: primer pintado de 5.000 filas (virtualizada) | 300 ms | 300 ms | 450 ms |
 | Tabla de objetos: confirmar la edición de una celda, con diagrama e índice al día | 100 ms | 100 ms | 150 ms |
 | Guardar tras cambiar un objeto | 300 ms | 3 s | 5 s |
-| Autoguardado de un conjunto de cambios; bloqueo más largo del hilo de entrada | 200 ms; 50 ms | 200 ms; 50 ms | — |
+| Autoguardado (A1: documento entero sin los bytes de adjuntos; alternativa: conjunto de cambios); bloqueo más largo del hilo de entrada | 200 ms; 50 ms | 200 ms; 50 ms | — |
 | Memoria del renderer con el repositorio abierto (sin abrir adjuntos) | 400 MB | 400 MB | 400 MB |
 
 Con `synthetic-org-l+runs`, abrir y buscar mantienen los mismos presupuestos (las corridas no se

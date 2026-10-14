@@ -647,7 +647,7 @@ or versioning wrong forces a rewrite later. `docs/REPOSITORY_CONTRACT.md` settle
 
 - **Version 3** is version 2 plus `catalog/<type>/<id>.json` and content-addressed
   `attachments/<sha256>[.<ext>]`, and a stable `id` per process in the manifest. It is written only
-  when a catalog object, an attachment or an entry under a reserved name exists, and once read as
+  when a catalog object, an attachment, a `limits` member or an entry under a reserved name exists, and once read as
   version 3 it stays version 3. Builds that read versions 1 and 2 already refuse it with
   `LILA-MANIFEST`/`E-MANIFEST`.
 - **Unknown entries are preserved** instead of dropped, in every version, because their bytes no

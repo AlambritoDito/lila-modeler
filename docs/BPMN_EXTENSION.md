@@ -53,7 +53,7 @@ All of them (except `versionTag`, see below) go inside `bpmn:extensionElements` 
 
 | Element | Attributes | What it documents | Points to |
 |---|---|---|---|
-| `lila:responsibility` | `type` (`R`\|`A`\|`C`\|`I`), `roleRef` | The element's RACI matrix: one row per responsible-party/role combination. An element can have several `lila:responsibility` (several roles, or the same role with a different `type`, which doesn't make sense but is not validated as an error — it's a warning). | `roleRef` → id of a role object (`catalog/role/<id>.json`, see [the repository contract](REPOSITORY_CONTRACT.md)). |
+| `lila:responsibility` | `type` (`R`\|`A`\|`C`\|`I`), `roleRef` | The element's RACI matrix: one row per responsible-party/role combination. An element can have several `lila:responsibility` (several roles, or the same role with a different `type`): accepted as written; nothing checks it today (a warning may come with LILA-095, #95). | `roleRef` → id of a role object (`catalog/role/<id>.json`, see [the repository contract](REPOSITORY_CONTRACT.md)). |
 | `lila:systemRef` | `ref` | System/application involved in the element. | id in the system catalog. |
 | `lila:documentRef` | `ref` | Document associated with the element (input, output, or just a general reference). | id in the document catalog. |
 | `lila:riskRef` | `ref` | Risk associated with the element. | id in the risk catalog. |

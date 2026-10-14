@@ -60,7 +60,8 @@ rename of the bytes a catalog edit and prevent deduplication.
 ```
 
 It is the version 2 manifest (`RepositoryManifest` in `packages/engine/src/project/lila.ts`) with
-one addition: each process has an **`id`**, its stable identity (§ 3.2). Nothing else is listed:
+two additions: each process has an **`id`**, its stable identity (§ 3.2), and an optional `limits`
+(below). Nothing else is listed:
 catalog objects and attachments are discovered by listing their directories, and the id → file
 index is derived on open, as ADR-029 requires. Putting the catalog in the manifest would make every
 object edit touch the one file every other edit also touches, which is exactly the merge conflict
@@ -75,7 +76,8 @@ that one file per object is meant to avoid.
 - `attachmentBytes` is the largest attachment that may be added; `repositoryBytes` is the largest
   total of all attachment entries of the repository. Both are optional; a missing member, or a
   missing `limits`, means the default: 20 MB (20,971,520 bytes) and 200 MB (209,715,200 bytes).
-- Each member must be a positive integer no larger than `Number.MAX_SAFE_INTEGER`. An invalid value
+- Each member must be a positive integer no larger than 4,294,967,295, the largest size a
+  `.lila` can hold (the archive writer has no ZIP64). An invalid value
   is reported in `problems`, the default applies, and the value is written back as found until
   someone sets a valid one; the manifest is still read.
 - The app changes it from the repository's settings. Larger limits are the repository's choice:
@@ -122,7 +124,7 @@ Older builds refuse version 3 cleanly, with one exception below; nothing has to 
   swallows the `E-MANIFEST` of a version 3 parent. Opening a version 3 repository's
   `processes/<slug>/` folder (or its `model.bpmn`) directly therefore reads it as a standalone
   version 1 project, and saving it may write a nested `processes/<slug>/lila-project.json`. The
-  repository itself is not damaged; A1 reports such a nested `lila-project.json` as an unknown entry
+  repository itself is not damaged, but the runs of that process are not marked stale; A1 reports such a nested `lila-project.json` as an unknown entry
   and keeps it as is.
 
 **Unknown entries are preserved, no longer dropped.** Today an archive entry outside the layout is
@@ -581,14 +583,15 @@ the object file (§ 2.1).
   containers: limits refuse new attachments and never delete or drop existing ones.
 - **Types (owner's decision, § 10):** only this allowlist of document and image formats; any other
   extension, or none, is refused when added (`E-ADJUNTO`). The list belongs to the app version, not
-  to the repository.
+  to the repository. Legacy Office formats (`doc`, `xls`, `ppt`) are left out because they can
+  carry macros; adding them later is a list change, not a format change.
 
   | Extensions | `mediaType` |
   | --- | --- |
   | `pdf` | `application/pdf` |
-  | `doc`, `docx` | `application/msword`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document` |
-  | `xls`, `xlsx` | `application/vnd.ms-excel`, `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
-  | `ppt`, `pptx` | `application/vnd.ms-powerpoint`, `application/vnd.openxmlformats-officedocument.presentationml.presentation` |
+  | `docx` | `application/vnd.openxmlformats-officedocument.wordprocessingml.document` |
+  | `xlsx` | `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
+  | `pptx` | `application/vnd.openxmlformats-officedocument.presentationml.presentation` |
   | `odt`, `ods`, `odp` | `application/vnd.oasis.opendocument.text`, `…spreadsheet`, `…presentation` |
   | `txt`, `md`, `csv` | `text/plain`, `text/markdown`, `text/csv` |
   | `png`, `jpg`/`jpeg`, `gif`, `webp` | `image/png`, `image/jpeg`, `image/gif`, `image/webp` |
@@ -716,7 +719,7 @@ cache.
 | Object table: first paint of 5,000 rows (virtualized) | 300 ms | 300 ms | 450 ms |
 | Object table: commit of one cell edit, diagram and index updated | 100 ms | 100 ms | 150 ms |
 | Save after changing one object | 300 ms | 3 s | 5 s |
-| Autosave of a change set; longest block of the input thread | 200 ms; 50 ms | 200 ms; 50 ms | — |
+| Autosave (A1: whole document without attachment bytes; fallback: change set); longest block of the input thread | 200 ms; 50 ms | 200 ms; 50 ms | — |
 | Renderer memory with the repository open (no attachment opened) | 400 MB | 400 MB | 400 MB |
 
 With `synthetic-org-l+runs`, open and search keep the same budgets (runs are not loaded), and no

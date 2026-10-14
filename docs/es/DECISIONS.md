@@ -656,8 +656,8 @@ ellos, y equivocarse en la identidad o en el versionado obliga a reescribir desp
 
 - **La versión 3** es la versión 2 más `catalog/<tipo>/<id>.json` y adjuntos direccionados por
   contenido `attachments/<sha256>[.<ext>]`, y un `id` estable por proceso en el manifiesto. Se
-  escribe solo cuando existe un objeto de catálogo, un adjunto o una entrada bajo un nombre
-  reservado, y una vez leída como versión 3 se queda en la 3. Las versiones de la app que leen la 1 y la 2 ya la rechazan con
+  escribe solo cuando existe un objeto de catálogo, un adjunto, un miembro `limits` o una entrada
+  bajo un nombre reservado, y una vez leída como versión 3 se queda en la 3. Las versiones de la app que leen la 1 y la 2 ya la rechazan con
   `LILA-MANIFEST`/`E-MANIFEST`.
 - **Las entradas desconocidas se conservan** en vez de descartarse, en todas las versiones, porque
   sus bytes ya no cruzan el IPC ni el espejo de `localStorage`. Las fases posteriores pueden añadir
