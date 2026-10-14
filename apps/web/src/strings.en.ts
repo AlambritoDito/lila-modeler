@@ -196,6 +196,8 @@ export const en = {
     cerrar: 'Close',
     /** Settings → About Lila Modeler (LILA-381): closes Settings and opens the About dialog. */
     acercaDe: 'About Lila Modeler',
+    /** Settings header, File menu, ⌘K and desktop Help (#651): GitHub's bug form, prefilled. */
+    reportarProblema: 'Report a problem…',
 
     /** Validation chips over the canvas and counters of the status bar. */
     irAlPrimerProblema: 'Go to the first element with problems',

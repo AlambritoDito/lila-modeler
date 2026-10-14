@@ -3,6 +3,51 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.28] - 2026-10-14
+
+Lote Q: an agent can model what the simulator already runs, without the app: escalations with a
+timer on a task, waits for a reply or a deadline, terminate ends, several starts and default
+flows; it can remove and reorder lanes, add notes and data objects, bring in an existing BPMN as
+another process, and define extended attributes. In the app, Report a problem opens GitHub's bug
+form with the version filled in. Simulation results are unchanged.
+
+### Added
+
+- **Outline and `edit_process` constructs (#631, #661)**: the outline takes a timer `boundary` on
+  a task (interrupting or not), an `eventGateway` whose branches are `timer` or `message` steps,
+  `end: "terminate"`, `starts` with `from` (timer starts included), `default: true` on an xor/or
+  branch, and the task types `sendTask`, `receiveTask`, `manualTask`, `scriptTask` and
+  `businessRuleTask`. `get_process_outline` reads all of them back without warnings.
+  `edit_process` adds `addBoundary`, `connect` with `default`, and `setType` between an end and a
+  terminate end. The 48-hour escalation is an example in the docs and in
+  `examples/outline/claim-escalation.json`.
+- **Lanes, notes and data objects (#638, #661)**: `edit_process` takes `removeLane` (with
+  `moveStepsTo` when it holds steps), `moveLane`, `rename` of a lane by its name, `annotate` /
+  `removeAnnotation` and `addDataObject` / `removeDataObject`; the outline carries `notes` and
+  `data` per step.
+- **Raw BPMN of a process (#632, #658)**: `get_process_bpmn` reads it and `put_process_bpmn` adds
+  a BPMN (a Bizagi export, say) as a new process of a `.lila`, with a base scenario, or replaces a
+  process's model and reports the scenario entries that no longer apply. `allowUnsimulatable`
+  (also on `create_project`) stores a model the simulator rejects, for documentation, with its
+  errors as notes. CLI: `lila process export-bpmn` and `lila process import`.
+- **Extended attribute definitions (#633, #657)**: `define_attribute` creates, updates or removes
+  a definition with the same rules as the app's dialog and a readable id, reporting the values a
+  change removes; `get_project` lists the definitions. CLI: `lila process attribute define|list`.
+- **Report a problem (#651, #656)**: in Settings, the File menu, ⌘K and the desktop Help menu. It
+  opens GitHub's bug form with only the version and the environment (system, app or browser)
+  filled in; nothing is sent until you submit it there.
+
+### Changed
+
+- The MCP server has twenty-one tools.
+
+### Fixed
+
+- Removing a task with `edit_process` also removes its data associations and the data objects
+  nothing else uses, instead of leaving them dangling.
+- Annotating a model with content the BPMN reader cannot write back names the problem instead of
+  printing `[object Object]`.
+
 ## [1.0.0-beta.27] - 2026-10-14
 
 Lila opens on a phone or tablet as a read-only viewer: the diagram with your fingers, what each

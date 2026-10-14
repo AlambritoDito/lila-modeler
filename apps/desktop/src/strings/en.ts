@@ -59,6 +59,7 @@ export const en = {
     /** The Help menu: on macOS it also carries the system's menu search (⇧⌘/). */
     ayuda: 'Help',
     documentacion: 'Documentation',
+    reportarProblema: 'Report a problem…',
     /**
      * Windows and Linux only (#566): the items macOS builds from a role and localises itself, and
      * that Electron would otherwise label in English there. Same words as Electron's, sentence case.

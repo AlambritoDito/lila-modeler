@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { main } from '../../src/cli.js';
 import { decodeLila, encodeLila, type ProcessDocument, type ProjectDocument } from '../../src/project/index.js';
-import { lilaProjectInventory, lilaScenarioView } from '../../src/project-fs/index.js';
+import { defineLilaAttribute, lilaProjectInventory, lilaScenarioView } from '../../src/project-fs/index.js';
 import { EXAMPLE_LILA, pedidoWithRuns } from './export-fixture.js';
 
 let scratch: string;
@@ -80,6 +80,7 @@ describe('lilaProjectInventory', () => {
             { id: 'run-1', scenario: 'as-is.scenario.json', start: expect.any(String), replications: 1, current: true },
             { id: 'run-2', scenario: 'to-be-3-cajeros.scenario.json', start: expect.any(String), replications: 1, current: false },
           ],
+          attributes: [],
         },
         {
           slug: 'copia',
@@ -89,10 +90,31 @@ describe('lilaProjectInventory', () => {
           elements: 11,
           scenarios: [{ entry: 'borrador.scenario.json', name: null, revision: 2, extends: 'missing.scenario.json' }],
           runs: [],
+          attributes: [],
         },
       ],
     });
     expect(readFileSync(file).equals(bytes)).toBe(true);
+  });
+
+  test('lists the extended attributes each process defines (#633); null for a model that cannot be read back whole', async () => {
+    const file = await repository();
+    await defineLilaAttribute({ file, process: 'copia', name: 'Risk', type: 'list', appliesTo: 'task', options: ['Low', 'High'] });
+    const document = decodeLila(readFileSync(file));
+    const b20 = readFileSync(new URL('../../../../examples/bizagi-exports/bizagi-miwg-B.2.0-roundtrip.bpmn', import.meta.url), 'utf8');
+    writeFileSync(file, encodeLila({ ...document, model: { ...document.model, xml: b20 } }));
+    const bytes = readFileSync(file);
+    const inventory = await lilaProjectInventory({ file });
+    expect(inventory.processes.map((p) => [p.slug, p.attributes])).toEqual([
+      ['pedido', null],
+      ['copia', [{ id: 'Attr_risk', name: 'Risk', type: 'list', appliesTo: 'task', options: ['Low', 'High'] }]],
+    ]);
+    expect(readFileSync(file).equals(bytes)).toBe(true);
+
+    expect(await main(['project', 'show', file])).toBe(0);
+    expect(out).toContain('  extended attributes: unreadable model');
+    expect(out).toContain('  1 extended attribute:');
+    expect(out).toContain('    Attr_risk  "Risk"  list, for tasks, options Low, High');
   });
 
   test('a one-process project is format version 1', async () => {
@@ -169,7 +191,7 @@ describe('CLI', () => {
     out = [];
     expect(await main(['--lang', 'es', 'project', 'show', file])).toBe(0);
     expect(out[1]).toBe('Proceso pedido "Pedido": Process_Restaurante, revisión del modelo 1, 11 elementos');
-    expect(out.at(-1)).toBe('  0 corridas guardadas');
+    expect(out.slice(-2)).toEqual(['  0 corridas guardadas', '  0 atributos extendidos']);
     out = [];
     expect(await main(['project', 'show', file, '--json'])).toBe(0);
     expect(JSON.parse(out.join('\n'))).toEqual(await lilaProjectInventory({ file }));

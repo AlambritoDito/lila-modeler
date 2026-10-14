@@ -11,12 +11,13 @@
 import { readFileSync } from 'node:fs';
 import { posix } from 'node:path';
 
-import { parseBpmn } from '../bpmn/index.js';
+import { parseBpmn, type AttributeDefinition } from '../bpmn/index.js';
 import { comparablePath, validatedModelOf } from '../cli-shared.js';
 import { messages, type Locale } from '../messages/index.js';
 import { isCurrentRun, type StoredRun } from '../project/index.js';
 import type { ScenarioDocument } from '../project/index.js';
 import { checkScenario, type LilaTarget } from './agent-tools.js';
+import { attributeDefinitionsOf } from './attributes.js';
 import { findLilaScenario, lilaScenarioPath, lilaScenarioReader, openLilaProcess, openLilaProject, type LilaProcess } from './input.js';
 
 export interface LilaScenarioSummary {
@@ -55,6 +56,11 @@ export interface LilaProcessSummary {
   readonly elements: number | null;
   readonly scenarios: readonly LilaScenarioSummary[];
   readonly runs: readonly LilaRunSummary[];
+  /**
+   * The extended attributes the process defines (#633), what `annotate_element` can fill in;
+   * `null` when the model cannot be read back whole (some Bizagi exports).
+   */
+  readonly attributes: readonly AttributeDefinition[] | null;
 }
 
 export interface LilaProjectInventory {
@@ -109,6 +115,7 @@ export async function lilaProjectInventory(target: Omit<LilaTarget, 'process'>):
         };
       }),
       runs: process.runs.map((run) => runSummary(lila, run)),
+      attributes: await attributeDefinitionsOf(process.model.xml),
     });
   }
   return { file: project.file, name: project.document.name, formatVersion: project.formatVersion, processes };

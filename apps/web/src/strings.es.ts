@@ -177,6 +177,8 @@ export const es: Strings = {
     cerrar: 'Cerrar',
     /** Ajustes → Acerca de Lila Modeler (LILA-381): cierra Ajustes y abre el diálogo Acerca de. */
     acercaDe: 'Acerca de Lila Modeler',
+    /** Cabecera de Ajustes, menú Archivo, ⌘K y Ayuda de escritorio (#651): el formulario de GitHub, rellenado. */
+    reportarProblema: 'Informar de un problema…',
 
     /** Chips de validación sobre el lienzo y contadores de la barra de estado. */
     irAlPrimerProblema: 'Ir al primer elemento con problemas',

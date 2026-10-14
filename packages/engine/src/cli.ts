@@ -1119,6 +1119,15 @@ function printOutline(outline: NormalOutline, slug: string, locale: Locale): voi
   const C = messages(locale).cli;
   console.log(C.processShowHeader(outline.name, slug));
   if (outline.lanes !== undefined) console.log(C.processShowLanes(outline.lanes.join(', ')));
+  // #631: the outline's own words, so the line reads the same in every language.
+  const end = (value: true | 'terminate'): string => (value === 'terminate' ? 'terminate' : 'end');
+  for (const start of outline.starts ?? []) {
+    const parts = [start.id, start.type === 'timer' ? 'timer start' : 'start'];
+    if (start.name !== undefined) parts.push(`"${start.name}"`);
+    if (start.lane !== undefined) parts.push(`[${start.lane}]`);
+    const to = outline.steps.filter((s) => [s.from ?? []].flat().includes(start.id)).map((s) => s.id);
+    console.log(`  ${parts.join('  ')} → ${to.join(', ')}`);
+  }
   for (const step of outline.steps) {
     const parts = [`${step.id}`, step.type ?? 'task'];
     if (step.name !== undefined) parts.push(`"${step.name}"`);
@@ -1128,13 +1137,25 @@ function printOutline(outline: NormalOutline, slug: string, locale: Locale): voi
       parts.push(step.resources.map((r) => (typeof r === 'string' ? r : `${r.name}×${r.quantity}`)).join(', '));
     }
     let after = '';
-    if (step.end === true) after = ' → end';
+    if (step.end !== undefined) after = ` → ${end(step.end)}`;
     else if (step.branches !== undefined) {
       after = ` → ${step.branches
-        .map((b) => `${b.label === undefined ? '' : `${b.label}: `}${b.to ?? 'end'}${b.probability === undefined ? '' : ` (${b.probability})`}`)
+        .map((b) => {
+          const tags = [...(b.probability === undefined ? [] : [String(b.probability)]), ...(b.default === true ? ['default'] : [])];
+          return `${b.label === undefined ? '' : `${b.label}: `}${b.to ?? end(b.end ?? true)}${tags.length === 0 ? '' : ` (${tags.join(', ')})`}`;
+        })
         .join(' | ')}`;
     } else if (step.next !== undefined) after = ` → ${[step.next].flat().join(', ')}`;
     console.log(`  ${parts.join('  ')}${after}`);
+    for (const b of step.boundary ?? []) {
+      const bparts = [`boundary ${b.id}`, b.interrupting === false ? 'timer (non-interrupting)' : 'timer'];
+      if (b.name !== undefined) bparts.push(`"${b.name}"`);
+      if (b.duration !== undefined) bparts.push(describeDistribution(b.duration));
+      console.log(`    ${bparts.join('  ')} → ${b.label === undefined ? '' : `${b.label}: `}${b.to ?? end(b.end ?? true)}`);
+    }
+    // #638: the step's data (in reads, out writes) and notes.
+    for (const d of step.data ?? []) console.log(`    data ${d.direction}  "${d.name}"`);
+    for (const note of step.notes ?? []) console.log(`    note  "${note}"`);
   }
 }
 
