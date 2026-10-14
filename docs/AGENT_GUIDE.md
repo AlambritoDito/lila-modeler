@@ -198,15 +198,20 @@ against the real desktop app.
 | --- | --- |
 | `name` | The process name (also the default slug). |
 | `lanes` | Lane names in order. Optional: without it, lanes are collected from the steps. |
+| `starts` | Optional start events: `{ id, name?, type?, lane? }`, `type` `none` (default) or `timer`. Without it, one plain start (`StartEvent`) leads to the first step. With it, steps name theirs with `from`, and every start must be used. Each start gets the default arrivals, so two starts bring two streams of cases. |
 | `steps[].id` | The BPMN id. Scenarios key on it, so pick short stable ids. |
 | `steps[].name` | The label. |
-| `steps[].type` | `task` (default), `userTask`, `serviceTask`, `callActivity`, `xor`, `and`, `or`, `timer`, `subprocess`. |
+| `steps[].type` | `task` (default), `userTask`, `serviceTask`, `sendTask`, `receiveTask`, `manualTask`, `scriptTask`, `businessRuleTask`, `callActivity`, `xor`, `and`, `or`, `eventGateway`, `timer`, `message`, `subprocess`. The task variants simulate as `task`; the document and the diagram show what they are. `message` (a wait for a message) is only a branch target of an `eventGateway`. |
 | `steps[].lane` | Defaults to the previous step's lane. |
+| `steps[].from` | With `starts`: the start id(s) that lead to this step. Only valid when `starts` is given. |
 | `steps[].next` | The step(s) after this one when it is not simply the next in the list (a loop back, a join). |
-| `steps[].branches` | Gateways only: `{ label?, to, probability? }` or `{ label?, end: true, probability? }`. XOR branches without a probability share what is left of 1. |
-| `steps[].end` | This step ends the process (an end event is added after it). |
-| `steps[].duration` | Seconds, `20m`, `1h30m`, `normal(20m, 5m)`, `triangular(1m, 2m, 5m)`, `exponential(mean=4m)`, or a distribution object in seconds. |
+| `steps[].branches` | Gateways only: `{ label?, to, probability?, default? }` or `{ label?, end: true \| "terminate", probability?, default? }`. XOR branches without a probability share what is left of 1. `default: true` marks the default flow of an `xor` or `or`, one per gateway. The branches of an `eventGateway` go `to` `timer` or `message` steps, with no `probability`: the first event to happen wins. |
+| `steps[].end` | `true`: this step ends the process (an end event is added after it). `"terminate"`: a terminate end event, which ends the whole case, every parallel path included. |
+| `steps[].duration` | Seconds, `20m`, `1h30m`, `normal(20m, 5m)`, `triangular(1m, 2m, 5m)`, `exponential(mean=4m)`, or a distribution object in seconds. On a task, its processing time; on a `timer` or a `message`, how long until it happens. |
 | `steps[].resources` | Names, or `{ name, quantity }`. With several, `selection: "or"` takes any one of them. |
+| `steps[].boundary` | Tasks only: deadlines on the task, `{ id, type: "timer", name?, duration?, interrupting?, to \| end }`. `interrupting` (default `true`) cuts the task short; `false` leaves it running and starts a parallel path. `to` is the step the boundary leads to; `end` (`true` or `"terminate"`) ends that path with an end event `EndEvent_<boundary id>`. The `duration` counts from the moment a case reaches the task, waiting for resources included. |
+| `steps[].notes` | Text annotations attached to the step. |
+| `steps[].data` | Activities only: data objects the step reads (`direction: "in"`) or writes (`"out"`), `{ name, direction }`. Steps naming the same object share it. |
 
 The order of the list is the flow. Start and end events are added; ids such as `StartEvent`,
 `EndEvent_<step>` and `Flow_<from>_<to>` are Lila's. `get_process_outline` returns the same

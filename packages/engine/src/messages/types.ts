@@ -338,6 +338,7 @@ export interface CliMessages {
   outlineBranchesNeedGateway: (step: string, type: string) => string;
   outlineManyNextNeedGateway: (step: string) => string;
   outlineBranchTarget: (step: string) => string;
+  outlineBoundaryTarget: (boundary: string) => string;
   outlineEndWithNext: (step: string) => string;
   outlineFieldNotApplicable: (step: string, field: string, type: string) => string;
   outlineProbabilityOnAnd: (step: string) => string;
@@ -353,12 +354,16 @@ export interface CliMessages {
   outlineNotObject: () => string;
   outlineNotText: () => string;
   outlineNotTextList: () => string;
+  outlineNotList: () => string;
   outlineNotBoolean: () => string;
   outlineNotProbability: () => string;
   outlineNotQuantity: () => string;
   outlineNoSteps: () => string;
   outlineBadType: (value: string, accepted: string) => string;
   outlineBadNext: () => string;
+  outlineBadFrom: () => string;
+  outlineBadEnd: () => string;
+  outlineBadChoice: (accepted: string) => string;
   outlineBadResource: () => string;
   outlineBadSelection: () => string;
   outlineNoWayOut: (step: string) => string;
@@ -394,6 +399,7 @@ export interface CliMessages {
   editIdTaken: (id: string) => string;
   editAfterAndBetween: () => string;
   editAfterAndBefore: () => string;
+  editBeforeOrAfter: () => string;
   editAfterEnd: (id: string) => string;
   editAfterAmbiguous: (id: string, count: number) => string;
   editNoFlowBetween: (from: string, to: string) => string;

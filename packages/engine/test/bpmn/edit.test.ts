@@ -11,7 +11,7 @@ import { BpmnModdle } from 'bpmn-moddle';
 import { describe, expect, test } from 'vitest';
 
 import { annotateElement, readAnnotations } from '../../src/bpmn/annotate.js';
-import { editBpmn, EditError, type EditOperation } from '../../src/bpmn/edit.js';
+import { editBpmn, EditError, EditOperationsSchema, type EditOperation } from '../../src/bpmn/edit.js';
 import { bpmnToOutline, outlineToBpmn } from '../../src/bpmn/outline.js';
 import { validateBpmnXml } from '../../src/bpmn/validate-report.js';
 import type { ScenarioDocument } from '../../src/project/types.js';
@@ -576,5 +576,116 @@ describe('models made elsewhere', () => {
     const p1 = after.shapes.get('sid-66751F1E-EEB9-4BA7-9FDA-7965A1CA9CD1')!;
     const p2 = after.shapes.get(pool2[0]!)!;
     expect(p1.x + p1.width <= p2.x || p1.y + p1.height <= p2.y).toBe(true);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * Lote Q (#631, #638): the reader takes the new operations and fields
+ * ------------------------------------------------------------------ */
+
+describe('the operations reader: addBoundary, lanes, annotations, data objects, default, end types (#631, #638)', () => {
+  test('the zod schema accepts every new operation', () => {
+    const ops: EditOperation[] = [
+      { op: 'add', step: { id: 'mail', type: 'sendTask' }, after: 'receive' },
+      { op: 'setType', id: 'EndEvent_issue', type: 'terminate' },
+      { op: 'connect', from: 'ok', to: 'issue', default: true },
+      { op: 'addBoundary', on: 'check', boundary: { id: 'sla', type: 'timer', duration: '48h', interrupting: false, to: 'reject' } },
+      { op: 'removeLane', lane: 'Customer', moveStepsTo: 'Analyst' },
+      { op: 'moveLane', lane: 'Analyst', before: 'Customer' },
+      { op: 'annotate', on: 'check', text: 'Within 48 h' },
+      { op: 'removeAnnotation', on: 'check', text: 'Within 48 h' },
+      { op: 'addDataObject', name: 'Claim file', on: 'check', direction: 'in' },
+      { op: 'removeDataObject', name: 'Claim file' },
+      { op: 'rename', id: 'Customer', name: 'Client' },
+    ];
+    expect(EditOperationsSchema.safeParse(ops).success).toBe(true);
+  });
+
+  test('well-formed ones pass the reader: only the not-yet-built ones are refused', async () => {
+    const { xml, scenario } = await credit();
+    const error = await refused(
+      xml,
+      [
+        { op: 'add', step: { id: 'mail', type: 'sendTask' }, after: 'receive' },
+        { op: 'setType', id: 'EndEvent_issue', type: 'terminate' },
+        { op: 'connect', from: 'ok', to: 'issue', default: true },
+        { op: 'addBoundary', on: 'check', boundary: { id: 'sla', type: 'timer', duration: '48h', end: 'terminate' } },
+        { op: 'removeLane', lane: 'Customer' },
+        { op: 'moveLane', lane: 'Analyst', after: 'Customer' },
+        { op: 'annotate', on: 'check', text: 'Within 48 h' },
+        { op: 'removeAnnotation', on: 'check', text: 'Within 48 h' },
+        { op: 'addDataObject', name: 'Claim file', on: 'check', direction: 'out' },
+        { op: 'removeDataObject', name: 'Claim file', on: 'check' },
+      ],
+      { scenario },
+    );
+    expect(error.issues.every((i) => i.message.startsWith('not implemented yet'))).toBe(true);
+    expect(error.issues.map((i) => [i.op, i.path])).toEqual([
+      [0, 'step.type'],
+      [1, 'type'],
+      [2, 'default'],
+      [3, 'op'],
+      [4, 'op'],
+      [5, 'op'],
+      [6, 'op'],
+      [7, 'op'],
+      [8, 'op'],
+      [9, 'op'],
+    ]);
+  });
+
+  test('every malformed new operation, at its index and path, at once', async () => {
+    const { xml, scenario } = await credit();
+    const error = await refused(
+      xml,
+      [
+        { op: 'addBoundary', on: 'check' },
+        { op: 'addBoundary', on: '', boundary: { id: 'sla', type: 'message', to: 'reject', end: true, extra: 1 } },
+        { op: 'addBoundary', on: 'check', boundary: 'sla' },
+        { op: 'removeLane', moveStepsTo: 3 },
+        { op: 'moveLane', lane: 'Analyst' },
+        { op: 'moveLane', lane: 'Analyst', before: 'Customer', after: 'Customer' },
+        { op: 'annotate', on: 'check' },
+        { op: 'removeAnnotation', text: 'x', at: 'check' },
+        { op: 'addDataObject', name: 'File', on: 'check', direction: 'both' },
+        { op: 'removeDataObject', on: 'check' },
+        { op: 'connect', from: 'ok', to: 'issue', default: 'yes' },
+        { op: 'setType', id: 'issue', type: 'endEvent' },
+        { op: 'add', step: { id: 'n', notes: ['x'], boundary: [] } },
+      ],
+      { scenario },
+    );
+    expect(error.issues.map((i) => [i.op, i.path, i.message])).toEqual([
+      [0, 'boundary', 'must be an object.'],
+      [1, 'on', 'must be a non-empty text.'],
+      [1, 'boundary.extra', 'unknown field "extra".'],
+      [1, 'boundary.type', 'must be one of timer.'],
+      [1, 'boundary', 'boundary "sla" needs exactly one of "to" (a step id) and "end".'],
+      [2, 'boundary', 'must be an object.'],
+      [3, 'lane', 'must be a non-empty text.'],
+      [3, 'moveStepsTo', 'must be a non-empty text.'],
+      [4, 'before', 'give "before" or "after": the lane it goes next to.'],
+      [5, 'before', 'use either "after" or "before", not both.'],
+      [6, 'text', 'must be a non-empty text.'],
+      [7, 'at', 'unknown field "at".'],
+      [7, 'on', 'must be a non-empty text.'],
+      [8, 'direction', 'must be one of in, out.'],
+      [9, 'name', 'must be a non-empty text.'],
+      [10, 'default', 'must be true or false.'],
+      [11, 'type', expect.stringContaining('"endEvent" is not a step type; use one of task, userTask')],
+      [12, 'step.notes', 'unknown field "notes".'],
+      [12, 'step.boundary', 'unknown field "boundary".'],
+    ]);
+    expect(error.issues[16]!.message).toContain(', end, terminate.');
+  });
+
+  test('es messages for the new ones', async () => {
+    const { xml, scenario } = await credit();
+    const error = await refused(xml, [{ op: 'moveLane', lane: 'Analyst' }, { op: 'addDataObject', name: 'F', on: 'check', direction: 'x' }], {
+      scenario,
+      locale: 'es',
+    });
+    expect(error.message).toContain('operations[0].before: indica "before" o "after": el carril junto al que va.');
+    expect(error.message).toContain('operations[1].direction: debe ser uno de in, out.');
   });
 });

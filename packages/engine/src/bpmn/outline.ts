@@ -49,34 +49,113 @@ export const OUTLINE_STEP_TYPES = [
   'task',
   'userTask',
   'serviceTask',
+  'sendTask',
+  'receiveTask',
+  'manualTask',
+  'scriptTask',
+  'businessRuleTask',
   'xor',
   'and',
   'or',
+  'eventGateway',
   'timer',
+  'message',
   'subprocess',
   'callActivity',
 ] as const;
 export type OutlineStepType = (typeof OUTLINE_STEP_TYPES)[number];
 
-const GATEWAYS: ReadonlySet<OutlineStepType> = new Set(['xor', 'and', 'or']);
-/** Steps that do work: they take a duration and resources. */
-const WORK: ReadonlySet<OutlineStepType> = new Set(['task', 'userTask', 'serviceTask', 'callActivity']);
+/** `starts[].type`: a plain start event or a timer start event. */
+export const OUTLINE_START_TYPES = ['none', 'timer'] as const;
+/** `boundary[].type`: only the timer, the boundary event the simulator runs (SEMANTICS R-BND). */
+export const OUTLINE_BOUNDARY_TYPES = ['timer'] as const;
+/** `data[].direction`: the activity reads the data object (`in`) or writes it (`out`). */
+export const OUTLINE_DATA_DIRECTIONS = ['in', 'out'] as const;
+
+export const GATEWAYS: ReadonlySet<OutlineStepType> = new Set(['xor', 'and', 'or', 'eventGateway']);
+/** Steps that do work: they take a duration, resources and boundary events. */
+export const WORK: ReadonlySet<OutlineStepType> = new Set([
+  'task',
+  'userTask',
+  'serviceTask',
+  'sendTask',
+  'receiveTask',
+  'manualTask',
+  'scriptTask',
+  'businessRuleTask',
+  'callActivity',
+]);
+
+/** The BPMN element of each step type (`timer` and `message` differ by their event definition). */
+export const BPMN_TYPE: Readonly<Record<OutlineStepType, string>> = {
+  task: 'bpmn:Task',
+  userTask: 'bpmn:UserTask',
+  serviceTask: 'bpmn:ServiceTask',
+  sendTask: 'bpmn:SendTask',
+  receiveTask: 'bpmn:ReceiveTask',
+  manualTask: 'bpmn:ManualTask',
+  scriptTask: 'bpmn:ScriptTask',
+  businessRuleTask: 'bpmn:BusinessRuleTask',
+  callActivity: 'bpmn:CallActivity',
+  xor: 'bpmn:ExclusiveGateway',
+  and: 'bpmn:ParallelGateway',
+  or: 'bpmn:InclusiveGateway',
+  eventGateway: 'bpmn:EventBasedGateway',
+  timer: 'bpmn:IntermediateCatchEvent',
+  message: 'bpmn:IntermediateCatchEvent',
+  subprocess: 'bpmn:SubProcess',
+};
 
 const OutlineResourceSchema = z.union([
   z.string().min(1),
   z.strictObject({ name: z.string().min(1), quantity: z.int().min(1).optional() }),
 ]);
 
+const OutlineDurationSchema = z
+  .union([z.string().min(1), z.number().nonnegative(), DistributionSchema])
+  .describe(
+    'Seconds, "20m", "normal(20m, 5m)", "triangular(1m, 2m, 5m)", "exponential(mean=4m)", or a scenario distribution object in seconds.',
+  );
+
+/** `end`: `true` adds a plain end event; `"terminate"` a terminate end event, which ends the whole case. */
+const OutlineEndSchema = z.union([z.boolean(), z.literal('terminate')]);
+
 const OutlineBranchSchema = z.strictObject({
   label: z.string().optional().describe('Name of the flow, e.g. "Yes".'),
   to: z.string().min(1).optional().describe('Id of the step this branch goes to.'),
-  end: z.boolean().optional().describe('true instead of `to`: this branch ends the process.'),
+  end: OutlineEndSchema.optional().describe('true (or "terminate") instead of `to`: this branch ends the process.'),
   probability: z
     .number()
     .min(0)
     .max(1)
     .optional()
     .describe('XOR/OR only: probability of this branch in the base scenario. Left-out XOR branches share the rest.'),
+  default: z.boolean().optional().describe('XOR/OR only: true marks the default flow of the gateway (one per gateway).'),
+});
+
+export const OutlineStartSchema = z.strictObject({
+  id: z.string().min(1).describe('BPMN id of the start event; its arrivals in the scenario key on it.'),
+  name: z.string().optional(),
+  type: z.enum(OUTLINE_START_TYPES).optional().describe('Defaults to none (a plain start event); timer is a timer start event.'),
+  lane: z.string().optional().describe('Lane name; defaults to the lane of the first step it leads to.'),
+});
+
+export const OutlineBoundarySchema = z.strictObject({
+  id: z.string().min(1).describe('BPMN id of the boundary event; its delay in the scenario keys on it.'),
+  type: z.enum(OUTLINE_BOUNDARY_TYPES).describe('timer: a deadline on the step.'),
+  name: z.string().optional(),
+  duration: OutlineDurationSchema.optional().describe('The deadline, counted from the moment the step starts.'),
+  interrupting: z
+    .boolean()
+    .optional()
+    .describe('true (default): the deadline cuts the step short. false: the step keeps running and a parallel path starts.'),
+  to: z.string().min(1).optional().describe('Id of the step the boundary leads to.'),
+  end: OutlineEndSchema.optional().describe('true (or "terminate") instead of `to`: the boundary path ends the process.'),
+});
+
+export const OutlineDataSchema = z.strictObject({
+  name: z.string().min(1).describe('Name of the data object; steps naming the same one share it.'),
+  direction: z.enum(OUTLINE_DATA_DIRECTIONS).describe('in: the step reads it. out: the step writes it.'),
 });
 
 const OutlineStepSchema = z.strictObject({
@@ -84,19 +163,20 @@ const OutlineStepSchema = z.strictObject({
   name: z.string().optional(),
   lane: z.string().optional().describe('Lane name; defaults to the previous step\'s lane.'),
   type: z.enum(OUTLINE_STEP_TYPES).optional().describe('Defaults to task.'),
+  from: z
+    .union([z.string().min(1), z.array(z.string().min(1)).min(1)])
+    .optional()
+    .describe('With `starts`: id(s) of the start event(s) that lead to this step.'),
   next: z
     .union([z.string().min(1), z.array(z.string().min(1)).min(1)])
     .optional()
     .describe('Id(s) of the following step(s) when it is not simply the next one in the list.'),
   branches: z.array(OutlineBranchSchema).min(1).optional().describe('Gateways only: outgoing branches.'),
-  end: z.boolean().optional().describe('true: the process ends after this step.'),
-  duration: z
-    .union([z.string().min(1), z.number().nonnegative(), DistributionSchema])
-    .optional()
-    .describe(
-      'Processing time (tasks) or delay (timer): seconds, "20m", "normal(20m, 5m)", "triangular(1m, 2m, 5m)", ' +
-        '"exponential(mean=4m)", or a scenario distribution object in seconds.',
-    ),
+  end: OutlineEndSchema.optional().describe('true: the process ends after this step. "terminate": it ends with a terminate end event.'),
+  duration: OutlineDurationSchema.optional().describe(
+    'Processing time (tasks) or delay (timer, message): seconds, "20m", "normal(20m, 5m)", "triangular(1m, 2m, 5m)", ' +
+      '"exponential(mean=4m)", or a scenario distribution object in seconds.',
+  ),
   resources: z
     .array(OutlineResourceSchema)
     .min(1)
@@ -106,12 +186,20 @@ const OutlineStepSchema = z.strictObject({
     .enum(['and', 'or'])
     .optional()
     .describe('With several resources: "and" needs all of them (default), "or" any one.'),
+  boundary: z.array(OutlineBoundarySchema).min(1).optional().describe('Tasks only: boundary events on the step (deadlines).'),
+  notes: z.array(z.string().min(1)).min(1).optional().describe('Text annotations attached to the step.'),
+  data: z.array(OutlineDataSchema).min(1).optional().describe('Activities only: data objects the step reads or writes.'),
 });
 
 /** The outline as an agent writes it (#97). Exported for the MCP tools' input schema. */
 export const OutlineSchema = z.strictObject({
   name: z.string().min(1).describe('Name of the process.'),
   lanes: z.array(z.string().min(1)).optional().describe('Lane names, top to bottom.'),
+  starts: z
+    .array(OutlineStartSchema)
+    .min(1)
+    .optional()
+    .describe('Start events, when there is more than one or one is a timer; steps name theirs with `from`. Default: one plain start before the first step.'),
   steps: z.array(OutlineStepSchema).min(1).describe('The steps in flow order.'),
 });
 
@@ -119,29 +207,61 @@ export type Outline = z.input<typeof OutlineSchema>;
 export type OutlineStep = z.input<typeof OutlineStepSchema>;
 
 export type NormalResource = string | { name: string; quantity: number };
+export type OutlineStart = z.input<typeof OutlineStartSchema>;
+export type OutlineBoundary = z.input<typeof OutlineBoundarySchema>;
+export type OutlineData = z.input<typeof OutlineDataSchema>;
+
+/** How a path ends: a plain end event, or a terminate end event that ends the whole case. */
+export type NormalEnd = true | 'terminate';
 export interface NormalBranch {
   label?: string;
-  /** The step it goes to; absent when the branch ends the process (`end: true`). */
+  /** The step it goes to; absent when the branch ends the process (`end`). */
   to?: string;
-  end?: true;
+  end?: NormalEnd;
   probability?: number;
+  /** The gateway's default flow. */
+  default?: true;
+}
+export interface NormalStart {
+  id: string;
+  name?: string;
+  /** Omitted for a plain start event. */
+  type?: 'timer';
+  lane?: string;
+}
+export interface NormalBoundary {
+  id: string;
+  type: 'timer';
+  name?: string;
+  duration?: Distribution;
+  /** Present only when it is `false` (the default is interrupting). */
+  interrupting?: false;
+  to?: string;
+  end?: NormalEnd;
 }
 export interface NormalStep {
   id: string;
   name?: string;
   type?: Exclude<OutlineStepType, 'task'>;
   lane?: string;
+  /** With `starts`: the start(s) that lead here (one id, or a list). */
+  from?: string | string[];
   next?: string | string[];
   branches?: NormalBranch[];
-  end?: true;
+  end?: NormalEnd;
   duration?: Distribution;
   resources?: NormalResource[];
   selection?: 'and' | 'or';
+  boundary?: NormalBoundary[];
+  notes?: string[];
+  data?: OutlineData[];
 }
 /** The canonical outline (see the header): what `normalizeOutline` and `bpmnToOutline` return. */
 export interface NormalOutline {
   name: string;
   lanes?: string[];
+  /** Omitted in the trivial case: one plain start event `StartEvent`, with no name. */
+  starts?: NormalStart[];
   steps: NormalStep[];
 }
 
@@ -265,32 +385,65 @@ export function parseDuration(value: string | number | Distribution): Distributi
 interface RawBranch {
   label?: string | undefined;
   to?: string | undefined;
-  end?: boolean | undefined;
+  end?: boolean | 'terminate' | undefined;
   probability?: number | undefined;
+  default?: boolean | undefined;
+}
+interface RawStart {
+  id: string;
+  name?: string | undefined;
+  type?: (typeof OUTLINE_START_TYPES)[number] | undefined;
+  lane?: string | undefined;
+}
+/** A boundary event as read, in an outline step or in `edit_process`'s `addBoundary`. */
+export interface RawBoundary {
+  id: string;
+  type?: (typeof OUTLINE_BOUNDARY_TYPES)[number] | undefined;
+  name?: string | undefined;
+  duration?: unknown;
+  interrupting?: boolean | undefined;
+  to?: string | undefined;
+  end?: boolean | 'terminate' | undefined;
+}
+interface RawData {
+  name: string;
+  direction: (typeof OUTLINE_DATA_DIRECTIONS)[number];
 }
 interface RawStep {
   id: string;
   name?: string | undefined;
   lane?: string | undefined;
   type?: OutlineStepType | undefined;
+  from?: string[] | undefined;
+  /** `from` was written as one id (paths say `from`, not `from[0]`). */
+  fromSingle?: boolean;
   next?: string[] | undefined;
   /** `next` was written as one id (paths say `next`, not `next[0]`). */
   nextSingle?: boolean;
   branches?: RawBranch[] | undefined;
-  end?: boolean | undefined;
+  end?: boolean | 'terminate' | undefined;
   duration?: unknown;
   resources?: { name: string; quantity: number }[] | undefined;
   selection?: 'and' | 'or' | undefined;
+  boundary?: RawBoundary[] | undefined;
+  notes?: string[] | undefined;
+  data?: RawData[] | undefined;
 }
 interface RawOutline {
   name: string;
   lanes?: string[] | undefined;
+  starts?: RawStart[] | undefined;
   steps: RawStep[];
 }
 
-const STEP_KEYS = new Set(['id', 'name', 'lane', 'type', 'next', 'branches', 'end', 'duration', 'resources', 'selection']);
-const BRANCH_KEYS = new Set(['label', 'to', 'end', 'probability']);
-const ROOT_KEYS = new Set(['name', 'lanes', 'steps']);
+const STEP_KEYS = new Set([
+  'id', 'name', 'lane', 'type', 'from', 'next', 'branches', 'end', 'duration', 'resources', 'selection', 'boundary', 'notes', 'data',
+]);
+const BRANCH_KEYS = new Set(['label', 'to', 'end', 'probability', 'default']);
+const ROOT_KEYS = new Set(['name', 'lanes', 'starts', 'steps']);
+const START_KEYS = new Set(['id', 'name', 'type', 'lane']);
+const BOUNDARY_KEYS = new Set(['id', 'type', 'name', 'duration', 'interrupting', 'to', 'end']);
+const DATA_KEYS = new Set(['name', 'direction']);
 
 /** Probabilities in the normal form carry no floating-point noise (0.7, not 0.7000000000000001). */
 const round9 = (value: number): number => Math.round(value * 1e9) / 1e9;
@@ -298,6 +451,68 @@ const round9 = (value: number): number => Math.round(value * 1e9) / 1e9;
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 const isText = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '';
+/** `end` as read: `true` or `"terminate"` end the path; `false` or absent do not. */
+const ends = (value: boolean | 'terminate' | undefined): boolean => value === true || value === 'terminate';
+
+/**
+ * The field readers `readOutline` is made of; each problem goes to `bad` (path, catalog message)
+ * and the field reads as `undefined`. Shared with `edit.ts`: `addBoundary` takes a boundary as in
+ * an outline.
+ */
+export function outlineReaders(C: CliMessages, bad: (path: string, message: string) => undefined) {
+  const unknownKeys = (value: Record<string, unknown>, keys: ReadonlySet<string>, path: string): void => {
+    for (const key of Object.keys(value)) if (!keys.has(key)) bad(path === '' ? key : `${path}.${key}`, C.outlineUnknownKey(key));
+  };
+  const text = (value: unknown, path: string): string | undefined =>
+    value === undefined ? undefined : isText(value) ? value : bad(path, C.outlineNotText());
+  /** A required non-empty text; `''` when it is missing or wrong. */
+  const required = (value: unknown, path: string): string => (isText(value) ? value : (bad(path, C.outlineNotText()) ?? ''));
+  const optionalString = (value: unknown, path: string): string | undefined =>
+    value === undefined ? undefined : typeof value === 'string' ? value : bad(path, C.outlineNotText());
+  const boolean = (value: unknown, path: string): boolean | undefined =>
+    value === undefined ? undefined : typeof value === 'boolean' ? value : bad(path, C.outlineNotBoolean());
+  const end = (value: unknown, path: string): boolean | 'terminate' | undefined =>
+    value === undefined || typeof value === 'boolean' || value === 'terminate' ? value : bad(path, C.outlineBadEnd());
+  /** One of `accepted`; required (a missing value is an issue too). */
+  const choice = <T extends string>(value: unknown, accepted: readonly T[], path: string): T | undefined =>
+    (accepted as readonly unknown[]).includes(value) ? (value as T) : bad(path, C.outlineBadChoice(accepted.join(', ')));
+  /** A non-empty list, each entry read by `entry` (and left out when it is wrong). */
+  const list = <T>(
+    value: unknown,
+    path: string,
+    entry: (item: unknown, at: string) => T | undefined,
+    notList: string = C.outlineNotList(),
+  ): T[] | undefined => {
+    if (value === undefined) return undefined;
+    if (!Array.isArray(value) || value.length === 0) return bad(path, notList);
+    const out: T[] = [];
+    value.forEach((item, k) => {
+      const read = entry(item, `${path}[${k}]`);
+      if (read !== undefined) out.push(read);
+    });
+    return out;
+  };
+  const boundary = (value: unknown, at: string): RawBoundary | undefined => {
+    if (!isObject(value)) return bad(at, C.outlineNotObject());
+    unknownKeys(value, BOUNDARY_KEYS, at);
+    const read: RawBoundary = {
+      id: required(value['id'], `${at}.id`),
+      type: choice(value['type'], OUTLINE_BOUNDARY_TYPES, `${at}.type`),
+      name: optionalString(value['name'], `${at}.name`),
+      duration: value['duration'],
+      interrupting: boolean(value['interrupting'], `${at}.interrupting`),
+      to: text(value['to'], `${at}.to`),
+      end: end(value['end'], `${at}.end`),
+    };
+    // Exactly one way out: `to` a step, or `end`. Only checked when both fields read well.
+    const readWell = (value['to'] === undefined || read.to !== undefined) && (value['end'] === undefined || read.end !== undefined);
+    if (readWell && ends(read.end) === (read.to !== undefined)) {
+      bad(at, C.outlineBoundaryTarget(read.id));
+    }
+    return read;
+  };
+  return { unknownKeys, text, required, optionalString, boolean, end, choice, list, boundary };
+}
 
 /**
  * Reads `input` in one pass, recording every problem as an issue with a catalog message and a
@@ -309,15 +524,7 @@ function readOutline(input: unknown, C: CliMessages, issues: OutlineIssue[]): Ra
     issues.push({ path, message });
     return undefined;
   };
-  const unknownKeys = (value: Record<string, unknown>, keys: ReadonlySet<string>, path: string): void => {
-    for (const key of Object.keys(value)) if (!keys.has(key)) bad(path === '' ? key : `${path}.${key}`, C.outlineUnknownKey(key));
-  };
-  const text = (value: unknown, path: string): string | undefined =>
-    value === undefined ? undefined : isText(value) ? value : bad(path, C.outlineNotText());
-  const optionalString = (value: unknown, path: string): string | undefined =>
-    value === undefined ? undefined : typeof value === 'string' ? value : bad(path, C.outlineNotText());
-  const boolean = (value: unknown, path: string): boolean | undefined =>
-    value === undefined ? undefined : typeof value === 'boolean' ? value : bad(path, C.outlineNotBoolean());
+  const { unknownKeys, text, required, optionalString, boolean, end, choice, list, boundary } = outlineReaders(C, bad);
 
   if (!isObject(input)) {
     bad('(root)', C.outlineNotObject());
@@ -333,9 +540,19 @@ function readOutline(input: unknown, C: CliMessages, issues: OutlineIssue[]): Ra
       input['lanes'].forEach((lane, i) => (isText(lane) ? lanes!.push(lane) : bad(`lanes[${i}]`, C.outlineNotText())));
     }
   }
+  const starts = list(input['starts'], 'starts', (value, at): RawStart | undefined => {
+    if (!isObject(value)) return bad(at, C.outlineNotObject());
+    unknownKeys(value, START_KEYS, at);
+    return {
+      id: required(value['id'], `${at}.id`),
+      name: optionalString(value['name'], `${at}.name`),
+      type: value['type'] === undefined ? undefined : choice(value['type'], OUTLINE_START_TYPES, `${at}.type`),
+      lane: text(value['lane'], `${at}.lane`),
+    };
+  });
   if (!Array.isArray(input['steps']) || input['steps'].length === 0) {
     bad('steps', C.outlineNoSteps());
-    return { name, lanes, steps: [] };
+    return { name, lanes, starts, steps: [] };
   }
 
   const steps = (input['steps'] as unknown[]).map((value, index): RawStep => {
@@ -352,6 +569,12 @@ function readOutline(input: unknown, C: CliMessages, issues: OutlineIssue[]): Ra
       if ((OUTLINE_STEP_TYPES as readonly unknown[]).includes(value['type'])) step.type = value['type'] as OutlineStepType;
       else bad(`${at}.type`, C.outlineBadType(String(value['type']), OUTLINE_STEP_TYPES.join(', ')));
     }
+    const from = value['from'];
+    if (isText(from)) {
+      step.from = [from];
+      step.fromSingle = true;
+    } else if (Array.isArray(from) && from.length > 0 && from.every(isText)) step.from = from as string[];
+    else if (from !== undefined) bad(`${at}.from`, C.outlineBadFrom());
     const next = value['next'];
     if (isText(next)) {
       step.next = [next];
@@ -369,18 +592,19 @@ function readOutline(input: unknown, C: CliMessages, issues: OutlineIssue[]): Ra
           return {
             label: optionalString(b['label'], `${bat}.label`),
             to: text(b['to'], `${bat}.to`),
-            end: boolean(b['end'], `${bat}.end`),
+            end: end(b['end'], `${bat}.end`),
             probability:
               probability === undefined
                 ? undefined
                 : typeof probability === 'number' && probability >= 0 && probability <= 1
                   ? probability
                   : bad(`${bat}.probability`, C.outlineNotProbability()),
+            default: boolean(b['default'], `${bat}.default`),
           };
         });
       }
     }
-    step.end = boolean(value['end'], `${at}.end`);
+    step.end = end(value['end'], `${at}.end`);
     step.duration = value['duration'];
     if (value['resources'] !== undefined) {
       if (!Array.isArray(value['resources']) || value['resources'].length === 0) bad(`${at}.resources`, C.outlineBadResource());
@@ -401,14 +625,48 @@ function readOutline(input: unknown, C: CliMessages, issues: OutlineIssue[]): Ra
       if (value['selection'] === 'and' || value['selection'] === 'or') step.selection = value['selection'];
       else bad(`${at}.selection`, C.outlineBadSelection());
     }
+    step.boundary = list(value['boundary'], `${at}.boundary`, boundary);
+    step.notes = list(value['notes'], `${at}.notes`, (note, nat) => (isText(note) ? note : bad(nat, C.outlineNotText())), C.outlineNotTextList());
+    step.data = list(value['data'], `${at}.data`, (entry, dat): RawData | undefined => {
+      if (!isObject(entry)) return bad(dat, C.outlineNotObject());
+      unknownKeys(entry, DATA_KEYS, dat);
+      const dataName = required(entry['name'], `${dat}.name`);
+      const direction = choice(entry['direction'], OUTLINE_DATA_DIRECTIONS, `${dat}.direction`);
+      return dataName === '' || direction === undefined ? undefined : { name: dataName, direction };
+    });
     return step;
   });
-  return { name, lanes, steps };
+  return { name, lanes, starts, steps };
+}
+
+/**
+ * Lote Q contract commit (#631/#638): the reader accepts the new constructs, the build does not
+ * yet. Each use is refused at its path until the implementation lands.
+ */
+const NOT_IMPLEMENTED = 'not implemented yet (#631/#638).';
+const NEW_STEP_TYPES: ReadonlySet<OutlineStepType> = new Set([
+  'sendTask', 'receiveTask', 'manualTask', 'scriptTask', 'businessRuleTask', 'eventGateway', 'message',
+]);
+function notImplemented(outline: RawOutline, issues: OutlineIssue[]): void {
+  const stub = (path: string): void => void issues.push({ path, message: NOT_IMPLEMENTED });
+  if (outline.starts !== undefined) stub('starts');
+  outline.steps.forEach((step, index) => {
+    const at = `steps[${index}]`;
+    if (step.type !== undefined && NEW_STEP_TYPES.has(step.type)) stub(`${at}.type`);
+    if (step.from !== undefined) stub(`${at}.from`);
+    if (step.end === 'terminate') stub(`${at}.end`);
+    step.branches?.forEach((b, k) => {
+      if (b.end === 'terminate') stub(`${at}.branches[${k}].end`);
+      if (b.default !== undefined) stub(`${at}.branches[${k}].default`);
+    });
+    for (const field of ['boundary', 'notes', 'data'] as const) if (step[field] !== undefined) stub(`${at}.${field}`);
+  });
 }
 
 function toGraph(input: unknown, C: CliMessages): Graph {
   const issues: OutlineIssue[] = [];
   const outline = readOutline(input, C, issues);
+  notImplemented(outline, issues);
   const at = (index: number, field?: string): string => `steps[${index}]${field === undefined ? '' : `.${field}`}`;
 
   const lanes = [...(outline.lanes ?? [])];
@@ -443,7 +701,7 @@ function toGraph(input: unknown, C: CliMessages): Graph {
     if (lane === undefined && lanes.length > 0) lane = lanes[0];
     previousLane = lane;
 
-    if (step.end === true && (step.next !== undefined || step.branches !== undefined)) {
+    if (ends(step.end) && (step.next !== undefined || step.branches !== undefined)) {
       issues.push({ path: at(index, 'end'), message: C.outlineEndWithNext(step.id) });
     }
     if (step.branches !== undefined && !gateway) {
@@ -458,10 +716,10 @@ function toGraph(input: unknown, C: CliMessages): Graph {
     }
 
     let succ: Successor[];
-    if (step.end === true) succ = [{ to: END }];
+    if (ends(step.end)) succ = [{ to: END }];
     else if (step.branches !== undefined) {
       succ = step.branches.map((b, k) => {
-        if ((b.end === true) === (b.to !== undefined)) {
+        if (ends(b.end) === (b.to !== undefined)) {
           issues.push({ path: at(index, `branches[${k}]`), message: C.outlineBranchTarget(step.id) });
         }
         return { to: b.to ?? END, label: b.label, probability: b.probability, path: at(index, `branches[${k}].to`) };
@@ -493,7 +751,7 @@ function toGraph(input: unknown, C: CliMessages): Graph {
 
     let duration: Distribution | undefined;
     if (step.duration !== undefined) {
-      if (!WORK.has(type) && type !== 'timer') {
+      if (!WORK.has(type) && type !== 'timer' && type !== 'message') {
         issues.push({ path: at(index, 'duration'), message: C.outlineFieldNotApplicable(step.id, 'duration', type) });
       }
       duration = parseDuration(step.duration as string | number | Distribution) ?? undefined;
@@ -588,18 +846,6 @@ const START_ID = 'StartEvent';
 /** Id of the `k`-th end event after `step` (a gateway may have several branches that end). */
 const endId = (step: string, k = 1): string => (k === 1 ? `EndEvent_${step}` : `EndEvent_${step}_${k}`);
 const endCount = (step: GraphStep): number => step.succ.filter((s) => s.to === END).length;
-
-const BPMN_TYPE: Readonly<Record<OutlineStepType, string>> = {
-  task: 'bpmn:Task',
-  userTask: 'bpmn:UserTask',
-  serviceTask: 'bpmn:ServiceTask',
-  callActivity: 'bpmn:CallActivity',
-  xor: 'bpmn:ExclusiveGateway',
-  and: 'bpmn:ParallelGateway',
-  or: 'bpmn:InclusiveGateway',
-  timer: 'bpmn:IntermediateCatchEvent',
-  subprocess: 'bpmn:SubProcess',
-};
 
 
 export interface OutlineToBpmnOptions {

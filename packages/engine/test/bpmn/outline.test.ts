@@ -11,7 +11,9 @@ import { describe, expect, test } from 'vitest';
 import {
   bpmnToOutline,
   normalizeOutline,
+  OUTLINE_STEP_TYPES,
   OutlineError,
+  OutlineSchema,
   outlineToBpmn,
   parseDuration,
 } from '../../src/bpmn/outline.js';
@@ -482,5 +484,147 @@ describe('QA of #553', () => {
     const file = readdirSync(examples).find((f) => f.endsWith('.bpmn'))!;
     const { outline } = await bpmnToOutline(readFileSync(examples + file, 'utf8'));
     expect(outline.name).not.toBe('');
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * Lote Q (#631, #638): the reader takes the new constructs
+ * ------------------------------------------------------------------ */
+
+describe('the outline reader: starts, terminate, default flows, new types, boundary, notes, data (#631, #638)', () => {
+  async function refusedWith(outline: unknown, locale?: 'es'): Promise<{ path: string; message: string }[]> {
+    try {
+      await outlineToBpmn(outline, { locale });
+    } catch (error) {
+      expect(error).toBeInstanceOf(OutlineError);
+      return (error as OutlineError).issues.map(({ path, message }) => ({ path, message }));
+    }
+    throw new Error('expected an OutlineError');
+  }
+
+  /** The claim escalation of the docs, with every new field once. */
+  const ESCALATION = {
+    name: 'Claim',
+    lanes: ['Intake', 'Adjuster', 'Supervisor'],
+    starts: [
+      { id: 'web', name: 'Claim filed online', lane: 'Intake' },
+      { id: 'nightly', name: 'Nightly batch', type: 'timer', lane: 'Intake' },
+    ],
+    steps: [
+      { id: 'register', type: 'manualTask', name: 'Register claim', lane: 'Intake', from: ['web', 'nightly'], notes: ['Paper claims too'] },
+      {
+        id: 'assess',
+        type: 'userTask',
+        name: 'Assess claim',
+        lane: 'Adjuster',
+        duration: '2h',
+        data: [{ name: 'Claim file', direction: 'in' }, { name: 'Assessment', direction: 'out' }],
+        boundary: [{ id: 'sla', type: 'timer', name: '48 h', duration: '48h', interrupting: false, to: 'escalate' }],
+      },
+      {
+        id: 'ok',
+        type: 'xor',
+        name: 'Covered?',
+        branches: [{ label: 'Yes', to: 'notify', default: true }, { label: 'Fraud', end: 'terminate', probability: 0.05 }],
+      },
+      { id: 'notify', type: 'sendTask', name: 'Notify customer', next: 'reply' },
+      { id: 'reply', type: 'eventGateway', name: 'Reply?', branches: [{ to: 'answer' }, { to: 'timeout' }] },
+      { id: 'answer', type: 'message', name: 'Customer answers', duration: '1d', end: true },
+      { id: 'timeout', type: 'timer', name: '5 days', duration: '5d', end: 'terminate' },
+      { id: 'escalate', name: 'Escalate', lane: 'Supervisor', end: true },
+    ],
+  };
+
+  test('the zod schema accepts every new field', () => {
+    expect(OutlineSchema.safeParse(ESCALATION).success).toBe(true);
+    expect(OUTLINE_STEP_TYPES).toEqual(
+      expect.arrayContaining(['sendTask', 'receiveTask', 'manualTask', 'scriptTask', 'businessRuleTask', 'eventGateway', 'message']),
+    );
+  });
+
+  test('the hand reader accepts them too: no shape issue, only the not-yet-built ones', async () => {
+    const issues = await refusedWith(ESCALATION);
+    expect(issues.every((i) => i.message.startsWith('not implemented yet'))).toBe(true);
+    expect(issues.map((i) => i.path)).toEqual([
+      'starts',
+      'steps[0].type',
+      'steps[0].from',
+      'steps[0].notes',
+      'steps[1].boundary',
+      'steps[1].data',
+      'steps[2].branches[0].default',
+      'steps[2].branches[1].end',
+      'steps[3].type',
+      'steps[4].type',
+      'steps[5].type',
+      'steps[6].end',
+    ]);
+  });
+
+  test('every malformed new field, at its path, at once', async () => {
+    const issues = await refusedWith({
+      name: 'X',
+      starts: [{ id: '', type: 'message', lane: 3, extra: 1 }, 'web'],
+      steps: [
+        { id: 'a', type: 'eventGatway', from: 7, end: 'stop' },
+        { id: 'g', type: 'xor', branches: [{ to: 'a', default: 'yes' }, { end: 'abort' }] },
+        {
+          id: 'b',
+          boundary: [
+            { id: 'sla', type: 'message', duration: '1h', interrupting: 'no', to: 'a' },
+            { id: 'both', type: 'timer', to: 'a', end: true },
+            { id: 'neither', type: 'timer' },
+            { type: 'timer', end: true, when: 'later' },
+            'sla',
+          ],
+          notes: ['ok', ''],
+          data: [{ name: 'File', direction: 'inout' }, { direction: 'in' }, { name: 'X', direction: 'out', kind: 'store' }, 4],
+        },
+        { id: 'c', boundary: [], notes: 'text', data: {} },
+      ],
+    });
+    const at = (path: string): string[] => issues.filter((i) => i.path === path).map((i) => i.message);
+    expect(at('starts[0].id')).toEqual(['must be a non-empty text.']);
+    expect(at('starts[0].type')).toEqual(['must be one of none, timer.']);
+    expect(at('starts[0].lane')).toEqual(['must be a non-empty text.']);
+    expect(at('starts[0].extra')).toEqual(['unknown field "extra".']);
+    expect(at('starts[1]')).toEqual(['must be an object.']);
+    expect(at('steps[0].type')[0]).toContain('"eventGatway" is not a step type; use one of task, userTask, serviceTask, sendTask');
+    expect(at('steps[0].from')).toEqual(['must be a start id or a list of start ids.']);
+    expect(at('steps[0].end')).toEqual(['must be true, false or "terminate".']);
+    expect(at('steps[1].branches[0].default')).toEqual(['must be true or false.']);
+    expect(at('steps[1].branches[1].end')).toEqual(['must be true, false or "terminate".']);
+    expect(at('steps[2].boundary[0].type')).toEqual(['must be one of timer.']);
+    expect(at('steps[2].boundary[0].interrupting')).toEqual(['must be true or false.']);
+    expect(at('steps[2].boundary[1]')).toEqual(['boundary "both" needs exactly one of "to" (a step id) and "end".']);
+    expect(at('steps[2].boundary[2]')).toEqual(['boundary "neither" needs exactly one of "to" (a step id) and "end".']);
+    expect(at('steps[2].boundary[3].id')).toEqual(['must be a non-empty text.']);
+    expect(at('steps[2].boundary[3].when')).toEqual(['unknown field "when".']);
+    expect(at('steps[2].boundary[4]')).toEqual(['must be an object.']);
+    expect(at('steps[2].notes[1]')).toEqual(['must be a non-empty text.']);
+    expect(at('steps[2].data[0].direction')).toEqual(['must be one of in, out.']);
+    expect(at('steps[2].data[1].name')).toEqual(['must be a non-empty text.']);
+    expect(at('steps[2].data[2].kind')).toEqual(['unknown field "kind".']);
+    expect(at('steps[2].data[3]')).toEqual(['must be an object.']);
+    expect(at('steps[3].boundary')).toEqual(['must be a non-empty list.']);
+    expect(at('steps[3].notes')).toEqual(['must be a list of non-empty texts.']);
+    expect(at('steps[3].data')).toEqual(['must be a non-empty list.']);
+    // A well-formed boundary on a valid path is not reported for its target.
+    expect(at('steps[2].boundary[0]')).toEqual([]);
+  });
+
+  test('the new messages follow the locale', async () => {
+    const issues = await refusedWith(
+      { name: 'X', starts: [{ id: 's', type: 'cron' }], steps: [{ id: 'a', from: [], end: 'stop', boundary: [{ id: 'b', type: 'timer' }] }] },
+      'es',
+    );
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        { path: 'starts[0].type', message: 'debe ser uno de none, timer.' },
+        { path: 'steps[0].from', message: 'debe ser el id de un inicio o una lista de ids de inicio.' },
+        { path: 'steps[0].end', message: 'debe ser true, false o "terminate".' },
+        { path: 'steps[0].boundary[0]', message: 'el evento adjunto "b" necesita uno solo de "to" (el id de un paso) y "end".' },
+      ]),
+    );
   });
 });

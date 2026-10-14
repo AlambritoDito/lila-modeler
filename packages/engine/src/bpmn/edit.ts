@@ -27,7 +27,17 @@ import { z } from 'zod';
 
 import lila from './lila.moddle.json' with { type: 'json' };
 import { isNCName, marcarExportador } from './ids.js';
-import { OUTLINE_STEP_TYPES, OutlineSchema, parseDuration, type OutlineStepType } from './outline.js';
+import {
+  BPMN_TYPE,
+  OUTLINE_DATA_DIRECTIONS,
+  OUTLINE_STEP_TYPES,
+  OutlineBoundarySchema,
+  outlineReaders,
+  OutlineSchema,
+  parseDuration,
+  WORK,
+  type OutlineStepType,
+} from './outline.js';
 import type { ParseBpmnOptions } from './parse.js';
 import { validateBpmnXml } from './validate-report.js';
 import type { ValidationResult } from './validate.js';
@@ -45,7 +55,18 @@ import { processSlug } from '../project/repository.js';
 const Id = z.string().min(1);
 
 /** A step as in an outline (#97), without its connections: `add` places it with `after`/`between`. */
-const EditStepSchema = OutlineSchema.shape.steps.element.omit({ next: true, branches: true, end: true });
+const EditStepSchema = OutlineSchema.shape.steps.element.omit({
+  from: true,
+  next: true,
+  branches: true,
+  end: true,
+  boundary: true,
+  notes: true,
+  data: true,
+});
+
+/** What `setType` accepts: the outline's step types, and `end`/`terminate` to retype an end event. */
+export const EDIT_TYPES = [...OUTLINE_STEP_TYPES, 'end', 'terminate'] as const;
 
 export const EditOperationSchema = z.discriminatedUnion('op', [
   z
@@ -63,15 +84,25 @@ export const EditOperationSchema = z.discriminatedUnion('op', [
       to: Id,
       label: z.string().optional().describe('Name of the flow, e.g. "Yes".'),
       probability: z.number().min(0).max(1).optional().describe('Out of an xor/or gateway: the branch probability in the base scenario.'),
+      default: z.boolean().optional().describe('Out of an xor/or gateway: true makes the new flow the gateway\'s default flow.'),
       id: Id.optional().describe('Id of the new flow. Default Flow_<from>_<to>.'),
     })
     .describe('Adds a sequence flow.'),
   z
     .strictObject({ op: z.literal('remove'), id: Id })
-    .describe('Removes a step (its predecessors are reconnected to its successor when that is unambiguous) or a sequence flow.'),
-  z.strictObject({ op: z.literal('rename'), id: Id, name: z.string() }).describe('Renames any element: step, flow, lane, pool or process. "" clears the name.'),
-  z.strictObject({ op: z.literal('setType'), id: Id, type: z.enum(OUTLINE_STEP_TYPES) }).describe('Changes the type of a step; its id, name, flows and annotations stay.'),
-  z.strictObject({ op: z.literal('moveToLane'), id: Id, lane: Id.describe('Lane name or id.') }).describe('Moves a step to another lane.'),
+    .describe(
+      'Removes a step (its predecessors are reconnected to its successor when that is unambiguous), a sequence flow, a boundary ' +
+        'event, or an artifact: text annotation, data object or store, group, association. An end event left with no incoming flow goes too.',
+    ),
+  z
+    .strictObject({ op: z.literal('rename'), id: Id.describe('Id of the element, or the name of a lane.'), name: z.string() })
+    .describe('Renames any element: step, flow, lane, pool or process. A lane can be named by its name. "" clears the name.'),
+  z
+    .strictObject({ op: z.literal('setType'), id: Id, type: z.enum(EDIT_TYPES) })
+    .describe('Changes the type of a step (its id, name, flows and annotations stay), or turns an end event into a terminate end (and back).'),
+  z
+    .strictObject({ op: z.literal('moveToLane'), id: Id, lane: Id.describe('Lane name or id.') })
+    .describe('Moves a step to another lane, with its boundary events and the ends they lead to.'),
   z
     .strictObject({
       op: z.literal('addLane'),
@@ -81,6 +112,49 @@ export const EditOperationSchema = z.discriminatedUnion('op', [
       before: Id.optional().describe('Lane (name or id) it goes above.'),
     })
     .describe('Adds a lane. The first lane of a process without lanes holds all its steps (and the process gets a pool if it had none).'),
+  z
+    .strictObject({
+      op: z.literal('removeLane'),
+      lane: Id.describe('Lane name or id.'),
+      moveStepsTo: Id.optional().describe('Lane (name or id, a lane with no sub-lanes) that takes its steps. Required when it holds any.'),
+    })
+    .describe('Removes a lane without sub-lanes. Removing the last lane leaves the pool without lanes.'),
+  z
+    .strictObject({
+      op: z.literal('moveLane'),
+      lane: Id.describe('Lane name or id.'),
+      before: Id.optional().describe('Sibling lane (name or id) it goes above.'),
+      after: Id.optional().describe('Sibling lane (name or id) it goes below.'),
+    })
+    .describe('Reorders a lane among its siblings: exactly one of before and after.'),
+  z
+    .strictObject({
+      op: z.literal('addBoundary'),
+      on: Id.describe('Id of the task the boundary event is attached to.'),
+      boundary: OutlineBoundarySchema.describe('As in an outline: {id, type: "timer", name?, duration?, interrupting?, to | end}.'),
+    })
+    .describe('Attaches a boundary timer to a task. Its duration goes into the base scenario.'),
+  z
+    .strictObject({ op: z.literal('annotate'), on: Id.describe('Id of the element.'), text: z.string().min(1) })
+    .describe('Attaches a text annotation to an element.'),
+  z
+    .strictObject({ op: z.literal('removeAnnotation'), on: Id.describe('Id of the element.'), text: z.string().min(1) })
+    .describe('Removes the text annotation with that text attached to the element, and its association.'),
+  z
+    .strictObject({
+      op: z.literal('addDataObject'),
+      name: z.string().min(1).describe('Name of the data object; an existing one with that name is reused.'),
+      on: Id.describe('Id of the activity that reads or writes it.'),
+      direction: z.enum(OUTLINE_DATA_DIRECTIONS).describe('in: the activity reads it. out: the activity writes it.'),
+    })
+    .describe('Connects a data object to an activity, creating the object when the process has none with that name.'),
+  z
+    .strictObject({
+      op: z.literal('removeDataObject'),
+      name: z.string().min(1).describe('Name of the data object.'),
+      on: Id.optional().describe('Only its connection to this activity; without it, every connection.'),
+    })
+    .describe('Disconnects a data object (from one activity, or from all); the object goes when nothing uses it any more.'),
 ]);
 export const EditOperationsSchema = z.array(EditOperationSchema).min(1);
 
@@ -145,22 +219,13 @@ export interface BpmnEdit {
   readonly touched: ReadonlyMap<string, number>;
 }
 
-const BPMN_TYPE: Readonly<Record<OutlineStepType, string>> = {
-  task: 'bpmn:Task',
-  userTask: 'bpmn:UserTask',
-  serviceTask: 'bpmn:ServiceTask',
-  callActivity: 'bpmn:CallActivity',
-  xor: 'bpmn:ExclusiveGateway',
-  and: 'bpmn:ParallelGateway',
-  or: 'bpmn:InclusiveGateway',
-  timer: 'bpmn:IntermediateCatchEvent',
-  subprocess: 'bpmn:SubProcess',
-};
-const WORK: ReadonlySet<OutlineStepType> = new Set(['task', 'userTask', 'serviceTask', 'callActivity']);
-
 /** Short name of a node's type, for messages: the outline's when it has one. */
 function typeName(el: El): string {
-  if (el.$type === 'bpmn:IntermediateCatchEvent' && isTimer(el)) return 'timer';
+  if (el.$type === 'bpmn:IntermediateCatchEvent') {
+    if (isTimer(el)) return 'timer';
+    if (((el['eventDefinitions'] ?? []) as El[]).some((d) => d.$type === 'bpmn:MessageEventDefinition')) return 'message';
+    return 'IntermediateCatchEvent';
+  }
   const known = (Object.entries(BPMN_TYPE) as [OutlineStepType, string][]).find(([, t]) => t === el.$type);
   return known?.[0] ?? el.$type.replace(/^bpmn:/, '');
 }
@@ -506,6 +571,8 @@ class Editor {
 
   apply(op: Op): void {
     const before = this.issues.length;
+    const stub = notImplemented(op);
+    if (stub !== undefined) return this.issue(stub, NOT_IMPLEMENTED);
     switch (op.op) {
       case 'add':
         return this.add(op, before);
@@ -521,6 +588,14 @@ class Editor {
         return this.moveToLane(op);
       case 'addLane':
         return this.addLane(op, before);
+      case 'removeLane':
+      case 'moveLane':
+      case 'addBoundary':
+      case 'annotate':
+      case 'removeAnnotation':
+      case 'addDataObject':
+      case 'removeDataObject':
+        return this.issue('op', NOT_IMPLEMENTED);
     }
   }
 
@@ -709,7 +784,7 @@ class Editor {
     if (is(el, 'bpmn:BoundaryEvent')) return this.issue('id', this.C.editNotAStep(op.id, el.$type));
     const from = typeName(el);
     if (from === op.type) return this.change(this.C.editRetyped(op.id, from, op.type));
-    const type = BPMN_TYPE[op.type];
+    const type = BPMN_TYPE[op.type as OutlineStepType];
     const container = el['$parent'] as El;
     const boundaries = ((container['flowElements'] ?? []) as El[]).filter((b) => b['attachedToRef'] === el);
     const replacement = this.create(type, { id: el.id });
@@ -897,14 +972,36 @@ class Editor {
  * Reading the operations: one pass, every problem, catalog messages
  * ------------------------------------------------------------------ */
 
+/**
+ * Lote Q contract commit (#631/#638): the reader accepts the new operations and fields, the editor
+ * does not yet. Each use is refused at its path until the implementation lands.
+ */
+const NOT_IMPLEMENTED = 'not implemented yet (#631/#638).';
+const NEW_TYPES: ReadonlySet<string> = new Set([
+  'sendTask', 'receiveTask', 'manualTask', 'scriptTask', 'businessRuleTask', 'eventGateway', 'message', 'end', 'terminate',
+]);
+function notImplemented(op: Op): string | undefined {
+  if (op.op === 'add' && op.step.type !== undefined && NEW_TYPES.has(op.step.type)) return 'step.type';
+  if (op.op === 'setType' && NEW_TYPES.has(op.type)) return 'type';
+  if (op.op === 'connect' && op.default !== undefined) return 'default';
+  return undefined;
+}
+
 const OP_KEYS: Readonly<Record<Op['op'], readonly string[]>> = {
   add: ['op', 'step', 'after', 'between'],
-  connect: ['op', 'from', 'to', 'label', 'probability', 'id'],
+  connect: ['op', 'from', 'to', 'label', 'probability', 'default', 'id'],
   remove: ['op', 'id'],
   rename: ['op', 'id', 'name'],
   setType: ['op', 'id', 'type'],
   moveToLane: ['op', 'id', 'lane'],
   addLane: ['op', 'name', 'id', 'after', 'before'],
+  removeLane: ['op', 'lane', 'moveStepsTo'],
+  moveLane: ['op', 'lane', 'before', 'after'],
+  addBoundary: ['op', 'on', 'boundary'],
+  annotate: ['op', 'on', 'text'],
+  removeAnnotation: ['op', 'on', 'text'],
+  addDataObject: ['op', 'name', 'on', 'direction'],
+  removeDataObject: ['op', 'name', 'on'],
 };
 const STEP_KEYS = new Set(['id', 'name', 'lane', 'type', 'duration', 'resources', 'selection']);
 
@@ -945,6 +1042,7 @@ function readOperations(input: unknown, C: CliMessages, issues: EditIssue[]): (O
       if (v === undefined) return required ? bad(key, C.outlineNotText()) : undefined;
       return typeof v === 'string' ? v : bad(key, C.outlineNotText());
     };
+    const readers = outlineReaders(C, bad);
     const type = (v: unknown, path: string): OutlineStepType | undefined =>
       (OUTLINE_STEP_TYPES as readonly unknown[]).includes(v) ? (v as OutlineStepType) : bad(path, C.outlineBadType(String(v), OUTLINE_STEP_TYPES.join(', ')));
 
@@ -992,6 +1090,7 @@ function readOperations(input: unknown, C: CliMessages, issues: EditIssue[]): (O
         op = { ...op, from: text('from', true), to: text('to', true), label: string('label', false), id: text('id', false) };
         const p = value['probability'];
         if (p !== undefined) op['probability'] = typeof p === 'number' && p >= 0 && p <= 1 ? p : bad('probability', C.outlineNotProbability());
+        op['default'] = readers.boolean(value['default'], 'default');
         break;
       }
       case 'remove':
@@ -1000,14 +1099,50 @@ function readOperations(input: unknown, C: CliMessages, issues: EditIssue[]): (O
       case 'rename':
         op = { ...op, id: text('id', true), name: string('name', true) };
         break;
-      case 'setType':
-        op = { ...op, id: text('id', true), type: value['type'] === undefined ? bad('type', C.outlineNotText()) : type(value['type'], 'type') };
+      case 'setType': {
+        const t = value['type'];
+        op = {
+          ...op,
+          id: text('id', true),
+          type: (EDIT_TYPES as readonly unknown[]).includes(t) ? t : bad('type', C.outlineBadType(String(t), EDIT_TYPES.join(', '))),
+        };
         break;
+      }
       case 'moveToLane':
         op = { ...op, id: text('id', true), lane: text('lane', true) };
         break;
       case 'addLane':
         op = { ...op, name: text('name', true), id: text('id', false), after: text('after', false), before: text('before', false) };
+        break;
+      case 'removeLane':
+        op = { ...op, lane: text('lane', true), moveStepsTo: text('moveStepsTo', false) };
+        break;
+      case 'moveLane':
+        op = { ...op, lane: text('lane', true), before: text('before', false), after: text('after', false) };
+        if (value['before'] !== undefined && value['after'] !== undefined) bad('before', C.editAfterAndBefore());
+        else if (value['before'] === undefined && value['after'] === undefined) bad('before', C.editBeforeOrAfter());
+        break;
+      case 'addBoundary':
+        op = {
+          ...op,
+          on: text('on', true),
+          boundary: value['boundary'] === undefined ? bad('boundary', C.outlineNotObject()) : readers.boundary(value['boundary'], 'boundary'),
+        };
+        break;
+      case 'annotate':
+      case 'removeAnnotation':
+        op = { ...op, on: text('on', true), text: text('text', true) };
+        break;
+      case 'addDataObject':
+        op = {
+          ...op,
+          name: text('name', true),
+          on: text('on', true),
+          direction: readers.choice(value['direction'], OUTLINE_DATA_DIRECTIONS, 'direction'),
+        };
+        break;
+      case 'removeDataObject':
+        op = { ...op, name: text('name', true), on: text('on', false) };
         break;
     }
     if (issues.length > before) return undefined;

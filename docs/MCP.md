@@ -416,13 +416,20 @@ terminal.
 
 | Operation | Fields | What it does |
 | --- | --- | --- |
-| `add` | `step`, `after?` or `between?` | Adds a step. `step` is an outline step without its connections: `{ id, name?, type?, lane?, duration?, resources? }`. With `after: id`, the new step takes over that step's outgoing flow (refused when it has several: use `between`). With `between: [from, to]`, it goes on the flow from → to. The flow it lands on keeps its id, name and probability; a new flow continues to the old successor. Without either, it is added unconnected. `lane` defaults to the lane of the step it follows. |
-| `connect` | `from`, `to`, `label?`, `probability?`, `id?` | Adds a sequence flow (id `Flow_<from>_<to>` by default). `probability` only out of an `xor` or `or` gateway. |
-| `remove` | `id` | Removes a step and reconnects: its incoming flows go to its successor when it has at most one; a step with no incoming flow loses its outgoing ones; a step with several incoming and several outgoing flows (a split after a join) is refused. A step with boundary events is refused. Message flows and associations attached to it go with it. A sequence flow can be removed too. |
-| `rename` | `id`, `name` | Renames any element: step, flow, lane, pool, process. `""` clears the name. |
-| `setType` | `id`, `type` | One of the outline types. Name, documentation, extension elements and flows stay; a sub-process turned into something else loses its content (listed in `removed`). |
-| `moveToLane` | `id`, `lane` | Lane by name or id. |
+| `add` | `step`, `after?` or `between?` | Adds a step. `step` is an outline step without its connections, boundary events, notes or data: `{ id, name?, type?, lane?, duration?, resources? }`, any outline type. With `after: id`, the new step takes over that step's outgoing flow (refused when it has several: use `between`). With `between: [from, to]`, it goes on the flow from → to. The flow it lands on keeps its id, name and probability; a new flow continues to the old successor. Without either, it is added unconnected. `lane` defaults to the lane of the step it follows. |
+| `connect` | `from`, `to`, `label?`, `probability?`, `default?`, `id?` | Adds a sequence flow (id `Flow_<from>_<to>` by default). `probability` and `default: true` (the gateway's default flow) only out of an `xor` or `or` gateway. |
+| `remove` | `id` | Removes a step and reconnects: its incoming flows go to its successor when it has at most one; a step with no incoming flow loses its outgoing ones; a step with several incoming and several outgoing flows (a split after a join) is refused. A step with boundary events is refused. Message flows and associations attached to it go with it. An end event left with no incoming flow goes too (listed in `removed`). A sequence flow, a boundary event, a text annotation, a data object or data store, a group or an association can be removed too. |
+| `rename` | `id`, `name` | Renames any element: step, flow, lane, pool, process. A lane can also be named by its name, when no element has that id. `""` clears the name. |
+| `setType` | `id`, `type` | One of the outline types, or `end`/`terminate` to turn an end event into a terminate end and back. Name, documentation, extension elements and flows stay; a sub-process turned into something else loses its content (listed in `removed`). |
+| `moveToLane` | `id`, `lane` | Lane by name or id. The step's boundary events, and the end events they lead to, move with it. |
 | `addLane` | `name`, `id?`, `after?` or `before?` | Adds a lane (at the bottom by default). The first lane of a process without lanes holds all its steps, and a process without a pool gets one. |
+| `removeLane` | `lane`, `moveStepsTo?` | Removes a lane (by name or id). A lane that holds steps needs `moveStepsTo`, a lane with no sub-lanes that takes them. A lane with sub-lanes is refused. Removing the last lane removes the lane set; the pool stays. |
+| `moveLane` | `lane`, `before` or `after` | Moves a lane above (`before`) or below (`after`) a sibling lane; exactly one of the two. |
+| `addBoundary` | `on`, `boundary` | Attaches a boundary timer to a task. `boundary` is as in an outline: `{ id, type: "timer", name?, duration?, interrupting?, to \| end }`. Its `duration` goes into the base scenario. |
+| `annotate` | `on`, `text` | Attaches a text annotation to an element. |
+| `removeAnnotation` | `on`, `text` | Removes the annotation with that text attached to the element, with its association. |
+| `addDataObject` | `name`, `on`, `direction` | Connects a data object to an activity: `in`, the activity reads it; `out`, the activity writes it. An object with that name in the process is reused, otherwise one is created. |
+| `removeDataObject` | `name`, `on?` | Disconnects the data object from the activity `on`, or from every activity without it. The object goes when nothing uses it any more. |
 
 - **Ids never change.** A renamed step keeps its scenario entries, and so does a retyped one, as
   far as they still apply. `duration`, `resources` and `selection` of an added step and the
