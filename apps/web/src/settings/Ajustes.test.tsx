@@ -12,6 +12,7 @@ import { LOCALES, setLocale, type Preferencia } from '../i18n';
 import type { Densidad } from '../ids';
 import { en as T } from '../strings.en';
 import { Ajustes } from './Ajustes';
+import { version } from '../../package.json';
 
 setLocale('en');
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -134,4 +135,20 @@ it('the section arrows start from the tab that has the focus, not from the selec
   await tecla(pestana('general'), 'ArrowUp');
   expect(document.activeElement).toBe(pestana('atajos'));
   expect(pestana('atajos').getAttribute('aria-selected')).toBe('true');
+});
+
+it('the header links «Report a problem…» to the prefilled bug form, in a new tab (#651)', () => {
+  const enlace = [...container.querySelectorAll<HTMLAnchorElement>('.ajustes-encabezado a')]
+    .find((a) => a.textContent === T.app.reportarProblema)!;
+  expect(enlace).toBeDefined();
+  expect([enlace.target, enlace.rel]).toEqual(['_blank', 'noopener noreferrer']);
+  const url = new URL(enlace.href);
+  expect(`${url.origin}${url.pathname}`).toBe('https://github.com/AlambritoDito/lila-modeler/issues/new');
+  expect([...url.searchParams.keys()]).toEqual(['template', 'version', 'environment']);
+  expect(url.searchParams.get('template')).toBe('bug_report.yml');
+  expect(url.searchParams.get('version')).toBe(version);
+  // jsdom: no bridge and no standalone display, so the web browser surface.
+  expect(url.searchParams.get('environment')).toMatch(/ · browser \(\w+\)$/);
+  // Beside «About», which it does not replace.
+  expect(container.querySelector('.ajustes-encabezado')?.textContent).toContain(T.app.acercaDe);
 });

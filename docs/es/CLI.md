@@ -302,6 +302,51 @@ npx lila scenario show examples/pedido.lila to-be-3-cajeros --resolved
 ```
 Código de salida: `0`.
 
+## `process export-bpmn` y `process import` (#632)
+
+El BPMN de un proceso de un `.lila`, tal cual, hacia fuera y hacia dentro — las tools MCP
+`get_process_bpmn` y `put_process_bpmn` ([`docs/es/MCP.md`](MCP.md#el-bpmn-de-un-proceso)):
+
+- `lila process export-bpmn -p <proyecto.lila>` imprime el modelo del proceso como está guardado,
+  o lo escribe en `--out archivo.bpmn` (un archivo que ya existe se rechaza salvo con `--force`).
+  No escribe nada en el `.lila`.
+- `lila process import -p <proyecto.lila> --bpmn <archivo.bpmn>` añade el BPMN (una exportación de
+  Bizagi, por ejemplo) como proceso nuevo del `.lila`, que tiene que existir; un proyecto versión 1
+  pasa a ser un repositorio. El slug es `--process`, o sale de `--name`, si no del nombre del pool,
+  del proceso o del archivo; uno que ya está en el archivo sale con `1`. El proceso nuevo recibe un
+  `as-is.scenario.json` con los valores por defecto de la app (20 llegadas con un minuto entre
+  ellas, un minuto por tarea). Con `--replace` reemplaza en cambio el modelo del proceso
+  `--process`: la revisión sube (las corridas guardadas quedan obsoletas), las anotaciones son las
+  del modelo nuevo, las entradas de escenario que ya no aplican se quitan y se imprimen como notas,
+  y un error de escenario que con el modelo viejo no había sale con `1`.
+
+Un modelo con errores de validación sale con `1` y no escribe nada, salvo con
+`--allow-unsimulatable`: entonces se guarda como diagrama que no se simula, con sus errores
+impresos como notas. Un archivo que no es BPMN se rechaza siempre. Un modelo sin diagrama se
+maqueta salvo con `--no-layout`. La escritura es la escritura atómica y con candado del `.lila`
+(ver [Un `.lila` como entrada](#un-lila-como-entrada-466)), con los demás procesos intactos;
+`--dry-run` no escribe nada; `--json` imprime el objeto de resultado de `put_process_bpmn`:
+`{ file, mode, slug, name, processId, revision, dryRun, laidOut, summary, scenarioRemovals, notes,
+warnings, slugs }`.
+
+```bash
+npx lila process export-bpmn -p examples/pedido.lila --out results/pedido.bpmn
+```
+Código de salida: `0`.
+
+```bash
+npx lila process import -p examples/pedido.lila --bpmn examples/bizagi-exports/bizagi-miwg-A.1.0-roundtrip.bpmn --dry-run
+```
+Código de salida: `0`.
+
+A.3.0 tiene eventos de borde que el simulador no admite, así que se rechaza salvo con
+`--allow-unsimulatable`:
+
+```bash
+npx lila process import -p examples/pedido.lila --bpmn examples/bizagi-exports/bizagi-miwg-A.3.0-roundtrip.bpmn --dry-run
+```
+Código de salida: `1`.
+
 ## `mcp`
 
 Arranca el servidor MCP (`@lila-modeler/mcp`) por stdio, para que lo lance un cliente MCP, no algo que se

@@ -55,6 +55,9 @@ const ES_USAGE = `Uso: lila validate <archivo.bpmn|proyecto.lila> [--process slu
                            [--responsibility R|A|C|I:rol ...] [--clear-responsibilities]
                            [--ref tipo=id ...] [--attribute id=valor ...] [--dry-run] [--json]
      lila process raci <proyecto.lila> [--process slug] [--json|--csv]
+     lila process export-bpmn -p <proyecto.lila> [--process slug] [--out archivo.bpmn] [--force]
+     lila process import -p <proyecto.lila> --bpmn <archivo.bpmn> [--replace] [--process slug]
+                         [--name nombre] [--no-layout] [--allow-unsimulatable] [--dry-run] [--json]
      lila process attribute define <proyecto.lila> --name nombre --type text|number|list|date
                                    --applies-to task|gateway|event|subProcess|lane|process
                                    [--option valor ...] [--default valor] [--id id]
@@ -79,6 +82,8 @@ Comandos:
              edit: aplica una lista de operaciones a un proceso, todas o ninguna. Ver docs/CLI.md.
              annotate: escribe en el .lila la descripción, el RACI, las referencias al catálogo y
              los atributos extendidos de un elemento. raci: imprime la matriz RACI del documento.
+             export-bpmn: imprime o escribe el BPMN de un proceso. import: añade un .bpmn como
+             proceso nuevo de un .lila, o con --replace reemplaza el modelo de uno.
              attribute: define (o quita) un atributo extendido, o los lista.
   scenario   import: aplica una hoja de escenario (.xlsx/.csv) a un escenario del .lila, como
              Importar Excel/CSV de la app. template: escribe esa hoja, rellenada, para una persona.
@@ -145,6 +150,17 @@ Opciones de process annotate:
                     repetible; reemplaza las listas de los tipos dados (tipo= vacía uno).
   --attribute k=v   Un atributo extendido por id o nombre; repetible; "k=" quita su valor.
   --dry-run         Muestra el resultado sin escribir.
+
+Opciones de process import:
+  --bpmn archivo    El archivo BPMN 2.0 (una exportación de Bizagi, por ejemplo).
+  --replace         Reemplaza el modelo del proceso (--process) en vez de añadir uno.
+  --process slug    Sin --replace: slug del proceso nuevo (por defecto, de su nombre).
+  --name nombre     Sin --replace: nombre del proceso nuevo (por defecto, el de su pool, el de
+                    su proceso o el del archivo).
+  --no-layout       Deja tal cual un modelo sin diagrama (por defecto, se maqueta).
+  --allow-unsimulatable  Guarda un modelo con errores de validación, como diagrama que no se
+                    simula; los errores salen como notas.
+  --dry-run         Comprueba todo y no escribe nada.
 
 Opciones de process attribute define:
   --name, --type, --applies-to  La definición entera, siempre; se busca por --id, si no por nombre
@@ -557,7 +573,7 @@ export const es: Catalog = {
       `Proceso "${name}" (${slug}) creado en ${newFile ? 'el archivo nuevo ' : ''}${file}: ${n(steps, 'paso', 'pasos')}, ${n(lanes, 'carril', 'carriles')}, escenario base as-is.scenario.json.`,
     processDryRun: (name, slug, file, steps, lanes, newFile) =>
       `Simulacro: se crearía el proceso "${name}" (${slug}) en ${newFile ? 'el archivo nuevo ' : ''}${file}: ${n(steps, 'paso', 'pasos')}, ${n(lanes, 'carril', 'carriles')}. No se escribió nada.`,
-    processUnknownSubcommand: (sub) => `subcomando desconocido "${sub}"; usa create, show, edit, annotate, raci o attribute.`,
+    processUnknownSubcommand: (sub) => `subcomando desconocido "${sub}"; usa create, show, edit, annotate, raci, export-bpmn, import o attribute.`,
     processMissingOption: (option) => `falta ${option}.`,
     processShowHeader: (name, slug) => `Proceso "${name}" (${slug})`,
     processShowLanes: (lanes) => `Carriles: ${lanes}`,
