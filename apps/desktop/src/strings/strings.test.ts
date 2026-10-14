@@ -111,6 +111,7 @@ describe('LILA-213 · the two desktop catalogs are the same catalog in two langu
       // The Help menu is new.
       ayuda: 'Ayuda',
       documentacion: 'Documentación',
+      reportarProblema: 'Informar de un problema…',
       // #566: the role items Electron labelled in English outside macOS, new as labels.
       editar: 'Edición',
       deshacer: 'Deshacer',

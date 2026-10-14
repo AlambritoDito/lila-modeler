@@ -297,6 +297,19 @@ describe('menuTemplate · DevTools and Help', () => {
     (docs.click as () => void)();
     expect(abrirDocs).toHaveBeenCalledOnce();
   });
+
+  it.each(IDIOMAS.flatMap((l) => (['darwin', 'win32'] as const).map((p) => [l, p] as const)))(
+    'Help → Report a problem… comes right after Documentation and sends "reportarProblema" (#651; %s, %s)',
+    (locale, platform) => {
+      const S = desktopStrings(locale).menu;
+      const send = vi.fn();
+      const ayuda = menuTemplate([], platform, send, desktopStrings(locale)).at(-1)!;
+      const items = ayuda.submenu as MenuItemConstructorOptions[];
+      expect(items.map((i) => i.label)).toEqual([S.documentacion, S.reportarProblema]);
+      (items[1]!.click as () => void)();
+      expect(send).toHaveBeenCalledExactlyOnceWith('reportarProblema');
+    },
+  );
 });
 
 describe('teclaDeVentanaHija · ⌘W / ⌘Q in the About and detached windows', () => {

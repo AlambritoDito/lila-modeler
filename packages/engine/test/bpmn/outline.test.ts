@@ -11,13 +11,16 @@ import { describe, expect, test } from 'vitest';
 import {
   bpmnToOutline,
   normalizeOutline,
+  OUTLINE_STEP_TYPES,
   OutlineError,
+  OutlineSchema,
   outlineToBpmn,
   parseDuration,
 } from '../../src/bpmn/outline.js';
 import { validateBpmnXml } from '../../src/bpmn/validate-report.js';
 import { parseScenario, validateScenario } from '../../src/scenario.js';
-import { CREDIT, ORDER } from '../fixtures/outlines.js';
+import { expectCleanImport } from '../fixtures/bpmn-import.js';
+import { CONSTRUCTS, CREDIT, ORDER } from '../fixtures/outlines.js';
 
 interface Box {
   x: number;
@@ -63,7 +66,8 @@ async function expectLaidOut(xml: string): Promise<void> {
   for (let i = 0; i < laneBoxes.length; i++) {
     for (let j = i + 1; j < laneBoxes.length; j++) expect(overlaps(laneBoxes[i]!, laneBoxes[j]!)).toBe(false);
   }
-  const nodes = [...shapes].filter(([id]) => !['bpmn:Participant', 'bpmn:Lane'].includes(types.get(id)!));
+  // Boundary events sit on their host's border by design (#631).
+  const nodes = [...shapes].filter(([id]) => !['bpmn:Participant', 'bpmn:Lane', 'bpmn:BoundaryEvent'].includes(types.get(id)!));
   for (let i = 0; i < nodes.length; i++) {
     for (let j = i + 1; j < nodes.length; j++) {
       expect(overlaps(nodes[i]![1], nodes[j]![1]), `${nodes[i]![0]} overlaps ${nodes[j]![0]}`).toBe(false);
@@ -198,7 +202,8 @@ describe('bpmnToOutline', () => {
   </bpmn:process>
 </bpmn:definitions>`;
     const { outline, warnings } = await bpmnToOutline(xml);
-    expect(outline).toEqual({ name: 'Foreign', steps: [{ id: 't', name: 'T', end: true }] });
+    // A start that is not the trivial `StartEvent` is listed; a manual task keeps its type (#631).
+    expect(outline).toEqual({ name: 'Foreign', starts: [{ id: 's' }], steps: [{ id: 't', name: 'T', type: 'manualTask', from: 's', end: true }] });
     expect(warnings).toHaveLength(3);
     expect(warnings[0]).toContain('m (bpmn:IntermediateThrowEvent)');
   });
@@ -267,8 +272,8 @@ describe('a malformed outline is an OutlineError with every issue, nothing built
         expect.stringContaining('lanes lane "A" is listed more than once'),
         expect.stringContaining('steps[0].lane step "a": lane "B" is not in "lanes"'),
         expect.stringContaining('"nowhere" is not the id of a step'),
-        expect.stringContaining('steps[1].id step id "a" is used more than once'),
-        expect.stringContaining('step id "1bad" is not a valid BPMN id'),
+        expect.stringContaining('steps[1].id id "a" is used more than once'),
+        expect.stringContaining('id "1bad" is not a valid BPMN id'),
         expect.stringContaining('"branches" needs a gateway'),
         expect.stringContaining('add up to 1.2'),
         expect.stringContaining('"probability" does not apply'),
@@ -483,4 +488,664 @@ describe('QA of #553', () => {
     const { outline } = await bpmnToOutline(readFileSync(examples + file, 'utf8'));
     expect(outline.name).not.toBe('');
   });
+});
+
+/* ------------------------------------------------------------------ *
+ * Lote Q (#631, #638): the reader takes the new constructs
+ * ------------------------------------------------------------------ */
+
+describe('the outline reader: starts, terminate, default flows, new types, boundary, notes, data (#631, #638)', () => {
+  async function refusedWith(outline: unknown, locale?: 'es'): Promise<{ path: string; message: string }[]> {
+    try {
+      await outlineToBpmn(outline, { locale });
+    } catch (error) {
+      expect(error).toBeInstanceOf(OutlineError);
+      return (error as OutlineError).issues.map(({ path, message }) => ({ path, message }));
+    }
+    throw new Error('expected an OutlineError');
+  }
+
+  /** The claim escalation of the docs, with every new field once. */
+  const ESCALATION = {
+    name: 'Claim',
+    lanes: ['Intake', 'Adjuster', 'Supervisor'],
+    starts: [
+      { id: 'web', name: 'Claim filed online', lane: 'Intake' },
+      { id: 'nightly', name: 'Nightly batch', type: 'timer', lane: 'Intake' },
+    ],
+    steps: [
+      { id: 'register', type: 'manualTask', name: 'Register claim', lane: 'Intake', from: ['web', 'nightly'], notes: ['Paper claims too'] },
+      {
+        id: 'assess',
+        type: 'userTask',
+        name: 'Assess claim',
+        lane: 'Adjuster',
+        duration: '2h',
+        data: [{ name: 'Claim file', direction: 'in' }, { name: 'Assessment', direction: 'out' }],
+        boundary: [{ id: 'sla', type: 'timer', name: '48 h', duration: '48h', interrupting: false, to: 'escalate' }],
+      },
+      {
+        id: 'ok',
+        type: 'xor',
+        name: 'Covered?',
+        branches: [{ label: 'Yes', to: 'notify', default: true }, { label: 'Fraud', end: 'terminate', probability: 0.05 }],
+      },
+      { id: 'notify', type: 'sendTask', name: 'Notify customer', next: 'reply' },
+      { id: 'reply', type: 'eventGateway', name: 'Reply?', branches: [{ to: 'answer' }, { to: 'timeout' }] },
+      { id: 'answer', type: 'message', name: 'Customer answers', duration: '1d', end: true },
+      { id: 'timeout', type: 'timer', name: '5 days', duration: '5d', end: 'terminate' },
+      { id: 'escalate', name: 'Escalate', lane: 'Supervisor', end: true },
+    ],
+  };
+
+  test('the zod schema accepts every new field', () => {
+    expect(OutlineSchema.safeParse(ESCALATION).success).toBe(true);
+    expect(OUTLINE_STEP_TYPES).toEqual(
+      expect.arrayContaining(['sendTask', 'receiveTask', 'manualTask', 'scriptTask', 'businessRuleTask', 'eventGateway', 'message']),
+    );
+  });
+
+  test('the hand reader accepts them too, and they build and read back with no warning (#638 notes and data)', async () => {
+    const built = await outlineToBpmn(ESCALATION);
+    expect(built.warnings).toEqual([]);
+    const reading = await bpmnToOutline(built.xml, { scenario: built.scenario as Record<string, unknown> });
+    expect(reading.warnings).toEqual([]);
+    expect(reading.outline).toEqual(built.outline);
+    expect(built.outline.steps[0]!.notes).toEqual(['Paper claims too']);
+    expect(built.outline.steps[1]!.data).toEqual([
+      { name: 'Claim file', direction: 'in' },
+      { name: 'Assessment', direction: 'out' },
+    ]);
+  });
+
+  test('every malformed new field, at its path, at once', async () => {
+    const issues = await refusedWith({
+      name: 'X',
+      starts: [{ id: '', type: 'message', lane: 3, extra: 1 }, 'web'],
+      steps: [
+        { id: 'a', type: 'eventGatway', from: 7, end: 'stop' },
+        { id: 'g', type: 'xor', branches: [{ to: 'a', default: 'yes' }, { end: 'abort' }] },
+        {
+          id: 'b',
+          boundary: [
+            { id: 'sla', type: 'message', duration: '1h', interrupting: 'no', to: 'a' },
+            { id: 'both', type: 'timer', to: 'a', end: true },
+            { id: 'neither', type: 'timer' },
+            { type: 'timer', end: true, when: 'later' },
+            'sla',
+          ],
+          notes: ['ok', ''],
+          data: [{ name: 'File', direction: 'inout' }, { direction: 'in' }, { name: 'X', direction: 'out', kind: 'store' }, 4],
+        },
+        { id: 'c', boundary: [], notes: 'text', data: {} },
+      ],
+    });
+    const at = (path: string): string[] => issues.filter((i) => i.path === path).map((i) => i.message);
+    expect(at('starts[0].id')).toEqual(['must be a non-empty text.']);
+    expect(at('starts[0].type')).toEqual(['must be one of none, timer.']);
+    expect(at('starts[0].lane')).toEqual(['must be a non-empty text.']);
+    expect(at('starts[0].extra')).toEqual(['unknown field "extra".']);
+    expect(at('starts[1]')).toEqual(['must be an object.']);
+    expect(at('steps[0].type')[0]).toContain('"eventGatway" is not a step type; use one of task, userTask, serviceTask, sendTask');
+    expect(at('steps[0].from')).toEqual(['must be a start id or a list of start ids.']);
+    expect(at('steps[0].end')).toEqual(['must be true, false or "terminate".']);
+    expect(at('steps[1].branches[0].default')).toEqual(['must be true or false.']);
+    expect(at('steps[1].branches[1].end')).toEqual(['must be true, false or "terminate".']);
+    expect(at('steps[2].boundary[0].type')).toEqual(['must be one of timer.']);
+    expect(at('steps[2].boundary[0].interrupting')).toEqual(['must be true or false.']);
+    expect(at('steps[2].boundary[1]')).toEqual(['boundary "both" needs exactly one of "to" (a step id) and "end".']);
+    expect(at('steps[2].boundary[2]')).toEqual(['boundary "neither" needs exactly one of "to" (a step id) and "end".']);
+    expect(at('steps[2].boundary[3].id')).toEqual(['must be a non-empty text.']);
+    expect(at('steps[2].boundary[3].when')).toEqual(['unknown field "when".']);
+    expect(at('steps[2].boundary[4]')).toEqual(['must be an object.']);
+    expect(at('steps[2].notes[1]')).toEqual(['must be a non-empty text.']);
+    expect(at('steps[2].data[0].direction')).toEqual(['must be one of in, out.']);
+    expect(at('steps[2].data[1].name')).toEqual(['must be a non-empty text.']);
+    expect(at('steps[2].data[2].kind')).toEqual(['unknown field "kind".']);
+    expect(at('steps[2].data[3]')).toEqual(['must be an object.']);
+    expect(at('steps[3].boundary')).toEqual(['must be a non-empty list.']);
+    expect(at('steps[3].notes')).toEqual(['must be a list of non-empty texts.']);
+    expect(at('steps[3].data')).toEqual(['must be a non-empty list.']);
+    // A well-formed boundary on a valid path is not reported for its target.
+    expect(at('steps[2].boundary[0]')).toEqual([]);
+  });
+
+  test('the new messages follow the locale', async () => {
+    const issues = await refusedWith(
+      { name: 'X', starts: [{ id: 's', type: 'cron' }], steps: [{ id: 'a', from: [], end: 'stop', boundary: [{ id: 'b', type: 'timer' }] }] },
+      'es',
+    );
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        { path: 'starts[0].type', message: 'debe ser uno de none, timer.' },
+        { path: 'steps[0].from', message: 'debe ser el id de un inicio o una lista de ids de inicio.' },
+        { path: 'steps[0].end', message: 'debe ser true, false o "terminate".' },
+        { path: 'steps[0].boundary[0]', message: 'el evento adjunto "b" necesita uno solo de "to" (el id de un paso) y "end".' },
+      ]),
+    );
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * Lote Q contract review (#631, #638): the graph rules, the end ids, the reader's warnings
+ * ------------------------------------------------------------------ */
+
+describe('the contract rules of the new constructs (#631, #638)', () => {
+  async function issuesOf(outline: unknown): Promise<Map<string, string[]>> {
+    try {
+      await outlineToBpmn(outline);
+    } catch (error) {
+      expect(error).toBeInstanceOf(OutlineError);
+      const byPath = new Map<string, string[]>();
+      for (const { path, message } of (error as OutlineError).issues) {
+        (byPath.get(path) ?? byPath.set(path, []).get(path)!).push(message);
+      }
+      return byPath;
+    }
+    throw new Error('expected an OutlineError');
+  }
+
+  test('an event gateway leads only to timer or message steps that have no other way in', async () => {
+    const issues = await issuesOf({
+      name: 'X',
+      steps: [
+        { id: 'a', next: 'wait' },
+        { id: 'g', type: 'eventGateway', branches: [{ to: 'wait', probability: 0.5 }, { to: 'a' }, { end: true }, { to: 'msg', default: true }] },
+        { id: 'wait', type: 'timer', duration: '1h', end: true },
+        { id: 'msg', type: 'message', end: true },
+        { id: 'h', type: 'eventGateway', branches: [{ to: 'msg2' }] },
+        { id: 'msg2', type: 'message' },
+        { id: 'lost', type: 'message', end: true },
+        { id: 'last', type: 'eventGateway' },
+      ],
+    });
+    expect(issues.get('steps[1].branches[0].to')).toEqual([
+      'step "wait" follows the event gateway "g", so that must be its only way in; it has a, g. Check "next", "to", "from" and the step before it in the list.',
+    ]);
+    expect(issues.get('steps[1].branches[0].probability')).toEqual(['step "g": "probability" does not apply to an eventGateway.']);
+    expect(issues.get('steps[1].branches[1].to')![0]).toContain('event gateway "g": every way out goes to a timer or message step, and "a" is not one');
+    expect(issues.get('steps[1].branches[2].end')![0]).toContain('and "end" is not one');
+    expect(issues.get('steps[1].branches[3].default')).toEqual(['step "g": "default" does not apply to an eventGateway.']);
+    // msg2 is the step right after its gateway in the list, and its only branch: one way in, fine.
+    expect(issues.has('steps[4].branches[0].to')).toBe(false);
+    // The step before `lost` falls into it, and nothing else: a message needs an event gateway.
+    expect(issues.get('steps[6].type')).toEqual(['step "lost": a message step only goes after an event gateway, as one of its branches.']);
+    // The last step: its implicit way out is the end.
+    expect(issues.get('steps[7]')![0]).toContain('event gateway "last"');
+  });
+
+  test('a timer after an event gateway that the step before it also falls into has two ways in', async () => {
+    const issues = await issuesOf({
+      name: 'X',
+      steps: [
+        { id: 'g', type: 'eventGateway', branches: [{ to: 't1' }, { to: 't2' }] },
+        { id: 't1', type: 'timer', duration: '1h' },
+        { id: 't2', type: 'timer', duration: '2h', end: true },
+      ],
+    });
+    expect(issues.get('steps[0].branches[1].to')![0]).toContain('it has g, t1.');
+  });
+
+  test('default flows: xor and or only, one per gateway', async () => {
+    const issues = await issuesOf({
+      name: 'X',
+      steps: [
+        { id: 'p', type: 'and', branches: [{ to: 'x', default: true }, { to: 'x' }] },
+        { id: 'x', type: 'xor', branches: [{ to: 'a', default: true }, { to: 'a', default: true }, { to: 'a', default: false }] },
+        { id: 'a', end: true },
+      ],
+    });
+    expect(issues.get('steps[0].branches[0].default')).toEqual(['step "p": "default" does not apply to an and.']);
+    expect(issues.get('steps[1].branches')).toEqual(['gateway "x": only one branch can be the default ("default": true).']);
+  });
+
+  test('starts: each one in the "from" of exactly one step, "from" only with starts, lanes as for steps', async () => {
+    const issues = await issuesOf({
+      name: 'X',
+      lanes: ['A'],
+      starts: [{ id: 's1', lane: 'B' }, { id: 's2' }, { id: 's3' }],
+      steps: [
+        { id: 'a', from: ['s1', 'nope'] },
+        { id: 'b', from: 's1' },
+        { id: 'c', from: 's2', next: 's3' },
+      ],
+    });
+    expect(issues.get('starts[0].lane')).toEqual(['start "s1": lane "B" is not in "lanes".']);
+    expect(issues.get('steps[0].from[1]')).toEqual(['step "a": "nope" is not the id of a start in "starts".']);
+    expect(issues.get('starts[0]')![0]).toContain('start "s1" is in the "from" of several steps (a, b)');
+    expect(issues.get('starts[2]')).toEqual(['start "s3" leads nowhere: name it in the "from" of the step it leads to.']);
+    // A start id is not a step id: `next` cannot name it.
+    expect(issues.get('steps[2].next')).toEqual(['step "c": "s3" is not the id of a step.']);
+    expect((await issuesOf({ name: 'X', steps: [{ id: 'a', from: 's' }] })).get('steps[0].from')).toEqual([
+      'step "a": "from" names start events, so it needs "starts".',
+    ]);
+  });
+
+  test('starts, steps and boundary events share one space of ids', async () => {
+    const issues = await issuesOf({
+      name: 'X',
+      starts: [{ id: 'a' }],
+      steps: [
+        { id: 'a', from: 'a', boundary: [{ id: 'b', type: 'timer', duration: '1h', end: true }] },
+        { id: 'b', end: true },
+      ],
+    });
+    expect(issues.get('steps[0].id')![0]).toContain('id "a" is used more than once');
+    expect(issues.get('steps[1].id')![0]).toContain('id "b" is used more than once');
+  });
+
+  test('boundary events: on tasks and call activities, to a step, with a valid duration', async () => {
+    const issues = await issuesOf({
+      name: 'X',
+      steps: [
+        { id: 'g', type: 'xor', branches: [{ to: 'c' }, { to: 's' }], boundary: [{ id: 'b0', type: 'timer', end: true }] },
+        { id: 'c', type: 'callActivity', boundary: [{ id: 'b1', type: 'timer', duration: 'soon', to: 'ghost', label: 'Late' }], end: true },
+        { id: 's', type: 'subprocess', boundary: [{ id: 'b2', type: 'timer', end: true }], end: true },
+      ],
+    });
+    expect(issues.get('steps[0].boundary')).toEqual(['step "g": "boundary" does not apply to an xor.']);
+    expect(issues.has('steps[1].boundary')).toBe(false);
+    expect(issues.get('steps[1].boundary[0].to')).toEqual(['step "c": "ghost" is not the id of a step.']);
+    expect(issues.get('steps[1].boundary[0].duration')![0]).toContain('duration "soon" is not a distribution');
+    expect(issues.get('steps[2].boundary')).toEqual(['step "s": "boundary" does not apply to a subprocess.']);
+  });
+
+  test('data: on activities, a name and direction once per step', async () => {
+    const issues = await issuesOf({
+      name: 'X',
+      steps: [
+        { id: 'a', data: [{ name: 'File', direction: 'in' }, { name: 'File', direction: 'out' }, { name: 'File', direction: 'in' }] },
+        { id: 's', type: 'subprocess', data: [{ name: 'File', direction: 'out' }] },
+        { id: 'g', type: 'and', data: [{ name: 'File', direction: 'in' }], end: true },
+      ],
+    });
+    expect(issues.get('steps[0].data[2]')).toEqual(['step "a": data "File" (in) is listed more than once.']);
+    expect(issues.has('steps[1].data')).toBe(false);
+    expect(issues.get('steps[2].data')).toEqual(['step "g": "data" does not apply to an and.']);
+  });
+
+  test('notes: each text once per step (removeAnnotation names a note by its text)', async () => {
+    const issues = await issuesOf({
+      name: 'X',
+      steps: [
+        { id: 'a', notes: ['Check ID', 'Paper too', 'Check ID'] },
+        { id: 'b', notes: ['Check ID'], end: true },
+      ],
+    });
+    expect(issues.get('steps[0].notes[2]')).toEqual(['step "a": the note "Check ID" is listed more than once.']);
+    expect(issues.has('steps[1].notes[0]')).toBe(false);
+  });
+});
+
+describe('the trivial start and the exclusive splits of the new constructs (#631 contract review)', () => {
+  test('starts: [{ id: "StartEvent" }] to a step further down is the trivial start: its step moves to the head', async () => {
+    const outline = {
+      name: 'X',
+      starts: [{ id: 'StartEvent' }],
+      steps: [
+        { id: 'a', next: 'c' },
+        { id: 'b', from: 'StartEvent', next: 'a' },
+        { id: 'c', end: true },
+      ],
+    };
+    const normal = normalizeOutline(outline);
+    // b first; then a and c follow it in the list, so no `next` is left.
+    expect(normal).toEqual({ name: 'X', steps: [{ id: 'b' }, { id: 'a' }, { id: 'c', end: true }] });
+    const built = await outlineToBpmn(outline);
+    const reading = await bpmnToOutline(built.xml, { scenario: built.scenario as unknown as Record<string, unknown> });
+    expect(reading.warnings).toEqual([]);
+    expect(reading.outline).toEqual(normal);
+  });
+
+  test('a parallel join of the branches of an event gateway is flagged like one behind an xor', async () => {
+    const built = await outlineToBpmn({
+      name: 'X',
+      steps: [
+        { id: 'g', type: 'eventGateway', branches: [{ to: 'm' }, { to: 't' }] },
+        { id: 'm', type: 'message', duration: '1h', next: 'j' },
+        { id: 't', type: 'timer', duration: '2h', next: 'j' },
+        { id: 'j', type: 'and', end: true },
+      ],
+    });
+    expect(built.notes).toEqual([
+      'parallel join "j" waits for branches of the exclusive gateway "g", which only ever takes one: cases would wait there forever. Use an xor (or or) join.',
+    ]);
+  });
+});
+
+describe('generated end ids never clash (#631 review)', () => {
+  test('the second end of "x" and the end of step "x_2" get different ids, each with its flow', async () => {
+    const outline = {
+      name: 'X',
+      steps: [
+        { id: 'x', type: 'xor', branches: [{ label: 'No', end: true }, { label: 'Cancel', end: true }, { label: 'Yes', to: 'x_2' }] },
+        { id: 'x_2', end: true },
+      ],
+    };
+    const built = await outlineToBpmn(outline);
+    const { rootElement } = await BpmnModdle().fromXML(built.xml);
+    const process = (rootElement as any).rootElements.find((el: any) => el.$type === 'bpmn:Process');
+    const ends = process.flowElements.filter((el: any) => el.$type === 'bpmn:EndEvent');
+    expect(ends.map((el: any) => el.id).sort()).toEqual(['EndEvent_x', 'EndEvent_x_2', 'EndEvent_x_2_2']);
+    const flows = process.flowElements.filter((el: any) => el.$type === 'bpmn:SequenceFlow');
+    for (const end of ends) expect(flows.filter((f: any) => f.targetRef === end)).toHaveLength(1);
+    const reading = await bpmnToOutline(built.xml, { scenario: built.scenario as unknown as Record<string, unknown> });
+    expect(reading.warnings).toEqual([]);
+    expect(reading.outline).toEqual(normalizeOutline(outline));
+  });
+});
+
+describe('the reader never returns an outline normalizeOutline refuses, and says what it leaves out (#631 review)', () => {
+  const xml = (gateway: string): string => `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="https://example.org">
+  <bpmn:process id="P" name="P" isExecutable="true">
+    <bpmn:startEvent id="S"><bpmn:signalEventDefinition /></bpmn:startEvent>
+    <bpmn:sequenceFlow id="f1" name="go" sourceRef="S" targetRef="a" />
+    <bpmn:sequenceFlow id="f2" sourceRef="S" targetRef="b" />
+    <bpmn:task id="a" /><bpmn:task id="b" />
+    <bpmn:${gateway} id="g" />
+    <bpmn:sequenceFlow id="f3" sourceRef="a" targetRef="g" />
+    <bpmn:sequenceFlow id="f4" sourceRef="g" targetRef="b" />
+    <bpmn:sequenceFlow id="f5" sourceRef="g" targetRef="E" />
+    <bpmn:sequenceFlow id="f6" sourceRef="b" targetRef="E2" />
+    <bpmn:endEvent id="E"><bpmn:messageEventDefinition /></bpmn:endEvent>
+    <bpmn:endEvent id="E2"><bpmn:terminateEventDefinition /></bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>`;
+
+  test.each([
+    ['parallelGateway', 0.5, 0.5],
+    ['exclusiveGateway', 0.7, 0.6],
+  ])('%s with probabilities %s and %s', async (gateway, p4, p5) => {
+    const scenario = { elements: { f4: { probability: p4 }, f5: { probability: p5 } } };
+    const { outline, warnings } = await bpmnToOutline(xml(gateway), { scenario });
+    expect(() => normalizeOutline(outline)).not.toThrow();
+    expect(JSON.stringify(outline)).not.toContain('probability');
+    expect(warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('were left out: f4, f5.'),
+        'S: the outline has no bpmn:SignalEventDefinition; it is read as a plain event.',
+        'E: the outline has no bpmn:MessageEventDefinition; it is read as a plain event.',
+        'start event S has several outgoing flows; an outline start leads to one step, so these were left out: f2.',
+        'the names of flows out of a start event are not part of the outline and were left out: f1 "go".',
+      ]),
+    );
+    // A terminate end is an outline construct, not a loss.
+    expect(warnings.some((w) => w.startsWith('E2:'))).toBe(false);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * #631: each construct is built, validates, and reads back the same with no warning
+ * ------------------------------------------------------------------ */
+
+describe('the #631 constructs round-trip with no warning', () => {
+  async function roundTrip(outline: unknown) {
+    const built = await outlineToBpmn(outline);
+    const parsed = parseScenario(built.scenario);
+    expect(parsed.success, JSON.stringify(parsed.error?.issues)).toBe(true);
+    const { ir, errors } = await validateBpmnXml(built.xml);
+    expect(errors).toEqual([]);
+    expect(validateScenario(parsed.data!, ir).filter((p) => p.severity === 'error')).toEqual([]);
+    const reading = await bpmnToOutline(built.xml, { scenario: built.scenario as unknown as Record<string, unknown> });
+    expect(reading.warnings).toEqual([]);
+    expect(reading.outline).toEqual(normalizeOutline(outline));
+    expect(reading.outline).toEqual(built.outline);
+    return { built, ir, elements: built.scenario['elements'] as Record<string, any> };
+  }
+
+  test.each(Object.entries(CONSTRUCTS))('%s', async (_label, outline) => {
+    await roundTrip(outline);
+  });
+
+  test('task variants keep their BPMN element and simulate as tasks', async () => {
+    const { built, ir } = await roundTrip(CONSTRUCTS['task variants']);
+    for (const type of ['sendTask', 'receiveTask', 'manualTask', 'scriptTask', 'businessRuleTask']) expect(built.xml).toContain(`<bpmn:${type} `);
+    expect(['send', 'receive', 'manual', 'script', 'rule'].map((id) => ir.nodes[id]!.type)).toEqual(['task', 'task', 'task', 'task', 'task']);
+  });
+
+  test('terminate ends: on a step and on a branch', async () => {
+    const { built, ir } = await roundTrip(CONSTRUCTS['terminate ends']);
+    expect(ir.nodes['EndEvent_fast']!.type).toBe('terminate');
+    expect(ir.nodes['EndEvent_check']!.type).toBe('terminate');
+    expect(ir.nodes['EndEvent_check_2']!.type).toBe('end');
+    expect(built.outline.steps.find((s) => s.id === 'check')!.branches).toEqual([
+      { end: 'terminate', label: 'Abort', probability: 0.5 },
+      { end: true, label: 'Done', probability: 0.5 },
+    ]);
+  });
+
+  test('starts: two streams of arrivals, a timer start, each start in its lane', async () => {
+    const { built, elements } = await roundTrip(CONSTRUCTS['starts and a timer start']);
+    expect(built.xml).toMatch(/<bpmn:startEvent id="nightly" name="Every night">\s*<bpmn:outgoing>[^<]+<\/bpmn:outgoing>\s*<bpmn:timerEventDefinition/);
+    expect(elements['walkIn']).toEqual({ triggerCount: 20, interTriggerTimer: { type: 'constant', value: 60 } });
+    expect(elements['nightly']).toEqual(elements['walkIn']);
+    expect(elements['StartEvent']).toBeUndefined();
+    const { lanes } = await geometry(built.xml);
+    expect(lanes.get('Lane_1')).toContain('walkIn');
+    expect(lanes.get('Lane_2')).toContain('nightly');
+    expect(built.outline.starts).toEqual([
+      { id: 'walkIn', name: 'Customer walks in', lane: 'Front' },
+      { id: 'nightly', name: 'Every night', type: 'timer', lane: 'Back' },
+    ]);
+  });
+
+  test('default flows of an xor and an or', async () => {
+    const { built, ir } = await roundTrip(CONSTRUCTS['default flows']);
+    expect(built.xml).toContain('<bpmn:exclusiveGateway id="kind" default="Flow_kind_review">');
+    expect(built.xml).toContain('<bpmn:inclusiveGateway id="extras" default="Flow_extras_mail">');
+    expect(ir.flows['Flow_kind_review']!.isDefault).toBe(true);
+    expect(ir.flows['Flow_extras_mail']!.isDefault).toBe(true);
+  });
+
+  test('boundary timers: cancelActivity="false" only when they do not interrupt, their delay in the scenario', async () => {
+    const { built, ir, elements } = await roundTrip(CONSTRUCTS['boundary timers']);
+    expect(built.xml).toMatch(/<bpmn:boundaryEvent id="late" cancelActivity="false" attachedToRef="work">/);
+    expect(built.xml).toMatch(/<bpmn:boundaryEvent id="cut" attachedToRef="work">/);
+    expect(built.xml).toMatch(/<bpmn:boundaryEvent id="hang" attachedToRef="call">/);
+    expect(built.xml).not.toContain('timeDuration');
+    expect(ir.nodes['late']).toMatchObject({ type: 'timer', attachedTo: 'work', interrupting: false });
+    expect(ir.nodes['cut']!.interrupting).not.toBe(false);
+    expect(elements['late']).toEqual({ processingTime: { type: 'constant', value: 1200 } });
+    expect(elements['cut']).toEqual({ processingTime: { type: 'constant', value: 2400 } });
+    expect(ir.nodes['EndEvent_cut']!.type).toBe('terminate');
+    // Each boundary event sits on its host's bottom border.
+    const { shapes } = await geometry(built.xml);
+    for (const [b, host] of [['late', 'work'], ['cut', 'work'], ['hang', 'call']] as const) {
+      const box = shapes.get(b)!;
+      const h = shapes.get(host)!;
+      expect(box.y + box.height / 2, b).toBeCloseTo(h.y + h.height, 0);
+    }
+  });
+
+  test('boundary events in a lane sit in the lane of their host, and so do their ends', async () => {
+    const built = await outlineToBpmn({
+      name: 'X',
+      lanes: ['A', 'B'],
+      steps: [
+        { id: 'a', lane: 'B', duration: '1h', boundary: [{ id: 'sla', type: 'timer', duration: '30m', end: true }] },
+        { id: 'b', lane: 'A', end: true },
+      ],
+    });
+    const { lanes } = await geometry(built.xml);
+    expect(lanes.get('Lane_2')).toEqual(expect.arrayContaining(['a', 'sla', 'EndEvent_sla']));
+    await expectLaidOut(built.xml);
+  });
+
+  test('the event gateway: a message and a timer branch, their delays in the scenario', async () => {
+    const { built, ir, elements } = await roundTrip(CONSTRUCTS['event gateway']);
+    expect(built.xml).toContain('<bpmn:eventBasedGateway id="wait" name="Reply?">');
+    expect(built.xml).toMatch(/<bpmn:intermediateCatchEvent id="answer" name="Answer">[\s\S]*?<bpmn:messageEventDefinition/);
+    expect(ir.nodes['wait']!.type).toBe('eventGateway');
+    expect(elements['answer']).toEqual({ processingTime: { type: 'exponential', mean: 1200 } });
+    expect(elements['timeout']).toEqual({ processingTime: { type: 'constant', value: 1800 } });
+  });
+
+  test('the claim escalation example (examples/outline/claim-escalation.json) and the docs fixture', async () => {
+    const repo = fileURLToPath(new URL('../../../../', import.meta.url));
+    const example = JSON.parse(readFileSync(`${repo}examples/outline/claim-escalation.json`, 'utf8'));
+    const { built } = await roundTrip(example);
+    expect(built.notes).toEqual([]);
+    expect(built.outline.steps.find((s) => s.id === 'assess')!.boundary).toEqual([
+      { id: 'sla', type: 'timer', name: '48 h', label: 'No decision in 48 h', duration: { type: 'constant', value: 172800 }, interrupting: false, to: 'escalate' },
+    ]);
+    await expectLaidOut(built.xml);
+  });
+
+  test('a task with an interrupting boundary is an exclusive split for a parallel join', async () => {
+    const built = await outlineToBpmn({
+      name: 'X',
+      steps: [
+        { id: 'a', boundary: [{ id: 'cut', type: 'timer', duration: '1h', to: 'b' }, { id: 'soft', type: 'timer', duration: '2h', interrupting: false, to: 'c' }] },
+        { id: 'j', type: 'and', end: true },
+        { id: 'b', next: 'j' },
+        { id: 'c', end: true },
+      ],
+    });
+    expect(built.notes).toEqual([
+      'parallel join "j" waits for branches of the exclusive gateway "a", which only ever takes one: cases would wait there forever. Use an xor (or or) join.',
+    ]);
+  });
+});
+
+describe('what the reader still leaves out of the new constructs, with a warning (#631)', () => {
+  const doc = (body: string): string => `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="https://example.org">
+  <bpmn:process id="P" name="P" isExecutable="true">
+    ${body}
+  </bpmn:process>
+</bpmn:definitions>`;
+
+  test('timer expressions in the XML are said lost (durations live in the scenario)', async () => {
+    const { outline, warnings } = await bpmnToOutline(
+      doc(`<bpmn:startEvent id="s"><bpmn:timerEventDefinition><bpmn:timeCycle>R/P1D</bpmn:timeCycle></bpmn:timerEventDefinition></bpmn:startEvent>
+    <bpmn:task id="a" /><bpmn:boundaryEvent id="b" attachedToRef="a"><bpmn:timerEventDefinition><bpmn:timeDuration>PT1H</bpmn:timeDuration></bpmn:timerEventDefinition></bpmn:boundaryEvent>
+    <bpmn:intermediateCatchEvent id="t"><bpmn:timerEventDefinition><bpmn:timeDate>2026-01-01</bpmn:timeDate></bpmn:timerEventDefinition></bpmn:intermediateCatchEvent>
+    <bpmn:endEvent id="e" />
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="a" /><bpmn:sequenceFlow id="f2" sourceRef="a" targetRef="t" />
+    <bpmn:sequenceFlow id="f3" sourceRef="t" targetRef="e" /><bpmn:sequenceFlow id="f4" sourceRef="b" targetRef="e" />`),
+    );
+    expect(warnings).toEqual([
+      'timer expressions in the BPMN are not part of the outline (durations live in the scenario) and were left out: s, t, b.',
+    ]);
+    expect(outline.starts).toEqual([{ id: 's', type: 'timer' }]);
+    expect(outline.steps[0]!.boundary).toEqual([{ id: 'b', type: 'timer', end: true }]);
+  });
+
+  test('an instantiating event gateway, a boundary on a sub-process, a lone message catch event', async () => {
+    const { outline, warnings } = await bpmnToOutline(
+      doc(`<bpmn:startEvent id="StartEvent" /><bpmn:eventBasedGateway id="g" instantiate="true" />
+    <bpmn:intermediateCatchEvent id="m1"><bpmn:messageEventDefinition /></bpmn:intermediateCatchEvent>
+    <bpmn:intermediateCatchEvent id="t1"><bpmn:timerEventDefinition /></bpmn:intermediateCatchEvent>
+    <bpmn:subProcess id="sp" /><bpmn:boundaryEvent id="b" attachedToRef="sp"><bpmn:timerEventDefinition /></bpmn:boundaryEvent>
+    <bpmn:intermediateCatchEvent id="m2"><bpmn:messageEventDefinition /></bpmn:intermediateCatchEvent>
+    <bpmn:endEvent id="e" />
+    <bpmn:sequenceFlow id="f1" sourceRef="StartEvent" targetRef="sp" /><bpmn:sequenceFlow id="f2" sourceRef="sp" targetRef="g" />
+    <bpmn:sequenceFlow id="f3" sourceRef="g" targetRef="m1" /><bpmn:sequenceFlow id="f4" sourceRef="g" targetRef="t1" />
+    <bpmn:sequenceFlow id="f5" sourceRef="m1" targetRef="m2" /><bpmn:sequenceFlow id="f6" sourceRef="t1" targetRef="e" />
+    <bpmn:sequenceFlow id="f7" sourceRef="m2" targetRef="e" /><bpmn:sequenceFlow id="f8" sourceRef="b" targetRef="e" />`),
+    );
+    expect(warnings).toEqual(
+      expect.arrayContaining([
+        'g (bpmn:EventBasedGateway) has no outline equivalent and was left out.',
+        'b (bpmn:BoundaryEvent) has no outline equivalent and was left out.',
+        'm1 (bpmn:IntermediateCatchEvent) has no outline equivalent and was left out.',
+        'm2 (bpmn:IntermediateCatchEvent) has no outline equivalent and was left out.',
+      ]),
+    );
+    expect(() => normalizeOutline(outline)).not.toThrow();
+    expect(outline.steps.map((s) => s.id)).toEqual(['sp', 't1']);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * #638: notes and data, built and read back
+ * ------------------------------------------------------------------ */
+
+describe('notes and data (#638)', () => {
+  const PAPERWORK = {
+    name: 'Paperwork',
+    lanes: ['Desk', 'Back office'],
+    steps: [
+      { id: 'receive', name: 'Receive', lane: 'Desk', notes: ['Paper too', 'Check the ID'], data: [{ name: 'Claim', direction: 'out' }, { name: 'Policy', direction: 'in' }] },
+      { id: 'ok', type: 'xor', name: 'Complete?', notes: ['Asked by phone'], branches: [{ to: 'file', label: 'Yes' }, { to: 'receive', label: 'No', probability: 0.1 }] },
+      { id: 'file', type: 'subprocess', name: 'File it', lane: 'Back office', data: [{ name: 'Claim', direction: 'in' }, { name: 'Archive', direction: 'out' }] },
+      { id: 'wait', type: 'timer', name: 'A day', duration: '1d', notes: ['Calendar days'], end: true },
+    ],
+  } as const;
+
+  test('one data object per name, shared by the steps that name it; normal form lists reads first', async () => {
+    const built = await outlineToBpmn(PAPERWORK);
+    expect(built.warnings).toEqual([]);
+    expect(built.xml.match(/<bpmn:dataObjectReference /g)).toHaveLength(3);
+    expect(built.xml.match(/<bpmn:textAnnotation /g)).toHaveLength(4);
+    expect(built.outline.steps[0]).toMatchObject({
+      notes: ['Paper too', 'Check the ID'],
+      data: [{ name: 'Policy', direction: 'in' }, { name: 'Claim', direction: 'out' }],
+    });
+    expect(normalizeOutline(PAPERWORK)).toEqual(built.outline);
+    const reading = await bpmnToOutline(built.xml, { scenario: built.scenario as Record<string, unknown> });
+    expect(reading.warnings).toEqual([]);
+    expect(reading.outline).toEqual(built.outline);
+    // Built again from what was read: the same model.
+    expect((await outlineToBpmn(reading.outline)).xml).toBe(built.xml);
+  });
+
+  test('the model opens with no import warning; annotations sit inside the pool, beside their step', async () => {
+    const built = await outlineToBpmn(PAPERWORK);
+    await expectCleanImport(built.xml);
+    const { rootElement } = await BpmnModdle().fromXML(built.xml);
+    const shapes = new Map<string, any>(((rootElement as any).diagrams[0].plane.planeElement as any[]).map((di) => [di.bpmnElement.id, di.bounds]));
+    const pool = shapes.get('Participant_1');
+    for (const [id, b] of shapes) {
+      if (!id.startsWith('TextAnnotation_')) continue;
+      expect(b.y, id).toBeGreaterThanOrEqual(pool.y);
+      expect(b.y + b.height, id).toBeLessThanOrEqual(pool.y + pool.height);
+    }
+  });
+
+  test('reading a model from elsewhere: repeated notes once; empty ones, loose artifacts, a second object of a name and data on events said lost', async () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="x">
+  <bpmn:process id="P" isExecutable="true">
+    <bpmn:startEvent id="s"><bpmn:dataOutputAssociation id="so"><bpmn:targetRef>form</bpmn:targetRef></bpmn:dataOutputAssociation></bpmn:startEvent>
+    <bpmn:task id="a" name="A"><bpmn:dataOutputAssociation id="o1"><bpmn:targetRef>form</bpmn:targetRef></bpmn:dataOutputAssociation>
+      <bpmn:dataOutputAssociation id="o2"><bpmn:targetRef>crm</bpmn:targetRef></bpmn:dataOutputAssociation>
+      <bpmn:dataOutputAssociation id="o3"><bpmn:targetRef>form2</bpmn:targetRef></bpmn:dataOutputAssociation></bpmn:task>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="a"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="a" targetRef="e"/>
+    <bpmn:dataObject id="formData"/>
+    <bpmn:dataObjectReference id="form" name="Form" dataObjectRef="formData"/>
+    <bpmn:dataObjectReference id="loose" name="Loose" dataObjectRef="formData"/>
+    <bpmn:dataObjectReference id="form2" name="Form" dataObjectRef="formData"/>
+    <bpmn:dataStoreReference id="crm" name="CRM"/>
+    <bpmn:textAnnotation id="n1"><bpmn:text>Twice</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="n2"><bpmn:text>Twice</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="n3"><bpmn:text> </bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="n4"><bpmn:text>On the start</bpmn:text></bpmn:textAnnotation>
+    <bpmn:association id="a1" sourceRef="a" targetRef="n1"/>
+    <bpmn:association id="a2" sourceRef="n2" targetRef="a"/>
+    <bpmn:association id="a3" sourceRef="a" targetRef="n3"/>
+    <bpmn:association id="a4" sourceRef="s" targetRef="n4"/>
+  </bpmn:process>
+</bpmn:definitions>`;
+    const { outline, warnings } = await bpmnToOutline(xml);
+    expect(outline.steps).toEqual([{ id: 'a', name: 'A', from: 's', end: true, notes: ['Twice'], data: [{ name: 'Form', direction: 'out' }] }]);
+    expect(warnings).toEqual([
+      expect.stringContaining('crm (bpmn:DataStoreReference) has no outline equivalent'),
+      'text annotations that repeat a note of the same step were read once: a "Twice".',
+      expect.stringContaining('loose (bpmn:DataObjectReference) has no outline equivalent'),
+      expect.stringContaining('form2 (bpmn:DataObjectReference) has no outline equivalent'),
+      expect.stringContaining('so (bpmn:DataOutputAssociation) has no outline equivalent'),
+      '4 annotations, groups or associations are not part of the outline and were left out.',
+    ]);
+  });
+});
+
+test('the default arrivals are recognised whatever the key order of the scenario (patch_scenario rewrites it)', async () => {
+  const built = await outlineToBpmn(CREDIT);
+  const scenario = structuredClone(built.scenario) as any;
+  scenario.elements.StartEvent = { interTriggerTimer: { value: 60, type: 'constant' }, triggerCount: 20 };
+  expect((await bpmnToOutline(built.xml, { scenario })).warnings).toEqual([]);
 });

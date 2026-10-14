@@ -153,7 +153,12 @@ export function menuTemplate(
     { label: S.simulacion, submenu: [atajo(S.ejecutar, 'CmdOrCtrl+Enter', 'ejecutar')] },
     ventana,
     // `role: 'help'` makes it the macOS Help menu, which brings the system's menu search (⇧⌘/).
-    { label: S.ayuda, role: 'help', submenu: [{ label: S.documentacion, click: abrirDocs }] },
+    // Report a problem… (#651) goes through the renderer, which knows the version and builds the URL.
+    {
+      label: S.ayuda,
+      role: 'help',
+      submenu: [{ label: S.documentacion, click: abrirDocs }, { label: S.reportarProblema, click: () => send('reportarProblema') }],
+    },
   ];
 }
 

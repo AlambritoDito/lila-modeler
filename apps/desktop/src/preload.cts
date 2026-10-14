@@ -26,6 +26,8 @@ const { contextBridge, ipcRenderer } = electron;
 const lila = {
   platform: 'desktop',
   version: process.versions.electron ?? '',
+  // #651: the sandboxed preload's `process` still has these three.
+  system: { platform: process.platform, arch: process.arch, version: process.getSystemVersion() },
   chooseFolder: (fileOnly?: boolean) =>
     ipcRenderer.invoke('lila:chooseFolder', fileOnly) as Promise<string | null>,
   chooseSaveFile: (defaultPath?: string) =>

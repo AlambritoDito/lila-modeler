@@ -20,6 +20,7 @@ import type { TemaGuardado } from '../theme/temas';
 import { Apariencia, type Ranuras } from './Apariencia';
 import { Atajos, type GrupoAtajos } from './Atajos';
 import { ATAJOS, etiqueta, MAC, teclaDeArchivo, type GrupoAtajo } from '../atajos';
+import { urlReporteActual } from '../reportarProblema';
 
 const GRUPOS: readonly GrupoAtajo[] = ['archivo', 'buscar', 'modos', 'simulacion', 'lienzo', 'paneles'];
 const DESKTOP = typeof window !== 'undefined' && typeof window.lila !== 'undefined';
@@ -94,7 +95,12 @@ export function Ajustes(props: AjustesProps): React.JSX.Element {
     <form ref={formRef} method="dialog" onKeyDown={(e) => { if (e.key === 'Enter' && e.target instanceof HTMLInputElement) e.preventDefault(); }}>
       <div className="ajustes-encabezado">
         <h2 id="ajustes-titulo">{S.app.ajustes} / {S.ajustes.secciones[seccion]}</h2>
-        <button type="button" className="boton" onClick={() => { props.cerrarDialogo(); props.abrirAcerca(); }}>{S.app.acercaDe}</button>
+        <div className="ajustes-encabezado-acciones">
+          <button type="button" className="boton" onClick={() => { props.cerrarDialogo(); props.abrirAcerca(); }}>{S.app.acercaDe}</button>
+          {/* #651: a link, so the URL is built when Settings renders, and Settings stays open. In
+              the desktop app `setWindowOpenHandler` sends it to the system browser. */}
+          <a className="boton" href={urlReporteActual()} target="_blank" rel="noopener noreferrer">{S.app.reportarProblema}</a>
+        </div>
       </div>
       <div className="ajustes-cuerpo">
         <nav

@@ -20,7 +20,7 @@ interview ([`MCP.md`](MCP.md#resources-and-prompt)).
 
 | Step | Tool | CLI |
 | --- | --- | --- |
-| 0. The file exists: read what it holds | `get_project`, `get_scenario` | `lila project show`, `lila scenario show` |
+| 0. The file exists: read what it holds, or bring in a BPMN | `get_project`, `get_scenario`, `put_process_bpmn`, `get_process_bpmn` | `lila project show`, `lila scenario show`, `lila process import`, `lila process export-bpmn` |
 | 1. Read the interview, write an outline | (the agent) | |
 | 2. Create the process | `create_process` | `lila process create` |
 | 3. Fix it | `edit_process`, `get_process_outline` | `lila process edit`, `lila process show` |
@@ -55,6 +55,17 @@ nothing. `get_scenario` reads one scenario, as stored or `resolved: true`, with 
 `test`. Then pick the step below that the person asked for: a new process (step 2), a fix
 (step 3), new numbers (step 5) or a new run (step 6).
 
+When the person brings a BPMN drawn elsewhere (a Bizagi export, say), do not rebuild it as an
+outline: add it as another process of the `.lila` with `put_process_bpmn` and `mode: "add"`. It
+gets a base scenario with default arrivals and task times, to fill in at step 5 before a run.
+A diagram the simulator cannot run (message events, collaborations) is kept for documentation
+with `allowUnsimulatable: true`, its errors in `notes`. `get_process_bpmn` hands out the XML of a
+process, and `mode: "replace"` takes it back (see [Raw BPMN of a process](MCP.md#raw-bpmn-of-a-process)).
+
+```json
+{ "name": "put_process_bpmn", "arguments": { "project": "card.lila", "mode": "add", "bpmn": "bizagi-export.bpmn", "name": "Card dispute" } }
+```
+
 ### 1. From the interview to an outline
 
 Read the transcript and write down: the roles that do the work (lanes), each thing someone does
@@ -80,14 +91,17 @@ such as a parallel join waiting for branches of one exclusive split.
 ### 3. `edit_process` and `get_process_outline`
 
 To change a process, do not create it again: `edit_process` applies a list of operations (`add`,
-`connect`, `remove`, `rename`, `setType`, `moveToLane`, `addLane`) all or none, keeps every id and
+`connect`, `remove`, `rename`, `setType`, `moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`, `annotate`,
+`addDataObject`…) all or none, keeps every id and
 everything the operations do not touch (documentation, RACI, attributes, other processes). Send it
 with `dryRun: true` first and show the `changes` to the person when the edit is not trivial.
 
 ```json
 { "name": "edit_process", "arguments": { "project": "card.lila", "dryRun": true, "operations": [
   { "op": "add", "step": { "id": "verify", "name": "Verify identity", "duration": "5m" }, "after": "receive" },
-  { "op": "rename", "id": "issue", "name": "Issue the card" } ] } }
+  { "op": "rename", "id": "issue", "name": "Issue the card" },
+  { "op": "addBoundary", "on": "bureau", "boundary": { "id": "bureauDown", "type": "timer", "duration": "30m",
+    "label": "No answer in 30 min", "to": "assess" } } ] } }
 ```
 
 **After any edit the process still simulates.** Scenario entries that no longer apply are removed
@@ -106,6 +120,20 @@ imported from Bizagi; `warnings` says what an outline cannot carry.
 `annotate_element` writes the description, the RACI list, the catalog references and the extended
 attributes of one element by its BPMN id. `get_raci_matrix` returns the matrix the document will
 print. Both are optional; the document is better with them.
+
+An extended attribute (an SLA, a risk level…) has to be defined before an element can have a
+value for it. `define_attribute` defines it once per element type, with the rules of the app's
+dialog, and `get_project` lists what each process defines:
+
+```json
+{ "name": "define_attribute", "arguments": { "project": "card.lila", "name": "Risk level", "type": "list",
+  "appliesTo": "task", "options": ["Low", "Medium", "High"] } }
+```
+
+Then `annotate_element` fills it in by name, `"attributes": { "Risk level": "High" }`, and the
+process document prints it under the element. Calling `define_attribute` again with the same
+definition changes nothing; retyping it or taking options away removes the values that no longer
+fit, and `removedValues` says which.
 
 ### 5. The scenario
 
@@ -198,20 +226,75 @@ against the real desktop app.
 | --- | --- |
 | `name` | The process name (also the default slug). |
 | `lanes` | Lane names in order. Optional: without it, lanes are collected from the steps. |
+| `starts` | Optional start events: `{ id, name?, type?, lane? }`, `type` `none` (default) or `timer`. Without it, one plain start (`StartEvent`) leads to the first step. With it, the start ids are yours (the scenario's arrivals key on them), steps name theirs with `from`, and each start is in the `from` of exactly one step: to fork, put a gateway after it. `lane` follows the rule of `steps[].lane` and defaults to the lane of its step. Each start gets the default arrivals, so two starts bring two streams of cases. A `timer` start is notation: its cases arrive by the scenario's arrivals on that start, exactly as on a plain one, not by a calendar of the timer. |
 | `steps[].id` | The BPMN id. Scenarios key on it, so pick short stable ids. |
 | `steps[].name` | The label. |
-| `steps[].type` | `task` (default), `userTask`, `serviceTask`, `callActivity`, `xor`, `and`, `or`, `timer`, `subprocess`. |
+| `steps[].type` | `task` (default), `userTask`, `serviceTask`, `sendTask`, `receiveTask`, `manualTask`, `scriptTask`, `businessRuleTask`, `callActivity`, `xor`, `and`, `or`, `eventGateway`, `timer`, `message`, `subprocess`. The task variants simulate as `task`; the document and the diagram show what they are. `message` (a wait for a message) only goes after an `eventGateway`, as one of its branches. |
 | `steps[].lane` | Defaults to the previous step's lane. |
+| `steps[].from` | With `starts`: the start id(s) that lead to this step. Only valid when `starts` is given; only start ids. |
 | `steps[].next` | The step(s) after this one when it is not simply the next in the list (a loop back, a join). |
-| `steps[].branches` | Gateways only: `{ label?, to, probability? }` or `{ label?, end: true, probability? }`. XOR branches without a probability share what is left of 1. |
-| `steps[].end` | This step ends the process (an end event is added after it). |
-| `steps[].duration` | Seconds, `20m`, `1h30m`, `normal(20m, 5m)`, `triangular(1m, 2m, 5m)`, `exponential(mean=4m)`, or a distribution object in seconds. |
+| `steps[].branches` | Gateways only: `{ label?, to, probability?, default? }` or `{ label?, end: true \| "terminate", probability?, default? }`. XOR branches without a probability share what is left of 1. `default: true` marks the default flow of an `xor` or `or`, one per gateway: in an `xor` it does not change the split (what is left of 1 still goes to the branches without a probability); in an `or` it is the fallback taken when no other branch is. Every way out of an `eventGateway` (its branches, `next` or the following step) goes to a `timer` or `message` step whose only way in is that gateway: not the step before it in the list, nor another `next`, `to` or `from`, nor a boundary event. Its branches take no `probability`, `default` or `end`. The first event to happen wins; a branch without a `duration` never fires, and when none has one, cases stay at the gateway. |
+| `steps[].end` | `true`: this step ends the process (an end event is added after it). `"terminate"`: a terminate end event, which ends the whole case, every parallel path included. |
+| `steps[].duration` | Seconds, `20m`, `1h30m`, `normal(20m, 5m)`, `triangular(1m, 2m, 5m)`, `exponential(mean=4m)`, or a distribution object in seconds. On a task, its processing time; on a `timer` or a `message`, how long until it happens. |
 | `steps[].resources` | Names, or `{ name, quantity }`. With several, `selection: "or"` takes any one of them. |
+| `steps[].boundary` | Tasks (any variant) and call activities, not sub-processes: deadlines on the step, `{ id, type: "timer", name?, label?, duration?, interrupting?, to \| end }`. `interrupting` (default `true`) cuts the step short; `false` leaves it running and starts a parallel path. `to` is the step the boundary leads to; `end` (`true` or `"terminate"`) ends that path with an end event `EndEvent_<boundary id>`. `label` names the flow out of it. The `duration` counts from the moment a case reaches the step, waiting for resources included; without one the boundary never fires. |
+| `steps[].notes` | Text annotations attached to the step, in order; each text once per step. |
+| `steps[].data` | Activities only (tasks, call activities, sub-processes): data objects the step reads (`direction: "in"`) or writes (`"out"`), `{ name, direction }`, each name and direction once per step. Steps naming the same object share it. |
 
-The order of the list is the flow. Start and end events are added; ids such as `StartEvent`,
-`EndEvent_<step>` and `Flow_<from>_<to>` are Lila's. `get_process_outline` returns the same
-format in normal form (every lane named, durations as objects, probabilities filled in), so an
-outline round-trips. The full rules are in [`MCP.md`](MCP.md#creating-a-process-from-an-outline).
+The order of the list is the flow. End events are added, and so is the start unless `starts` is
+given (then the start ids are yours). Starts, steps and boundary events share one set of ids, and
+`next` and `to` only name steps. Ids such as `StartEvent`, `EndEvent_<step>`, `EndEvent_<boundary>`
+(the end a boundary with `end` leads to) and `Flow_<from>_<to>` are Lila's. `get_process_outline`
+returns the same format in normal form (every lane named, durations as objects, probabilities
+filled in), so an outline round-trips. The full rules are in [`MCP.md`](MCP.md#creating-a-process-from-an-outline).
+
+### Example: escalate after 48 hours
+
+«If the adjuster has not decided in 48 hours, the claim goes to a supervisor; the adjuster keeps
+working on it. Then we ask the customer to confirm, and if they do not answer in five days the
+claim is closed.» A deadline on a task is a `boundary` timer: `interrupting: false` because the
+adjuster keeps working while the supervisor looks at it (`true`, the default, would take the claim
+away from the adjuster). «Answer or five days, whichever comes first» is an `eventGateway` whose
+branches are a `message` step and a `timer` step; the timer path ends with `"terminate"`, which
+closes the whole case, the escalation path included. This is `examples/outline/claim-escalation.json`:
+
+```json
+{ "name": "Claim handling",
+  "lanes": ["Customer service", "Adjuster", "Supervisor"],
+  "steps": [
+    { "id": "register", "name": "Register claim", "lane": "Customer service", "duration": "10m", "resources": ["Clerk"] },
+    { "id": "assess", "name": "Assess claim", "type": "userTask", "lane": "Adjuster",
+      "duration": "triangular(4h, 24h, 72h)", "resources": ["Adjuster"],
+      "boundary": [ { "id": "sla", "type": "timer", "name": "48 h", "duration": "48h", "interrupting": false,
+                      "label": "No decision in 48 h", "to": "escalate" } ] },
+    { "id": "covered", "type": "xor", "name": "Covered?",
+      "branches": [ { "label": "Yes", "to": "confirm", "probability": 0.8, "default": true },
+                    { "label": "No", "to": "reject" } ] },
+    { "id": "confirm", "name": "Ask the customer to confirm", "type": "sendTask", "lane": "Customer service", "duration": "5m" },
+    { "id": "reply", "type": "eventGateway", "name": "Customer replies?",
+      "branches": [ { "to": "confirmed" }, { "to": "deadline" } ] },
+    { "id": "confirmed", "type": "message", "name": "Confirmation received", "duration": "exponential(mean=2d)" },
+    { "id": "pay", "name": "Pay claim", "type": "serviceTask", "lane": "Adjuster", "duration": "1m", "end": true },
+    { "id": "deadline", "type": "timer", "name": "5 days", "lane": "Customer service", "duration": "5d", "end": "terminate" },
+    { "id": "reject", "name": "Notify rejection", "type": "sendTask", "lane": "Customer service", "duration": "5m", "end": true },
+    { "id": "escalate", "name": "Escalate to supervisor", "lane": "Supervisor", "duration": "30m", "resources": ["Supervisor"], "end": true } ] }
+```
+
+The durations of `sla`, `confirmed` and `deadline` go to the base scenario, never to the XML: a
+`message` step's `duration` is how long the customer takes to answer. **Lengthen the run before you
+simulate it:** the base scenario runs for one hour (`run.duration: 3600`), and in one hour no case
+reaches a 48-hour deadline, so the escalation would never show. Patch `run.duration` first, e.g. to
+60 days, then run and export:
+
+```json
+{ "name": "patch_scenario", "arguments": { "project": "claims.lila", "scenario": "as-is",
+  "patch": [ { "op": "replace", "path": "/run/duration", "value": 5184000 } ] } }
+```
+
+With one adjuster, almost every claim waits past 48 hours, so the supervisor sees nearly all of
+them: the run says so in `elements.sla.completed` and `elements.escalate.completed`. A case ends
+where its last path ends, so `byEndEvent` counts a claim under `EndEvent_pay`, not under
+`EndEvent_escalate`, when it was paid after its escalation.
 
 ## When a call fails
 
@@ -264,8 +347,9 @@ the same `.lila`.
   and a sub-process is created collapsed. `edit_process` with `layout: true` replaces positions
   set by hand in that process; `layout: false` keeps them and places new steps simply. Move things
   in the app when the picture matters.
-- **Edits** reach only the main process of a BPMN (the one the simulator reads), and lanes cannot
-  be removed.
+- **Edits** reach only the main process of a BPMN (the one the simulator reads). `edit_process`
+  neither adds start events nor changes their type: give them in the outline (`starts`), or edit
+  them in the app.
 - **Scenario fields from the outline** are only `duration`, `resources` and branch `probability`.
   Arrivals, calendars, costs and capacities go through `patch_scenario` or a sheet.
 - **A long run takes its time.** The server keeps answering and reports each replication, and a
