@@ -375,7 +375,9 @@ export class Diagram {
   /**
    * Makes `dx` of room at `fromX` in `plane`, between `top` and `bottom`: what starts right of it
    * moves right, and the pools, lanes and expanded sub-processes it crosses get wider. A boundary
-   * event moves with its host, wherever it starts.
+   * event moves with its host, wherever it starts. A sequence flow with an end that moved and an end
+   * point that did not (or the other way round) is routed again, so it still leaves and reaches its
+   * shapes (QA of #661: the flow out of a boundary's host lost the host).
    */
   makeRoom(plane: El, fromX: number, dx: number, band: { top: number; bottom: number }): void {
     const inBand = (b: Box): boolean => b.y < band.bottom && bottom(b) > band.top;
@@ -385,29 +387,32 @@ export class Diagram {
       const host = di['bpmnElement']?.['attachedToRef'] as El | undefined;
       return host === undefined ? undefined : this.bounds(host.id);
     };
-    // Boundary events that do not go the way their own x says: their flows are routed again.
-    const odd = new Set<El>();
+    const went = new Set<El>();
+    // Sequence flows and whether their first and last points moved.
+    const ends: { flow: El; first: boolean; last: boolean }[] = [];
     for (const di of (plane['planeElement'] ?? []) as El[]) {
       if (!this.owns(di['bpmnElement'])) continue;
       if (di.$type === 'bpmndi:BPMNShape') {
         const b = di['bounds'] as Box;
         const host = hostBox(di);
-        const go = host === undefined ? moves(b) : moves(host);
-        if (host !== undefined && go !== moves(b)) odd.add(di['bpmnElement']);
-        if (go) {
+        if (host === undefined ? moves(b) : moves(host)) {
           b.x += dx;
           if (di['label']?.['bounds'] !== undefined) di['label']['bounds'].x += dx;
           this.moved.add(di['bpmnElement'].id);
+          went.add(di['bpmnElement']);
         } else if (inBand(b) && this.isContainer(di) && right(b) > fromX) b.width += dx;
       } else if (di.$type === 'bpmndi:BPMNEdge') {
-        for (const p of (di['waypoint'] ?? []) as Point[]) if (p.x >= fromX && p.y >= band.top && p.y <= band.bottom) p.x += dx;
+        const points = (di['waypoint'] ?? []) as Point[];
+        const shifted = points.map((p) => p.x >= fromX && p.y >= band.top && p.y <= band.bottom);
+        points.forEach((p, i) => {
+          if (shifted[i]) p.x += dx;
+        });
         if (di['label']?.['bounds'] !== undefined && di['label']['bounds'].x >= fromX) di['label']['bounds'].x += dx;
+        if (di['bpmnElement']?.$type === 'bpmn:SequenceFlow' && points.length > 0) ends.push({ flow: di['bpmnElement'], first: shifted[0]!, last: shifted[points.length - 1]! });
       }
     }
-    if (odd.size === 0) return;
-    for (const di of (plane['planeElement'] ?? []) as El[]) {
-      const flow = di['bpmnElement'] as El | undefined;
-      if (di.$type === 'bpmndi:BPMNEdge' && flow?.$type === 'bpmn:SequenceFlow' && odd.has(flow['sourceRef'])) this.routeFlow(flow);
+    for (const { flow, first, last } of ends) {
+      if (first !== went.has(flow['sourceRef']) || last !== went.has(flow['targetRef'])) this.routeFlow(flow);
     }
   }
 
@@ -526,12 +531,15 @@ export class Diagram {
     if (anchor !== undefined) {
       preferred = insideBand(center(anchor).y) ? center(anchor).y : center(band!).y;
       x = right(anchor) + GAP;
+      // Room is made right of a boundary event's host, not inside it (QA of #661).
+      const host = options.anchor?.['attachedToRef'] === undefined ? undefined : this.bounds(options.anchor['attachedToRef'].id);
+      const from = Math.max(right(anchor), host === undefined ? -Infinity : right(host)) + 1;
       const range = poolBox === undefined ? { top: -Infinity, bottom: Infinity } : { top: poolBox.y, bottom: bottom(poolBox) };
       const slot: Box = { x, y: preferred - size.height / 2, width: size.width, height: size.height };
       if (next !== undefined && next.x > anchor.x && next.x < x + size.width + GAP) {
-        this.makeRoom(plane, right(anchor) + 1, x + size.width + GAP - next.x, range);
+        this.makeRoom(plane, from, x + size.width + GAP - next.x, range);
       } else if (this.nodeShapes(plane).some((di) => di['bpmnElement'] !== el && overlaps(di['bounds'] as Box, slot, 10))) {
-        this.makeRoom(plane, right(anchor) + 1, size.width + GAP, range);
+        this.makeRoom(plane, from, size.width + GAP, range);
       }
     } else {
       const inBand = this.nodeShapes(plane)
@@ -787,15 +795,8 @@ export async function relayout(context: RelayoutContext): Promise<void> {
 const artifactSize = (el: El): { width: number; height: number } =>
   el.$type === 'bpmn:TextAnnotation' ? { width: 100, height: 30 } : el.$type === 'bpmn:DataStoreReference' ? { width: 50, height: 50 } : { width: 36, height: 50 };
 
-/**
- * #630: the text annotations, data objects and data stores of `process` (or of a sub-process, on
- * its own plane) that have no shape (a model that arrived without a diagram, or one an outline or
- * an edit just added, #638) get one next to the node they hang on: an annotation above and right of
- * it, a data object or store below it; one that hangs on nothing goes in a row below the drawing.
- * Each moves along until it overlaps no other shape. Every association (plain or data) without an
- * edge whose two ends have a shape gets one, drawn straight.
- */
-export function placeArtifacts(diagram: Diagram, plane: El, process: El, nodes: readonly El[], associations: readonly El[], dataAssociations: readonly El[]): void {
+/** What each text annotation, data object or data store hangs on: the first node of `nodes` it is linked to. */
+export function anchorsOf(nodes: readonly El[], associations: readonly El[], dataAssociations: readonly El[]): Map<El, El> {
   const anchorOf = new Map<El, El>();
   for (const a of associations) {
     const s = a['sourceRef'] as El | undefined;
@@ -808,17 +809,80 @@ export function placeArtifacts(diagram: Diagram, plane: El, process: El, nodes: 
     const data = d.$type === 'bpmn:DataInputAssociation' ? ((d['sourceRef'] ?? []) as El[])[0] : (d['targetRef'] as El | undefined);
     if (data !== undefined && !anchorOf.has(data)) anchorOf.set(data, node);
   }
+  return anchorOf;
+}
+
+/** Room under a data object or store for its label. */
+const LABEL_ROOM = 30;
+
+/** `box` moved along by `step` until it overlaps no node shape of `plane` (but `self`'s). */
+function freeSpot(diagram: Diagram, plane: El, box: Box, step: Point, self?: El): Box {
+  const taken = diagram
+    .nodeShapes(plane)
+    .filter((di) => di['bpmnElement'] !== self)
+    .map((di) => di['bounds'] as Box);
+  let b = box;
+  for (let i = 0; i < 100 && taken.some((o) => overlaps(b, o, 10)); i++) b = { ...b, x: b.x + step.x, y: b.y + step.y };
+  return b;
+}
+
+/** Where a new annotation (above and right) or data object (`gap` below) of a node drawn at `at` goes. */
+function besideAnchor(el: El, at: Box, top: number, gap = 40): { box: Box; step: Point } {
+  const size = artifactSize(el);
+  return el.$type === 'bpmn:TextAnnotation'
+    ? { box: { x: right(at) + 20, y: Math.max(at.y - size.height - 30, top), ...size }, step: { x: size.width + 20, y: 0 } }
+    : { box: { x: center(at).x - size.width / 2, y: bottom(at) + gap, ...size }, step: { x: size.width + 20, y: 0 } };
+}
+
+/**
+ * QA of #661: keeps the data object or data store `el` in the band (lane, else pool) of the node
+ * drawn at `at`, as bpmn-js's editor does. One that sits in another band goes back below the node;
+ * one that (with its label) does not fit makes its band, and the lanes and pool around it, taller,
+ * as a new row does. Nothing happens on a plane without pools or lanes. Text annotations may sit
+ * anywhere, as in bpmn-js, and are left alone.
+ */
+export function keepInBand(diagram: Diagram, plane: El, el: El, at: Box): void {
+  const box = diagram.bounds(el.id);
+  if (box === undefined || el.$type === 'bpmn:TextAnnotation') return;
+  const c = center(at);
+  const around = ((plane['planeElement'] ?? []) as El[]).filter((di) => {
+    if (di.$type !== 'bpmndi:BPMNShape' || !(is(di['bpmnElement'], 'bpmn:Participant') || is(di['bpmnElement'], 'bpmn:Lane'))) return false;
+    const b = di['bounds'] as Box;
+    return b.x <= c.x && c.x <= right(b) && b.y <= c.y && c.y <= bottom(b);
+  });
+  if (around.length === 0) return;
+  const leaf = around.map((di) => di['bounds'] as Box).reduce((a, b) => (b.height < a.height ? b : a));
+  let next: Box = { ...box };
+  if (center(box).y < leaf.y || center(box).y > bottom(leaf)) {
+    const { box: spot, step } = besideAnchor(el, at, leaf.y, 20);
+    next = freeSpot(diagram, plane, spot, step, el);
+  }
+  if (next.y < leaf.y + 5) next = { ...next, y: leaf.y + 5 };
+  const need = bottom(next) + LABEL_ROOM - bottom(leaf);
+  if (need > 0) {
+    const edge = bottom(leaf);
+    const grow = new Set(around.filter((di) => Math.abs(bottom(di['bounds'] as Box) - edge) < 1).map((di) => di['bpmnElement'] as El));
+    diagram.shiftDown(plane, edge, Math.ceil(need), new Set([diagram.shapes.get(el.id)!]), grow);
+  }
+  if (next.x !== box.x || next.y !== box.y) diagram.setBounds(el.id, next);
+}
+
+/**
+ * #630: the text annotations, data objects and data stores of `process` (or of a sub-process, on
+ * its own plane) that have no shape (a model that arrived without a diagram, or one an outline or
+ * an edit just added, #638) get one next to the node they hang on: an annotation above and right of
+ * it, a data object or store below it; one that hangs on nothing goes in a row below the drawing.
+ * Each moves along until it overlaps no other shape; a data object or store stays in the lane (or
+ * pool) of its node (`keepInBand`, also one that moved with its node). Every association (plain or data)
+ * without an edge whose two ends have a shape gets one, drawn straight.
+ */
+export function placeArtifacts(diagram: Diagram, plane: El, process: El, nodes: readonly El[], associations: readonly El[], dataAssociations: readonly El[]): void {
+  const anchorOf = anchorsOf(nodes, associations, dataAssociations);
   const annotations = [...associations.flatMap((a) => [a['sourceRef'], a['targetRef']] as El[]), ...((process['artifacts'] ?? []) as El[])]
     .filter((el, i, all) => el !== undefined && el.$type === 'bpmn:TextAnnotation' && all.indexOf(el) === i);
   const data = ((process['flowElements'] ?? []) as El[]).filter((el) => el.$type === 'bpmn:DataObjectReference' || el.$type === 'bpmn:DataStoreReference');
   const missing = [...annotations, ...data].filter((el) => !diagram.shapes.has(el.id));
 
-  const taken = (): Box[] => diagram.nodeShapes(plane).map((di) => di['bounds'] as Box);
-  const free = (box: Box, step: Point): Box => {
-    let b = box;
-    for (let i = 0; i < 100 && taken().some((o) => overlaps(b, o, 10)); i++) b = { ...b, x: b.x + step.x, y: b.y + step.y };
-    return b;
-  };
   const orphans: El[] = [];
   for (const el of missing) {
     const anchor = anchorOf.get(el);
@@ -827,7 +891,6 @@ export function placeArtifacts(diagram: Diagram, plane: El, process: El, nodes: 
       orphans.push(el);
       continue;
     }
-    const size = artifactSize(el);
     // An annotation stays inside the band (lane or pool) of its node: above it when there is room.
     const top = Math.max(
       -Infinity,
@@ -837,14 +900,16 @@ export function placeArtifacts(diagram: Diagram, plane: El, process: El, nodes: 
         .filter((b) => b.x <= center(at).x && center(at).x <= right(b) && b.y <= center(at).y && center(at).y <= bottom(b))
         .map((b) => b.y + 5),
     );
-    const box =
-      el.$type === 'bpmn:TextAnnotation'
-        ? free({ x: right(at) + 20, y: Math.max(at.y - size.height - 30, top), ...size }, { x: size.width + 20, y: 0 })
-        : free({ x: center(at).x - size.width / 2, y: bottom(at) + 40, ...size }, { x: size.width + 20, y: 0 });
-    diagram.addShape(el, plane, box);
+    const { box, step } = besideAnchor(el, at, top);
+    diagram.addShape(el, plane, freeSpot(diagram, plane, box, step));
+  }
+  // A data object or store that is new, moved, or hangs on a node that moved stays in its node's band.
+  for (const [el, anchor] of anchorOf) {
+    const at = diagram.bounds(anchor.id);
+    if (at !== undefined && (diagram.moved.has(el.id) || diagram.moved.has(anchor.id))) keepInBand(diagram, plane, el, at);
   }
   if (orphans.length > 0) {
-    const all = taken();
+    const all = diagram.nodeShapes(plane).map((di) => di['bounds'] as Box);
     let x = all.length === 0 ? 0 : Math.min(...all.map((b) => b.x));
     const y = all.length === 0 ? 0 : Math.max(...all.map(bottom)) + 40;
     for (const el of orphans) {

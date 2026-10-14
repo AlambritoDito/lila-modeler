@@ -1338,3 +1338,151 @@ describe('QA of #661: boundary events, nested lanes and notes with the increment
     expect(reading.outline.steps.find((s) => s.id === 'ok')?.notes).toEqual(['Policy 7']);
   });
 });
+
+/* ------------------------------------------------------------------ *
+ * QA of #661, round 2
+ * ------------------------------------------------------------------ */
+
+describe('QA of #661, round 2: a host keeps its outgoing flow, data objects stay in their lane', () => {
+  const within = (p: { x: number; y: number }, b: Box): boolean => p.x >= b.x - 1 && p.x <= b.x + b.width + 1 && p.y >= b.y - 1 && p.y <= b.y + b.height + 1;
+  const inside = (b: Box, band: Box): boolean => b.y >= band.y && b.y + b.height <= band.y + band.height && b.x >= band.x && b.x + b.width <= band.x + band.width;
+  const apart = (a: Box, b: Box): boolean => a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+  const timer = (id: string) => ({ op: 'addBoundary', on: 'work', boundary: { id, type: 'timer', duration: '30m', interrupting: false, end: true } }) as EditOperation;
+
+  test.each([
+    ['no lanes, one boundary', [], ['warn']],
+    ['no lanes, two boundaries', [], ['warn', 'cut']],
+    ['one lane, two boundaries', ['A'], ['warn', 'cut']],
+    ['two lanes, next in the other, four boundaries', ['A', 'B'], ['b1', 'b2', 'b3', 'b4']],
+  ] as const)('addBoundary with an end (layout: false, %s): the host\'s own outgoing flow still leaves the host', async (_, lanes, ids) => {
+    const lane = (i: number) => (lanes.length === 0 ? {} : { lane: lanes[Math.min(i, lanes.length - 1)] });
+    const built = await outlineToBpmn({
+      name: 'D',
+      ...(lanes.length === 0 ? {} : { lanes: [...lanes] }),
+      steps: [
+        { id: 'reg', duration: '5m', ...lane(0) },
+        { id: 'work', name: 'Work', duration: '1h', ...lane(0) },
+        { id: 'next', duration: '5m', end: true, ...lane(1) },
+      ],
+    });
+    const edit = await editBpmn(built.xml, ids.map(timer), { scenario: built.scenario, layout: false });
+    expect(await errorsOf(edit.xml)).toEqual([]);
+    const { shapes, edges } = await di(edit.xml);
+    const work = shapes.get('work')!;
+    const flow = edges.get('Flow_work_next')!;
+    expect(within(flow[0]!, work), JSON.stringify(flow)).toBe(true);
+    expect(within(flow[flow.length - 1]!, shapes.get('next')!), JSON.stringify(flow)).toBe(true);
+    for (const id of ids) expect(apart(shapes.get(`EndEvent_${id}`)!, shapes.get('next')!), id).toBe(true);
+    expect((await bpmnToOutline(edit.xml, { scenario: edit.scenario as Record<string, unknown> })).warnings).toEqual([]);
+  });
+
+  test('the round-1 repro: a host whose only outgoing flow is its own end keeps it', async () => {
+    const built = await outlineToBpmn({ name: 'D', steps: [{ id: 'work', name: 'Work', duration: '1h', end: true }] });
+    const edit = await editBpmn(built.xml, [timer('warn'), { ...timer('cut'), boundary: { id: 'cut', type: 'timer', duration: '1h', end: 'terminate' } } as EditOperation], {
+      scenario: built.scenario,
+      layout: false,
+    });
+    const { shapes, edges } = await di(edit.xml);
+    expect(within(edges.get('Flow_work_EndEvent_work')![0]!, shapes.get('work')!)).toBe(true);
+  });
+
+  test.each([
+    ['two lanes', ['X', 'Y']],
+    ['one lane', ['Y']],
+  ])('create_process with lanes (%s): a data object of a step in the last lane stays in its lane, inside the pool', async (_, lanes) => {
+    const built = await outlineToBpmn({
+      name: 'D',
+      lanes,
+      steps: [
+        { id: 'a', lane: lanes[0]! },
+        { id: 'b', lane: 'Y', end: true, data: [{ name: 'Doc', direction: 'out' }] },
+      ],
+    });
+    await expectCleanImport(built.xml);
+    const { shapes } = await di(built.xml);
+    const laneY = shapes.get(`Lane_${lanes.length}`)!;
+    expect(inside(shapes.get('DataObjectReference_b')!, laneY), JSON.stringify([...shapes])).toBe(true);
+    expect(inside(laneY, shapes.get('Participant_1')!)).toBe(true);
+    expect(inside(shapes.get('b')!, laneY)).toBe(true);
+  });
+
+  test.each([
+    ['Middle before Front', { op: 'moveLane', lane: 'Middle', before: 'Front' }],
+    ['Front after Back', { op: 'moveLane', lane: 'Front', after: 'Back' }],
+  ])('moveLane %s (layout: false): the data object and the note stay in the lane of their step', async (_, op) => {
+    const built = await outlineToBpmn({
+      name: 'D',
+      lanes: ['Front', 'Middle', 'Back'],
+      steps: [
+        { id: 'reg', lane: 'Front', data: [{ name: 'Claim file', direction: 'out' }], notes: ['Two signatures'] },
+        { id: 'chk', lane: 'Middle', data: [{ name: 'Claim file', direction: 'in' }] },
+        { id: 'pay', lane: 'Back', end: true },
+      ],
+    });
+    const edit = await editBpmn(built.xml, [op as EditOperation], { scenario: built.scenario, layout: false });
+    await expectCleanImport(edit.xml);
+    const { shapes } = await di(edit.xml);
+    const front = shapes.get('Lane_1')!;
+    for (const id of ['reg', 'DataObjectReference_reg', 'TextAnnotation_reg']) expect(inside(shapes.get(id)!, front), id).toBe(true);
+    expect(inside(front, shapes.get('Participant_1')!)).toBe(true);
+  });
+
+  test('moveLane (layout: false) carries a data object drawn in the next lane with its step, not with that lane', async () => {
+    const built = await outlineToBpmn({
+      name: 'D',
+      lanes: ['Front', 'Middle', 'Back'],
+      steps: [
+        { id: 'reg', lane: 'Front', data: [{ name: 'Claim file', direction: 'out' }] },
+        { id: 'chk', lane: 'Middle' },
+        { id: 'pay', lane: 'Back', end: true },
+      ],
+    });
+    // As it was drawn before this fix (and as another editor may draw it): below the step, in the next lane.
+    const before = await di(built.xml);
+    const lanes = ['Lane_1', 'Lane_2'].map((id) => before.shapes.get(id)!);
+    const shape = before.shapes.get('DataObjectReference_reg')!;
+    const moved = built.xml.replace(
+      new RegExp(`(bpmnElement="DataObjectReference_reg"[^>]*>\\s*<dc:Bounds x="[^"]*" y=")[^"]*"`),
+      `$1${lanes[1]!.y + 10}"`,
+    );
+    expect(moved).not.toBe(built.xml);
+    const edit = await editBpmn(moved, [{ op: 'moveLane', lane: 'Middle', before: 'Front' }], { scenario: built.scenario, layout: false });
+    const { shapes } = await di(edit.xml);
+    const reg = shapes.get('reg')!;
+    const data = shapes.get('DataObjectReference_reg')!;
+    // Front moved down by Middle's height; the data object went with reg, not up with Middle.
+    expect(reg.y - before.shapes.get('reg')!.y).toBe(lanes[1]!.height);
+    expect(data.y).toBeGreaterThan(reg.y);
+    expect(data.x).toBe(shape.x);
+    expect(inside(data, shapes.get('Lane_1')!), JSON.stringify([data, shapes.get('Lane_1')])).toBe(true);
+  });
+
+  test('removing every lane (layout: false) leaves the data objects inside the pool, clear of the pool below', async () => {
+    const laned = await editBpmn(
+      pedidoXml,
+      [
+        { op: 'addLane', name: 'Kitchen' },
+        { op: 'addLane', name: 'Counter' },
+        { op: 'moveToLane', id: 'Task_Revisar', lane: 'Counter' },
+        { op: 'addDataObject', on: 'Task_Revisar', name: 'Doc', direction: 'out' },
+        { op: 'addDataObject', on: 'Task_TomarPedido', name: 'Ticket', direction: 'out' },
+      ],
+      { scenario: pedidoScenario, layout: false },
+    );
+    const edit = await editBpmn(laned.xml, [{ op: 'removeLane', lane: 'Counter', moveStepsTo: 'Kitchen' }, { op: 'removeLane', lane: 'Kitchen' }], {
+      scenario: laned.scenario,
+      layout: false,
+    });
+    expect(await errorsOf(edit.xml)).toEqual([]);
+    await expectCleanImport(edit.xml);
+    for (const xml of [laned.xml, edit.xml]) {
+      const { shapes } = await di(xml);
+      const pool = shapes.get('Participant_Restaurante')!;
+      for (const id of ['DataObjectReference_Task_Revisar', 'DataObjectReference_Task_TomarPedido']) {
+        expect(inside(shapes.get(id)!, pool), `${id} ${JSON.stringify(shapes.get(id))} ${JSON.stringify(pool)}`).toBe(true);
+        expect(apart(shapes.get(id)!, shapes.get('Participant_Cliente')!), id).toBe(true);
+      }
+      expect(apart(pool, shapes.get('Participant_Cliente')!)).toBe(true);
+    }
+  });
+});
