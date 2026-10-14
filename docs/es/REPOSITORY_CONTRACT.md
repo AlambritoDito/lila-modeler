@@ -8,7 +8,7 @@ ADR-032. Nada de este documento está implementado salvo lo que dice «hoy». Am
 y fija lo que [ADR-029](DECISIONS.md) dejó abierto: la disposición de la versión 3, la identidad de
 los objetos, las referencias, la interfaz de almacenamiento, los adjuntos, la recuperación ante
 fallos y los presupuestos de rendimiento. La sección 10 reúne las únicas preguntas que necesitan al
-dueño.
+dueño. El orden de entrega está en el [roadmap](ROADMAP.md).
 
 **Debe**, **no debe** y **puede** son normativos. «La app» es la app web y la de escritorio por
 igual; «el motor» es `@lila-modeler/engine` (y, a través de él, la CLI y el servidor MCP).

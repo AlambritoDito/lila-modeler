@@ -255,8 +255,7 @@ El inglés es el idioma base; las versiones en español viven en `docs/es/`.
 - [`SEMANTICS.md`](docs/es/SEMANTICS.md) — perfil BPMN soportado y semántica exacta del motor.
 - [`SCENARIO_FORMAT.md`](docs/es/SCENARIO_FORMAT.md) — el escenario JSON.
 - [`RESULTS_FORMAT.md`](docs/es/RESULTS_FORMAT.md) — resultados, CSV y XLSX.
-- [`PROJECT_FORMAT.md`](docs/PROJECT_FORMAT.md) — la carpeta de proyecto y el archivo `.lila`
-  (en inglés).
+- [`PROJECT_FORMAT.md`](docs/es/PROJECT_FORMAT.md) — la carpeta de proyecto y el archivo `.lila`.
 - [`BPMN_EXTENSION.md`](docs/es/BPMN_EXTENSION.md) — el namespace `lila:` y la política de ids.
 - [`GUIA-AGENTES.md`](docs/es/GUIA-AGENTES.md) — el flujo de un agente, de una entrevista a un documento.
 - [`CLI.md`](docs/es/CLI.md) — la línea de comandos `lila`: cada subcomando, códigos de salida y

@@ -86,9 +86,9 @@ existen con otro alcance.
 ### Orden de arranque
 
 El código ADONIS empieza cuando el Lote R cierre la épica de agentes #527 (el Lote P salió en
-beta.25, el Lote Q está en curso y el R va después). Mientras tanto, el contrato RM-01, solo
-documentación, se redacta en paralelo como [`REPOSITORY_CONTRACT.md`](REPOSITORY_CONTRACT.md) y la
-ADR-032 en [DECISIONS.md](DECISIONS.md). Lotes de entrega propuestos:
+beta.25, el Lote Q está en curso y el R va después). El contrato RM-01, solo documentación, es
+[`REPOSITORY_CONTRACT.md`](REPOSITORY_CONTRACT.md), registrado como ADR-032 (propuesta hasta que el
+dueño responda sus preguntas abiertas) en [DECISIONS.md](DECISIONS.md). Lotes de entrega propuestos:
 
 | Lote | Alcance | Fase |
 | --- | --- | --- |

@@ -85,9 +85,9 @@ other scopes.
 ### Sequencing
 
 ADONIS code starts after Lote R closes the agent epic #527 (Lote P shipped in beta.25, Lote Q is
-in progress, Lote R comes next). Meanwhile the RM-01 contract, documentation only, is written in
-parallel as [`REPOSITORY_CONTRACT.md`](REPOSITORY_CONTRACT.md) and ADR-032 in
-[DECISIONS.md](DECISIONS.md). Proposed delivery lots:
+in progress, Lote R comes next). The RM-01 contract, documentation only, is
+[`REPOSITORY_CONTRACT.md`](REPOSITORY_CONTRACT.md), recorded as ADR-032 (proposed until the owner
+answers its open questions) in [DECISIONS.md](DECISIONS.md). Proposed delivery lots:
 
 | Lot | Scope | Phase |
 | --- | --- | --- |

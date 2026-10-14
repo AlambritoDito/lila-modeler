@@ -7,7 +7,7 @@ in this document is implemented yet unless it says "today". It extends
 [the project format](PROJECT_FORMAT.md) (versions 1 and 2, which stay exactly as they are) and
 settles what [ADR-029](DECISIONS.md) left open: the version 3 layout, object identity, references,
 the storage interface, attachments, failure recovery and performance budgets. Section 10 lists
-the only questions that need the owner.
+the only questions that need the owner. The delivery order is in the [roadmap](ROADMAP.md).
 
 The words **must**, **must not** and **may** are normative. "The app" means the web app and the
 desktop app alike; "the engine" means `@lila-modeler/engine` (and through it the CLI and the MCP
