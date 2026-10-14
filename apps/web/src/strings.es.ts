@@ -177,6 +177,8 @@ export const es: Strings = {
     cerrar: 'Cerrar',
     /** Ajustes → Acerca de Lila Modeler (LILA-381): cierra Ajustes y abre el diálogo Acerca de. */
     acercaDe: 'Acerca de Lila Modeler',
+    /** Cabecera de Ajustes, menú Archivo, ⌘K y Ayuda de escritorio (#651): el formulario de GitHub, rellenado. */
+    reportarProblema: 'Informar de un problema…',
 
     /** Chips de validación sobre el lienzo y contadores de la barra de estado. */
     irAlPrimerProblema: 'Ir al primer elemento con problemas',
@@ -2135,5 +2137,12 @@ export const es: Strings = {
     pistaRecursosCarril: 'Elige una tarea o el nombre de un carril',
     sinNombre: { 'bpmn:Participant': 'Pool sin nombre', 'bpmn:Lane': 'Carril sin nombre' },
     finCorto: 'Fin',
+  },
+  visor: {
+    modo: 'Modo visor',
+    editor: 'Editor completo',
+    avisoTitulo: 'Estás viendo la versión móvil',
+    avisoTexto: 'Está limitada: solo muestra los procesos. Usa Lila Modeler desde una computadora para el sistema completo.',
+    avisoOk: 'Entendido',
   },
 };

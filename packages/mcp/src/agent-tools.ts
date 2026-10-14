@@ -1,7 +1,8 @@
 /**
- * The modelling tools of #99, #403 and #514: `annotate_element`, `get_raci_matrix`,
- * `import_scenario_sheet`, `export_scenario_template` and `create_project`, and the read-only
- * inventory of #628: `get_project` and `get_scenario`. Thin layers over
+ * The modelling tools of #99, #403, #514 and #633: `annotate_element`, `define_attribute`,
+ * `get_raci_matrix`, `import_scenario_sheet`, `export_scenario_template` and `create_project`, the
+ * read-only inventory of #628: `get_project` and `get_scenario`, and the raw BPMN of a process
+ * (#632): `get_process_bpmn` and `put_process_bpmn`. Thin layers over
  * `@lila-modeler/engine/project-fs`, like `lila process annotate|raci` and
  * `lila scenario import|template`; registered by `createServer` (`server.ts`).
  *
@@ -13,11 +14,14 @@ import type { Locale } from '@lila-modeler/engine/messages';
 import {
   annotateLilaElement,
   createLilaProject,
+  defineLilaAttribute,
   importLilaScenarioSheet,
   lilaProjectInventory,
   lilaRaciMatrix,
   lilaScenarioTemplate,
   lilaScenarioView,
+  putLilaProcessBpmn,
+  readLilaProcessBpmn,
   writeExportFile,
 } from '@lila-modeler/engine/project-fs';
 import type { CallToolResult, McpServer } from '@modelcontextprotocol/server';
@@ -46,6 +50,10 @@ export function registerAgentTools(
     .optional()
     .describe('Slug of the process when the .lila holds several; implicit when it holds one.');
   const dryRunSchema = z.boolean().optional().describe('Report what would change and write nothing.');
+  const allowUnsimulatableSchema = z
+    .boolean()
+    .optional()
+    .describe('Save a model with validation errors as a diagram that does not simulate; the errors come back in `notes`. Default false: refused.');
 
   server.registerTool(
     'annotate_element',
@@ -97,6 +105,53 @@ export function registerAgentTools(
         );
       } catch (error) {
         return failure('annotate_element', error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'define_attribute',
+    {
+      title: 'Define attribute',
+      description:
+        'Defines, changes or removes one extended attribute of a process of a .lila (#633), what ' +
+        '`annotate_element` then fills in on elements, with the rules of the app\'s attribute ' +
+        'dialog: a name unique per element type, a `list` with at least one option, a `default` ' +
+        'that fits. Pass the whole definition every time (`name`, `type`, `appliesTo`, and ' +
+        '`options`/`default` when it has them): it updates the one with that `id`, else the one ' +
+        'with that name (any case) and `appliesTo`, else creates one with a deterministic id ' +
+        '(`Attr_<name>`), so calling it again changes nothing. A rename keeps the values; ' +
+        '`remove: true` removes the definition and its values, and retyping, changing ' +
+        '`appliesTo` or taking options away removes the values that no longer fit: ' +
+        '`removedValues` lists them, a dry run too. Returns `before`, `after` and every ' +
+        '`definition` of the process; `get_project` lists them too. Like ' +
+        '`lila process attribute define`.',
+      inputSchema: z.object({
+        project: projectSchema,
+        process: processSchema,
+        id: z.string().optional().describe('The definition to change or remove. Leave it out to find it by name and appliesTo, or to create one.'),
+        name: z.string().optional().describe('Its name, as people read it ("SLA (h)"). Required unless removing by id.'),
+        type: z.string().optional().describe('text, number, list or date. Required unless removing.'),
+        appliesTo: z
+          .string()
+          .optional()
+          .describe('The element type it applies to: task, gateway, event, subProcess, lane (pools and lanes) or process. Required unless removing by id.'),
+        options: z.array(z.string()).optional().describe('The options of a list (only a list takes them).'),
+        default: z.string().optional().describe('What an element without its own value shows; it has to fit the type.'),
+        remove: z.boolean().optional().describe('Remove the definition and every value it has.'),
+        dryRun: dryRunSchema,
+        locale: localeSchema,
+      }),
+    },
+    async ({ project, process, id, name, type, appliesTo, options, default: fallback, remove, dryRun, locale }): Promise<CallToolResult> => {
+      try {
+        return textResult(
+          await defineLilaAttribute({
+            file: project, process, id, name, type, appliesTo, options, default: fallback, remove, dryRun, locale: localeOf(locale),
+          }),
+        );
+      } catch (error) {
+        return failure('define_attribute', error);
       }
     },
   );
@@ -193,7 +248,9 @@ export function registerAgentTools(
         'or `extends` gets "model.bpmn"): each comes back with `runnable` and its `errors`, so a ' +
         'draft is kept but flagged. Written atomically (no partial file on error); an existing ' +
         'file is refused unless `overwrite`. A model without a diagram (BPMN DI) gets one, drawn ' +
-        'as `edit_process` with `layout: true` draws it (`laidOut: true`).',
+        'as `edit_process` with `layout: true` draws it (`laidOut: true`). `allowUnsimulatable: ' +
+        'true` keeps a model with validation errors as a diagram that does not simulate, the ' +
+        'errors in `notes`.',
       inputSchema: z.object({
         path: z.string().describe('Path of the new .lila, relative to the cwd of the server process.'),
         name: z.string().describe('Name of the project.'),
@@ -207,12 +264,13 @@ export function registerAgentTools(
           )
           .optional(),
         overwrite: z.boolean().optional().describe('Replace an existing file. Default false.'),
+        allowUnsimulatable: allowUnsimulatableSchema,
         locale: localeSchema,
       }),
     },
-    async ({ path, name, bpmn, scenarios, overwrite, locale }): Promise<CallToolResult> => {
+    async ({ path, name, bpmn, scenarios, overwrite, allowUnsimulatable, locale }): Promise<CallToolResult> => {
       try {
-        return textResult(await createLilaProject({ path, name, bpmn, scenarios, overwrite, locale: localeOf(locale) }));
+        return textResult(await createLilaProject({ path, name, bpmn, scenarios, overwrite, allowUnsimulatable, locale: localeOf(locale) }));
       } catch (error) {
         return failure('create_project', error);
       }
@@ -227,9 +285,11 @@ export function registerAgentTools(
         'What a .lila holds, read without writing anything: its name, `formatVersion` (2 for a ' +
         'repository of several processes, 1 otherwise) and its `processes`, each with `slug`, ' +
         '`name`, `processId`, `modelRevision`, `elements` (flow nodes), its `scenarios` (entry, ' +
-        'name, revision, extends) and its stored `runs` (id, scenario, start, replications and ' +
-        '`current`: false when the model or the scenario changed after the run). Call it first on ' +
-        'an existing file. Like `lila project show --json`.',
+        'name, revision, extends), its stored `runs` (id, scenario, start, replications and ' +
+        '`current`: false when the model or the scenario changed after the run) and its extended ' +
+        '`attributes` (the definitions `annotate_element` can fill in, with `appliesTo` and ' +
+        '`options`; null when the model cannot be read back whole). Call it first on an existing ' +
+        'file. Like `lila project show --json`.',
       inputSchema: z.object({ project: projectSchema, locale: localeSchema }),
     },
     async ({ project, locale }): Promise<CallToolResult> => {
@@ -264,6 +324,67 @@ export function registerAgentTools(
         return textResult(await lilaScenarioView({ file: project, process, scenario, resolved, locale: localeOf(locale) }));
       } catch (error) {
         return failure('get_scenario', error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_process_bpmn',
+    {
+      title: 'Get process BPMN',
+      description:
+        'The BPMN 2.0 XML of one process of a .lila, as stored, read without writing anything: ' +
+        '`{ file, process, processId, revision, xml }`. Hand it to another tool, or edit it and ' +
+        'write it back with `put_process_bpmn` `mode: "replace"`. Like `lila process export-bpmn`.',
+      inputSchema: z.object({ project: projectSchema, process: processSchema, locale: localeSchema }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ project, process, locale }): Promise<CallToolResult> => {
+      try {
+        return textResult(await readLilaProcessBpmn(project, { process, locale: localeOf(locale) }));
+      } catch (error) {
+        return failure('get_process_bpmn', error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'put_process_bpmn',
+    {
+      title: 'Put process BPMN',
+      description:
+        'Adds a BPMN model (inline XML, or a path to a .bpmn: a Bizagi export, say) as a new ' +
+        'process of an existing .lila (`mode: "add"`, with a default `as-is` scenario), or replaces ' +
+        'the model of one of its processes (`mode: "replace"`: its revision goes up, so saved runs ' +
+        'go stale; its annotations go with the old model). The model is validated as ' +
+        '`create_project` validates it: one with errors is refused unless `allowUnsimulatable`. ' +
+        'On replace, scenario entries that no longer apply are removed and listed in ' +
+        '`scenarioRemovals`, as `edit_process` does, and a scenario error the old model did not ' +
+        'cause refuses the call (unless `allowUnsimulatable`). A model without a diagram is laid ' +
+        'out (`layout`, default true). Atomic and locked like every write; `dryRun` writes ' +
+        'nothing. Like `lila process import`.',
+      inputSchema: z.object({
+        project: projectSchema,
+        process: z
+          .string()
+          .optional()
+          .describe('add: the slug of the new process (default: from its name). replace: the process replaced; implicit when the .lila holds one.'),
+        bpmn: z.string().describe('BPMN 2.0 XML, or a path to a .bpmn.'),
+        mode: z.string().describe('"add" (a new process) or "replace" (the model of an existing one).'),
+        name: z.string().optional().describe('add only: the name of the new process. Default: its pool\'s, its process\'s, or the file\'s.'),
+        layout: z.boolean().optional().describe('Lay out a model that has no diagram (BPMN DI). Default true.'),
+        allowUnsimulatable: allowUnsimulatableSchema,
+        dryRun: dryRunSchema,
+        locale: localeSchema,
+      }),
+    },
+    async ({ project, process, bpmn, mode, name, layout, allowUnsimulatable, dryRun, locale }): Promise<CallToolResult> => {
+      try {
+        return textResult(
+          await putLilaProcessBpmn({ file: project, process, bpmn, mode, name, layout, allowUnsimulatable, dryRun, locale: localeOf(locale) }),
+        );
+      } catch (error) {
+        return failure('put_process_bpmn', error);
       }
     },
   );

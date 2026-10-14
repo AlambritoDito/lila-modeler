@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { expect, test } from 'vitest';
-import { annotateElement, readAnnotations } from '../../src/bpmn/annotate.js';
+import { describe, expect, test } from 'vitest';
+import { annotateElement, readAnnotations, writeAttributeDefinitions } from '../../src/bpmn/annotate.js';
 
 const pedido = readFileSync(
   fileURLToPath(new URL('../../../../examples/pedido/model.bpmn', import.meta.url)),
@@ -133,6 +133,10 @@ test('un archivo cuyo contenido bpmn-moddle no sabe reescribir falla en vez de p
     'utf8',
   );
   await expect(readAnnotations(b20)).rejects.toThrow(/se perdería al guardarlo/);
+  // bpmn-moddle's warnings are plain objects: their message, never "[object Object]" (#633).
+  const error = await readAnnotations(b20).catch((e: unknown) => e as Error);
+  expect(error.message).not.toContain('[object Object]');
+  expect(error.message).toMatch(/unparsable content|unresolved reference/);
 });
 
 test('un id duplicado falla en vez de borrar el elemento repetido', async () => {
@@ -183,4 +187,55 @@ test('varias bpmn:documentation se leen todas', async () => {
     '<bpmn:task id="Task_X" name="X"><bpmn:documentation>uno</bpmn:documentation><bpmn:documentation>dos</bpmn:documentation></bpmn:task><bpmn:task id="Task_Revisar"',
   );
   expect((await readAnnotations(dos))['Task_X']?.documentation).toBe('uno\ndos');
+});
+
+describe('writeAttributeDefinitions (#633)', () => {
+  const sla = { id: 'Attr_sla', name: 'SLA', type: 'number', appliesTo: 'task' };
+  const level = { id: 'Attr_level', name: 'Level', type: 'list', appliesTo: 'task', options: ['Low', 'High'] };
+
+  test('writes them on the collaboration and consolidates the copies left on a process', async () => {
+    let xml = await annotateElement(pedido, 'Process_Restaurante', { versionTag: '3', attributeDefinitions: [sla] });
+    xml = await annotateElement(xml, 'Collaboration_Pedido', { documentation: 'Pedidos', attributeDefinitions: [sla] });
+    const out = await writeAttributeDefinitions(xml, [sla, level]);
+    const read = await readAnnotations(out);
+    expect(read['Collaboration_Pedido']).toEqual({ documentation: 'Pedidos', attributeDefinitions: [sla, level] });
+    // The process keeps its other lila: elements; only the stray copy goes.
+    expect(read['Process_Restaurante']).toEqual({ documentation: expect.any(String), versionTag: '3' });
+  });
+
+  test('on a diagram without a collaboration, the process holds them', async () => {
+    const plain = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="x">
+  <bpmn:process id="P" isExecutable="false"><bpmn:task id="T" /></bpmn:process>
+</bpmn:definitions>`;
+    const read = await readAnnotations(await writeAttributeDefinitions(plain, [sla]));
+    expect(read['P']).toEqual({ attributeDefinitions: [sla] });
+  });
+
+  test('drops the values the caller picks, and an extensionElements left empty', async () => {
+    let xml = await annotateElement(pedido, 'Collaboration_Pedido', { attributeDefinitions: [sla, level] });
+    xml = await annotateElement(xml, 'Task_TomarPedido', { attributes: [{ ref: 'Attr_level', value: 'High' }] });
+    xml = await annotateElement(xml, 'Task_Revisar', {
+      refs: { systemRef: ['sys-pos'] },
+      attributes: [{ ref: 'Attr_level', value: 'Low' }, { ref: 'Attr_sla', value: '2' }],
+    });
+    const seen: string[] = [];
+    const out = await writeAttributeDefinitions(xml, [sla], (value) => {
+      seen.push(`${value.elementId}:${value.ref}=${value.value}`);
+      return value.ref === 'Attr_level';
+    });
+    expect(seen).toEqual(['Task_TomarPedido:Attr_level=High', 'Task_Revisar:Attr_level=Low', 'Task_Revisar:Attr_sla=2']);
+    const read = await readAnnotations(out);
+    expect(read['Task_TomarPedido']).toBeUndefined();
+    expect(read['Task_Revisar']).toEqual({ refs: { systemRef: ['sys-pos'] }, attributes: [{ ref: 'Attr_sla', value: '2' }] });
+    expect(read['Collaboration_Pedido']).toEqual({ attributeDefinitions: [sla] });
+    expect(out).not.toMatch(/<bpmn:extensionElements\s*\/>/);
+  });
+
+  test('none left: the host keeps no empty extensionElements, and the rest of the file is as bpmn-moddle writes it', async () => {
+    const withOne = await annotateElement(pedido, 'Collaboration_Pedido', { attributeDefinitions: [sla] });
+    const none = await writeAttributeDefinitions(withOne, []);
+    expect(await readAnnotations(none)).toEqual(await readAnnotations(pedido));
+    expect(none).toBe(await writeAttributeDefinitions(pedido, []));
+  });
 });

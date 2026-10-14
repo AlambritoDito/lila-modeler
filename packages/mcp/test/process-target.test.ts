@@ -63,3 +63,14 @@ test('get_process_outline reads Restaurant, as run_simulation runs it (QA of #56
   expect(names).toContain('Take order');
   expect(names).not.toContain('Receive notification');
 });
+
+test('get_process_bpmn and put_process_bpmn replace keep to Restaurant, whose scenarios lose nothing (#632)', async () => {
+  const read = await call('get_process_bpmn', { project: file });
+  expect(read.isError, read.text).toBe(false);
+  const { xml } = JSON.parse(read.text) as { xml: string };
+  const bytes = readFileSync(file);
+  const put = await call('put_process_bpmn', { project: file, mode: 'replace', bpmn: xml.replace('name="Take order"', 'name="Take the order"'), dryRun: true });
+  expect(put.isError, put.text).toBe(false);
+  expect(JSON.parse(put.text)).toMatchObject({ processId: 'Process_Restaurante', scenarioRemovals: [], notes: [], revision: 2 });
+  expect(readFileSync(file).equals(bytes)).toBe(true);
+});

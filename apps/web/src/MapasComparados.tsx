@@ -32,7 +32,7 @@ export interface MapasComparadosProps {
 }
 
 /** The default shape colours of the theme on screen, the ones the main canvas uses. */
-function colores(): { defaultFillColor: string; defaultStrokeColor: string; defaultLabelColor: string } {
+export function colores(): { defaultFillColor: string; defaultStrokeColor: string; defaultLabelColor: string } {
   const token = (n: string): string => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   return { defaultFillColor: token('--diagram-fill'), defaultStrokeColor: token('--diagram-stroke'), defaultLabelColor: token('--diagram-label') };
 }

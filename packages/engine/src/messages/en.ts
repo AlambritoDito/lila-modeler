@@ -51,6 +51,15 @@ const EN_USAGE = `Usage: lila validate <file.bpmn|project.lila> [--process slug]
                              [--responsibility R|A|C|I:role ...] [--clear-responsibilities]
                              [--ref kind=id ...] [--attribute id=value ...] [--dry-run] [--json]
        lila process raci <project.lila> [--process slug] [--json|--csv]
+       lila process export-bpmn -p <project.lila> [--process slug] [--out file.bpmn] [--force]
+       lila process import -p <project.lila> --bpmn <file.bpmn> [--replace] [--process slug]
+                           [--name name] [--no-layout] [--allow-unsimulatable] [--dry-run] [--json]
+       lila process attribute define <project.lila> --name name --type text|number|list|date
+                                     --applies-to task|gateway|event|subProcess|lane|process
+                                     [--option value ...] [--default value] [--id id]
+                                     [--process slug] [--dry-run] [--json]
+       lila process attribute define <project.lila> --remove --id id|--name name --applies-to type
+       lila process attribute list <project.lila> [--process slug] [--json]
        lila scenario import <project.lila> <scenario> <sheet.xlsx|sheet.csv> [--process slug]
                             [--dry-run] [--json]
        lila scenario template <project.lila> <scenario> --out sheet.xlsx [--process slug] [--force]
@@ -69,6 +78,9 @@ Commands:
              edit: applies a list of operations to a process, all or none. See docs/CLI.md.
              annotate: writes an element's description, RACI, catalog references and extended
              attributes into the .lila. raci: prints the RACI matrix of the process document.
+             export-bpmn: prints or writes the BPMN of a process. import: adds a .bpmn as a new
+             process of a .lila, or --replace the model of one.
+             attribute: defines (or removes) an extended attribute, or lists them.
   scenario   import: applies a scenario sheet (.xlsx/.csv) to a scenario of the .lila, like the
              app's Import Excel/CSV. template: writes that sheet, filled in, for a person.
              show: prints a scenario as stored (or --resolved) with the validator's notes.
@@ -134,6 +146,25 @@ process annotate options:
   --ref kind=id     systemRef, documentRef, riskRef, controlRef, kpiRef, input or output;
                     repeatable; replaces the lists of the kinds given (kind= empties one).
   --attribute k=v   An extended attribute by id or name; repeatable; "k=" removes its value.
+  --dry-run         Shows the result without writing.
+
+process import options:
+  --bpmn file       The BPMN 2.0 file (a Bizagi export, say).
+  --replace         Replaces the model of the process (--process) instead of adding one.
+  --process slug    Without --replace: slug of the new process (default: from its name).
+  --name name       Without --replace: name of the new process (default: its pool's, its
+                    process's or the file's).
+  --no-layout       Keeps a model without a diagram as it is (default: laid out).
+  --allow-unsimulatable  Saves a model with validation errors, as a diagram that does not
+                    simulate; the errors are printed as notes.
+  --dry-run         Checks everything and writes nothing.
+
+process attribute define options:
+  --name, --type, --applies-to  The whole definition, every time; found by --id, else by name
+                    (any case) and --applies-to, else created with a new id.
+  --option v        A list's option; repeatable. --default v: what an element without a value shows.
+  --remove          Removes the definition and its values. Retyping, --applies-to or fewer
+                    options also remove the values that no longer fit; both list them.
   --dry-run         Shows the result without writing.
 
 scenario import options:
@@ -564,7 +595,7 @@ export const en: Catalog = {
       `Created process "${name}" (${slug}) in ${newFile ? 'the new file ' : ''}${file}: ${n(steps, 'step', 'steps')}, ${n(lanes, 'lane', 'lanes')}, base scenario as-is.scenario.json.`,
     processDryRun: (name, slug, file, steps, lanes, newFile) =>
       `Dry run: would create process "${name}" (${slug}) in ${newFile ? 'the new file ' : ''}${file}: ${n(steps, 'step', 'steps')}, ${n(lanes, 'lane', 'lanes')}. Nothing was written.`,
-    processUnknownSubcommand: (sub) => `unknown subcommand "${sub}"; use create, show, edit, annotate or raci.`,
+    processUnknownSubcommand: (sub) => `unknown subcommand "${sub}"; use create, show, edit, annotate, raci, export-bpmn, import or attribute.`,
     processMissingOption: (option) => `missing ${option}.`,
     processShowHeader: (name, slug) => `Process "${name}" (${slug})`,
     processShowLanes: (lanes) => `Lanes: ${lanes}`,

@@ -82,6 +82,7 @@ import './theme/tokens.css';
 import './app.css';
 import './theme/montana.css';
 import { confirmarEdicionEnCurso, useBorradorPendiente } from './edicionEnCurso';
+import { abrirReporte } from './reportarProblema';
 
 /** `file` (LILA-072): el `.bpmn` pulsado, cuando no es el `model.bpmn` de la carpeta. */
 type ProjectAction = 'new' | 'open' | 'openFile' | 'bpmn' | { readonly recent: string; readonly file?: string } | { readonly ejemplo: EjemploId }
@@ -1886,6 +1887,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   function ejecutar(accion: MenuAction): void {
     if (accion === 'ajustes') { if (!karaoke && !ajustesDialog.current?.open) ajustesDialog.current?.showModal(); }
     else if (accion === 'acerca') abrirAcerca();
+    else if (accion === 'reportarProblema') abrirReporte();
     else if (accion === 'nuevo') void projectAction('new');
     else if (accion === 'abrir') void projectAction('open');
     else if (accion === 'abrirArchivo') void projectAction('openFile');
@@ -2045,6 +2047,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       modelador !== null && { grupo: 'acciones', nombre: (DESKTOP ? S.app.menuEscritorio : S.app).exportarHtml, elegir: () => ejecutar('exportarHtml') },
       libre && { grupo: 'acciones', nombre: S.app.importarBpmn, elegir: () => ejecutar('importarBpmn') },
       { grupo: 'acciones', nombre: S.app.acercaDe, elegir: () => ejecutar('acerca') },
+      { grupo: 'acciones', nombre: S.app.reportarProblema, elegir: () => ejecutar('reportarProblema') },
     ];
     return [
       ...elementos,
@@ -2976,6 +2979,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               <button type="button" title={`${S.app.menuEscritorio.imprimir}${atajo('imprimir')}`} disabled={modelador === null} onClick={() => atajos.imprimir()}>{S.app.menuEscritorio.imprimir}</button>
               <hr />
               <button type="button" onClick={() => ejecutar('acerca')}>{S.app.acercaDe}</button>
+              <button type="button" onClick={() => ejecutar('reportarProblema')}>{S.app.reportarProblema}</button>
             </> : <>
               <button type="button" title={`${S.app.tituloNuevo}${atajo('nuevo')}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('new')}>{S.app.nuevo}</button>
               <button type="button" title={`${S.app.tituloAbrir}${atajo('abrir')}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('open')}>{S.app.abrir}</button>
@@ -2991,6 +2995,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarHtml')}>{S.app.exportarHtml}</button>
               <button type="button" title={`${S.app.imprimirPdf}${atajo('imprimir')}`} disabled={modelador === null} onClick={() => atajos.imprimir()}>{S.app.imprimirPdf}</button>
               <button type="button" onClick={() => ejecutar('acerca')}>{S.app.acercaDe}</button>
+              <button type="button" onClick={() => ejecutar('reportarProblema')}>{S.app.reportarProblema}</button>
             </>}
           </div>
         </details>
@@ -3093,6 +3098,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
                 <span className="marca-menu" aria-hidden="true">{pulsado[r] ? '✓' : ''}</span>{S.app.regiones[r]}
               </button>
             ))}
+            {/* #653: the read-only viewer, for a tablet (phones open it on their own). */}
+            {!DESKTOP && <button type="button" onClick={() => location.assign('?visor')}><span className="marca-menu" aria-hidden="true" />{S.visor.modo}</button>}
           </div>
         </details>
       </header>

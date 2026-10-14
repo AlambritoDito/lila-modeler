@@ -20,7 +20,7 @@ interview ([`MCP.md`](MCP.md#resources-and-prompt)).
 
 | Step | Tool | CLI |
 | --- | --- | --- |
-| 0. The file exists: read what it holds | `get_project`, `get_scenario` | `lila project show`, `lila scenario show` |
+| 0. The file exists: read what it holds, or bring in a BPMN | `get_project`, `get_scenario`, `put_process_bpmn`, `get_process_bpmn` | `lila project show`, `lila scenario show`, `lila process import`, `lila process export-bpmn` |
 | 1. Read the interview, write an outline | (the agent) | |
 | 2. Create the process | `create_process` | `lila process create` |
 | 3. Fix it | `edit_process`, `get_process_outline` | `lila process edit`, `lila process show` |
@@ -54,6 +54,17 @@ nothing. `get_scenario` reads one scenario, as stored or `resolved: true`, with 
 `notes`; read a scenario with it before you patch it, never with a `patch_scenario` of only
 `test`. Then pick the step below that the person asked for: a new process (step 2), a fix
 (step 3), new numbers (step 5) or a new run (step 6).
+
+When the person brings a BPMN drawn elsewhere (a Bizagi export, say), do not rebuild it as an
+outline: add it as another process of the `.lila` with `put_process_bpmn` and `mode: "add"`. It
+gets a base scenario with default arrivals and task times, to fill in at step 5 before a run.
+A diagram the simulator cannot run (message events, collaborations) is kept for documentation
+with `allowUnsimulatable: true`, its errors in `notes`. `get_process_bpmn` hands out the XML of a
+process, and `mode: "replace"` takes it back (see [Raw BPMN of a process](MCP.md#raw-bpmn-of-a-process)).
+
+```json
+{ "name": "put_process_bpmn", "arguments": { "project": "card.lila", "mode": "add", "bpmn": "bizagi-export.bpmn", "name": "Card dispute" } }
+```
 
 ### 1. From the interview to an outline
 
@@ -109,6 +120,20 @@ imported from Bizagi; `warnings` says what an outline cannot carry.
 `annotate_element` writes the description, the RACI list, the catalog references and the extended
 attributes of one element by its BPMN id. `get_raci_matrix` returns the matrix the document will
 print. Both are optional; the document is better with them.
+
+An extended attribute (an SLA, a risk level…) has to be defined before an element can have a
+value for it. `define_attribute` defines it once per element type, with the rules of the app's
+dialog, and `get_project` lists what each process defines:
+
+```json
+{ "name": "define_attribute", "arguments": { "project": "card.lila", "name": "Risk level", "type": "list",
+  "appliesTo": "task", "options": ["Low", "Medium", "High"] } }
+```
+
+Then `annotate_element` fills it in by name, `"attributes": { "Risk level": "High" }`, and the
+process document prints it under the element. Calling `define_attribute` again with the same
+definition changes nothing; retyping it or taking options away removes the values that no longer
+fit, and `removedValues` says which.
 
 ### 5. The scenario
 

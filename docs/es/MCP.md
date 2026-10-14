@@ -3,7 +3,7 @@
 > Leer en: [English](../MCP.md)
 
 `packages/mcp` (`@lila-modeler/mcp`) es un servidor [MCP](https://modelcontextprotocol.io) por stdio sobre
-`@lila-modeler/engine`, sin lógica propia: dieciocho tools, sobre el mismo pipeline de validación y
+`@lila-modeler/engine`, sin lógica propia: veintiuna tools, sobre el mismo pipeline de validación y
 simulación que la CLI — ver [`docs/es/CLI.md`](CLI.md) para ese mismo pipeline manejado desde una
 terminal en vez de un cliente MCP.
 
@@ -112,6 +112,10 @@ mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
   escribe la descripción, el RACI, las referencias al catálogo y los atributos extendidos de un
   elemento de un proceso de un `.lila`. Devuelve
   `{ file, process, elementId, documentationOn?, dryRun, changed, written, before, after }`.
+- **`define_attribute({ project, process?, id?, name?, type?, appliesTo?, options?, default?, remove?, dryRun?, locale? })`**
+  (#633) — define, cambia o quita un atributo extendido de un proceso de un `.lila`, el que luego
+  rellena `annotate_element`. Devuelve
+  `{ file, process, dryRun, changed, written, before, after, removedValues, definitions }`.
 - **`get_raci_matrix({ project, process?, locale? })`** — devuelve la matriz RACI del proceso:
   `{ file, process, roles, rows }`.
 - **`import_scenario_sheet({ project, process?, scenario, sheet, dryRun?, locale? })`** — aplica
@@ -119,19 +123,26 @@ mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
   `{ file, process, scenario, sheet, dryRun, written, tables, changes, issues }`.
 - **`export_scenario_template({ project, process?, scenario, saveTo, overwrite?, locale? })`** —
   escribe esa hoja como `.xlsx`, rellenada. Devuelve `{ file, project, process, scenario }`.
-- **`create_project({ path, name, bpmn, scenarios?, overwrite?, locale? })`** — crea un `.lila`
+- **`create_project({ path, name, bpmn, scenarios?, overwrite?, allowUnsimulatable?, locale? })`** — crea un `.lila`
   nuevo a partir de un BPMN que ya existe (un agente que parte de pasos usa `create_process`) y
-  escenarios. Devuelve `{ file, name, processId, laidOut, warnings, scenarios }`.
+  escenarios. Devuelve `{ file, name, processId, laidOut, warnings, notes, scenarios }`.
 - **`get_project({ project, locale? })`** (#628) — lista lo que tiene un `.lila` sin escribir nada:
   sus procesos, sus escenarios y sus corridas guardadas, vigentes u obsoletas. Devuelve
   `{ file, name, formatVersion, processes }`.
 - **`get_scenario({ project, process?, scenario, resolved?, locale? })`** (#628) — lee un escenario
   como está guardado, o resuelto por `extends`, con las notas del validador, sin escribir nada.
   Devuelve `{ file, process, entry, revision, resolved, scenario, runnable, notes }`.
+- **`get_process_bpmn({ project, process?, locale? })`** (#632) — lee el XML BPMN de un proceso
+  como está guardado, sin escribir nada. Devuelve `{ file, process, processId, revision, xml }`.
+- **`put_process_bpmn({ project, process?, bpmn, mode, name?, layout?, allowUnsimulatable?, dryRun?, locale? })`**
+  (#632) — añade un BPMN como proceso nuevo de un `.lila` que ya existe (`mode: "add"`) o
+  reemplaza el modelo de uno (`mode: "replace"`). Devuelve `{ file, mode, slug, name, processId,
+  revision, dryRun, laidOut, summary, scenarioRemovals, notes, warnings, slugs }`.
 
-Las tres de exportación se explican en [Exportar sin la app](#exportar-sin-la-app); las cinco
-siguientes en [Herramientas de modelado para agentes](#herramientas-de-modelado-para-agentes); las
-dos últimas en [Leer un proyecto](#leer-un-proyecto).
+Las tres de exportación se explican en [Exportar sin la app](#exportar-sin-la-app); las seis
+siguientes en [Herramientas de modelado para agentes](#herramientas-de-modelado-para-agentes);
+`get_project` y `get_scenario` en [Leer un proyecto](#leer-un-proyecto); las dos últimas en
+[El BPMN de un proceso](#el-bpmn-de-un-proceso).
 
 Toda tool que recibe un modelo acepta también un proyecto `.lila`: ver
 [Un `.lila` como entrada](#un-lila-como-entrada).
@@ -187,7 +198,9 @@ descubrir sus procesos, escenarios y corridas por los errores de otras tools.
   un repositorio de varios procesos y 1 si no. Cada proceso trae `slug` (lo que recibe `process`),
   `name`, `processId` (su `bpmn:process`), `modelRevision`, `elements` (nodos de flujo: tareas,
   eventos, compuertas; `null` si el modelo no se puede leer), `scenarios` (`entry`, `name`,
-  `revision`, `extends`) y `runs` (`id`, `scenario`, `start`, `replications`, `current`). Una
+  `revision`, `extends`), `runs` (`id`, `scenario`, `start`, `replications`, `current`) y
+  `attributes`, los atributos extendidos que define (`id`, `name`, `type`, `appliesTo`, `default?`,
+  `options?`; `null` si el modelo no se puede releer entero). Una
   corrida tiene `current: false` (obsoleta) cuando el modelo o su escenario cambiaron después de
   ella: `export_results` y `export_document` solo la toman por id. Un `.lila` no guarda la fecha en
   que se tomó una corrida; `start` es el inicio simulado (`run.start`) del escenario que corrió.
@@ -209,6 +222,61 @@ escribe nada (#627), pero no es para leer.
 
 ```json
 { "name": "get_scenario", "arguments": { "project": "credito.lila", "scenario": "as-is", "resolved": true } }
+```
+
+## El BPMN de un proceso
+
+`get_process_bpmn` y `put_process_bpmn` (#632) leen y escriben como XML el BPMN de un proceso de
+un `.lila`, por el mismo códec y el mismo candado que las demás tools: es la forma de traer un
+modelo dibujado en otro lado (una exportación de Bizagi, por ejemplo) como otro proceso de un
+proyecto, o de pasarle un proceso a una herramienta BPMN y recibirlo de vuelta. `lila process
+export-bpmn` y `lila process import` (`docs/es/CLI.md`) hacen lo mismo desde una terminal.
+
+- **`get_process_bpmn`** devuelve el modelo tal como está guardado: `xml`, su `revision` y
+  `processId`, el `bpmn:process` que simula el proyecto (como lo lista `get_project`). No escribe
+  nada.
+- **`put_process_bpmn`** recibe `bpmn` como XML (empieza por `<`) o como ruta a un `.bpmn`, y lo
+  valida como `create_project`: un modelo con errores de validación se rechaza.
+  - **`mode: "add"`** lo añade como proceso nuevo de un `.lila` que ya existe (para empezar un
+    archivo nuevo, usa `create_project`); un proyecto versión 1 pasa a ser un repositorio. Su slug
+    es `process`, o sale de `name`, si no del nombre de su pool, del de su proceso o del del
+    archivo; un slug que ya está en el archivo se rechaza. Recibe un `as-is.scenario.json` como el
+    que la app le da a un proceso nuevo: 20 llegadas con un minuto entre ellas en cada evento de
+    inicio y un minuto de trabajo en cada tarea, listo para correr y para parchear.
+  - **`mode: "replace"`** reemplaza el modelo del proceso `process` (implícito si el `.lila` tiene
+    uno). Conserva su nombre (aquí `name` se rechaza) y sus escenarios; su revisión sube, así que
+    sus corridas guardadas quedan obsoletas. Las anotaciones `lila:` (RACI, referencias, atributos
+    extendidos) y la documentación son las del modelo nuevo: las viejas se van con el modelo
+    viejo. Las entradas de escenario que ya no aplican — las de un elemento que el modelo nuevo no
+    tiene y los campos que un elemento que cambió de tipo ya no admite — se quitan y se listan en
+    `scenarioRemovals`, `{ scenario, id, removed, entry }`, igual que en `edit_process`, y `notes`
+    lo dice con palabras. Si aun así un escenario tiene un error que con el modelo viejo no tenía,
+    la llamada se rechaza.
+  - **`allowUnsimulatable: true`** guarda un modelo que el simulador no puede correr — eventos de
+    mensaje o señal, colaboraciones, ciclos, un diagrama dibujado para documentar — como lo guarda
+    la app. Acepta cualquier error de validación, y en un reemplazo también un error de escenario;
+    cada uno vuelve en `notes` (`no se simula: E-NOSOP: …`). Un archivo que no es XML, no es BPMN
+    o no tiene `bpmn:process` se sigue rechazando. Nada marca el proceso: «no se simula» es lo que
+    dice `get_scenario` (`runnable: false`, con los errores en sus `notes`) y `run_simulation` lo
+    rechaza, hasta que se arregle el modelo.
+  - **`layout`** (por defecto `true`) dibuja un modelo sin diagrama (sin formas `bpmndi`) con el
+    maquetado automático de `create_project` (`laidOut: true`); `false` lo deja como llegó.
+  - La escritura es la misma escritura atómica y con candado de `patch_scenario`: si el archivo
+    cambió en disco desde que se leyó, la llamada se rechaza (`E-CAMBIO-EXTERNO`) y no se pierde
+    nada. Los demás procesos quedan byte a byte. `dryRun` comprueba todo y no escribe nada.
+
+```json
+{ "name": "put_process_bpmn", "arguments": { "project": "credito.lila", "mode": "add",
+  "bpmn": "examples/bizagi-exports/bizagi-miwg-A.1.0-roundtrip.bpmn", "name": "MIWG A.1.0", "locale": "es" } }
+```
+
+```json
+{ "name": "get_process_bpmn", "arguments": { "project": "credito.lila", "process": "miwg-a-1-0" } }
+```
+
+```json
+{ "name": "put_process_bpmn", "arguments": { "project": "credito.lila", "process": "miwg-a-1-0", "mode": "replace",
+  "bpmn": "miwg-editado.bpmn", "allowUnsimulatable": true, "dryRun": true } }
 ```
 
 ## Exportar sin la app
@@ -446,10 +514,10 @@ el fin del camino que terminó al último, así que un siniestro escalado y lueg
 
 ## Herramientas de modelado para agentes
 
-`annotate_element`, `get_raci_matrix`, `import_scenario_sheet`, `export_scenario_template` y
-`create_project` (#99, #403, #514) dejan que un agente construya y documente un proyecto sin la
-app. La CLI tiene las cuatro primeras como `lila process annotate|raci` y
-`lila scenario import|template` (`docs/es/CLI.md`). Toda escritura pasa por el mismo guardado
+`annotate_element`, `define_attribute`, `get_raci_matrix`, `import_scenario_sheet`,
+`export_scenario_template` y `create_project` (#99, #633, #403, #514) dejan que un agente construya
+y documente un proyecto sin la app. La CLI tiene las cinco primeras como
+`lila process annotate|attribute|raci` y `lila scenario import|template` (`docs/es/CLI.md`). Toda escritura pasa por el mismo guardado
 atómico y con candado del `.lila` que `patch_scenario` (ver
 [Un `.lila` como entrada](#un-lila-como-entrada)): solo cambia el proceso tocado, los demás pasan
 byte a byte, y una entrada inválida es `isError` sin escribir nada. `dryRun: true` responde qué
@@ -471,6 +539,23 @@ cambiaría y no escribe nada.
   `documentationOn`), y un proceso dentro de un pool guarda su RACI y sus referencias en el pool,
   así que `responsibilities` o `refs` sobre ese proceso se rechazan con un mensaje que nombra el
   pool.
+- **`define_attribute`** declara un atributo extendido (#633) para que `annotate_element` lo
+  rellene: `get_project` lista los que define cada proceso. Se pasa siempre la definición entera:
+  `name`, `type` (`text`, `number`, `list`, `date`), `appliesTo` (`task`, `gateway`, `event`,
+  `subProcess`, `lane` para pools y carriles, `process`), y `options` y `default` si los tiene.
+  Cambia la definición con ese `id`; sin `id`, la que tiene ese nombre (sin distinguir mayúsculas)
+  y ese `appliesTo`; si no hay, crea una con un id determinista, `Attr_` y el nombre en ASCII
+  minúsculo (`"SLA (h)"` → `Attr_sla_h`, luego `_2`… si ya existe), así que un simulacro y la
+  escritura la nombran igual y repetir la llamada no cambia nada (`changed: false`). Las reglas son
+  las del diálogo de atributos de la app: un nombre único por tipo de elemento (sin distinguir
+  mayúsculas), una `list` con al menos una opción (recortadas y sin repetidas), `options` solo en
+  una `list` y un `default` que encaje con el tipo. Las definiciones se escriben en la
+  `bpmn:collaboration` (si no, en el proceso), y las copias que haya en otro sitio se mueven ahí
+  (`docs/es/BPMN_EXTENSION.md`). Renombrar conserva todos los valores. `remove: true` (con `id`, o
+  con `name` y `appliesTo`) quita la definición y sus valores; cambiar el tipo, el `appliesTo` o
+  quitar opciones quita los valores que ya no encajan, como el «limpiar» de la app. En los dos
+  casos `removedValues` los lista (`[{ elementId, value }]`), también en un `dryRun`;
+  `definitions` es la lista entera del proceso después.
 - **`get_raci_matrix`** lista lo que el documento del proceso (`export_document`) lista en
   «Responsabilidades (RACI)», en el mismo orden: una fila por elemento con responsabilidades, con
   su `id`, `name`, `lane` (si tiene), las `responsibilities` tal cual y `cells` (rol → `"R"`, o
@@ -486,7 +571,9 @@ cambiaría y no escribe nada.
 - **`export_scenario_template`** es «Descargar plantilla» de la app: dásela a una persona e importa
   lo que devuelva. Un `saveTo` que ya existe se rechaza salvo con `overwrite`.
 - **`create_project`** recibe `bpmn` como XML (empieza por `<`) o como ruta a un `.bpmn`. Un modelo
-  con errores de validación se rechaza. `scenarios` son `[{ "name", "scenario" }]`, guardados como
+  con errores de validación se rechaza, salvo con `allowUnsimulatable: true` (#632): entonces se
+  guarda como diagrama que no se simula y sus errores vuelven en `notes` (ver
+  [El BPMN de un proceso](#el-bpmn-de-un-proceso)). `scenarios` son `[{ "name", "scenario" }]`, guardados como
   `<name>.scenario.json`; un escenario sin `model` ni `extends` recibe `"model": "model.bpmn"`, y
   uno que nombra otro modelo se rechaza. Un escenario que todavía no puede correr es un borrador:
   se guarda y vuelve con `runnable: false` y sus `errors`. El archivo se escribe entero o nada, y
@@ -506,6 +593,16 @@ cambiaría y no escribe nada.
 { "name": "annotate_element", "arguments": { "project": "proyecto.lila", "elementId": "Task_TomarPedido",
   "documentation": "Toma el pedido en el mostrador.", "responsibilities": [{ "type": "R", "roleRef": "cajero" }, { "type": "A", "roleRef": "gerente" }],
   "refs": { "systemRef": ["POS"] }, "locale": "es" } }
+```
+
+```json
+{ "name": "define_attribute", "arguments": { "project": "proyecto.lila", "name": "Nivel de riesgo", "type": "list",
+  "appliesTo": "task", "options": ["Bajo", "Alto"], "default": "Bajo" } }
+```
+
+```json
+{ "name": "annotate_element", "arguments": { "project": "proyecto.lila", "elementId": "Task_TomarPedido",
+  "attributes": { "Nivel de riesgo": "Alto" } } }
 ```
 
 ```json

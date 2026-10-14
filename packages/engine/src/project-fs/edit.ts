@@ -109,7 +109,7 @@ function inapplicable(id: string, entry: Record<string, unknown>, ir: ProcessIR,
   return [...fields];
 }
 
-interface ScenarioError {
+export interface ScenarioError {
   scenario: string;
   path: string;
   code: string;
@@ -117,7 +117,7 @@ interface ScenarioError {
 }
 
 /** Errors of every scenario of `process` (resolved through `extends`) against `ir`, keyed `name\0code\0path`. */
-function scenarioErrors(input: LilaProcess, process: ProcessDocument, ir: ProcessIR, locale: Locale): Map<string, ScenarioError> {
+export function scenarioErrors(input: LilaProcess, process: ProcessDocument, ir: ProcessIR, locale: Locale): Map<string, ScenarioError> {
   const view: LilaProcess = { ...input, process };
   const read = lilaScenarioReader(
     view,
@@ -141,6 +141,62 @@ function scenarioErrors(input: LilaProcess, process: ProcessDocument, ir: Proces
     }
   }
   return out;
+}
+
+/** What `pruneScenarios` left: the scenarios, what it removed, and which scenarios changed. */
+export interface PrunedScenarios {
+  readonly scenarios: Record<string, ScenarioDocument>;
+  readonly scenarioRemovals: ScenarioRemoval[];
+  /** Entry names of the scenarios that lost something. */
+  readonly changed: ReadonlySet<string>;
+}
+
+/**
+ * Removes from `scenarios` the entries that no longer apply to the model `ir`: the whole entry of
+ * every id in `removed`, and the fields an id in `retyped` can no longer take (found with the
+ * scenario validator, `inapplicable`). Each removal is reported with its previous values. Shared by
+ * `edit_process` and `put_process_bpmn` with `mode: "replace"` (#632); `scenarios` is not mutated.
+ */
+export function pruneScenarios(
+  scenarios: Readonly<Record<string, ScenarioDocument>>,
+  ir: ProcessIR,
+  removed: ReadonlySet<string>,
+  retyped: readonly string[],
+): PrunedScenarios {
+  const out: Record<string, ScenarioDocument> = { ...scenarios };
+  const context: Record<string, unknown> = {
+    version: 1,
+    name: 'check',
+    run: { start: '2026-01-01T00:00:00Z', duration: 3600, warmup: 0, replications: 1, seed: 1, baseTimeUnit: 'min' },
+    resources: Object.assign({}, ...Object.values(out).map((s) => (s as { resources?: object }).resources ?? {})),
+    calendars: Object.assign({}, ...Object.values(out).map((s) => (s as { calendars?: object }).calendars ?? {})),
+  };
+  const scenarioRemovals: ScenarioRemoval[] = [];
+  const changed = new Set<string>();
+  for (const [name, scenario] of Object.entries(out)) {
+    const elements = elementsOf(scenario);
+    let next: Elements | undefined;
+    for (const [id, entry] of Object.entries(elements)) {
+      let fields: string[] | null = [];
+      if (removed.has(id)) fields = null;
+      else if (retyped.includes(id)) fields = inapplicable(id, entry, ir, context);
+      if (fields !== null && fields.length === 0) continue;
+      next ??= { ...elements };
+      if (fields === null || fields.length === Object.keys(entry).length) {
+        delete next[id];
+        scenarioRemovals.push({ scenario: name, id, removed: entry, entry: true });
+      } else {
+        const gone = fields;
+        next[id] = Object.fromEntries(Object.entries(entry).filter(([k]) => !gone.includes(k)));
+        scenarioRemovals.push({ scenario: name, id, removed: Object.fromEntries(gone.map((k) => [k, entry[k]])), entry: false });
+      }
+    }
+    if (next !== undefined) {
+      out[name] = { ...scenario, elements: next } as ScenarioDocument;
+      changed.add(name);
+    }
+  }
+  return { scenarios: out, scenarioRemovals, changed };
 }
 
 /**
@@ -168,43 +224,14 @@ export async function editLilaProcess(file: string, operations: unknown, options
 
   // Scenario entries that no longer apply go, each one reported with what it held.
   const ir = (await parseBpmn(edit.xml, { scenarios: Object.values(current.scenarios) })).ir;
-  const scenarios: Record<string, ScenarioDocument> = {
-    ...current.scenarios,
-    ...(edit.scenario === undefined ? {} : { [BASE_SCENARIO]: edit.scenario }),
-  };
-  const context: Record<string, unknown> = {
-    version: 1,
-    name: 'check',
-    run: { start: '2026-01-01T00:00:00Z', duration: 3600, warmup: 0, replications: 1, seed: 1, baseTimeUnit: 'min' },
-    resources: Object.assign({}, ...Object.values(scenarios).map((s) => (s as { resources?: object }).resources ?? {})),
-    calendars: Object.assign({}, ...Object.values(scenarios).map((s) => (s as { calendars?: object }).calendars ?? {})),
-  };
-  const removed = new Set(edit.removed);
-  const scenarioRemovals: ScenarioRemoval[] = [];
-  const changedScenarios = new Set<string>(edit.scenario === undefined ? [] : [BASE_SCENARIO]);
-  for (const [name, scenario] of Object.entries(scenarios)) {
-    const elements = elementsOf(scenario);
-    let next: Elements | undefined;
-    for (const [id, entry] of Object.entries(elements)) {
-      let fields: string[] | null = [];
-      if (removed.has(id)) fields = null;
-      else if (edit.retyped.includes(id)) fields = inapplicable(id, entry, ir, context);
-      if (fields !== null && fields.length === 0) continue;
-      next ??= { ...elements };
-      if (fields === null || fields.length === Object.keys(entry).length) {
-        delete next[id];
-        scenarioRemovals.push({ scenario: name, id, removed: entry, entry: true });
-      } else {
-        const gone = fields;
-        next[id] = Object.fromEntries(Object.entries(entry).filter(([k]) => !gone.includes(k)));
-        scenarioRemovals.push({ scenario: name, id, removed: Object.fromEntries(gone.map((k) => [k, entry[k]])), entry: false });
-      }
-    }
-    if (next !== undefined) {
-      scenarios[name] = { ...scenario, elements: next } as ScenarioDocument;
-      changedScenarios.add(name);
-    }
-  }
+  const pruned = pruneScenarios(
+    { ...current.scenarios, ...(edit.scenario === undefined ? {} : { [BASE_SCENARIO]: edit.scenario }) },
+    ir,
+    new Set(edit.removed),
+    edit.retyped,
+  );
+  const { scenarios, scenarioRemovals } = pruned;
+  const changedScenarios = new Set<string>([...(edit.scenario === undefined ? [] : [BASE_SCENARIO]), ...pruned.changed]);
 
   const scenarioRevisions = { ...current.scenarioRevisions };
   for (const name of changedScenarios) scenarioRevisions[name] = (current.scenarioRevisions[name] ?? 0) + 1;

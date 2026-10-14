@@ -21,7 +21,7 @@ flujo de abajo con una entrevista ([`MCP.md`](MCP.md#recursos-y-prompt)).
 
 | Paso | Tool | CLI |
 | --- | --- | --- |
-| 0. El archivo ya existe: leer lo que tiene | `get_project`, `get_scenario` | `lila project show`, `lila scenario show` |
+| 0. El archivo ya existe: leer lo que tiene, o traer un BPMN | `get_project`, `get_scenario`, `put_process_bpmn`, `get_process_bpmn` | `lila project show`, `lila scenario show`, `lila process import`, `lila process export-bpmn` |
 | 1. Leer la entrevista, escribir un esquema | (el agente) | |
 | 2. Crear el proceso | `create_process` | `lila process create` |
 | 3. Corregirlo | `edit_process`, `get_process_outline` | `lila process edit`, `lila process show` |
@@ -55,6 +55,18 @@ escribe nada. `get_scenario` lee un escenario, como está guardado o con `resolv
 `notes` del validador; lee un escenario con ella antes de parchearlo, nunca con un `patch_scenario`
 de solo `test`. Después sigue el paso de abajo que la persona pidió: un proceso nuevo (paso 2), una
 corrección (paso 3), números nuevos (paso 5) o una corrida nueva (paso 6).
+
+Cuando la persona trae un BPMN dibujado en otro lado (una exportación de Bizagi, por ejemplo), no lo
+rehagas como esquema: añádelo como otro proceso del `.lila` con `put_process_bpmn` y `mode: "add"`.
+Recibe un escenario base con llegadas y tiempos de tarea por defecto, que llenas en el paso 5 antes
+de correr. Un diagrama que el simulador no puede correr (eventos de mensaje, colaboraciones) se
+guarda para documentar con `allowUnsimulatable: true`, con sus errores en `notes`.
+`get_process_bpmn` entrega el XML de un proceso, y `mode: "replace"` lo recibe de vuelta (ver
+[El BPMN de un proceso](MCP.md#el-bpmn-de-un-proceso)).
+
+```json
+{ "name": "put_process_bpmn", "arguments": { "project": "tarjeta.lila", "mode": "add", "bpmn": "exportacion-bizagi.bpmn", "name": "Aclaración de cargo", "locale": "es" } }
+```
 
 ### 1. De la entrevista al esquema
 
@@ -112,6 +124,20 @@ importado de Bizagi; `warnings` dice lo que un esquema no puede llevar.
 `annotate_element` escribe la descripción, la lista RACI, las referencias de catálogo y los
 atributos extendidos de un elemento, por su id BPMN. `get_raci_matrix` devuelve la matriz que
 imprimirá el documento. Las dos son opcionales; el documento sale mejor con ellas.
+
+Un atributo extendido (un SLA, un nivel de riesgo…) tiene que estar definido antes de que un
+elemento tenga un valor para él. `define_attribute` lo define una vez por tipo de elemento, con las
+reglas del diálogo de la app, y `get_project` lista los que define cada proceso:
+
+```json
+{ "name": "define_attribute", "arguments": { "project": "tarjeta.lila", "name": "Nivel de riesgo", "type": "list",
+  "appliesTo": "task", "options": ["Bajo", "Medio", "Alto"] } }
+```
+
+Luego `annotate_element` lo rellena por nombre, `"attributes": { "Nivel de riesgo": "Alto" }`, y
+el documento del proceso lo imprime bajo el elemento. Repetir `define_attribute` con la misma
+definición no cambia nada; cambiarle el tipo o quitarle opciones quita los valores que ya no
+encajan, y `removedValues` dice cuáles.
 
 ### 5. El escenario
 
