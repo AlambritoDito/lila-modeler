@@ -87,7 +87,10 @@ export const EditOperationSchema = z.discriminatedUnion('op', [
       default: z
         .boolean()
         .optional()
-        .describe('Out of an xor/or gateway: true makes the new flow the gateway\'s default flow. Refused when the gateway already has one.'),
+        .describe(
+          'Out of an xor/or gateway: true makes the new flow the gateway\'s default flow. Refused when the gateway already has one. ' +
+            'To mark an existing flow (or clear the mark), connect the same steps again and remove the old flow: it gets a new id.',
+        ),
       id: Id.optional().describe('Id of the new flow. Default Flow_<from>_<to>.'),
     })
     .describe('Adds a sequence flow.'),
@@ -103,10 +106,16 @@ export const EditOperationSchema = z.discriminatedUnion('op', [
   z
     .strictObject({
       op: z.literal('setType'),
-      id: Id.describe('Id of the step; with end/terminate, the id of the end event, or of a step that leads to exactly one end event.'),
+      id: Id.describe(
+        'Id of the step. With end/terminate: the id of an end event, or of a step that leads to exactly one end event, whose end is ' +
+          'then retyped (not the step); anything else is refused.',
+      ),
       type: z.enum(EDIT_TYPES),
     })
-    .describe('Changes the type of a step (its id, name, flows and annotations stay), or turns an end event into a terminate end (and back).'),
+    .describe(
+      'Changes the type of a step (its id, name, flows and annotations stay), or turns an end event into a terminate end (and back). ' +
+        'Turning an xor/or into an and or an eventGateway drops the probabilities of its outgoing flows from the scenarios.',
+    ),
   z
     .strictObject({ op: z.literal('moveToLane'), id: Id, lane: Id.describe('Lane name or id.') })
     .describe('Moves a step to another lane, with its boundary events and the ends they lead to.'),
@@ -123,9 +132,15 @@ export const EditOperationSchema = z.discriminatedUnion('op', [
     .strictObject({
       op: z.literal('removeLane'),
       lane: Id.describe('Lane name or id.'),
-      moveStepsTo: Id.optional().describe('Lane (name or id, a lane with no sub-lanes) that takes its steps. Required when it holds any.'),
+      moveStepsTo: Id.optional().describe(
+        'Lane (name or id, another lane with no sub-lanes) that takes its nodes: steps, starts, end events, boundary events. ' +
+          'Required when it holds any, except for the only lane of the process.',
+      ),
     })
-    .describe('Removes a lane without sub-lanes. Removing the last lane leaves the pool without lanes.'),
+    .describe(
+      'Removes a lane without sub-lanes. Removing the only lane removes the lane set: its nodes stay in the pool, without lanes, ' +
+        'and moveStepsTo is not needed.',
+    ),
   z
     .strictObject({
       op: z.literal('moveLane'),
@@ -148,7 +163,7 @@ export const EditOperationSchema = z.discriminatedUnion('op', [
     ),
   z
     .strictObject({ op: z.literal('removeAnnotation'), on: Id.describe('Id of the step.'), text: z.string().min(1) })
-    .describe('Removes the text annotation with that text attached to the step, and its association.'),
+    .describe('Removes the text annotation with that text attached to the step (every one, if a model repeats it), and its association.'),
   z
     .strictObject({
       op: z.literal('addDataObject'),

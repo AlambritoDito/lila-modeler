@@ -349,6 +349,7 @@ export interface CliMessages {
   outlineEventTargetWaysIn: (target: string, gateway: string, waysIn: string) => string;
   outlineMessageNeedsEventGateway: (step: string) => string;
   outlineDuplicateData: (step: string, name: string, direction: string) => string;
+  outlineDuplicateNote: (step: string, text: string) => string;
   outlineEndWithNext: (step: string) => string;
   outlineFieldNotApplicable: (step: string, field: string, type: string) => string;
   outlineProbabilityOnAnd: (step: string) => string;
@@ -388,6 +389,9 @@ export interface CliMessages {
   outlineDroppedArtifacts: (count: number) => string;
   outlineDroppedDefaults: (ids: string) => string;
   outlineDroppedFlowNames: (flows: string) => string;
+  /** `notes` arrives already joined: `step "text"`, … */
+  outlineMergedNotes: (notes: string) => string;
+  outlineDroppedTimerExpressions: (ids: string) => string;
   outlineDroppedProbabilities: (flows: string) => string;
   /** `kinds` are keys joined by `,` (`arrivals,calendars`): arrivals, calendars, costs, capacities, conditions. */
   outlineScenarioOutside: (kinds: string) => string;

@@ -512,6 +512,7 @@ export const es: Catalog = {
       `el paso "${target}" sigue a la compuerta por eventos "${gateway}", así que esa debe ser su única entrada; tiene ${waysIn}. Revisa "next", "to", "from" y el paso anterior de la lista.`,
     outlineMessageNeedsEventGateway: (step) => `paso "${step}": un paso message solo va después de una compuerta por eventos, como una de sus ramas.`,
     outlineDuplicateData: (step, name, direction) => `paso "${step}": el dato "${name}" (${direction}) aparece más de una vez.`,
+    outlineDuplicateNote: (step, text) => `paso "${step}": la nota "${text}" aparece más de una vez.`,
     outlineManyNextNeedGateway: (step) => `paso "${step}": varios pasos en "next" necesitan una compuerta (xor, or, and); añade una.`,
     outlineEndWithNext: (step) => `paso "${step}": "end" no se puede combinar con "next" ni con "branches".`,
     outlineFieldNotApplicable: (step, field, type) => `paso "${step}": "${field}" no aplica a un ${type}.`,
@@ -552,6 +553,9 @@ export const es: Catalog = {
     outlineDroppedArtifacts: (count) => `${n(count, 'anotación, grupo o asociación no forma', 'anotaciones, grupos o asociaciones no forman')} parte del esquema y ${count === 1 ? 'se omitió' : 'se omitieron'}.`,
     outlineDroppedDefaults: (ids) => `las marcas de flujo por defecto no forman parte del esquema y se omitieron: ${ids}.`,
     outlineDroppedFlowNames: (flows) => `los nombres de los flujos que salen de un evento de inicio no forman parte del esquema y se omitieron: ${flows}.`,
+    outlineMergedNotes: (notes) => `las anotaciones de texto que repiten una nota del mismo paso se leyeron una sola vez: ${notes}.`,
+    outlineDroppedTimerExpressions: (ids) =>
+      `las expresiones de temporizador del BPMN no forman parte del esquema (las duraciones viven en el escenario) y se omitieron: ${ids}.`,
     outlineDroppedProbabilities: (flows) =>
       `se omitieron las probabilidades de rama que el esquema no admite (fuera de un xor o un or, o las de un xor que suman más de 1): ${flows}.`,
     outlineScenarioOutside: (kinds) =>

@@ -767,6 +767,56 @@ describe('the contract rules of the new constructs (#631, #638)', () => {
     expect(issues.has('steps[1].data')).toBe(false);
     expect(issues.get('steps[2].data')).toEqual(['step "g": "data" does not apply to a and.']);
   });
+
+  test('notes: each text once per step (removeAnnotation names a note by its text)', async () => {
+    const issues = await issuesOf({
+      name: 'X',
+      steps: [
+        { id: 'a', notes: ['Check ID', 'Paper too', 'Check ID'] },
+        { id: 'b', notes: ['Check ID'], end: true },
+      ],
+    });
+    expect(issues.get('steps[0].notes[2]')).toEqual(['step "a": the note "Check ID" is listed more than once.']);
+    expect(issues.has('steps[1].notes[0]')).toBe(false);
+  });
+});
+
+describe('the trivial start and the exclusive splits of the new constructs (#631 contract review)', () => {
+  // Enabled with the build of `starts` and of the event gateway (they are refused as not
+  // implemented yet in the contract commit).
+  test.skip('starts: [{ id: "StartEvent" }] to a step further down is the trivial start: its step moves to the head', async () => {
+    const outline = {
+      name: 'X',
+      starts: [{ id: 'StartEvent' }],
+      steps: [
+        { id: 'a', next: 'c' },
+        { id: 'b', from: 'StartEvent', next: 'a' },
+        { id: 'c', end: true },
+      ],
+    };
+    const normal = normalizeOutline(outline);
+    // b first; then a and c follow it in the list, so no `next` is left.
+    expect(normal).toEqual({ name: 'X', steps: [{ id: 'b' }, { id: 'a' }, { id: 'c', end: true }] });
+    const built = await outlineToBpmn(outline);
+    const reading = await bpmnToOutline(built.xml, { scenario: built.scenario as unknown as Record<string, unknown> });
+    expect(reading.warnings).toEqual([]);
+    expect(reading.outline).toEqual(normal);
+  });
+
+  test.skip('a parallel join of the branches of an event gateway is flagged like one behind an xor', async () => {
+    const built = await outlineToBpmn({
+      name: 'X',
+      steps: [
+        { id: 'g', type: 'eventGateway', branches: [{ to: 'm' }, { to: 't' }] },
+        { id: 'm', type: 'message', duration: '1h', next: 'j' },
+        { id: 't', type: 'timer', duration: '2h', next: 'j' },
+        { id: 'j', type: 'and', end: true },
+      ],
+    });
+    expect(built.notes).toEqual([
+      'parallel join "j" waits for branches of the exclusive gateway "g", which only ever takes one: cases would wait there forever. Use an xor (or or) join.',
+    ]);
+  });
 });
 
 describe('generated end ids never clash (#631 review)', () => {

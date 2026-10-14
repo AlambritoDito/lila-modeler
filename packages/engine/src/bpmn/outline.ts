@@ -20,11 +20,14 @@
  * - `end: true` (or `"terminate"` for a terminate end event) on every step that finishes the process;
  * - gateway successors are `branches` (an `eventGateway` always has them, even with one branch), with
  *   `default: true` on the default flow of an xor/or;
- * - `starts` is left out in the trivial case, a single plain start `StartEvent` with no name, one
- *   outgoing flow and the lane of its step: then that step leads the list and no step has `from`.
- *   Otherwise every start is listed (`type` only for `timer`) and the steps keep their order; `from`
- *   lists a step's starts in the order of `starts`, one id as a string and several as a list;
+ * - `starts` is left out in the trivial case, a single plain start `StartEvent` with no name in the
+ *   lane of its step, wherever that step is in the list: the normal form then moves that step to
+ *   the head of the list (the others keep their order) and no step has `from`, which is also how
+ *   `bpmnToOutline` reads a model with one plain start. Otherwise every start is listed (`type` only
+ *   for `timer`) and the steps keep their order; `from` lists a step's starts in the order of
+ *   `starts`, one id as a string and several as a list;
  * - `boundary` keeps its order, with `interrupting` only when it is `false`;
+ * - `notes` keeps its order (when read, the document order of the associations), each text once;
  * - `data` lists the reads (`in`) first and then the writes (`out`), each group in its order;
  * - durations are scenario distributions in seconds, and the XOR probabilities that were left out
  *   share what is left of 1.
@@ -37,7 +40,21 @@
  *
  * Reading. `bpmnToOutline` never returns an outline that `normalizeOutline` would refuse: what an
  * outline cannot say is left out with a warning (e.g. probabilities on the flows of an `and` or an
- * `eventGateway`), never silently.
+ * `eventGateway`), never silently. In particular:
+ * - only an event-based gateway in the simulator's profile (R-EVG-1: `eventGatewayProfile` and
+ *   `isBranchCatchEvent` in `parse.ts`; exclusive, not instantiating, every branch an intermediate
+ *   timer or message catch event with one way in and one way out) reads as an `eventGateway`, and
+ *   only its message branches read as `message` steps; any other event-based gateway (an
+ *   instantiating or parallel one, one with a branch to a receive task or to a catch event with
+ *   several ways in or out) and any other message catch event is left out (`outlineUnsupported`),
+ *   with its flows;
+ * - only a boundary timer the simulator runs (`boundaryTimerHost` in `parse.ts`: on a task or a
+ *   call activity, no incoming flow, one way out) reads as a `boundary`; one on a sub-process
+ *   (#639), with an incoming flow or with several outgoing flows is left out;
+ * - the timer expressions in the XML (`timeDuration`, `timeDate`, `timeCycle`) of timer starts,
+ *   timer steps and boundary timers are left out: durations live in the scenario, never in the XML;
+ * - text annotations with no text are left out, and so are those that repeat a text already
+ *   attached to the same step (the step's `notes` keep it once).
  */
 import { BpmnModdle } from 'bpmn-moddle';
 import { z } from 'zod';
@@ -158,7 +175,10 @@ const OutlineBranchSchema = z.strictObject({
 export const OutlineStartSchema = z.strictObject({
   id: z.string().min(1).describe('BPMN id of the start event; its arrivals in the scenario key on it.'),
   name: z.string().optional(),
-  type: z.enum(OUTLINE_START_TYPES).optional().describe('Defaults to none (a plain start event); timer is a timer start event.'),
+  type: z
+    .enum(OUTLINE_START_TYPES)
+    .optional()
+    .describe('Defaults to none (a plain start event); timer is a timer start event, notation only: its cases come from the scenario arrivals, as with none.'),
   lane: z.string().optional().describe('Lane name; defaults to the lane of the step it leads to.'),
 });
 
@@ -220,7 +240,11 @@ const OutlineStepSchema = z.strictObject({
     .min(1)
     .optional()
     .describe('Tasks (any variant) and call activities only, not sub-processes: boundary events on the step (deadlines).'),
-  notes: z.array(z.string().min(1)).min(1).optional().describe('Text annotations attached to the step.'),
+  notes: z
+    .array(z.string().min(1))
+    .min(1)
+    .optional()
+    .describe('Text annotations attached to the step, in order; each text once per step.'),
   data: z
     .array(OutlineDataSchema)
     .min(1)
@@ -883,6 +907,14 @@ function toGraph(input: unknown, C: CliMessages): Graph {
         seen.add(key);
       });
     }
+    if (step.notes !== undefined) {
+      // One annotation per text and step, so `removeAnnotation { on, text }` is never ambiguous.
+      const seen = new Set<string>();
+      step.notes.forEach((note, k) => {
+        if (seen.has(note)) issues.push({ path: at(index, `notes[${k}]`), message: C.outlineDuplicateNote(step.id, note) });
+        seen.add(note);
+      });
+    }
 
     return { id: step.id, name: step.name ?? '', type, lane, succ, duration, resources: step.resources, selection: step.selection };
   });
@@ -1015,7 +1047,9 @@ export interface OutlineBpmn {
 /**
  * A parallel join that waits for branches of one exclusive split, which only ever sends a case
  * down one of them: the simulation reports it (W-JOIN-BLOQUEADO) but only after running. Each
- * incoming path is followed back through plain one-in steps to the gateway it comes from.
+ * incoming path is followed back through plain one-in steps to the gateway it comes from. An
+ * exclusive split is an `xor` or an `eventGateway` (the first event wins), and so is a task with
+ * an interrupting boundary event: its normal way out and the boundary's path never both run.
  */
 function joinNotes(graph: Graph, C: CliMessages): string[] {
   const incoming = new Map<string, string[]>();
@@ -1034,7 +1068,8 @@ function joinNotes(graph: Graph, C: CliMessages): string[] {
       }
       return current;
     });
-    const split = origins.find((id, i) => byId.get(id)!.type === 'xor' && origins.indexOf(id) !== i);
+    const exclusive = (id: string): boolean => byId.get(id)!.type === 'xor' || byId.get(id)!.type === 'eventGateway';
+    const split = origins.find((id, i) => exclusive(id) && origins.indexOf(id) !== i);
     if (split !== undefined) notes.push(C.outlineXorAndJoin(join.id, split));
   }
   return notes;

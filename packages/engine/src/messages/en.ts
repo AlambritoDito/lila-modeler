@@ -506,6 +506,7 @@ export const en: Catalog = {
       `step "${target}" follows the event gateway "${gateway}", so that must be its only way in; it has ${waysIn}. Check "next", "to", "from" and the step before it in the list.`,
     outlineMessageNeedsEventGateway: (step) => `step "${step}": a message step only goes after an event gateway, as one of its branches.`,
     outlineDuplicateData: (step, name, direction) => `step "${step}": data "${name}" (${direction}) is listed more than once.`,
+    outlineDuplicateNote: (step, text) => `step "${step}": the note "${text}" is listed more than once.`,
     outlineManyNextNeedGateway: (step) => `step "${step}": several "next" steps need a gateway (xor, or, and); add one.`,
     outlineEndWithNext: (step) => `step "${step}": "end" cannot be combined with "next" or "branches".`,
     outlineFieldNotApplicable: (step, field, type) => `step "${step}": "${field}" does not apply to a ${type}.`,
@@ -546,6 +547,9 @@ export const en: Catalog = {
     outlineDroppedArtifacts: (count) => `${n(count, 'annotation, group or association is', 'annotations, groups or associations are')} not part of the outline and ${count === 1 ? 'was' : 'were'} left out.`,
     outlineDroppedDefaults: (ids) => `default-flow marks are not part of the outline and were left out: ${ids}.`,
     outlineDroppedFlowNames: (flows) => `the names of flows out of a start event are not part of the outline and were left out: ${flows}.`,
+    outlineMergedNotes: (notes) => `text annotations that repeat a note of the same step were read once: ${notes}.`,
+    outlineDroppedTimerExpressions: (ids) =>
+      `timer expressions in the BPMN are not part of the outline (durations live in the scenario) and were left out: ${ids}.`,
     outlineDroppedProbabilities: (flows) =>
       `branch probabilities the outline cannot carry (not out of an xor or an or, or an xor's adding up to more than 1) were left out: ${flows}.`,
     outlineScenarioOutside: (kinds) =>

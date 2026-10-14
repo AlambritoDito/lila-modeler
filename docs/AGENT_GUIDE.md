@@ -198,7 +198,7 @@ against the real desktop app.
 | --- | --- |
 | `name` | The process name (also the default slug). |
 | `lanes` | Lane names in order. Optional: without it, lanes are collected from the steps. |
-| `starts` | Optional start events: `{ id, name?, type?, lane? }`, `type` `none` (default) or `timer`. Without it, one plain start (`StartEvent`) leads to the first step. With it, the start ids are yours (the scenario's arrivals key on them), steps name theirs with `from`, and each start is in the `from` of exactly one step: to fork, put a gateway after it. `lane` follows the rule of `steps[].lane` and defaults to the lane of its step. Each start gets the default arrivals, so two starts bring two streams of cases. |
+| `starts` | Optional start events: `{ id, name?, type?, lane? }`, `type` `none` (default) or `timer`. Without it, one plain start (`StartEvent`) leads to the first step. With it, the start ids are yours (the scenario's arrivals key on them), steps name theirs with `from`, and each start is in the `from` of exactly one step: to fork, put a gateway after it. `lane` follows the rule of `steps[].lane` and defaults to the lane of its step. Each start gets the default arrivals, so two starts bring two streams of cases. A `timer` start is notation: its cases arrive by the scenario's arrivals on that start, exactly as on a plain one, not by a calendar of the timer. |
 | `steps[].id` | The BPMN id. Scenarios key on it, so pick short stable ids. |
 | `steps[].name` | The label. |
 | `steps[].type` | `task` (default), `userTask`, `serviceTask`, `sendTask`, `receiveTask`, `manualTask`, `scriptTask`, `businessRuleTask`, `callActivity`, `xor`, `and`, `or`, `eventGateway`, `timer`, `message`, `subprocess`. The task variants simulate as `task`; the document and the diagram show what they are. `message` (a wait for a message) only goes after an `eventGateway`, as one of its branches. |
@@ -210,7 +210,7 @@ against the real desktop app.
 | `steps[].duration` | Seconds, `20m`, `1h30m`, `normal(20m, 5m)`, `triangular(1m, 2m, 5m)`, `exponential(mean=4m)`, or a distribution object in seconds. On a task, its processing time; on a `timer` or a `message`, how long until it happens. |
 | `steps[].resources` | Names, or `{ name, quantity }`. With several, `selection: "or"` takes any one of them. |
 | `steps[].boundary` | Tasks (any variant) and call activities, not sub-processes: deadlines on the step, `{ id, type: "timer", name?, label?, duration?, interrupting?, to \| end }`. `interrupting` (default `true`) cuts the step short; `false` leaves it running and starts a parallel path. `to` is the step the boundary leads to; `end` (`true` or `"terminate"`) ends that path with an end event `EndEvent_<boundary id>`. `label` names the flow out of it. The `duration` counts from the moment a case reaches the step, waiting for resources included; without one the boundary never fires. |
-| `steps[].notes` | Text annotations attached to the step. |
+| `steps[].notes` | Text annotations attached to the step, in order; each text once per step. |
 | `steps[].data` | Activities only (tasks, call activities, sub-processes): data objects the step reads (`direction: "in"`) or writes (`"out"`), `{ name, direction }`, each name and direction once per step. Steps naming the same object share it. |
 
 The order of the list is the flow. End events are added, and so is the start unless `starts` is
