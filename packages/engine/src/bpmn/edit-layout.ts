@@ -930,6 +930,20 @@ export function seatedData(diagram: Diagram, plane: El, dataAssociations: readon
 }
 
 /**
+ * The data objects and stores of `dataAssociations` drawn inside some pool or lane (QA of #661,
+ * round 5): one that is in none once the edit is done (its lane was removed) goes back into a band.
+ */
+export function enclosedData(diagram: Diagram, plane: El, dataAssociations: readonly El[]): Set<El> {
+  const out = new Set<El>();
+  for (const d of dataAssociations) {
+    const data = d.$type === 'bpmn:DataInputAssociation' ? ((d['sourceRef'] ?? []) as El[])[0] : (d['targetRef'] as El | undefined);
+    const box = data === undefined ? undefined : diagram.bounds(data.id);
+    if (data !== undefined && box !== undefined && bandsAround(plane, box).length > 0) out.add(data);
+  }
+  return out;
+}
+
+/**
  * #630: the text annotations, data objects and data stores of `process` (or of a sub-process, on
  * its own plane) that have no shape (a model that arrived without a diagram, or one an outline or
  * an edit just added, #638) get one next to the node they hang on: an annotation above and right of
@@ -946,6 +960,7 @@ export function placeArtifacts(
   associations: readonly El[],
   dataAssociations: readonly El[],
   seated: ReadonlySet<El> = new Set(),
+  enclosed: ReadonlySet<El> = new Set(),
 ): void {
   const anchorOf = anchorsOf(nodes, associations, dataAssociations);
   const annotations = [...associations.flatMap((a) => [a['sourceRef'], a['targetRef']] as El[]), ...((process['artifacts'] ?? []) as El[])]
@@ -975,12 +990,15 @@ export function placeArtifacts(
   }
   // A data object or store that is new, moved, or hangs on a node that moved stays in its node's band;
   // so does one that sat in the band of a node it is linked to when the edit began (`seated`) and no
-  // longer does (QA of #661, round 3: a shared one left in the lane of a step that was removed). One
-  // its author drew elsewhere (round 4) is left where it is.
+  // longer does (QA of #661, round 3: a shared one left in the lane of a step that was removed), and
+  // one that was inside a pool or lane (`enclosed`) and is in none now (round 5: its lane was removed).
+  // One its author drew elsewhere (round 4), or a data store outside every pool, is left where it is.
   const now = seatedData(diagram, plane, dataAssociations);
+  const stillEnclosed = enclosedData(diagram, plane, dataAssociations);
+  const lost = (el: El): boolean => (seated.has(el) && !now.has(el)) || (enclosed.has(el) && !stillEnclosed.has(el));
   for (const [el, anchor] of anchorOf) {
     const at = diagram.bounds(anchor.id);
-    if (at !== undefined && (diagram.moved.has(el.id) || diagram.moved.has(anchor.id) || (seated.has(el) && !now.has(el)))) keepInBand(diagram, plane, el, at);
+    if (at !== undefined && (diagram.moved.has(el.id) || diagram.moved.has(anchor.id) || lost(el))) keepInBand(diagram, plane, el, at);
   }
   if (orphans.length > 0) {
     const all = diagram.nodeShapes(plane).map((di) => di['bounds'] as Box);

@@ -1709,3 +1709,35 @@ describe('QA of #661, round 4: edits that do not touch the data leave it where i
     expect(within(f4[f4.length - 1]!, shapes.get('e2')!), JSON.stringify(f4)).toBe(true);
   });
 });
+
+/* ------------------------------------------------------------------ *
+ * QA of #661, round 5
+ * ------------------------------------------------------------------ */
+
+describe('QA of #661, round 5: a data object drawn off its step\'s lane stays in the pool when its lane goes', () => {
+  const inside = (b: Box, band: Box): boolean => b.y >= band.y && b.y + b.height <= band.y + band.height && b.x >= band.x && b.x + b.width <= band.x + band.width;
+
+  test.each([
+    ['removeLane of its lane', [[{ op: 'removeLane', lane: 'Lane_2', moveStepsTo: 'Lane_1' }]]],
+    ['remove b, then removeLane of its lane', [[{ op: 'remove', id: 'b' }], [{ op: 'removeLane', lane: 'Lane_2', moveStepsTo: 'Lane_1' }]]],
+  ] as const)('layout: false, %s', async (_, calls) => {
+    const built = await outlineToBpmn({
+      name: 'Hand',
+      lanes: ['A', 'B'],
+      steps: [
+        { id: 'a', lane: 'A', data: [{ name: 'Doc', direction: 'out' }] },
+        { id: 'b', lane: 'B', end: true },
+      ],
+    });
+    const lane2 = (await di(built.xml)).shapes.get('Lane_2')!;
+    let xml = built.xml.replace(/(bpmnElement="DataObjectReference_a"[^>]*>\s*<dc:Bounds x="[^"]*" y=")[^"]*"/, `$1${lane2.y + 10}"`);
+    let scenario = built.scenario;
+    for (const ops of calls) ({ xml, scenario } = await editBpmn(xml, ops as unknown as EditOperation[], { scenario, layout: false }));
+    const { shapes } = await di(xml);
+    const data = shapes.get('DataObjectReference_a')!;
+    expect(inside(data, shapes.get('Participant_1')!), `${JSON.stringify(data)} in ${JSON.stringify(shapes.get('Participant_1'))}`).toBe(true);
+    expect(inside(data, shapes.get('Lane_1')!)).toBe(true);
+    expect(await errorsOf(xml)).toEqual([]);
+    await expectCleanImport(xml);
+  });
+});

@@ -48,7 +48,7 @@ import {
 import type { ParseBpmnOptions } from './parse.js';
 import { validateBpmnXml } from './validate-report.js';
 import type { ValidationResult } from './validate.js';
-import { Diagram, everything, is, placeArtifacts, relayout, seatedData, type Box, type El, type Point } from './edit-layout.js';
+import { Diagram, everything, is, placeArtifacts, relayout, enclosedData, seatedData, type Box, type El, type Point } from './edit-layout.js';
 import { laneOfNode, lanesOf, LayoutError } from './layout.js';
 import { messages, type CliMessages, type Locale } from '../messages/index.js';
 import type { Distribution } from '../scenario.js';
@@ -1434,7 +1434,9 @@ class Editor {
    * and associations without an edge get one, on the plane of each container.
    */
   placeArtifacts(): void {
-    for (const { plane, container, nodes, own, data } of this.artifactPlanes()) placeArtifacts(this.diagram, plane, container, nodes, own, data, this.seated);
+    for (const { plane, container, nodes, own, data } of this.artifactPlanes()) {
+      placeArtifacts(this.diagram, plane, container, nodes, own, data, this.seated, this.enclosed);
+    }
   }
 
   /**
@@ -1442,9 +1444,14 @@ class Editor {
    * (QA of #661, round 4): only those go back into a band when an edit takes them out of it.
    */
   readonly seated = new Set<El>();
+  /** Those drawn inside some pool or lane before any operation runs (round 5): they stay inside one. */
+  readonly enclosed = new Set<El>();
 
   noteSeated(): void {
-    for (const { plane, data } of this.artifactPlanes()) for (const el of seatedData(this.diagram, plane, data)) this.seated.add(el);
+    for (const { plane, data } of this.artifactPlanes()) {
+      for (const el of seatedData(this.diagram, plane, data)) this.seated.add(el);
+      for (const el of enclosedData(this.diagram, plane, data)) this.enclosed.add(el);
+    }
   }
 
   /** Each container (the process, its sub-processes) drawn on a plane, with its nodes, associations and data associations. */
