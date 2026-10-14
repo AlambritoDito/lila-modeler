@@ -484,15 +484,28 @@ export const en: Catalog = {
       `the model or the scenario ${scenario} of ${file} changed while the simulation ran; the run was not saved. Run it again.`,
     runSaved: (id, file, slug) => `Run ${id} saved in ${file} (process ${slug}).`,
     outlineInvalid: (detail) => `the outline is invalid:\n${detail}`,
-    outlineDuplicateId: (id) => `step id "${id}" is used more than once.`,
-    outlineBadId: (id) => `step id "${id}" is not a valid BPMN id (letters, digits, "_", "-" and ".", not starting with a digit).`,
+    outlineDuplicateId: (id) => `id "${id}" is used more than once (steps, starts and boundary events share one set of ids).`,
+    outlineBadId: (id) => `id "${id}" is not a valid BPMN id (letters, digits, "_", "-" and ".", not starting with a digit).`,
     outlineReservedId: (id) => `step id "${id}" clashes with an id Lila generates (start, end, flows, lanes, diagram); rename the step.`,
     outlineDuplicateLane: (lane) => `lane "${lane}" is listed more than once.`,
     outlineUnknownLane: (step, lane) => `step "${step}": lane "${lane}" is not in "lanes".`,
+    outlineStartUnknownLane: (start, lane) => `start "${start}": lane "${lane}" is not in "lanes".`,
+    outlineFromWithoutStarts: (step) => `step "${step}": "from" names start events, so it needs "starts".`,
+    outlineUnknownStart: (step, start) => `step "${step}": "${start}" is not the id of a start in "starts".`,
+    outlineStartUnused: (start) => `start "${start}" leads nowhere: name it in the "from" of the step it leads to.`,
+    outlineStartManySteps: (start, steps) =>
+      `start "${start}" is in the "from" of several steps (${steps}); a start leads to one step. Put a gateway after it, or add a start.`,
     outlineUnknownTarget: (step, target) => `step "${step}": "${target}" is not the id of a step.`,
-    outlineBranchesNeedGateway: (step, type) => `step "${step}": "branches" needs a gateway (xor, or, and), not ${type}.`,
+    outlineBranchesNeedGateway: (step, type) => `step "${step}": "branches" needs a gateway (xor, or, and, eventGateway), not ${type}.`,
     outlineBranchTarget: (step) => `step "${step}": each branch needs either "to" (a step id) or "end": true.`,
     outlineBoundaryTarget: (boundary) => `boundary "${boundary}" needs exactly one of "to" (a step id) and "end".`,
+    outlineManyDefaults: (step) => `gateway "${step}": only one branch can be the default ("default": true).`,
+    outlineEventGatewayTarget: (step, target) =>
+      `event gateway "${step}": every way out goes to a timer or message step, and "${target}" is not one (an end, a task or a gateway cannot follow it).`,
+    outlineEventTargetWaysIn: (target, gateway, waysIn) =>
+      `step "${target}" follows the event gateway "${gateway}", so that must be its only way in; it has ${waysIn}. Check "next", "to", "from" and the step before it in the list.`,
+    outlineMessageNeedsEventGateway: (step) => `step "${step}": a message step only goes after an event gateway, as one of its branches.`,
+    outlineDuplicateData: (step, name, direction) => `step "${step}": data "${name}" (${direction}) is listed more than once.`,
     outlineManyNextNeedGateway: (step) => `step "${step}": several "next" steps need a gateway (xor, or, and); add one.`,
     outlineEndWithNext: (step) => `step "${step}": "end" cannot be combined with "next" or "branches".`,
     outlineFieldNotApplicable: (step, field, type) => `step "${step}": "${field}" does not apply to a ${type}.`,
@@ -504,6 +517,9 @@ export const en: Catalog = {
     outlineNoProcess: () => 'the BPMN has no process.',
     outlineUnsupported: (id, type) => `${id} (${type}) has no outline equivalent and was left out.`,
     outlineLostFlow: (id) => `${id}: a flow to or from an element the outline left out was dropped.`,
+    outlineStartManyFlows: (start, flows) =>
+      `start event ${start} has several outgoing flows; an outline start leads to one step, so these were left out: ${flows}.`,
+    outlineDroppedTrigger: (id, definitions) => `${id}: the outline has no ${definitions}; it is read as a plain event.`,
     outlineUnknownKey: (key) => `unknown field "${key}".`,
     outlineNotObject: () => 'must be an object.',
     outlineNotText: () => 'must be a non-empty text.',
@@ -529,6 +545,9 @@ export const en: Catalog = {
     outlineDroppedEventNames: (events) => `start and end events are implicit in an outline; their names were left out: ${events}.`,
     outlineDroppedArtifacts: (count) => `${n(count, 'annotation, group or association is', 'annotations, groups or associations are')} not part of the outline and ${count === 1 ? 'was' : 'were'} left out.`,
     outlineDroppedDefaults: (ids) => `default-flow marks are not part of the outline and were left out: ${ids}.`,
+    outlineDroppedFlowNames: (flows) => `the names of flows out of a start event are not part of the outline and were left out: ${flows}.`,
+    outlineDroppedProbabilities: (flows) =>
+      `branch probabilities the outline cannot carry (not out of an xor or an or, or an xor's adding up to more than 1) were left out: ${flows}.`,
     outlineScenarioOutside: (kinds) =>
       `the scenario's ${kinds.split(',').map((k) => ({ arrivals: 'arrivals', calendars: 'calendars', costs: 'costs', capacities: 'resource capacities and types', conditions: 'conditional routing' } as Record<string, string>)[k] ?? k).join(', ')} are not part of the outline; they stay in the scenario, which this reading does not change.`,
     processSlugNewFile: (slug, derived) =>

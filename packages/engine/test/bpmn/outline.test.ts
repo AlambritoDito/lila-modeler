@@ -269,8 +269,8 @@ describe('a malformed outline is an OutlineError with every issue, nothing built
         expect.stringContaining('lanes lane "A" is listed more than once'),
         expect.stringContaining('steps[0].lane step "a": lane "B" is not in "lanes"'),
         expect.stringContaining('"nowhere" is not the id of a step'),
-        expect.stringContaining('steps[1].id step id "a" is used more than once'),
-        expect.stringContaining('step id "1bad" is not a valid BPMN id'),
+        expect.stringContaining('steps[1].id id "a" is used more than once'),
+        expect.stringContaining('id "1bad" is not a valid BPMN id'),
         expect.stringContaining('"branches" needs a gateway'),
         expect.stringContaining('add up to 1.2'),
         expect.stringContaining('"probability" does not apply'),
@@ -626,5 +626,207 @@ describe('the outline reader: starts, terminate, default flows, new types, bound
         { path: 'steps[0].boundary[0]', message: 'el evento adjunto "b" necesita uno solo de "to" (el id de un paso) y "end".' },
       ]),
     );
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * Lote Q contract review (#631, #638): the graph rules, the end ids, the reader's warnings
+ * ------------------------------------------------------------------ */
+
+describe('the contract rules of the new constructs (#631, #638)', () => {
+  async function issuesOf(outline: unknown): Promise<Map<string, string[]>> {
+    try {
+      await outlineToBpmn(outline);
+    } catch (error) {
+      expect(error).toBeInstanceOf(OutlineError);
+      const byPath = new Map<string, string[]>();
+      for (const { path, message } of (error as OutlineError).issues) {
+        if (message.startsWith('not implemented yet')) continue;
+        (byPath.get(path) ?? byPath.set(path, []).get(path)!).push(message);
+      }
+      return byPath;
+    }
+    throw new Error('expected an OutlineError');
+  }
+
+  test('an event gateway leads only to timer or message steps that have no other way in', async () => {
+    const issues = await issuesOf({
+      name: 'X',
+      steps: [
+        { id: 'a', next: 'wait' },
+        { id: 'g', type: 'eventGateway', branches: [{ to: 'wait', probability: 0.5 }, { to: 'a' }, { end: true }, { to: 'msg', default: true }] },
+        { id: 'wait', type: 'timer', duration: '1h', end: true },
+        { id: 'msg', type: 'message', end: true },
+        { id: 'h', type: 'eventGateway', branches: [{ to: 'msg2' }] },
+        { id: 'msg2', type: 'message' },
+        { id: 'lost', type: 'message', end: true },
+        { id: 'last', type: 'eventGateway' },
+      ],
+    });
+    expect(issues.get('steps[1].branches[0].to')).toEqual([
+      'step "wait" follows the event gateway "g", so that must be its only way in; it has a, g. Check "next", "to", "from" and the step before it in the list.',
+    ]);
+    expect(issues.get('steps[1].branches[0].probability')).toEqual(['step "g": "probability" does not apply to a eventGateway.']);
+    expect(issues.get('steps[1].branches[1].to')![0]).toContain('event gateway "g": every way out goes to a timer or message step, and "a" is not one');
+    expect(issues.get('steps[1].branches[2].end')![0]).toContain('and "end" is not one');
+    expect(issues.get('steps[1].branches[3].default')).toEqual(['step "g": "default" does not apply to a eventGateway.']);
+    // msg2 is the step right after its gateway in the list, and its only branch: one way in, fine.
+    expect(issues.has('steps[4].branches[0].to')).toBe(false);
+    // The step before `lost` falls into it, and nothing else: a message needs an event gateway.
+    expect(issues.get('steps[6].type')).toEqual(['step "lost": a message step only goes after an event gateway, as one of its branches.']);
+    // The last step: its implicit way out is the end.
+    expect(issues.get('steps[7]')![0]).toContain('event gateway "last"');
+  });
+
+  test('a timer after an event gateway that the step before it also falls into has two ways in', async () => {
+    const issues = await issuesOf({
+      name: 'X',
+      steps: [
+        { id: 'g', type: 'eventGateway', branches: [{ to: 't1' }, { to: 't2' }] },
+        { id: 't1', type: 'timer', duration: '1h' },
+        { id: 't2', type: 'timer', duration: '2h', end: true },
+      ],
+    });
+    expect(issues.get('steps[0].branches[1].to')![0]).toContain('it has g, t1.');
+  });
+
+  test('default flows: xor and or only, one per gateway', async () => {
+    const issues = await issuesOf({
+      name: 'X',
+      steps: [
+        { id: 'p', type: 'and', branches: [{ to: 'x', default: true }, { to: 'x' }] },
+        { id: 'x', type: 'xor', branches: [{ to: 'a', default: true }, { to: 'a', default: true }, { to: 'a', default: false }] },
+        { id: 'a', end: true },
+      ],
+    });
+    expect(issues.get('steps[0].branches[0].default')).toEqual(['step "p": "default" does not apply to a and.']);
+    expect(issues.get('steps[1].branches')).toEqual(['gateway "x": only one branch can be the default ("default": true).']);
+  });
+
+  test('starts: each one in the "from" of exactly one step, "from" only with starts, lanes as for steps', async () => {
+    const issues = await issuesOf({
+      name: 'X',
+      lanes: ['A'],
+      starts: [{ id: 's1', lane: 'B' }, { id: 's2' }, { id: 's3' }],
+      steps: [
+        { id: 'a', from: ['s1', 'nope'] },
+        { id: 'b', from: 's1' },
+        { id: 'c', from: 's2', next: 's3' },
+      ],
+    });
+    expect(issues.get('starts[0].lane')).toEqual(['start "s1": lane "B" is not in "lanes".']);
+    expect(issues.get('steps[0].from[1]')).toEqual(['step "a": "nope" is not the id of a start in "starts".']);
+    expect(issues.get('starts[0]')![0]).toContain('start "s1" is in the "from" of several steps (a, b)');
+    expect(issues.get('starts[2]')).toEqual(['start "s3" leads nowhere: name it in the "from" of the step it leads to.']);
+    // A start id is not a step id: `next` cannot name it.
+    expect(issues.get('steps[2].next')).toEqual(['step "c": "s3" is not the id of a step.']);
+    expect((await issuesOf({ name: 'X', steps: [{ id: 'a', from: 's' }] })).get('steps[0].from')).toEqual([
+      'step "a": "from" names start events, so it needs "starts".',
+    ]);
+  });
+
+  test('starts, steps and boundary events share one space of ids', async () => {
+    const issues = await issuesOf({
+      name: 'X',
+      starts: [{ id: 'a' }],
+      steps: [
+        { id: 'a', from: 'a', boundary: [{ id: 'b', type: 'timer', duration: '1h', end: true }] },
+        { id: 'b', end: true },
+      ],
+    });
+    expect(issues.get('steps[0].id')![0]).toContain('id "a" is used more than once');
+    expect(issues.get('steps[1].id')![0]).toContain('id "b" is used more than once');
+  });
+
+  test('boundary events: on tasks and call activities, to a step, with a valid duration', async () => {
+    const issues = await issuesOf({
+      name: 'X',
+      steps: [
+        { id: 'g', type: 'xor', branches: [{ to: 'c' }, { to: 's' }], boundary: [{ id: 'b0', type: 'timer', end: true }] },
+        { id: 'c', type: 'callActivity', boundary: [{ id: 'b1', type: 'timer', duration: 'soon', to: 'ghost', label: 'Late' }], end: true },
+        { id: 's', type: 'subprocess', boundary: [{ id: 'b2', type: 'timer', end: true }], end: true },
+      ],
+    });
+    expect(issues.get('steps[0].boundary')).toEqual(['step "g": "boundary" does not apply to a xor.']);
+    expect(issues.has('steps[1].boundary')).toBe(false);
+    expect(issues.get('steps[1].boundary[0].to')).toEqual(['step "c": "ghost" is not the id of a step.']);
+    expect(issues.get('steps[1].boundary[0].duration')![0]).toContain('duration "soon" is not a distribution');
+    expect(issues.get('steps[2].boundary')).toEqual(['step "s": "boundary" does not apply to a subprocess.']);
+  });
+
+  test('data: on activities, a name and direction once per step', async () => {
+    const issues = await issuesOf({
+      name: 'X',
+      steps: [
+        { id: 'a', data: [{ name: 'File', direction: 'in' }, { name: 'File', direction: 'out' }, { name: 'File', direction: 'in' }] },
+        { id: 's', type: 'subprocess', data: [{ name: 'File', direction: 'out' }] },
+        { id: 'g', type: 'and', data: [{ name: 'File', direction: 'in' }], end: true },
+      ],
+    });
+    expect(issues.get('steps[0].data[2]')).toEqual(['step "a": data "File" (in) is listed more than once.']);
+    expect(issues.has('steps[1].data')).toBe(false);
+    expect(issues.get('steps[2].data')).toEqual(['step "g": "data" does not apply to a and.']);
+  });
+});
+
+describe('generated end ids never clash (#631 review)', () => {
+  test('the second end of "x" and the end of step "x_2" get different ids, each with its flow', async () => {
+    const outline = {
+      name: 'X',
+      steps: [
+        { id: 'x', type: 'xor', branches: [{ label: 'No', end: true }, { label: 'Cancel', end: true }, { label: 'Yes', to: 'x_2' }] },
+        { id: 'x_2', end: true },
+      ],
+    };
+    const built = await outlineToBpmn(outline);
+    const { rootElement } = await BpmnModdle().fromXML(built.xml);
+    const process = (rootElement as any).rootElements.find((el: any) => el.$type === 'bpmn:Process');
+    const ends = process.flowElements.filter((el: any) => el.$type === 'bpmn:EndEvent');
+    expect(ends.map((el: any) => el.id).sort()).toEqual(['EndEvent_x', 'EndEvent_x_2', 'EndEvent_x_2_2']);
+    const flows = process.flowElements.filter((el: any) => el.$type === 'bpmn:SequenceFlow');
+    for (const end of ends) expect(flows.filter((f: any) => f.targetRef === end)).toHaveLength(1);
+    const reading = await bpmnToOutline(built.xml, { scenario: built.scenario as unknown as Record<string, unknown> });
+    expect(reading.warnings).toEqual([]);
+    expect(reading.outline).toEqual(normalizeOutline(outline));
+  });
+});
+
+describe('the reader never returns an outline normalizeOutline refuses, and says what it leaves out (#631 review)', () => {
+  const xml = (gateway: string): string => `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="https://example.org">
+  <bpmn:process id="P" name="P" isExecutable="true">
+    <bpmn:startEvent id="S"><bpmn:signalEventDefinition /></bpmn:startEvent>
+    <bpmn:sequenceFlow id="f1" name="go" sourceRef="S" targetRef="a" />
+    <bpmn:sequenceFlow id="f2" sourceRef="S" targetRef="b" />
+    <bpmn:task id="a" /><bpmn:task id="b" />
+    <bpmn:${gateway} id="g" />
+    <bpmn:sequenceFlow id="f3" sourceRef="a" targetRef="g" />
+    <bpmn:sequenceFlow id="f4" sourceRef="g" targetRef="b" />
+    <bpmn:sequenceFlow id="f5" sourceRef="g" targetRef="E" />
+    <bpmn:sequenceFlow id="f6" sourceRef="b" targetRef="E2" />
+    <bpmn:endEvent id="E"><bpmn:messageEventDefinition /></bpmn:endEvent>
+    <bpmn:endEvent id="E2"><bpmn:terminateEventDefinition /></bpmn:endEvent>
+  </bpmn:process>
+</bpmn:definitions>`;
+
+  test.each([
+    ['parallelGateway', 0.5, 0.5],
+    ['exclusiveGateway', 0.7, 0.6],
+  ])('%s with probabilities %s and %s', async (gateway, p4, p5) => {
+    const scenario = { elements: { f4: { probability: p4 }, f5: { probability: p5 } } };
+    const { outline, warnings } = await bpmnToOutline(xml(gateway), { scenario });
+    expect(() => normalizeOutline(outline)).not.toThrow();
+    expect(JSON.stringify(outline)).not.toContain('probability');
+    expect(warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('were left out: f4, f5.'),
+        'S: the outline has no bpmn:SignalEventDefinition; it is read as a plain event.',
+        'E: the outline has no bpmn:MessageEventDefinition; it is read as a plain event.',
+        'start event S has several outgoing flows; an outline start leads to one step, so these were left out: f2.',
+        'the names of flows out of a start event are not part of the outline and were left out: f1 "go".',
+      ]),
+    );
+    // A terminate end is an outline construct, not a loss.
+    expect(warnings.some((w) => w.startsWith('E2:'))).toBe(false);
   });
 });

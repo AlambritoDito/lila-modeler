@@ -14,11 +14,30 @@
  * every named flow gets a label on its own segment, not on a trunk it shares with its siblings.
  *
  * Normal form. `normalizeOutline` turns any accepted outline into one canonical shape, which is
- * also what `bpmnToOutline` returns, so a round trip compares equal: every step names its lane
- * (when there are lanes), `type` is omitted for `task`, `next` only when it is not simply the
- * following step, `end: true` on every step that finishes the process, gateway successors are
- * `branches`, durations are scenario distributions in seconds, and the XOR probabilities that
- * were left out share what is left of 1.
+ * also what `bpmnToOutline` returns, so a round trip compares equal:
+ * - every step names its lane (when there are lanes), and so does every start;
+ * - `type` is omitted for `task`; `next` only when it is not simply the following step;
+ * - `end: true` (or `"terminate"` for a terminate end event) on every step that finishes the process;
+ * - gateway successors are `branches` (an `eventGateway` always has them, even with one branch), with
+ *   `default: true` on the default flow of an xor/or;
+ * - `starts` is left out in the trivial case, a single plain start `StartEvent` with no name, one
+ *   outgoing flow and the lane of its step: then that step leads the list and no step has `from`.
+ *   Otherwise every start is listed (`type` only for `timer`) and the steps keep their order; `from`
+ *   lists a step's starts in the order of `starts`, one id as a string and several as a list;
+ * - `boundary` keeps its order, with `interrupting` only when it is `false`;
+ * - `data` lists the reads (`in`) first and then the writes (`out`), each group in its order;
+ * - durations are scenario distributions in seconds, and the XOR probabilities that were left out
+ *   share what is left of 1.
+ *
+ * Ids. Starts, steps and boundary events share one space of ids: unique and NCName. Only step ids
+ * can be named by `next` and `to`, and only start ids by `from` (a `next` naming a start or a
+ * boundary is "not the id of a step"). The ids of the end events Lila adds (`EndEvent_<step>`,
+ * `EndEvent_<boundary>`) are reserved; when two generated ids would clash, the later one takes the
+ * first free `_<n>` suffix, as flows do.
+ *
+ * Reading. `bpmnToOutline` never returns an outline that `normalizeOutline` would refuse: what an
+ * outline cannot say is left out with a warning (e.g. probabilities on the flows of an `and` or an
+ * `eventGateway`), never silently.
  */
 import { BpmnModdle } from 'bpmn-moddle';
 import { z } from 'zod';
@@ -130,21 +149,27 @@ const OutlineBranchSchema = z.strictObject({
     .max(1)
     .optional()
     .describe('XOR/OR only: probability of this branch in the base scenario. Left-out XOR branches share the rest.'),
-  default: z.boolean().optional().describe('XOR/OR only: true marks the default flow of the gateway (one per gateway).'),
+  default: z
+    .boolean()
+    .optional()
+    .describe('XOR/OR only: true marks the default flow of the gateway (one per gateway). In an xor it does not change the split; in an or it is the fallback when no other branch is taken.'),
 });
 
 export const OutlineStartSchema = z.strictObject({
   id: z.string().min(1).describe('BPMN id of the start event; its arrivals in the scenario key on it.'),
   name: z.string().optional(),
   type: z.enum(OUTLINE_START_TYPES).optional().describe('Defaults to none (a plain start event); timer is a timer start event.'),
-  lane: z.string().optional().describe('Lane name; defaults to the lane of the first step it leads to.'),
+  lane: z.string().optional().describe('Lane name; defaults to the lane of the step it leads to.'),
 });
 
 export const OutlineBoundarySchema = z.strictObject({
   id: z.string().min(1).describe('BPMN id of the boundary event; its delay in the scenario keys on it.'),
   type: z.enum(OUTLINE_BOUNDARY_TYPES).describe('timer: a deadline on the step.'),
   name: z.string().optional(),
-  duration: OutlineDurationSchema.optional().describe('The deadline, counted from the moment the step starts.'),
+  label: z.string().optional().describe('Name of the flow out of the boundary event, e.g. "Over 48 h".'),
+  duration: OutlineDurationSchema.optional().describe(
+    'The deadline, counted from the moment a case reaches the step (waiting for resources included). Without it the boundary never fires.',
+  ),
   interrupting: z
     .boolean()
     .optional()
@@ -171,7 +196,11 @@ const OutlineStepSchema = z.strictObject({
     .union([z.string().min(1), z.array(z.string().min(1)).min(1)])
     .optional()
     .describe('Id(s) of the following step(s) when it is not simply the next one in the list.'),
-  branches: z.array(OutlineBranchSchema).min(1).optional().describe('Gateways only: outgoing branches.'),
+  branches: z
+    .array(OutlineBranchSchema)
+    .min(1)
+    .optional()
+    .describe('Gateways only: outgoing branches. Those of an eventGateway go to timer or message steps that have no other way in.'),
   end: OutlineEndSchema.optional().describe('true: the process ends after this step. "terminate": it ends with a terminate end event.'),
   duration: OutlineDurationSchema.optional().describe(
     'Processing time (tasks) or delay (timer, message): seconds, "20m", "normal(20m, 5m)", "triangular(1m, 2m, 5m)", ' +
@@ -186,9 +215,17 @@ const OutlineStepSchema = z.strictObject({
     .enum(['and', 'or'])
     .optional()
     .describe('With several resources: "and" needs all of them (default), "or" any one.'),
-  boundary: z.array(OutlineBoundarySchema).min(1).optional().describe('Tasks only: boundary events on the step (deadlines).'),
+  boundary: z
+    .array(OutlineBoundarySchema)
+    .min(1)
+    .optional()
+    .describe('Tasks (any variant) and call activities only, not sub-processes: boundary events on the step (deadlines).'),
   notes: z.array(z.string().min(1)).min(1).optional().describe('Text annotations attached to the step.'),
-  data: z.array(OutlineDataSchema).min(1).optional().describe('Activities only: data objects the step reads or writes.'),
+  data: z
+    .array(OutlineDataSchema)
+    .min(1)
+    .optional()
+    .describe('Activities only (tasks, call activities, sub-processes): data objects the step reads or writes; a name and direction once per step.'),
 });
 
 /** The outline as an agent writes it (#97). Exported for the MCP tools' input schema. */
@@ -233,6 +270,8 @@ export interface NormalBoundary {
   id: string;
   type: 'timer';
   name?: string;
+  /** Name of the flow out of it. */
+  label?: string;
   duration?: Distribution;
   /** Present only when it is `false` (the default is interrupting). */
   interrupting?: false;
@@ -292,6 +331,10 @@ interface Successor {
   to: string | typeof END;
   label?: string | undefined;
   probability?: number | undefined;
+  /** The default flow of an xor/or. */
+  default?: boolean | undefined;
+  /** The flow's id, when read from a BPMN. */
+  id?: string | undefined;
   /** Where the outline named it, for issues (`steps[2].branches[0].to`). */
   path?: string | undefined;
 }
@@ -400,6 +443,7 @@ export interface RawBoundary {
   id: string;
   type?: (typeof OUTLINE_BOUNDARY_TYPES)[number] | undefined;
   name?: string | undefined;
+  label?: string | undefined;
   duration?: unknown;
   interrupting?: boolean | undefined;
   to?: string | undefined;
@@ -442,7 +486,7 @@ const STEP_KEYS = new Set([
 const BRANCH_KEYS = new Set(['label', 'to', 'end', 'probability', 'default']);
 const ROOT_KEYS = new Set(['name', 'lanes', 'starts', 'steps']);
 const START_KEYS = new Set(['id', 'name', 'type', 'lane']);
-const BOUNDARY_KEYS = new Set(['id', 'type', 'name', 'duration', 'interrupting', 'to', 'end']);
+const BOUNDARY_KEYS = new Set(['id', 'type', 'name', 'label', 'duration', 'interrupting', 'to', 'end']);
 const DATA_KEYS = new Set(['name', 'direction']);
 
 /** Probabilities in the normal form carry no floating-point noise (0.7, not 0.7000000000000001). */
@@ -499,6 +543,7 @@ export function outlineReaders(C: CliMessages, bad: (path: string, message: stri
       id: required(value['id'], `${at}.id`),
       type: choice(value['type'], OUTLINE_BOUNDARY_TYPES, `${at}.type`),
       name: optionalString(value['name'], `${at}.name`),
+      label: optionalString(value['label'], `${at}.label`),
       duration: value['duration'],
       interrupting: boolean(value['interrupting'], `${at}.interrupting`),
       to: text(value['to'], `${at}.to`),
@@ -677,13 +722,48 @@ function toGraph(input: unknown, C: CliMessages): Graph {
   }
   const declared = outline.lanes !== undefined;
 
+  // Starts, steps and boundary events share one space of ids; only step ids are targets.
   const ids = new Set<string>();
+  const taken = new Set<string>();
+  const claim = (id: string, path: string): void => {
+    if (id === '') return;
+    if (!isNCName(id)) issues.push({ path, message: C.outlineBadId(id) });
+    if (taken.has(id)) issues.push({ path, message: C.outlineDuplicateId(id) });
+    taken.add(id);
+  };
+  outline.starts?.forEach((start, i) => claim(start.id, `starts[${i}].id`));
   for (const [index, step] of outline.steps.entries()) {
-    if (step.id === '') continue;
-    if (!isNCName(step.id)) issues.push({ path: at(index, 'id'), message: C.outlineBadId(step.id) });
-    if (ids.has(step.id)) issues.push({ path: at(index, 'id'), message: C.outlineDuplicateId(step.id) });
-    ids.add(step.id);
+    claim(step.id, at(index, 'id'));
+    if (step.id !== '') ids.add(step.id);
+    step.boundary?.forEach((b, k) => claim(b.id, at(index, `boundary[${k}].id`)));
   }
+
+  // Starts: their lanes follow the steps' rule; each one leads to exactly one step (`from`).
+  const startIds = new Set((outline.starts ?? []).map((start) => start.id));
+  outline.starts?.forEach((start, i) => {
+    if (start.lane === undefined || seenLanes.has(start.lane)) return;
+    if (declared) issues.push({ path: `starts[${i}].lane`, message: C.outlineStartUnknownLane(start.id, start.lane) });
+    else {
+      lanes.push(start.lane);
+      seenLanes.add(start.lane);
+    }
+  });
+  const ledBy = new Map<string, string[]>();
+  outline.steps.forEach((step, index) => {
+    if (step.from === undefined) return;
+    if (outline.starts === undefined) return void issues.push({ path: at(index, 'from'), message: C.outlineFromWithoutStarts(step.id) });
+    step.from.forEach((start, k) => {
+      const path = at(index, step.fromSingle === true ? 'from' : `from[${k}]`);
+      if (!startIds.has(start)) issues.push({ path, message: C.outlineUnknownStart(step.id, start) });
+      else (ledBy.get(start) ?? ledBy.set(start, []).get(start)!).push(step.id);
+    });
+  });
+  outline.starts?.forEach((start, i) => {
+    if (start.id === '') return;
+    const led = ledBy.get(start.id) ?? [];
+    if (led.length === 0) issues.push({ path: `starts[${i}]`, message: C.outlineStartUnused(start.id) });
+    else if (led.length > 1) issues.push({ path: `starts[${i}]`, message: C.outlineStartManySteps(start.id, led.join(', ')) });
+  });
 
   let previousLane: string | undefined;
   const steps: GraphStep[] = outline.steps.map((step, index) => {
@@ -716,14 +796,26 @@ function toGraph(input: unknown, C: CliMessages): Graph {
     }
 
     let succ: Successor[];
-    if (ends(step.end)) succ = [{ to: END }];
+    if (ends(step.end)) succ = [{ to: END, path: at(index, 'end') }];
     else if (step.branches !== undefined) {
       succ = step.branches.map((b, k) => {
         if (ends(b.end) === (b.to !== undefined)) {
           issues.push({ path: at(index, `branches[${k}]`), message: C.outlineBranchTarget(step.id) });
         }
-        return { to: b.to ?? END, label: b.label, probability: b.probability, path: at(index, `branches[${k}].to`) };
+        // `default` marks the fallback flow of an xor/or; the branches of an eventGateway carry no
+        // probability: the first event to happen wins (R-EVG).
+        if (b.default === true && type !== 'xor' && type !== 'or') {
+          issues.push({ path: at(index, `branches[${k}].default`), message: C.outlineFieldNotApplicable(step.id, 'default', type) });
+        }
+        if (b.probability !== undefined && type === 'eventGateway') {
+          issues.push({ path: at(index, `branches[${k}].probability`), message: C.outlineFieldNotApplicable(step.id, 'probability', type) });
+        }
+        const path = at(index, `branches[${k}].${b.to === undefined ? 'end' : 'to'}`);
+        return { to: b.to ?? END, label: b.label, probability: b.probability, default: b.default === true || undefined, path };
       });
+      if (step.branches.filter((b) => b.default === true).length > 1) {
+        issues.push({ path: at(index, 'branches'), message: C.outlineManyDefaults(step.id) });
+      }
     } else if (nextList !== undefined) {
       succ = nextList.map((to, k) => ({ to, path: at(index, step.nextSingle === true ? 'next' : `next[${k}]`) }));
     }
@@ -768,8 +860,59 @@ function toGraph(input: unknown, C: CliMessages): Graph {
     if (step.selection !== undefined && (step.resources === undefined || !WORK.has(type))) {
       issues.push({ path: at(index, 'selection'), message: C.outlineFieldNotApplicable(step.id, 'selection', type) });
     }
+    if (step.boundary !== undefined) {
+      // A task (any variant) or a call activity; a sub-process is #639.
+      if (!WORK.has(type)) issues.push({ path: at(index, 'boundary'), message: C.outlineFieldNotApplicable(step.id, 'boundary', type) });
+      step.boundary.forEach((b, k) => {
+        const bat = at(index, `boundary[${k}]`);
+        if (b.to !== undefined && !ids.has(b.to)) issues.push({ path: `${bat}.to`, message: C.outlineUnknownTarget(step.id, b.to) });
+        if (b.duration !== undefined && parseDuration(b.duration as string | number | Distribution) === null) {
+          const shown = typeof b.duration === 'string' ? b.duration : JSON.stringify(b.duration);
+          issues.push({ path: `${bat}.duration`, message: C.outlineBadDuration(b.id, shown) });
+        }
+      });
+    }
+    if (step.data !== undefined) {
+      if (!WORK.has(type) && type !== 'subprocess') {
+        issues.push({ path: at(index, 'data'), message: C.outlineFieldNotApplicable(step.id, 'data', type) });
+      }
+      const seen = new Set<string>();
+      step.data.forEach((d, k) => {
+        const key = `${d.direction}:${d.name}`;
+        if (seen.has(key)) issues.push({ path: at(index, `data[${k}]`), message: C.outlineDuplicateData(step.id, d.name, d.direction) });
+        seen.add(key);
+      });
+    }
 
     return { id: step.id, name: step.name ?? '', type, lane, succ, duration, resources: step.resources, selection: step.selection };
+  });
+
+  // The event gateway (R-EVG-1): every way out (a branch, `next` or the following step) goes to a
+  // timer or message step whose only way in is that gateway; and a message step only ever follows
+  // one. Ways in: the flows of steps, the `from` of starts (or the implicit start before the first
+  // step), and the `to` of boundary events.
+  const byId = new Map(steps.map((step) => [step.id, step]));
+  const waysIn = new Map<string, string[]>();
+  const wayIn = (to: string, from: string): void => void (waysIn.get(to) ?? waysIn.set(to, []).get(to)!).push(from);
+  if (outline.starts === undefined && steps[0] !== undefined) wayIn(steps[0].id, START_ID);
+  outline.steps.forEach((step) => step.from?.forEach((start) => wayIn(step.id, start)));
+  for (const step of steps) for (const s of step.succ) if (s.to !== END) wayIn(s.to, step.id);
+  outline.steps.forEach((step) => step.boundary?.forEach((b) => b.to !== undefined && wayIn(b.to, b.id)));
+  steps.forEach((step, index) => {
+    if (step.type === 'eventGateway') {
+      for (const s of step.succ) {
+        const target = s.to === END ? undefined : byId.get(s.to);
+        if (s.to !== END && target === undefined) continue; // reported as an unknown target
+        if (target === undefined || (target.type !== 'timer' && target.type !== 'message')) {
+          issues.push({ path: s.path ?? at(index), message: C.outlineEventGatewayTarget(step.id, s.to === END ? 'end' : String(s.to)) });
+        } else if ((waysIn.get(target.id) ?? []).length !== 1) {
+          issues.push({ path: s.path ?? at(index), message: C.outlineEventTargetWaysIn(target.id, step.id, waysIn.get(target.id)!.join(', ')) });
+        }
+      }
+    }
+    if (step.type === 'message' && !(waysIn.get(step.id) ?? []).some((from) => byId.get(from)?.type === 'eventGateway')) {
+      issues.push({ path: at(index, 'type'), message: C.outlineMessageNeedsEventGateway(step.id) });
+    }
   });
 
   // A step from which no path reaches an end would trap its cases forever (QA of #553): reverse
@@ -805,13 +948,15 @@ function toNormal(graph: Graph): NormalOutline {
     if (graph.lanes.length > 0 && step.lane !== undefined) out.lane = step.lane;
 
     const following = graph.steps[index + 1]?.id;
-    const decorated = step.succ.some((s) => s.label !== undefined || s.probability !== undefined);
+    const decorated = step.succ.some((s) => s.label !== undefined || s.probability !== undefined || s.default === true);
     const toSteps = step.succ.filter((s): s is Successor & { to: string } => s.to !== END);
-    if (GATEWAYS.has(step.type) && (step.succ.length > 1 || decorated)) {
+    // An eventGateway always lists its branches, even a single one: its targets are branch targets.
+    if (GATEWAYS.has(step.type) && (step.type === 'eventGateway' || step.succ.length > 1 || decorated)) {
       out.branches = step.succ.map((s) => {
         const branch: NormalBranch = s.to === END ? { end: true } : { to: s.to };
         if (s.label !== undefined && s.label !== '') branch.label = s.label;
         if (s.probability !== undefined) branch.probability = round9(s.probability);
+        if (s.default === true) branch.default = true;
         return branch;
       });
     } else if (toSteps.length === 0) {
@@ -843,7 +988,7 @@ export function normalizeOutline(input: unknown, options: { locale?: Locale | un
 
 
 const START_ID = 'StartEvent';
-/** Id of the `k`-th end event after `step` (a gateway may have several branches that end). */
+/** The naive id of the `k`-th end event after `step` (a gateway may have several branches that end). */
 const endId = (step: string, k = 1): string => (k === 1 ? `EndEvent_${step}` : `EndEvent_${step}_${k}`);
 const endCount = (step: GraphStep): number => step.succ.filter((s) => s.to === END).length;
 
@@ -910,13 +1055,15 @@ const DEFAULT_RUN = {
   baseTimeUnit: 'min',
 } as const;
 
-function flowId(source: string, target: string, used: Set<string>): string {
-  const base = `Flow_${source}_${target}`;
+/** `base`, or `base_2`, `base_3`… the first one not in `used` (which then holds it). */
+function freeId(base: string, used: Set<string>): string {
   let id = base;
   for (let n = 2; used.has(id); n++) id = `${base}_${n}`;
   used.add(id);
   return id;
 }
+
+const flowId = (source: string, target: string, used: Set<string>): string => freeId(`Flow_${source}_${target}`, used);
 
 interface Built {
   definitions: El;
@@ -931,12 +1078,13 @@ function buildSemantic(graph: Graph, processId: string, C: CliMessages): Built {
   const create = (type: string, attrs: Record<string, unknown> = {}): El => moddle.create(type, attrs) as El;
 
   // Ids Lila generates must not clash with a step id, nor with the `<id>_di` of the diagram.
-  const generated = new Set<string>(['Definitions_1', processId, START_ID, 'Collaboration_1', 'Participant_1', 'LaneSet_1']);
-  graph.lanes.forEach((_, i) => generated.add(`Lane_${i + 1}`));
+  const fixed = new Set<string>(['Definitions_1', processId, START_ID, 'Collaboration_1', 'Participant_1', 'LaneSet_1']);
+  graph.lanes.forEach((_, i) => fixed.add(`Lane_${i + 1}`));
   for (const step of graph.steps) {
-    for (let k = 1; k <= endCount(step); k++) generated.add(endId(step.id, k));
-    if (step.type === 'subprocess') for (const part of ['start', 'end', 'flow']) generated.add(`${step.id}_${part}`);
+    if (step.type === 'subprocess') for (const part of ['start', 'end', 'flow']) fixed.add(`${step.id}_${part}`);
   }
+  const generated = new Set<string>(fixed);
+  for (const step of graph.steps) for (let k = 1; k <= endCount(step); k++) generated.add(endId(step.id, k));
   const issues: OutlineIssue[] = [];
   const stepIds = new Set(graph.steps.map((s) => s.id));
   graph.steps.forEach((step, index) => {
@@ -977,11 +1125,19 @@ function buildSemantic(graph: Graph, processId: string, C: CliMessages): Built {
       el['flowElements'] = [start, end, flow];
     }
   }
+  // The end ids, allocated so they never clash with each other: the second end of `x` and the first
+  // of a step `x_2` are both `EndEvent_x_2`, so the later one takes a free suffix (`EndEvent_x_2_2`).
+  const used = new Set<string>([...fixed, ...stepIds]);
+  const endsOf = new Map<string, string[]>();
   for (const step of graph.steps) {
-    for (let k = 1; k <= endCount(step); k++) add(create('bpmn:EndEvent', { id: endId(step.id, k) }), step.lane);
+    const own: string[] = [];
+    for (let k = 1; k <= endCount(step); k++) {
+      own.push(freeId(`EndEvent_${step.id}`, used));
+      add(create('bpmn:EndEvent', { id: own.at(-1)! }), step.lane);
+    }
+    endsOf.set(step.id, own);
   }
-
-  const used = new Set<string>([...generated, ...stepIds]);
+  for (const id of generated) used.add(id);
   const flows: Built['flows'] = [];
   const connect = (source: El, target: El, label?: string, probability?: number): void => {
     const id = flowId(source.id, target.id, used);
@@ -997,7 +1153,7 @@ function buildSemantic(graph: Graph, processId: string, C: CliMessages): Built {
   for (const step of graph.steps) {
     let ended = 0;
     for (const s of step.succ) {
-      const target = s.to === END ? nodes.get(endId(step.id, ++ended))! : nodes.get(s.to)!;
+      const target = s.to === END ? nodes.get(endsOf.get(step.id)![ended++]!)! : nodes.get(s.to)!;
       connect(nodes.get(step.id)!, target, s.label, s.probability);
     }
   }
@@ -1243,6 +1399,15 @@ export async function bpmnToOutline(xml: string, options: BpmnToOutlineOptions =
     else warnings.push(C.outlineUnsupported(el.id, el.$type));
   }
   for (const extra of starts.slice(1)) warnings.push(C.outlineUnsupported(extra.id, extra.$type));
+  // Triggers the outline has no word for read as plain events, with a warning. A timer start and a
+  // terminate end are outline constructs (#631), not losses.
+  const triggers = (el: El, read: string): string[] =>
+    ((el['eventDefinitions'] ?? []) as El[]).map((d) => d.$type).filter((t) => t !== read);
+  for (const el of flowElements) {
+    const dropped =
+      el === starts[0] ? triggers(el, 'bpmn:TimerEventDefinition') : ends.has(el.id) ? triggers(el, 'bpmn:TerminateEventDefinition') : [];
+    if (dropped.length > 0) warnings.push(C.outlineDroppedTrigger(el.id, dropped.join(', ')));
+  }
   const namedEvents = flowElements.filter(
     (el) => (el === starts[0] || ends.has(el.id)) && typeof el['name'] === 'string' && el['name'] !== '',
   );
@@ -1263,23 +1428,39 @@ export async function bpmnToOutline(xml: string, options: BpmnToOutlineOptions =
     (flowsFrom.get(source.id) ?? flowsFrom.set(source.id, []).get(source.id)!).push(flow);
   }
 
+  // A start leads to one step: further flows out of it, and the names of its flows, are not carried.
+  const startFlows = flowsFrom.get(starts[0]?.id ?? '') ?? [];
+  if (startFlows.length > 1) warnings.push(C.outlineStartManyFlows(starts[0]!.id, startFlows.slice(1).map((f) => f.id).join(', ')));
+  const namedStartFlows = startFlows.filter((f) => typeof f['name'] === 'string' && f['name'] !== '');
+  if (namedStartFlows.length > 0) warnings.push(C.outlineDroppedFlowNames(namedStartFlows.map((f) => `${f.id} "${f['name']}"`).join(', ')));
+
   // The start's target leads the list; the rest keep the document order.
   const order = [...kept.keys()];
-  const firstId = (flowsFrom.get(starts[0]?.id ?? '') ?? [])[0]?.['targetRef']?.id as string | undefined;
+  const firstId = startFlows[0]?.['targetRef']?.id as string | undefined;
   if (firstId !== undefined && kept.has(firstId)) order.splice(order.indexOf(firstId), 1), order.unshift(firstId);
 
+  // Branch probabilities the outline would refuse are left out with a warning, never read: those on
+  // flows that do not leave an xor or an or, and those of an xor that add up to more than 1.
+  const droppedProbabilities: string[] = [];
   const steps: GraphStep[] = order.map((id) => {
     const el = flowElements.find((e) => e.id === id)!;
     const type = kept.get(id)!;
     const succ: Successor[] = (flowsFrom.get(id) ?? []).map((flow) => {
       const target = flow['targetRef'].id as string;
       const probability = record(elements[flow.id])['probability'];
+      const read = typeof probability === 'number' && probability >= 0 && probability <= 1;
+      if (typeof probability === 'number' && !(read && (type === 'xor' || type === 'or'))) droppedProbabilities.push(flow.id);
       return {
         to: ends.has(target) ? END : target,
         label: (flow['name'] as string | undefined) || undefined,
-        probability: GATEWAYS.has(type) && typeof probability === 'number' ? probability : undefined,
+        probability: read && (type === 'xor' || type === 'or') ? probability : undefined,
+        id: flow.id,
       };
     });
+    const sum = succ.reduce((total, s) => total + (s.probability ?? 0), 0);
+    if (type === 'xor' && sum > 1 + 1e-9) {
+      for (const s of succ) if (s.probability !== undefined) (droppedProbabilities.push(s.id!), (s.probability = undefined));
+    }
     const element = record(elements[id]);
     const duration = element['processingTime'] === undefined ? undefined : parseDuration(element['processingTime']) ?? undefined;
     const resources = Array.isArray(element['resources'])
@@ -1293,6 +1474,7 @@ export async function bpmnToOutline(xml: string, options: BpmnToOutlineOptions =
     const selection = element['selection'] === 'and' || element['selection'] === 'or' ? (element['selection'] as 'and' | 'or') : undefined;
     return { id, name: (el['name'] as string | undefined) ?? '', type, lane: laneOf.get(id), succ, duration, resources, selection };
   });
+  if (droppedProbabilities.length > 0) warnings.push(C.outlineDroppedProbabilities(droppedProbabilities.join(', ')));
   const outside = scenarioOutside(scenario, starts.map((el) => el.id), steps);
   if (outside.length > 0) warnings.push(C.outlineScenarioOutside(outside.join(',')));
 

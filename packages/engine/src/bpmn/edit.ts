@@ -84,7 +84,10 @@ export const EditOperationSchema = z.discriminatedUnion('op', [
       to: Id,
       label: z.string().optional().describe('Name of the flow, e.g. "Yes".'),
       probability: z.number().min(0).max(1).optional().describe('Out of an xor/or gateway: the branch probability in the base scenario.'),
-      default: z.boolean().optional().describe('Out of an xor/or gateway: true makes the new flow the gateway\'s default flow.'),
+      default: z
+        .boolean()
+        .optional()
+        .describe('Out of an xor/or gateway: true makes the new flow the gateway\'s default flow. Refused when the gateway already has one.'),
       id: Id.optional().describe('Id of the new flow. Default Flow_<from>_<to>.'),
     })
     .describe('Adds a sequence flow.'),
@@ -98,7 +101,11 @@ export const EditOperationSchema = z.discriminatedUnion('op', [
     .strictObject({ op: z.literal('rename'), id: Id.describe('Id of the element, or the name of a lane.'), name: z.string() })
     .describe('Renames any element: step, flow, lane, pool or process. A lane can be named by its name. "" clears the name.'),
   z
-    .strictObject({ op: z.literal('setType'), id: Id, type: z.enum(EDIT_TYPES) })
+    .strictObject({
+      op: z.literal('setType'),
+      id: Id.describe('Id of the step; with end/terminate, the id of the end event, or of a step that leads to exactly one end event.'),
+      type: z.enum(EDIT_TYPES),
+    })
     .describe('Changes the type of a step (its id, name, flows and annotations stay), or turns an end event into a terminate end (and back).'),
   z
     .strictObject({ op: z.literal('moveToLane'), id: Id, lane: Id.describe('Lane name or id.') })
@@ -130,21 +137,23 @@ export const EditOperationSchema = z.discriminatedUnion('op', [
   z
     .strictObject({
       op: z.literal('addBoundary'),
-      on: Id.describe('Id of the task the boundary event is attached to.'),
-      boundary: OutlineBoundarySchema.describe('As in an outline: {id, type: "timer", name?, duration?, interrupting?, to | end}.'),
+      on: Id.describe('Id of the task (any variant) or call activity it is attached to; not a sub-process.'),
+      boundary: OutlineBoundarySchema.describe('As in an outline: {id, type: "timer", name?, label?, duration?, interrupting?, to | end}.'),
     })
-    .describe('Attaches a boundary timer to a task. Its duration goes into the base scenario.'),
+    .describe('Attaches a boundary timer to a task or call activity. Its duration goes into the base scenario.'),
   z
-    .strictObject({ op: z.literal('annotate'), on: Id.describe('Id of the element.'), text: z.string().min(1) })
-    .describe('Attaches a text annotation to an element.'),
+    .strictObject({ op: z.literal('annotate'), on: Id.describe('Id of the step.'), text: z.string().min(1) })
+    .describe(
+      'Attaches a BPMN text annotation to a step (read back as its `notes`; not annotate_element). The same text on the same step again changes nothing.',
+    ),
   z
-    .strictObject({ op: z.literal('removeAnnotation'), on: Id.describe('Id of the element.'), text: z.string().min(1) })
-    .describe('Removes the text annotation with that text attached to the element, and its association.'),
+    .strictObject({ op: z.literal('removeAnnotation'), on: Id.describe('Id of the step.'), text: z.string().min(1) })
+    .describe('Removes the text annotation with that text attached to the step, and its association.'),
   z
     .strictObject({
       op: z.literal('addDataObject'),
       name: z.string().min(1).describe('Name of the data object; an existing one with that name is reused.'),
-      on: Id.describe('Id of the activity that reads or writes it.'),
+      on: Id.describe('Id of the activity (task, call activity or sub-process) that reads or writes it.'),
       direction: z.enum(OUTLINE_DATA_DIRECTIONS).describe('in: the activity reads it. out: the activity writes it.'),
     })
     .describe('Connects a data object to an activity, creating the object when the process has none with that name.'),

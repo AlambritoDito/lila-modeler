@@ -62,7 +62,8 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
 - **`get_process_outline({ project, process?, locale? })`** reads one process of a `.lila` back as an
   outline: `{ file, slug, name, outline, warnings }`.
 - **`edit_process({ project, process?, operations, dryRun?, layout?, locale? })`** applies a list of
-  operations (add, connect, remove, rename, setType, moveToLane, addLane) to one process of a
+  operations (add, connect, remove, rename, setType, moveToLane, addLane, removeLane, moveLane,
+  addBoundary, annotate, removeAnnotation, addDataObject, removeDataObject) to one process of a
   `.lila`, all or none. Returns `{ file, slug, name, dryRun, summary, changes, removed,
   scenarioRemovals, notes, warnings, outline }`. See [Editing a process](#editing-a-process).
 
@@ -257,20 +258,58 @@ included), validates it like `validate_bpmn`, and writes it into the `.lila`. `l
 ```
 
 - **List order is the flow**: each step follows the previous one unless it has `next` (one id, or
-  several after a gateway), `branches` (gateways only: `{ label?, to, probability? }`, or
-  `{ label?, end: true, probability? }` for a branch that ends the process) or `end: true`. The
-  last step ends the process. Start and end events are added.
-- **`type`** defaults to `task`; the others are `userTask`, `serviceTask`, `callActivity`, `xor`,
-  `and`, `or`, `timer` (an intermediate timer event) and `subprocess` (a collapsed embedded
-  sub-process with a pass-through start and end inside).
-- **Step ids become the BPMN ids**, so scenarios key on them. They must be valid BPMN ids and must
-  not clash with the ids Lila generates (`StartEvent`, `EndEvent_<step>`, `Flow_…`, `Lane_<n>`,
-  `Process_…`, `<id>_di`).
+  several after a gateway), `branches` (gateways only: `{ label?, to, probability?, default? }`, or
+  `{ label?, end: true | "terminate", probability?, default? }` for a branch that ends the process)
+  or `end` (`true`, or `"terminate"` for a terminate end event, which ends the whole case, every
+  parallel path included). The last step ends the process. End events are added, and so is the
+  start unless `starts` is given.
+- **`type`** defaults to `task`; the others are the task variants `userTask`, `serviceTask`,
+  `sendTask`, `receiveTask`, `manualTask`, `scriptTask` and `businessRuleTask` (they simulate as
+  `task`), `callActivity`, the gateways `xor`, `and`, `or` and `eventGateway`, the waits `timer` (an
+  intermediate timer event) and `message` (an intermediate message event), and `subprocess` (a
+  collapsed embedded sub-process with a pass-through start and end inside).
+- **Default flows.** `default: true` marks one branch of an `xor` or an `or` as its default flow
+  (one per gateway). In an `xor` it does not change the split: what is left of 1 still goes to the
+  branches without a probability (R-XOR-2). In an `or` it is the fallback taken when no other
+  branch is (R-OR-3).
+- **The event gateway** (R-EVG-1). Every way out of an `eventGateway` — its branches, `next`, or the
+  following step — goes to a `timer` or `message` step, never to an end, a task or a gateway; so an
+  `eventGateway` cannot be the last step, have `end`, or have a branch with `end`. Each of those
+  steps has that gateway as its only way in: the step before it in the list must not fall into it,
+  and no other `next`, `to`, `from`, boundary event or second gateway may lead to it. A `message`
+  step is only valid there. The branches take no `probability` and no `default`: the first event to
+  happen wins. A branch without a `duration` never fires (R-EVG-5), and when none has one, cases
+  stay at the gateway (R-EVG-6).
+- **Starts.** `starts: [{ id, name?, type?, lane? }]` (`type` `none` or `timer`) replaces the
+  implicit start; the start ids are yours. Each start is in the `from` of exactly one step (a start
+  has one outgoing flow: to fork, put a gateway after it), and `from` only names starts and only
+  exists with `starts`. A start's `lane` follows the rule of a step's and defaults to the lane of
+  its step.
+- **Boundary events.** `boundary: [{ id, type: "timer", name?, label?, duration?, interrupting?, to | end }]`
+  on a task (any variant) or a call activity; not on a sub-process (#639). `to` names the step the
+  boundary leads to; `end` (`true` or `"terminate"`) ends that path with the end event
+  `EndEvent_<boundary id>`. `interrupting: false` leaves the task running and starts a parallel
+  path; the default cuts it short. `label` names the flow out of it. The `duration` counts from the
+  moment a case reaches the task, waiting for resources included; without one the boundary never
+  fires (R-BND-8). A deadline longer than the run (`run.duration` is 1 h by default) never fires
+  either: lengthen the run with `patch_scenario`.
+- **Notes and data.** `notes: [text]` attaches text annotations to a step. `data: [{ name,
+  direction }]` connects data objects to an activity (a task, a call activity or a sub-process):
+  `in`, it reads the object; `out`, it writes it. Steps naming the same object share it; a name and
+  direction appear once per step.
+- **Ids.** Starts, steps and boundary events share one set of ids: unique, valid BPMN ids (NCName),
+  and `next`/`to` name only steps (a `next` naming a start or a boundary event is "not the id of a
+  step"), `from` only starts. Step ids become the BPMN ids, so scenarios key on them. No id may
+  clash with the ids Lila generates (`StartEvent` without `starts`, `EndEvent_<step>`,
+  `EndEvent_<boundary>`, `Flow_…`, `Lane_<n>`, `Process_…`, `<id>_di`). When two generated ids
+  would clash (the second end of `x` and the end of a step `x_2`), the later one takes the first
+  free `_<n>` suffix.
 - **`lane`** defaults to the previous step's lane (the first lane for the first step). Lanes not
   listed in `lanes` are an error when `lanes` is given and are collected in order when it is not.
 - **The base scenario.** The process gets `as-is.scenario.json`: the app's default arrivals for a
-  new process (20 cases, one a minute), every `duration` as `processingTime` (tasks) or delay
-  (timers), every `resources` entry (a name, or `{ name, quantity }`; a resource is created with
+  new process (20 cases, one a minute) on each start, so two starts bring two streams of cases;
+  every `duration` as `processingTime` (of a task, and the delay of a `timer`, a `message` or a
+  boundary event), every `resources` entry (a name, or `{ name, quantity }`; a resource is created with
   the capacity of its largest request; with several, `selection: "or"` takes any one of them
   instead of all), and every branch `probability` as the probability of its
   flow. The XOR branches left without one share what is left of 1. A `duration` is a number of
@@ -303,18 +342,34 @@ included), validates it like `validate_bpmn`, and writes it into the `.lila`. `l
   "summary": "Created process \"Credit application\" (credit-application) in the new file /work/credit.lila: 5 steps, 2 lanes, base scenario as-is.scenario.json." }
 ```
 
-`get_process_outline` returns the outline in **normal form**: every step names its lane, `type` is
-left out for `task`, `next` appears only when it is not simply the following step, every step
-that finishes the process has `end: true`, gateway successors are `branches`, durations are
-distribution objects in seconds and the XOR probabilities are filled in. That is the form
-`create_process` returns as `outline`, so a process round-trips. Durations, resources and
-probabilities (and resource `selection`) come from the process's `as-is.scenario.json` when it has
-one. For a process Lila did not generate, `warnings` says once per kind what the outline leaves
-out: other pools, message flows, the names of start and end events, annotations, default-flow
-marks, other event types, nested lanes, and the parts of the scenario an outline does not carry
-(arrivals, calendars, costs, resource capacities and types, conditional routing; the scenario
-itself is not changed). A process with no name takes the one in the `.lila`, else its id. The
-steps keep the document order.
+`get_process_outline` returns the outline in **normal form**: every step names its lane, and so
+does every start; `type` is left out for `task`; `next` appears only when it is not simply the
+following step; every step that finishes the process has `end: true` (`"terminate"` for a
+terminate end event); gateway successors are `branches` (an `eventGateway` always has them, even
+a single one) with `default: true` on the default flow of an `xor` or `or`; durations are
+distribution objects in seconds and the XOR probabilities are filled in. `starts` is left out in
+the trivial case — a single plain start `StartEvent` with no name, one outgoing flow and the lane of
+its step — and then that step leads the list and no step has `from`; otherwise every start is
+listed and the steps keep the document order. `from` lists a step's starts in the order of
+`starts`, one id as a string and several as a list (like `next`). `boundary` keeps its order, with
+`interrupting` only when it is `false`. `data` lists the reads first and then the writes, each in
+its order. That is the form `create_process` returns as `outline`, so a process round-trips.
+Durations, resources and probabilities (and resource `selection`) come from the process's
+`as-is.scenario.json` when it has one.
+
+For a process Lila did not generate, the reading never returns an outline that `create_process`
+would refuse: what an outline cannot say is left out, and `warnings` says so once per kind. That
+covers other pools, message flows, the names of end events and of the flows out of a start or a
+boundary event, start events other than plain or timer and end events other than plain or
+terminate (read as plain events), a start with several outgoing flows (only the first is kept),
+boundary events other than timers and those with several outgoing flows, default-flow marks out
+of anything but an `xor` or an `or` (and broken ones), branch probabilities an outline cannot
+carry (out of an `and` or an `eventGateway`, or an `xor`'s adding up to more than 1), groups and
+text annotations not attached to a step, data stores, data objects with no name, two data
+objects with the same name, data associations with something that is not an activity, nested
+lanes, and the parts of the scenario an outline does not carry (arrivals, calendars, costs,
+resource capacities and types, conditional routing; the scenario itself is not changed). A
+process with no name takes the one in the `.lila`, else its id.
 
 ## Modelling tools for agents
 
@@ -417,18 +472,18 @@ terminal.
 | Operation | Fields | What it does |
 | --- | --- | --- |
 | `add` | `step`, `after?` or `between?` | Adds a step. `step` is an outline step without its connections, boundary events, notes or data: `{ id, name?, type?, lane?, duration?, resources? }`, any outline type. With `after: id`, the new step takes over that step's outgoing flow (refused when it has several: use `between`). With `between: [from, to]`, it goes on the flow from → to. The flow it lands on keeps its id, name and probability; a new flow continues to the old successor. Without either, it is added unconnected. `lane` defaults to the lane of the step it follows. |
-| `connect` | `from`, `to`, `label?`, `probability?`, `default?`, `id?` | Adds a sequence flow (id `Flow_<from>_<to>` by default). `probability` and `default: true` (the gateway's default flow) only out of an `xor` or `or` gateway. |
+| `connect` | `from`, `to`, `label?`, `probability?`, `default?`, `id?` | Adds a sequence flow (id `Flow_<from>_<to>` by default). `probability` and `default: true` (the gateway's default flow) only out of an `xor` or `or` gateway; `default: true` is refused when the gateway already has a default flow. |
 | `remove` | `id` | Removes a step and reconnects: its incoming flows go to its successor when it has at most one; a step with no incoming flow loses its outgoing ones; a step with several incoming and several outgoing flows (a split after a join) is refused. A step with boundary events is refused. Message flows and associations attached to it go with it. An end event left with no incoming flow goes too (listed in `removed`). A sequence flow, a boundary event, a text annotation, a data object or data store, a group or an association can be removed too. |
 | `rename` | `id`, `name` | Renames any element: step, flow, lane, pool, process. A lane can also be named by its name, when no element has that id. `""` clears the name. |
-| `setType` | `id`, `type` | One of the outline types, or `end`/`terminate` to turn an end event into a terminate end and back. Name, documentation, extension elements and flows stay; a sub-process turned into something else loses its content (listed in `removed`). |
+| `setType` | `id`, `type` | One of the outline types, or `end`/`terminate` to turn an end event into a terminate end and back. For those two, `id` is the end event's (`EndEvent_<step>` in a process Lila made; the outline does not show it otherwise), or a step that leads to exactly one end event. Name, documentation, extension elements and flows stay; a sub-process turned into something else loses its content (listed in `removed`). |
 | `moveToLane` | `id`, `lane` | Lane by name or id. The step's boundary events, and the end events they lead to, move with it. |
 | `addLane` | `name`, `id?`, `after?` or `before?` | Adds a lane (at the bottom by default). The first lane of a process without lanes holds all its steps, and a process without a pool gets one. |
 | `removeLane` | `lane`, `moveStepsTo?` | Removes a lane (by name or id). A lane that holds steps needs `moveStepsTo`, a lane with no sub-lanes that takes them. A lane with sub-lanes is refused. Removing the last lane removes the lane set; the pool stays. |
 | `moveLane` | `lane`, `before` or `after` | Moves a lane above (`before`) or below (`after`) a sibling lane; exactly one of the two. |
-| `addBoundary` | `on`, `boundary` | Attaches a boundary timer to a task. `boundary` is as in an outline: `{ id, type: "timer", name?, duration?, interrupting?, to \| end }`. Its `duration` goes into the base scenario. |
-| `annotate` | `on`, `text` | Attaches a text annotation to an element. |
-| `removeAnnotation` | `on`, `text` | Removes the annotation with that text attached to the element, with its association. |
-| `addDataObject` | `name`, `on`, `direction` | Connects a data object to an activity: `in`, the activity reads it; `out`, the activity writes it. An object with that name in the process is reused, otherwise one is created. |
+| `addBoundary` | `on`, `boundary` | Attaches a boundary timer to a task (any variant) or a call activity, not a sub-process. `boundary` is as in an outline: `{ id, type: "timer", name?, label?, duration?, interrupting?, to \| end }`. Its `duration` goes into the base scenario. |
+| `annotate` | `on`, `text` | Attaches a BPMN text annotation to a step (it reads back as the step's `notes`). The same text on the same step again changes nothing, so `removeAnnotation` is never ambiguous. Not to be confused with `annotate_element`, which writes the documentation, RACI and attributes (`lila:` annotations). |
+| `removeAnnotation` | `on`, `text` | Removes the annotation with that text attached to the step, with its association. |
+| `addDataObject` | `name`, `on`, `direction` | Connects a data object to an activity (a task, a call activity or a sub-process): `in`, the activity reads it; `out`, the activity writes it. An object with that name in the process is reused, otherwise one is created. |
 | `removeDataObject` | `name`, `on?` | Disconnects the data object from the activity `on`, or from every activity without it. The object goes when nothing uses it any more. |
 
 - **Ids never change.** A renamed step keeps its scenario entries, and so does a retyped one, as
@@ -446,8 +501,8 @@ terminal.
   it did not have before refuses the edit. `removed` lists every id that left the model. `notes`
   also flags an XOR whose branch probabilities no longer add up to 1, naming the flows to patch.
 - **What is not touched stays**: documentation, `lila:` annotations (RACI, references, extended
-  attributes), other vendors' extensions, text annotations, data objects, other pools and message
-  flows. A model the BPMN reader cannot read completely is refused rather than written back with
+  attributes), other vendors' extensions, the text annotations, data objects and groups no
+  operation names, other pools and message flows. A model the BPMN reader cannot read completely is refused rather than written back with
   something missing.
 - **Layout.** By default (`layout: true`) the edited process is laid out again with the same
   layouter and lane fix as `create_process`: positions set by hand in that process are lost; text

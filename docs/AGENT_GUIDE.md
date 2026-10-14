@@ -198,25 +198,27 @@ against the real desktop app.
 | --- | --- |
 | `name` | The process name (also the default slug). |
 | `lanes` | Lane names in order. Optional: without it, lanes are collected from the steps. |
-| `starts` | Optional start events: `{ id, name?, type?, lane? }`, `type` `none` (default) or `timer`. Without it, one plain start (`StartEvent`) leads to the first step. With it, steps name theirs with `from`, and every start must be used. Each start gets the default arrivals, so two starts bring two streams of cases. |
+| `starts` | Optional start events: `{ id, name?, type?, lane? }`, `type` `none` (default) or `timer`. Without it, one plain start (`StartEvent`) leads to the first step. With it, the start ids are yours (the scenario's arrivals key on them), steps name theirs with `from`, and each start is in the `from` of exactly one step: to fork, put a gateway after it. `lane` follows the rule of `steps[].lane` and defaults to the lane of its step. Each start gets the default arrivals, so two starts bring two streams of cases. |
 | `steps[].id` | The BPMN id. Scenarios key on it, so pick short stable ids. |
 | `steps[].name` | The label. |
-| `steps[].type` | `task` (default), `userTask`, `serviceTask`, `sendTask`, `receiveTask`, `manualTask`, `scriptTask`, `businessRuleTask`, `callActivity`, `xor`, `and`, `or`, `eventGateway`, `timer`, `message`, `subprocess`. The task variants simulate as `task`; the document and the diagram show what they are. `message` (a wait for a message) is only a branch target of an `eventGateway`. |
+| `steps[].type` | `task` (default), `userTask`, `serviceTask`, `sendTask`, `receiveTask`, `manualTask`, `scriptTask`, `businessRuleTask`, `callActivity`, `xor`, `and`, `or`, `eventGateway`, `timer`, `message`, `subprocess`. The task variants simulate as `task`; the document and the diagram show what they are. `message` (a wait for a message) only goes after an `eventGateway`, as one of its branches. |
 | `steps[].lane` | Defaults to the previous step's lane. |
-| `steps[].from` | With `starts`: the start id(s) that lead to this step. Only valid when `starts` is given. |
+| `steps[].from` | With `starts`: the start id(s) that lead to this step. Only valid when `starts` is given; only start ids. |
 | `steps[].next` | The step(s) after this one when it is not simply the next in the list (a loop back, a join). |
-| `steps[].branches` | Gateways only: `{ label?, to, probability?, default? }` or `{ label?, end: true \| "terminate", probability?, default? }`. XOR branches without a probability share what is left of 1. `default: true` marks the default flow of an `xor` or `or`, one per gateway. The branches of an `eventGateway` go `to` `timer` or `message` steps, with no `probability`: the first event to happen wins. |
+| `steps[].branches` | Gateways only: `{ label?, to, probability?, default? }` or `{ label?, end: true \| "terminate", probability?, default? }`. XOR branches without a probability share what is left of 1. `default: true` marks the default flow of an `xor` or `or`, one per gateway: in an `xor` it does not change the split (what is left of 1 still goes to the branches without a probability); in an `or` it is the fallback taken when no other branch is. Every way out of an `eventGateway` (its branches, `next` or the following step) goes to a `timer` or `message` step whose only way in is that gateway: not the step before it in the list, nor another `next`, `to` or `from`, nor a boundary event. Its branches take no `probability`, `default` or `end`. The first event to happen wins; a branch without a `duration` never fires, and when none has one, cases stay at the gateway. |
 | `steps[].end` | `true`: this step ends the process (an end event is added after it). `"terminate"`: a terminate end event, which ends the whole case, every parallel path included. |
 | `steps[].duration` | Seconds, `20m`, `1h30m`, `normal(20m, 5m)`, `triangular(1m, 2m, 5m)`, `exponential(mean=4m)`, or a distribution object in seconds. On a task, its processing time; on a `timer` or a `message`, how long until it happens. |
 | `steps[].resources` | Names, or `{ name, quantity }`. With several, `selection: "or"` takes any one of them. |
-| `steps[].boundary` | Tasks only: deadlines on the task, `{ id, type: "timer", name?, duration?, interrupting?, to \| end }`. `interrupting` (default `true`) cuts the task short; `false` leaves it running and starts a parallel path. `to` is the step the boundary leads to; `end` (`true` or `"terminate"`) ends that path with an end event `EndEvent_<boundary id>`. The `duration` counts from the moment a case reaches the task, waiting for resources included. |
+| `steps[].boundary` | Tasks (any variant) and call activities, not sub-processes: deadlines on the step, `{ id, type: "timer", name?, label?, duration?, interrupting?, to \| end }`. `interrupting` (default `true`) cuts the step short; `false` leaves it running and starts a parallel path. `to` is the step the boundary leads to; `end` (`true` or `"terminate"`) ends that path with an end event `EndEvent_<boundary id>`. `label` names the flow out of it. The `duration` counts from the moment a case reaches the step, waiting for resources included; without one the boundary never fires. |
 | `steps[].notes` | Text annotations attached to the step. |
-| `steps[].data` | Activities only: data objects the step reads (`direction: "in"`) or writes (`"out"`), `{ name, direction }`. Steps naming the same object share it. |
+| `steps[].data` | Activities only (tasks, call activities, sub-processes): data objects the step reads (`direction: "in"`) or writes (`"out"`), `{ name, direction }`, each name and direction once per step. Steps naming the same object share it. |
 
-The order of the list is the flow. Start and end events are added; ids such as `StartEvent`,
-`EndEvent_<step>` and `Flow_<from>_<to>` are Lila's. `get_process_outline` returns the same
-format in normal form (every lane named, durations as objects, probabilities filled in), so an
-outline round-trips. The full rules are in [`MCP.md`](MCP.md#creating-a-process-from-an-outline).
+The order of the list is the flow. End events are added, and so is the start unless `starts` is
+given (then the start ids are yours). Starts, steps and boundary events share one set of ids, and
+`next` and `to` only name steps. Ids such as `StartEvent`, `EndEvent_<step>`, `EndEvent_<boundary>`
+(the end a boundary with `end` leads to) and `Flow_<from>_<to>` are Lila's. `get_process_outline`
+returns the same format in normal form (every lane named, durations as objects, probabilities
+filled in), so an outline round-trips. The full rules are in [`MCP.md`](MCP.md#creating-a-process-from-an-outline).
 
 ## When a call fails
 

@@ -490,15 +490,28 @@ export const es: Catalog = {
       `el modelo o el escenario ${scenario} de ${file} cambió mientras corría la simulación; la corrida no se guardó. Vuelve a correrla.`,
     runSaved: (id, file, slug) => `Corrida ${id} guardada en ${file} (proceso ${slug}).`,
     outlineInvalid: (detail) => `el esquema del proceso no es válido:\n${detail}`,
-    outlineDuplicateId: (id) => `el id de paso "${id}" se usa más de una vez.`,
-    outlineBadId: (id) => `el id de paso "${id}" no es un id BPMN válido (letras, dígitos, "_", "-" y ".", sin empezar por dígito).`,
+    outlineDuplicateId: (id) => `el id "${id}" se usa más de una vez (pasos, inicios y eventos adjuntos comparten un solo conjunto de ids).`,
+    outlineBadId: (id) => `el id "${id}" no es un id BPMN válido (letras, dígitos, "_", "-" y ".", sin empezar por dígito).`,
     outlineReservedId: (id) => `el id de paso "${id}" choca con un id que Lila genera (inicio, fin, flujos, carriles, diagrama); renombra el paso.`,
     outlineDuplicateLane: (lane) => `el carril "${lane}" aparece más de una vez.`,
     outlineUnknownLane: (step, lane) => `paso "${step}": el carril "${lane}" no está en "lanes".`,
+    outlineStartUnknownLane: (start, lane) => `inicio "${start}": el carril "${lane}" no está en "lanes".`,
+    outlineFromWithoutStarts: (step) => `paso "${step}": "from" nombra eventos de inicio, así que necesita "starts".`,
+    outlineUnknownStart: (step, start) => `paso "${step}": "${start}" no es el id de ningún inicio de "starts".`,
+    outlineStartUnused: (start) => `el inicio "${start}" no lleva a ningún paso: nómbralo en el "from" del paso al que lleva.`,
+    outlineStartManySteps: (start, steps) =>
+      `el inicio "${start}" está en el "from" de varios pasos (${steps}); un inicio lleva a un solo paso. Pon una compuerta después de él, o añade otro inicio.`,
     outlineUnknownTarget: (step, target) => `paso "${step}": "${target}" no es el id de ningún paso.`,
-    outlineBranchesNeedGateway: (step, type) => `paso "${step}": "branches" necesita una compuerta (xor, or, and), no ${type}.`,
+    outlineBranchesNeedGateway: (step, type) => `paso "${step}": "branches" necesita una compuerta (xor, or, and, eventGateway), no ${type}.`,
     outlineBranchTarget: (step) => `paso "${step}": cada rama necesita "to" (el id de un paso) o "end": true.`,
     outlineBoundaryTarget: (boundary) => `el evento adjunto "${boundary}" necesita uno solo de "to" (el id de un paso) y "end".`,
+    outlineManyDefaults: (step) => `compuerta "${step}": solo una rama puede ser la de por defecto ("default": true).`,
+    outlineEventGatewayTarget: (step, target) =>
+      `compuerta por eventos "${step}": cada salida va a un paso timer o message, y "${target}" no lo es (ni un fin, ni una tarea, ni una compuerta pueden seguirla).`,
+    outlineEventTargetWaysIn: (target, gateway, waysIn) =>
+      `el paso "${target}" sigue a la compuerta por eventos "${gateway}", así que esa debe ser su única entrada; tiene ${waysIn}. Revisa "next", "to", "from" y el paso anterior de la lista.`,
+    outlineMessageNeedsEventGateway: (step) => `paso "${step}": un paso message solo va después de una compuerta por eventos, como una de sus ramas.`,
+    outlineDuplicateData: (step, name, direction) => `paso "${step}": el dato "${name}" (${direction}) aparece más de una vez.`,
     outlineManyNextNeedGateway: (step) => `paso "${step}": varios pasos en "next" necesitan una compuerta (xor, or, and); añade una.`,
     outlineEndWithNext: (step) => `paso "${step}": "end" no se puede combinar con "next" ni con "branches".`,
     outlineFieldNotApplicable: (step, field, type) => `paso "${step}": "${field}" no aplica a un ${type}.`,
@@ -510,6 +523,9 @@ export const es: Catalog = {
     outlineNoProcess: () => 'el BPMN no tiene ningún proceso.',
     outlineUnsupported: (id, type) => `${id} (${type}) no tiene equivalente en el esquema y se omitió.`,
     outlineLostFlow: (id) => `${id}: se descartó un flujo que llega o sale de un elemento omitido en el esquema.`,
+    outlineStartManyFlows: (start, flows) =>
+      `el evento de inicio ${start} tiene varios flujos de salida; un inicio del esquema lleva a un solo paso, así que se omitieron: ${flows}.`,
+    outlineDroppedTrigger: (id, definitions) => `${id}: el esquema no tiene ${definitions}; se lee como un evento simple.`,
     outlineUnknownKey: (key) => `campo desconocido "${key}".`,
     outlineNotObject: () => 'debe ser un objeto.',
     outlineNotText: () => 'debe ser un texto no vacío.',
@@ -535,6 +551,9 @@ export const es: Catalog = {
     outlineDroppedEventNames: (events) => `los eventos de inicio y fin son implícitos en un esquema; se omitieron sus nombres: ${events}.`,
     outlineDroppedArtifacts: (count) => `${n(count, 'anotación, grupo o asociación no forma', 'anotaciones, grupos o asociaciones no forman')} parte del esquema y ${count === 1 ? 'se omitió' : 'se omitieron'}.`,
     outlineDroppedDefaults: (ids) => `las marcas de flujo por defecto no forman parte del esquema y se omitieron: ${ids}.`,
+    outlineDroppedFlowNames: (flows) => `los nombres de los flujos que salen de un evento de inicio no forman parte del esquema y se omitieron: ${flows}.`,
+    outlineDroppedProbabilities: (flows) =>
+      `se omitieron las probabilidades de rama que el esquema no admite (fuera de un xor o un or, o las de un xor que suman más de 1): ${flows}.`,
     outlineScenarioOutside: (kinds) =>
       `${kinds.split(',').map((k) => ({ arrivals: 'las llegadas', calendars: 'los calendarios', costs: 'los costos', capacities: 'las capacidades y tipos de recurso', conditions: 'el ruteo condicionado' } as Record<string, string>)[k] ?? k).join(', ')} del escenario no forman parte del esquema; siguen en el escenario, que esta lectura no cambia.`,
     processSlugNewFile: (slug, derived) =>

@@ -334,11 +334,21 @@ export interface CliMessages {
   outlineReservedId: (id: string) => string;
   outlineDuplicateLane: (lane: string) => string;
   outlineUnknownLane: (step: string, lane: string) => string;
+  outlineStartUnknownLane: (start: string, lane: string) => string;
+  outlineFromWithoutStarts: (step: string) => string;
+  outlineUnknownStart: (step: string, start: string) => string;
+  outlineStartUnused: (start: string) => string;
+  outlineStartManySteps: (start: string, steps: string) => string;
   outlineUnknownTarget: (step: string, target: string) => string;
   outlineBranchesNeedGateway: (step: string, type: string) => string;
   outlineManyNextNeedGateway: (step: string) => string;
   outlineBranchTarget: (step: string) => string;
   outlineBoundaryTarget: (boundary: string) => string;
+  outlineManyDefaults: (step: string) => string;
+  outlineEventGatewayTarget: (step: string, target: string) => string;
+  outlineEventTargetWaysIn: (target: string, gateway: string, waysIn: string) => string;
+  outlineMessageNeedsEventGateway: (step: string) => string;
+  outlineDuplicateData: (step: string, name: string, direction: string) => string;
   outlineEndWithNext: (step: string) => string;
   outlineFieldNotApplicable: (step: string, field: string, type: string) => string;
   outlineProbabilityOnAnd: (step: string) => string;
@@ -349,6 +359,8 @@ export interface CliMessages {
   outlineNoProcess: () => string;
   outlineUnsupported: (id: string, type: string) => string;
   outlineLostFlow: (id: string) => string;
+  outlineStartManyFlows: (start: string, flows: string) => string;
+  outlineDroppedTrigger: (id: string, definitions: string) => string;
   outlineFileUnreadable: (file: string, detail: string) => string;
   outlineUnknownKey: (key: string) => string;
   outlineNotObject: () => string;
@@ -375,6 +387,8 @@ export interface CliMessages {
   outlineDroppedEventNames: (events: string) => string;
   outlineDroppedArtifacts: (count: number) => string;
   outlineDroppedDefaults: (ids: string) => string;
+  outlineDroppedFlowNames: (flows: string) => string;
+  outlineDroppedProbabilities: (flows: string) => string;
   /** `kinds` are keys joined by `,` (`arrivals,calendars`): arrivals, calendars, costs, capacities, conditions. */
   outlineScenarioOutside: (kinds: string) => string;
   processSlugNewFile: (slug: string, derived: string) => string;
