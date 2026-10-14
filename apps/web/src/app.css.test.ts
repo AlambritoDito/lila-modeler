@@ -525,3 +525,9 @@ it('Lote M: a long problem never pushes «Go» out of the Simulate banner (QA of
   expect(texto).toContain('min-width: 0');
   expect(texto).toContain('overflow-wrap: anywhere');
 });
+
+it('the top bar stacks over the Simulate/Results sub-bar, so File and View drop over it (#650)', () => {
+  const z = (selector: string) => Number(/z-index: (\d+)/.exec(bloqueDeLinea(selector))![1]);
+  expect(bloqueDeLinea('.barra')).toContain('position: relative');
+  expect(z('.barra')).toBeGreaterThan(z('.c5-subbarra'));
+});

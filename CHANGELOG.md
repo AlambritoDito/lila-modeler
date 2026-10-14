@@ -3,6 +3,13 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.26] - 2026-10-14
+
+### Fixed
+
+- **File and View menus over the Simulate/Results bar (#650)**: in Simulate and Results the
+  dropdowns opened under the scenario and steps bar; the top bar now stacks above it.
+
 ## [1.0.0-beta.25] - 2026-10-12
 
 Lote P: an agent can see what a `.lila` holds without writing it, get results that fit its
