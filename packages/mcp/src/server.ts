@@ -1147,9 +1147,15 @@ export function createServer(options: ServerOptions = {}): McpServer {
         '`processes/<slug>/` of the .lila `project`, or as a new .lila when the file does not exist. ' +
         'It never replaces an existing process: a slug already in the file is an error and nothing ' +
         'is written. List order is the flow: each step follows the previous one unless it has ' +
-        '`next`, `branches` or `end`. Start and end events are added. Step ids become the BPMN ids. ' +
-        'The process gets a base scenario `as-is.scenario.json` with arrivals and every ' +
-        '`duration`, `resources` and branch `probability` given. Returns the slug, the outline as ' +
+        '`next`, `branches` or `end`. End events are added, and one start before the first step ' +
+        'unless `starts` lists them (several, or a timer start; steps name theirs with `from`). ' +
+        'Step ids become the BPMN ids. Also: terminate ends (`end: "terminate"`), default flows, ' +
+        'the task variants, boundary timers (deadlines and escalations, `boundary`) and the event ' +
+        'gateway (`eventGateway` → `message` | `timer` steps). The process gets a base scenario ' +
+        '`as-is.scenario.json` with arrivals (each start brings its own stream of cases) and every ' +
+        '`duration`, `resources` and branch `probability` given; the delay of a timer, message or ' +
+        'boundary step is its `duration`. Its run lasts 1 h: raise `run.duration` with ' +
+        '`patch_scenario` before simulating longer timers (e.g. a 48 h deadline). Returns the slug, the outline as ' +
         'stored (normal form), the validator warnings and a one-line `summary`. With `dryRun`, ' +
         'builds and checks everything and writes nothing.',
       inputSchema: z.object({
@@ -1159,11 +1165,16 @@ export function createServer(options: ServerOptions = {}): McpServer {
         outline: z
           .record(z.string(), z.unknown())
           .describe(
-            'The process: {name, lanes?: [lane names], steps: [{id, name?, lane?, type? (task | userTask | ' +
-              'serviceTask | callActivity | xor | and | or | timer | subprocess), next? (id or ids), branches? ' +
-              '(gateways: [{label?, to | end: true, probability?}]), end?: true, duration? ("20m", ' +
-              '"normal(20m, 5m)", seconds or a distribution object), resources? ([name | {name, quantity}]), ' +
-              'selection? ("and" | "or")}]}. List order is the flow. See docs/MCP.md.',
+            'The process: {name, lanes?: [lane names], starts?: [{id, name?, type? (none | timer), lane?}], ' +
+              'steps: [{id, name?, lane?, type? (task | userTask | serviceTask | sendTask | receiveTask | ' +
+              'manualTask | scriptTask | businessRuleTask | callActivity | xor | and | or | eventGateway | ' +
+              'timer | message | subprocess), from? (start id or ids, with starts), next? (id or ids), ' +
+              'branches? (gateways: [{label?, to | end: true | "terminate", probability? (xor/or), default? ' +
+              '(xor/or)}]; an eventGateway\'s go to timer or message steps), end?: true | "terminate", ' +
+              'duration? ("20m", "normal(20m, 5m)", seconds or a distribution object), resources? ([name | ' +
+              '{name, quantity}]), selection? ("and" | "or"), boundary? (tasks and call activities: [{id, ' +
+              'type: "timer", name?, label?, duration?, interrupting? (default true), to | end}])}]}. ' +
+              'List order is the flow. See docs/MCP.md.',
           ),
         project: z.string().describe('Path to the .lila (created if missing), relative to the cwd of the server process.'),
         process: z
@@ -1263,9 +1274,11 @@ export function createServer(options: ServerOptions = {}): McpServer {
       description:
         'Reads one process of a .lila as an outline (the format `create_process` takes, in normal ' +
         'form: every step names its lane, `next` only when it is not the following step, `end: ' +
-        'true` where the process ends, durations as scenario distributions in seconds). Durations, ' +
-        'resources and branch probabilities come from its `as-is.scenario.json` when it has one. ' +
-        '`warnings` lists what the outline could not carry (other event types, nested lanes…).',
+        'true` (or "terminate") where the process ends, `starts` unless there is one plain start ' +
+        '`StartEvent`, durations as scenario distributions in seconds). Boundary timers, event ' +
+        'gateways, default flows and the task variants are read too. Durations, delays, resources ' +
+        'and branch probabilities come from its `as-is.scenario.json` when it has one. `warnings` ' +
+        'lists what the outline could not carry (other pools, other event types, nested lanes…).',
       inputSchema: z.object({
         project: z.string().describe('Path to the .lila, relative to the cwd of the server process.'),
         process: z
@@ -1293,17 +1306,21 @@ export function createServer(options: ServerOptions = {}): McpServer {
       title: 'Edit process',
       description:
         'Applies a list of operations to one process of a .lila, all or none: `add` (a step, as in ' +
-        'an outline, `after` a step or `between` two connected steps, or unconnected), `connect`, ' +
-        '`remove` (a step, reconnecting its predecessors to its successor when that is unambiguous, ' +
-        'or a flow), `rename`, `setType`, `moveToLane` and `addLane`. Ids never change, so renamed ' +
+        'an outline, `after` a step or `between` two connected steps, or unconnected), `connect` ' +
+        '(`default: true` out of an xor/or marks the default flow), `remove` (a step, reconnecting ' +
+        'its predecessors to its successor when that is unambiguous, a flow or a boundary event; an ' +
+        'end event left with no way in goes too), `rename`, `setType` (also `end` ↔ `terminate` on ' +
+        'an end event), `moveToLane` (with the step\'s boundary events), `addLane` and `addBoundary` ' +
+        '(a boundary timer, as in an outline). Ids never change, so renamed ' +
         'or retyped steps keep their scenario entries; durations, resources and probabilities given ' +
         'go into the base scenario `as-is.scenario.json`. The result is validated; any problem ' +
         'refuses the whole edit, writes nothing and lists every issue with the index of its ' +
         'operation (`operations[i]`). Documentation, annotations, extended attributes and other ' +
         'pools are kept. With `layout` (default true) the process is laid out again; with ' +
         '`layout: false` every shape keeps its place and only new ones are placed. Returns what ' +
-        'each operation did (`changes`), the removed ids, the scenario entries of removed ids (kept, ' +
-        'not deleted), notes, the validator warnings and the outline after the edit. With `dryRun`, ' +
+        'each operation did (`changes`), the removed ids, the scenario entries that no longer apply ' +
+        '(removed, each one reported with its values in `scenarioRemovals`), notes, the validator ' +
+        'warnings and the outline after the edit. With `dryRun`, ' +
         'nothing is written.',
       inputSchema: z.object({
         project: z.string().describe('Path to the .lila, relative to the cwd of the server process.'),
@@ -1317,12 +1334,15 @@ export function createServer(options: ServerOptions = {}): McpServer {
           .unknown()
           .describe(
           'In order. Each one of: {op:"add", step:{id, name?, type?, lane?, duration?, resources?}, after?:id | between?:[from,to]}; ' +
-            '{op:"connect", from, to, label?, probability?, id?}; {op:"remove", id}; {op:"rename", id, name}; ' +
-            '{op:"setType", id, type: task|userTask|serviceTask|callActivity|xor|and|or|timer|subprocess}; ' +
-            '{op:"moveToLane", id, lane}; {op:"addLane", name, id?, after?|before?}. E.g. [{"op":"add","step":{"id":"verify","name":"Verify ID","duration":"5m"},"after":"receive"}, ' +
+            '{op:"connect", from, to, label?, probability?, default?, id?}; {op:"remove", id}; {op:"rename", id, name}; ' +
+            '{op:"setType", id, type: an outline step type, or end|terminate (id: an end event or a step leading to one)}; ' +
+            '{op:"moveToLane", id, lane}; {op:"addLane", name, id?, after?|before?}; ' +
+            '{op:"addBoundary", on, boundary:{id, type:"timer", name?, label?, duration?, interrupting?, to | end}}. ' +
+            'E.g. [{"op":"add","step":{"id":"verify","name":"Verify ID","duration":"5m"},"after":"receive"}, ' +
             '{"op":"connect","from":"ok","to":"verify","label":"Retry","probability":0.1}, {"op":"remove","id":"check"}, ' +
             '{"op":"rename","id":"issue","name":"Issue card"}, {"op":"setType","id":"check","type":"serviceTask"}, ' +
-            '{"op":"addLane","name":"Back office"}, {"op":"moveToLane","id":"issue","lane":"Back office"}].',
+            '{"op":"addLane","name":"Back office"}, {"op":"moveToLane","id":"issue","lane":"Back office"}, ' +
+            '{"op":"addBoundary","on":"check","boundary":{"id":"sla","type":"timer","duration":"48h","interrupting":false,"to":"escalate"}}].',
         ),
         dryRun: z.boolean().optional().describe('true: apply and validate in memory, write nothing.'),
         layout: z.boolean().optional().describe('Default true: lay the process out again. false: keep positions, place only new shapes.'),

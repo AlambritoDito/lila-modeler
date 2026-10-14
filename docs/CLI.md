@@ -312,8 +312,30 @@ npx lila process create --outline examples/outline/credit-application.json -p ex
 ```
 Exit code: `1`.
 
+`examples/outline/claim-escalation.json` is the 48-hour escalation of the
+[agent guide](AGENT_GUIDE.md#example-escalate-after-48-hours): a non-interrupting boundary timer
+on «Assess claim» that sends the claim to a supervisor after 48 hours, a default flow, task
+variants, and an event gateway where the customer's confirmation races a five-day timer that ends
+the case with a terminate end event:
+
+```bash
+npx lila process create --outline examples/outline/claim-escalation.json -p claims.lila --dry-run
+```
+Exit code: `0`.
+
+```text
+Dry run: would create process "Claim handling" (claim-handling) in the new file /…/claims.lila: 10 steps, 3 lanes. Nothing was written.
+```
+
+Its base scenario runs for one hour, like every created process: lengthen `run.duration` (in the
+app, or with the MCP tool `patch_scenario`) before running it, or no case reaches the 48-hour
+deadline.
+
 `process show` prints the outline of one process, one step per line with its type, name, lane,
-duration, resources and where it goes; `--json` prints `{ slug, outline, warnings }`, the outline in
+duration, resources and where it goes (`end`, `terminate`, or the branches with their probability
+and `default`); the starts come first when the outline lists them (`start` or `timer start`, and the
+step each one leads to), and each boundary timer gets a line under its step (`boundary <id>  timer`
+or `timer (non-interrupting)`, its name, its delay and where it leads). `--json` prints `{ slug, outline, warnings }`, the outline in
 normal form (the form `create_process` returns). Durations, resources and branch probabilities
 come from the process's `as-is.scenario.json`. What an outline cannot carry is reported on stderr.
 
@@ -333,7 +355,7 @@ Process "Restaurant" (pedido)
 
 `process edit` applies a list of operations to one process, all or none: the JSON array the MCP
 tool `edit_process` takes as `operations` (`add`, `connect`, `remove`, `rename`, `setType`,
-`moveToLane`, `addLane`; format and rules in [`docs/MCP.md`](MCP.md#editing-a-process)). Every
+`moveToLane`, `addLane`, `addBoundary`…; format and rules in [`docs/MCP.md`](MCP.md#editing-a-process)). Every
 operation is checked, the result is validated, and the `.lila` is written only if all of it is fine;
 otherwise it exits `1`, writes nothing and lists every problem with the index of its operation. The
 process is laid out again unless `--no-layout`, which keeps every position and only places the new

@@ -80,14 +80,16 @@ such as a parallel join waiting for branches of one exclusive split.
 ### 3. `edit_process` and `get_process_outline`
 
 To change a process, do not create it again: `edit_process` applies a list of operations (`add`,
-`connect`, `remove`, `rename`, `setType`, `moveToLane`, `addLane`) all or none, keeps every id and
+`connect`, `remove`, `rename`, `setType`, `moveToLane`, `addLane`, `addBoundary`…) all or none, keeps every id and
 everything the operations do not touch (documentation, RACI, attributes, other processes). Send it
 with `dryRun: true` first and show the `changes` to the person when the edit is not trivial.
 
 ```json
 { "name": "edit_process", "arguments": { "project": "card.lila", "dryRun": true, "operations": [
   { "op": "add", "step": { "id": "verify", "name": "Verify identity", "duration": "5m" }, "after": "receive" },
-  { "op": "rename", "id": "issue", "name": "Issue the card" } ] } }
+  { "op": "rename", "id": "issue", "name": "Issue the card" },
+  { "op": "addBoundary", "on": "bureau", "boundary": { "id": "bureauDown", "type": "timer", "duration": "30m",
+    "label": "No answer in 30 min", "to": "assess" } } ] } }
 ```
 
 **After any edit the process still simulates.** Scenario entries that no longer apply are removed
@@ -220,6 +222,54 @@ given (then the start ids are yours). Starts, steps and boundary events share on
 returns the same format in normal form (every lane named, durations as objects, probabilities
 filled in), so an outline round-trips. The full rules are in [`MCP.md`](MCP.md#creating-a-process-from-an-outline).
 
+### Example: escalate after 48 hours
+
+«If the adjuster has not decided in 48 hours, the claim goes to a supervisor; the adjuster keeps
+working on it. Then we ask the customer to confirm, and if they do not answer in five days the
+claim is closed.» A deadline on a task is a `boundary` timer: `interrupting: false` because the
+adjuster keeps working while the supervisor looks at it (`true`, the default, would take the claim
+away from the adjuster). «Answer or five days, whichever comes first» is an `eventGateway` whose
+branches are a `message` step and a `timer` step; the timer path ends with `"terminate"`, which
+closes the whole case, the escalation path included. This is `examples/outline/claim-escalation.json`:
+
+```json
+{ "name": "Claim handling",
+  "lanes": ["Customer service", "Adjuster", "Supervisor"],
+  "steps": [
+    { "id": "register", "name": "Register claim", "lane": "Customer service", "duration": "10m", "resources": ["Clerk"] },
+    { "id": "assess", "name": "Assess claim", "type": "userTask", "lane": "Adjuster",
+      "duration": "triangular(4h, 24h, 72h)", "resources": ["Adjuster"],
+      "boundary": [ { "id": "sla", "type": "timer", "name": "48 h", "duration": "48h", "interrupting": false,
+                      "label": "No decision in 48 h", "to": "escalate" } ] },
+    { "id": "covered", "type": "xor", "name": "Covered?",
+      "branches": [ { "label": "Yes", "to": "confirm", "probability": 0.8, "default": true },
+                    { "label": "No", "to": "reject" } ] },
+    { "id": "confirm", "name": "Ask the customer to confirm", "type": "sendTask", "lane": "Customer service", "duration": "5m" },
+    { "id": "reply", "type": "eventGateway", "name": "Customer replies?",
+      "branches": [ { "to": "confirmed" }, { "to": "deadline" } ] },
+    { "id": "confirmed", "type": "message", "name": "Confirmation received", "duration": "exponential(mean=2d)" },
+    { "id": "pay", "name": "Pay claim", "type": "serviceTask", "lane": "Adjuster", "duration": "1m", "end": true },
+    { "id": "deadline", "type": "timer", "name": "5 days", "lane": "Customer service", "duration": "5d", "end": "terminate" },
+    { "id": "reject", "name": "Notify rejection", "type": "sendTask", "lane": "Customer service", "duration": "5m", "end": true },
+    { "id": "escalate", "name": "Escalate to supervisor", "lane": "Supervisor", "duration": "30m", "resources": ["Supervisor"], "end": true } ] }
+```
+
+The durations of `sla`, `confirmed` and `deadline` go to the base scenario, never to the XML: a
+`message` step's `duration` is how long the customer takes to answer. **Lengthen the run before you
+simulate it:** the base scenario runs for one hour (`run.duration: 3600`), and in one hour no case
+reaches a 48-hour deadline, so the escalation would never show. Patch `run.duration` first, e.g. to
+60 days, then run and export:
+
+```json
+{ "name": "patch_scenario", "arguments": { "project": "claims.lila", "scenario": "as-is",
+  "patch": [ { "op": "replace", "path": "/run/duration", "value": 5184000 } ] } }
+```
+
+With one adjuster, almost every claim waits past 48 hours, so the supervisor sees nearly all of
+them: the run says so in `elements.sla.completed` and `elements.escalate.completed`. A case ends
+where its last path ends, so `byEndEvent` counts a claim under `EndEvent_pay`, not under
+`EndEvent_escalate`, when it was paid after its escalation.
+
 ## When a call fails
 
 - **Every problem at once, with its path, in one pass.** A bad call answers `isError: true` with all
@@ -272,7 +322,8 @@ the same `.lila`.
   set by hand in that process; `layout: false` keeps them and places new steps simply. Move things
   in the app when the picture matters.
 - **Edits** reach only the main process of a BPMN (the one the simulator reads), and lanes cannot
-  be removed.
+  be removed. `edit_process` neither adds start events nor changes their type: give them in the
+  outline (`starts`), or edit them in the app.
 - **Scenario fields from the outline** are only `duration`, `resources` and branch `probability`.
   Arrivals, calendars, costs and capacities go through `patch_scenario` or a sheet.
 - **A long run takes its time.** The server keeps answering and reports each replication, and a

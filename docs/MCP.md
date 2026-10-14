@@ -382,6 +382,43 @@ activity, nested lanes, and the parts of the scenario an outline does not carry 
 resource capacities and types, conditional routing; the scenario itself is not changed). A
 process with no name takes the one in the `.lila`, else its id.
 
+### Example: a 48-hour escalation
+
+`examples/outline/claim-escalation.json` (the outline is in the [agent guide](AGENT_GUIDE.md#example-escalate-after-48-hours))
+models «if the adjuster has not decided in 48 hours, a supervisor steps in» as a non-interrupting
+boundary timer on the task, and «the customer confirms or, after five days, the claim is closed» as
+an event gateway between a `message` step and a `timer` step that ends with `"terminate"`:
+
+```json
+{ "id": "assess", "name": "Assess claim", "type": "userTask", "lane": "Adjuster",
+  "duration": "triangular(4h, 24h, 72h)", "resources": ["Adjuster"],
+  "boundary": [ { "id": "sla", "type": "timer", "name": "48 h", "duration": "48h", "interrupting": false,
+                  "label": "No decision in 48 h", "to": "escalate" } ] }
+```
+
+The base scenario runs for one hour (`run.duration` 3600 s), so no case would ever reach the
+48-hour deadline or the five-day wait: lengthen the run with `patch_scenario` before
+`run_simulation`. The four calls, as the e2e test `outline-constructs.e2e.test.ts` makes them:
+
+```json
+{ "name": "create_process", "arguments": { "project": "claims.lila", "outline": { "name": "Claim handling", … } } }
+{ "name": "patch_scenario", "arguments": { "project": "claims.lila", "scenario": "as-is",
+  "patch": [ { "op": "replace", "path": "/run/duration", "value": 5184000 } ] } }
+{ "name": "run_simulation", "arguments": { "model": "claims.lila", "scenario": "as-is", "saveRun": true } }
+{ "name": "export_document", "arguments": { "project": "claims.lila", "format": "html", "saveTo": "claims.html" } }
+```
+
+The deadline is the scenario entry `elements.sla.processingTime`, never a `timeDuration` in the
+XML. `elements.sla.completed` counts the deadlines that fired. `byEndEvent` counts each case at the
+end of the path that finished last, so an escalated claim that was then paid counts under
+`EndEvent_pay`. To put the same deadline on a process that already exists, use `addBoundary`:
+
+```json
+{ "name": "edit_process", "arguments": { "project": "claims.lila", "operations": [
+  { "op": "addBoundary", "on": "assess", "boundary": { "id": "sla", "type": "timer", "name": "48 h",
+    "duration": "48h", "interrupting": false, "label": "No decision in 48 h", "to": "escalate" } } ] } }
+```
+
 ## Modelling tools for agents
 
 `annotate_element`, `get_raci_matrix`, `import_scenario_sheet`, `export_scenario_template` and
@@ -884,4 +921,5 @@ stays in the foreground, so it is not a CI smoke test.
   it are lost); an expanded sub-process becomes a collapsed one, and vertical pools (as Bizagi
   draws them) become horizontal. With `layout: false`, placement is simple: right of the
   predecessor, in its lane; it does not untangle crossings. Only the main process of the BPMN can
-  be edited, and nested lanes only through their leaf lanes.
+  be edited, and nested lanes only through their leaf lanes. Start events are neither added nor
+  retyped by `edit_process`: give them in the outline (`starts`) or change them in the app.
