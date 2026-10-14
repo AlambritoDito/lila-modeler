@@ -50,6 +50,25 @@ export function is(el: unknown, type: string): boolean {
   return typeof candidate?.$instanceOf === 'function' && candidate.$instanceOf(type);
 }
 
+/** Every element of `root` reachable through its properties (semantic tree and DI), once. */
+export function* everything(root: unknown): Generator<El> {
+  const seen = new Set<object>();
+  const stack: unknown[] = [root];
+  while (stack.length > 0) {
+    const value = stack.pop();
+    if (typeof value !== 'object' || value === null || seen.has(value)) continue;
+    seen.add(value);
+    if (Array.isArray(value)) {
+      stack.push(...value);
+      continue;
+    }
+    const el = value as El;
+    if (typeof el.$type !== 'string') continue;
+    yield el;
+    for (const key of Object.keys(el)) if (key !== '$parent') stack.push(el[key]);
+  }
+}
+
 /** bpmn-js's default size for a node of this type. */
 export function sizeOf(el: El): { width: number; height: number } {
   if (is(el, 'bpmn:Event')) return { width: 36, height: 36 };
@@ -738,12 +757,14 @@ const artifactSize = (el: El): { width: number; height: number } =>
   el.$type === 'bpmn:TextAnnotation' ? { width: 100, height: 30 } : el.$type === 'bpmn:DataStoreReference' ? { width: 50, height: 50 } : { width: 36, height: 50 };
 
 /**
- * #630: the text annotations, data objects and data stores of `process` that have no shape (a
- * model that arrived without a diagram) get one next to the node they hang on: an annotation above
- * and right of it, a data object or store below it; one that hangs on nothing goes in a row below
- * the drawing. Each moves along until it overlaps no other shape. Their associations get an edge.
+ * #630: the text annotations, data objects and data stores of `process` (or of a sub-process, on
+ * its own plane) that have no shape (a model that arrived without a diagram, or one an outline or
+ * an edit just added, #638) get one next to the node they hang on: an annotation above and right of
+ * it, a data object or store below it; one that hangs on nothing goes in a row below the drawing.
+ * Each moves along until it overlaps no other shape. Every association (plain or data) without an
+ * edge whose two ends have a shape gets one, drawn straight.
  */
-function placeArtifacts(diagram: Diagram, plane: El, process: El, nodes: readonly El[], associations: readonly El[], dataAssociations: readonly El[]): void {
+export function placeArtifacts(diagram: Diagram, plane: El, process: El, nodes: readonly El[], associations: readonly El[], dataAssociations: readonly El[]): void {
   const anchorOf = new Map<El, El>();
   for (const a of associations) {
     const s = a['sourceRef'] as El | undefined;
@@ -760,7 +781,6 @@ function placeArtifacts(diagram: Diagram, plane: El, process: El, nodes: readonl
     .filter((el, i, all) => el !== undefined && el.$type === 'bpmn:TextAnnotation' && all.indexOf(el) === i);
   const data = ((process['flowElements'] ?? []) as El[]).filter((el) => el.$type === 'bpmn:DataObjectReference' || el.$type === 'bpmn:DataStoreReference');
   const missing = [...annotations, ...data].filter((el) => !diagram.shapes.has(el.id));
-  if (missing.length === 0) return;
 
   const taken = (): Box[] => diagram.nodeShapes(plane).map((di) => di['bounds'] as Box);
   const free = (box: Box, step: Point): Box => {
@@ -777,9 +797,18 @@ function placeArtifacts(diagram: Diagram, plane: El, process: El, nodes: readonl
       continue;
     }
     const size = artifactSize(el);
+    // An annotation stays inside the band (lane or pool) of its node: above it when there is room.
+    const top = Math.max(
+      -Infinity,
+      ...((plane['planeElement'] ?? []) as El[])
+        .filter((di) => di.$type === 'bpmndi:BPMNShape' && (is(di['bpmnElement'], 'bpmn:Participant') || is(di['bpmnElement'], 'bpmn:Lane')))
+        .map((di) => di['bounds'] as Box)
+        .filter((b) => b.x <= center(at).x && center(at).x <= right(b) && b.y <= center(at).y && center(at).y <= bottom(b))
+        .map((b) => b.y + 5),
+    );
     const box =
       el.$type === 'bpmn:TextAnnotation'
-        ? free({ x: right(at) + 20, y: at.y - size.height - 30, ...size }, { x: size.width + 20, y: 0 })
+        ? free({ x: right(at) + 20, y: Math.max(at.y - size.height - 30, top), ...size }, { x: size.width + 20, y: 0 })
         : free({ x: center(at).x - size.width / 2, y: bottom(at) + 40, ...size }, { x: size.width + 20, y: 0 });
     diagram.addShape(el, plane, box);
   }
@@ -802,6 +831,6 @@ function placeArtifacts(diagram: Diagram, plane: El, process: El, nodes: readonl
       : [a['sourceRef'] as El | undefined, a['targetRef'] as El | undefined];
     const sb = s === undefined ? undefined : diagram.bounds(s.id);
     const tb = t === undefined ? undefined : diagram.bounds(t.id);
-    if (sb !== undefined && tb !== undefined && missing.some((el) => el === s || el === t)) diagram.setWaypoints(a, straight(sb, tb), plane);
+    if (sb !== undefined && tb !== undefined) diagram.setWaypoints(a, straight(sb, tb), plane);
   }
 }

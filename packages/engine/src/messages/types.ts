@@ -429,6 +429,15 @@ export interface CliMessages {
   editRemoveAmbiguous: (id: string, incoming: number, outgoing: number) => string;
   editRemoveBoundary: (id: string, boundaries: string) => string;
   editCannotRemove: (id: string, type: string) => string;
+  editLaneHasSubLanes: (lane: string, children: string) => string;
+  editLaneNotEmpty: (lane: string, nodes: string) => string;
+  editLaneTargetNotLeaf: (lane: string, children: string) => string;
+  editLaneSameTarget: (lane: string) => string;
+  editLaneNotSibling: (lane: string, other: string) => string;
+  editLaneSelf: (lane: string) => string;
+  editNoNote: (step: string, text: string, notes: string) => string;
+  editNoDataObject: (name: string, names: string) => string;
+  editDataNotConnected: (name: string, step: string) => string;
   editBoundaryNeedsActivity: (id: string, boundaries: string) => string;
   editNotOneEnd: (id: string, ends: string) => string;
   editLaneUnknown: (lane: string, lanes: string) => string;
@@ -451,6 +460,16 @@ export interface CliMessages {
   editRetyped: (id: string, from: string, to: string) => string;
   editMoved: (id: string, lane: string) => string;
   editLaneAdded: (name: string, id: string) => string;
+  editLaneRemoved: (lane: string, id: string, to: string, nodes: string) => string;
+  editLastLaneRemoved: (lane: string, id: string) => string;
+  editLaneMoved: (lane: string, where: 'before' | 'after', other: string) => string;
+  editNoteAdded: (step: string, text: string, id: string) => string;
+  editNoteExists: (step: string, text: string) => string;
+  editNoteRemoved: (step: string, text: string, ids: string) => string;
+  editDataAdded: (name: string, step: string, direction: 'in' | 'out', id: string, created: boolean) => string;
+  editDataExists: (name: string, step: string, direction: 'in' | 'out') => string;
+  editDataRemoved: (name: string, step: string | undefined, ids: string) => string;
+  editRemovedElement: (id: string, type: string, also: string) => string;
   /** One-line summary of `edit_process` / `lila process edit`. */
   processEdited: (name: string, slug: string, file: string, operations: number, removed: number) => string;
   processEditDryRun: (name: string, slug: string, file: string, operations: number, removed: number) => string;

@@ -82,7 +82,8 @@ atorados, como una unión paralela que espera ramas de una misma división exclu
 ### 3. `edit_process` y `get_process_outline`
 
 Para cambiar un proceso no lo crees otra vez: `edit_process` aplica una lista de operaciones
-(`add`, `connect`, `remove`, `rename`, `setType`, `moveToLane`, `addLane`, `addBoundary`…) todas o ninguna, conserva
+(`add`, `connect`, `remove`, `rename`, `setType`, `moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`,
+`annotate`, `addDataObject`…) todas o ninguna, conserva
 cada id y todo lo que las operaciones no tocan (documentación, RACI, atributos, otros procesos).
 Mándala primero con `dryRun: true` y muéstrale los `changes` a la persona cuando la edición no sea
 trivial.
@@ -332,9 +333,9 @@ Haz una escritura a la vez por archivo y espera su respuesta; escribir en parale
   `edit_process` con `layout: true` reemplaza las posiciones puestas a mano en ese proceso;
   `layout: false` las conserva y coloca los pasos nuevos de forma simple. Mueve las cosas en la app
   cuando el dibujo importe.
-- **Las ediciones** solo alcanzan el proceso principal de un BPMN (el que lee el simulador), y no se
-  pueden borrar carriles. `edit_process` no agrega eventos de inicio ni les cambia el tipo: ponlos
-  en el esquema (`starts`) o edítalos en la app.
+- **Las ediciones** solo alcanzan el proceso principal de un BPMN (el que lee el simulador).
+  `edit_process` no agrega eventos de inicio ni les cambia el tipo: ponlos en el esquema (`starts`)
+  o edítalos en la app.
 - **Del esquema al escenario** solo pasan `duration`, `resources` y la `probability` de las ramas.
   Llegadas, calendarios, costos y capacidades van por `patch_scenario` o por una hoja.
 - **Una corrida larga tarda lo suyo.** El servidor sigue respondiendo e informa cada replicación, y

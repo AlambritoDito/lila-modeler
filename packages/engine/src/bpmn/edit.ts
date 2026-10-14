@@ -29,7 +29,13 @@ import { z } from 'zod';
 import lila from './lila.moddle.json' with { type: 'json' };
 import { isNCName, marcarExportador } from './ids.js';
 import {
+  associationsOf,
+  attachData,
+  attachNote,
   BPMN_TYPE,
+  dataName,
+  dataOf,
+  notesOf,
   OUTLINE_DATA_DIRECTIONS,
   OUTLINE_STEP_TYPES,
   OutlineBoundarySchema,
@@ -42,7 +48,7 @@ import {
 import type { ParseBpmnOptions } from './parse.js';
 import { validateBpmnXml } from './validate-report.js';
 import type { ValidationResult } from './validate.js';
-import { Diagram, is, relayout, type El } from './edit-layout.js';
+import { Diagram, everything, is, placeArtifacts, relayout, type Box, type El, type Point } from './edit-layout.js';
 import { laneOfNode, lanesOf, LayoutError } from './layout.js';
 import { messages, type CliMessages, type Locale } from '../messages/index.js';
 import type { Distribution } from '../scenario.js';
@@ -262,25 +268,6 @@ function isTimer(el: El): boolean {
   return ((el['eventDefinitions'] ?? []) as El[]).some((d) => d.$type === 'bpmn:TimerEventDefinition');
 }
 
-/** Every element of `root` reachable through its properties (semantic tree and DI), once. */
-function* everything(root: unknown): Generator<El> {
-  const seen = new Set<object>();
-  const stack: unknown[] = [root];
-  while (stack.length > 0) {
-    const value = stack.pop();
-    if (typeof value !== 'object' || value === null || seen.has(value)) continue;
-    seen.add(value);
-    if (Array.isArray(value)) {
-      stack.push(...value);
-      continue;
-    }
-    const el = value as El;
-    if (typeof el.$type !== 'string') continue;
-    yield el;
-    for (const key of Object.keys(el)) if (key !== '$parent') stack.push(el[key]);
-  }
-}
-
 /** The process the simulator reads (`parseBpmn`'s rule): executable and non-empty, else non-empty, else first. */
 function mainProcess(definitions: El, processId?: string): El | undefined {
   const processes = ((definitions['rootElements'] ?? []) as El[]).filter((el) => el.$type === 'bpmn:Process');
@@ -495,6 +482,9 @@ class Editor {
   /** Removes `node` with what hangs on it; its sequence flows must be handled before. Returns what else went. */
   deleteNode(node: El): string[] {
     const container = node['$parent'] as El;
+    // Its data associations go with it, and so do the data objects nothing else uses (#638).
+    const data = dataOf(node);
+    const dataIds = this.dropDataAssociations([...new Set(data.map((d) => d.association))]);
     container['flowElements'] = (container['flowElements'] as El[]).filter((el) => el !== node);
     for (const { lane } of lanesOf(this.process)) {
       if (Array.isArray(lane['flowNodeRef'])) lane['flowNodeRef'] = (lane['flowNodeRef'] as El[]).filter((n) => n !== node);
@@ -522,7 +512,120 @@ class Editor {
     }
     this.free(node.id);
     this.removed.push(node.id);
+    also.unshift(...dataIds);
+    also.push(...this.dropUnusedData(data.map((d) => d.reference)));
     return also;
+  }
+
+  /* --- artifacts (#638) --- */
+
+  /** Every association (`bpmn:Association`) of the document. */
+  associations(): El[] {
+    return this.links().filter((l) => l.$type === 'bpmn:Association');
+  }
+
+  /** Every data input or output association in the process (sub-processes included). */
+  dataLinks(): El[] {
+    return [...everything(this.process['flowElements'] ?? [])].filter(
+      (el) => el.$type === 'bpmn:DataInputAssociation' || el.$type === 'bpmn:DataOutputAssociation',
+    );
+  }
+
+  /** Whether any data association of the document reads or writes `ref`. */
+  dataUsed(ref: El): boolean {
+    for (const el of everything(this.definitions['rootElements'])) {
+      if (el.$type === 'bpmn:DataInputAssociation' && ((el['sourceRef'] ?? []) as El[]).includes(ref)) return true;
+      if (el.$type === 'bpmn:DataOutputAssociation' && el['targetRef'] === ref) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Removes data associations from their activity, with their edges, and the activity's
+   * `__targetRef_placeholder` property when no input association targets it any more. Returns their ids.
+   */
+  dropDataAssociations(associations: readonly El[]): string[] {
+    const gone: string[] = [];
+    for (const a of associations) {
+      const node = a['$parent'] as El;
+      for (const key of ['dataInputAssociations', 'dataOutputAssociations']) {
+        if (Array.isArray(node[key])) node[key] = (node[key] as El[]).filter((x) => x !== a);
+      }
+      this.free(a.id);
+      this.removed.push(a.id);
+      gone.push(a.id);
+      const property = a['targetRef'] as El | undefined;
+      if (a.$type === 'bpmn:DataInputAssociation' && property?.$type === 'bpmn:Property' && Array.isArray(node['properties'])) {
+        if (!((node['dataInputAssociations'] ?? []) as El[]).some((x) => x['targetRef'] === property)) {
+          node['properties'] = (node['properties'] as El[]).filter((x) => x !== property);
+          this.free(property.id);
+        }
+      }
+      this.touch(node);
+    }
+    return gone;
+  }
+
+  /** Removes the data object references of `refs` that nothing reads or writes any more, and their data objects. */
+  dropUnusedData(refs: readonly El[]): string[] {
+    const gone: string[] = [];
+    for (const ref of new Set(refs)) {
+      if (ref.$type !== 'bpmn:DataObjectReference' || !((ref['$parent']?.['flowElements'] ?? []) as El[]).includes(ref)) continue;
+      if (this.dataUsed(ref)) continue;
+      gone.push(...this.removeArtifact(ref));
+    }
+    return gone;
+  }
+
+  /**
+   * Removes an artifact or a data element, with what hangs on it: the associations of an annotation,
+   * group or data reference; the data associations of a data reference; every reference of a data
+   * object; a data object nothing refers to any more. Returns every id that went, its own first.
+   */
+  removeArtifact(el: El): string[] {
+    const owner = el['$parent'] as El;
+    if (el.$type === 'bpmn:Association') {
+      this.deleteLink(el);
+      return [el.id];
+    }
+    if (el.$type === 'bpmn:DataInputAssociation' || el.$type === 'bpmn:DataOutputAssociation') {
+      const ref = el.$type === 'bpmn:DataInputAssociation' ? ((el['sourceRef'] ?? []) as El[])[0] : (el['targetRef'] as El | undefined);
+      const gone = this.dropDataAssociations([el]);
+      return [...gone, ...this.dropUnusedData(ref === undefined ? [] : [ref])];
+    }
+    if (el.$type === 'bpmn:DataObject') {
+      const refs = [...everything(this.definitions['rootElements'])].filter((r) => r.$type === 'bpmn:DataObjectReference' && r['dataObjectRef'] === el);
+      const gone = refs.flatMap((r) => this.removeArtifact(r));
+      if (((owner['flowElements'] ?? []) as El[]).includes(el)) gone.unshift(...this.deleteNode(el), el.id);
+      return [el.id, ...gone.filter((id) => id !== el.id)];
+    }
+    if (el.$type === 'bpmn:DataObjectReference' || el.$type === 'bpmn:DataStoreReference') {
+      const links = this.dataLinks().filter((a) =>
+        a.$type === 'bpmn:DataInputAssociation' ? ((a['sourceRef'] ?? []) as El[]).includes(el) : a['targetRef'] === el,
+      );
+      const gone = this.dropDataAssociations(links);
+      gone.push(...this.deleteNode(el));
+      const object = el['dataObjectRef'] as El | undefined;
+      const shared = [...everything(this.definitions['rootElements'])].some((r) => r.$type === 'bpmn:DataObjectReference' && r['dataObjectRef'] === object);
+      if (object !== undefined && !shared && ((object['$parent']?.['flowElements'] ?? []) as El[]).includes(object)) {
+        gone.push(object.id, ...this.deleteNode(object));
+      }
+      return [el.id, ...gone];
+    }
+    // A text annotation or a group: its associations go too.
+    const gone: string[] = [el.id];
+    for (const link of this.associations()) {
+      if (link['sourceRef'] === el || link['targetRef'] === el) {
+        this.deleteLink(link);
+        gone.push(link.id);
+      }
+    }
+    for (const key of ['artifacts', 'flowElements']) {
+      if (Array.isArray(owner[key])) owner[key] = (owner[key] as El[]).filter((x) => x !== el);
+    }
+    this.free(el.id);
+    this.removed.push(el.id);
+    return gone;
   }
 
   /** Durations and resources of a new step go into the base scenario. */
@@ -617,12 +720,17 @@ class Editor {
       case 'addBoundary':
         return this.addBoundary(op, before);
       case 'removeLane':
+        return this.removeLane(op, before);
       case 'moveLane':
+        return this.moveLane(op, before);
       case 'annotate':
+        return this.annotate(op);
       case 'removeAnnotation':
+        return this.removeAnnotation(op);
       case 'addDataObject':
+        return this.addDataObject(op);
       case 'removeDataObject':
-        return this.issue('op', NOT_IMPLEMENTED);
+        return this.removeDataObject(op, before);
     }
   }
 
@@ -770,7 +878,13 @@ class Editor {
   remove(op: Extract<Op, { op: 'remove' }>): void {
     const el = this.find(op.id);
     if (el === undefined) return this.issue('id', this.C.editUnknownId(op.id));
-    if (!this.inProcess(el)) return this.issue('id', this.C.editOtherProcess(op.id, this.process.id));
+    // A text annotation, a group or an association of this pool can be listed in the collaboration.
+    const pooled = this.participant !== undefined && el['$parent'] === this.participant['$parent'] && ARTIFACTS.has(el.$type);
+    if (!this.inProcess(el) && !pooled) return this.issue('id', this.C.editOtherProcess(op.id, this.process.id));
+    if (ARTIFACTS.has(el.$type)) {
+      const also = this.removeArtifact(el).filter((id) => id !== el.id);
+      return this.change(this.C.editRemovedElement(op.id, el.$type.replace(/^bpmn:/, ''), also.join(', ')));
+    }
     if (el.$type === 'bpmn:SequenceFlow') {
       const target = el['targetRef'] as El | undefined;
       this.deleteFlow(el);
@@ -824,13 +938,19 @@ class Editor {
   }
 
   rename(op: Extract<Op, { op: 'rename' }>): void {
-    const el = this.find(op.id);
+    let el = this.find(op.id);
+    if (el === undefined) {
+      // No element has that id: a lane by its name.
+      const named = lanesOf(this.process).filter((l) => l.lane['name'] === op.id);
+      if (named.length > 1) return this.issue('id', this.C.editLaneAmbiguous(op.id, named.map((l) => l.lane.id).join(', ')));
+      el = named[0]?.lane;
+    }
     if (el === undefined) return this.issue('id', this.C.editUnknownId(op.id));
     const before = (el['name'] as string | undefined) ?? '';
     if (op.name === '') delete el['name'];
     else el['name'] = op.name;
     this.touch(el);
-    this.change(this.C.editRenamed(op.id, before, op.name));
+    this.change(this.C.editRenamed(el.id, before, op.name));
   }
 
   setType(op: Extract<Op, { op: 'setType' }>): void {
@@ -855,11 +975,26 @@ class Editor {
     const target = (replacement as any).$descriptor as { propertiesByName: Record<string, unknown> };
     const source = (el as any).$descriptor as { properties: { name: string }[] };
     const skip = new Set(['id', 'flowElements', 'artifacts', 'laneSets', 'eventDefinitions', 'triggeredByEvent']);
+    // Data associations the new type cannot hold (a gateway, say) go, with the data objects nothing
+    // else uses (#638).
+    const dropped: string[] = [];
+    const lostData = (['dataInputAssociations', 'dataOutputAssociations'] as const).filter(
+      (key) => target.propertiesByName[key] === undefined && ((el[key] ?? []) as El[]).length > 0,
+    );
+    if (lostData.length > 0) {
+      const refs = dataOf(el).map((d) => d.reference);
+      dropped.push(...this.dropDataAssociations(lostData.flatMap((key) => el[key] as El[])));
+      dropped.push(...this.dropUnusedData(refs));
+    }
     for (const { name } of source.properties) {
-      const value = el[name];
+      const value: unknown = el[name];
       if (skip.has(name) || target.propertiesByName[name] === undefined || value === undefined) continue;
       if (Array.isArray(value) && value.length === 0) continue;
       replacement['set'](name, Array.isArray(value) ? [...value] : value);
+      // What it contains (data associations, properties…) now belongs to the replacement.
+      for (const child of (Array.isArray(value) ? value : [value]) as unknown[]) {
+        if (typeof child === 'object' && child !== null && (child as El)['$parent'] === el) (child as El)['$parent'] = replacement;
+      }
     }
     Object.assign(replacement['$attrs'] ?? {}, el['$attrs'] ?? {});
     if (op.type === 'timer') replacement['eventDefinitions'] = isTimer(el) ? el['eventDefinitions'] : [this.eventDefinition('timer', el.id)];
@@ -867,7 +1002,7 @@ class Editor {
     replacement['$parent'] = container;
 
     // What was inside a sub-process goes with it.
-    const also: string[] = [];
+    const also: string[] = [...dropped];
     if (is(el, 'bpmn:SubProcess')) {
       const inner = [...everything(el['flowElements'] ?? []), ...everything(el['artifacts'] ?? [])].filter((x) => typeof x.id === 'string');
       for (const x of inner) {
@@ -1028,22 +1163,272 @@ class Editor {
     }
     for (const l of this.laneChain(lane)) ((l['flowNodeRef'] ??= []) as El[]).push(...moving);
 
-    const before = this.incremental ? this.diagram.bounds(el.id) : undefined;
-    const from = before === undefined ? undefined : { x: before.x, y: before.y };
-    if (this.incremental) for (const node of [el, ...ends]) this.diagram.moveIntoLane(node, lane, this.participant);
-    const after = this.diagram.bounds(el.id);
-    if (from !== undefined && after !== undefined) {
-      for (const b of attached) {
-        const box = this.diagram.bounds(b.id);
-        if (box !== undefined) this.diagram.setBounds(b.id, { ...box, x: box.x + after.x - from.x, y: box.y + after.y - from.y });
-      }
+    if (this.incremental) this.moveShapesIntoLane([el, ...ends], lane);
+    else for (const node of moving) for (const flow of [...this.incoming(node), ...this.outgoing(node)]) this.diagram.routeFlow(flow);
+    this.touch(el, lane, ...ends);
+    this.change(this.C.editMoved(op.id, (lane['name'] as string | undefined) ?? lane.id));
+  }
+
+  /* --- lanes and artifacts on the diagram (#638) --- */
+
+  /**
+   * Incremental layout: moves the shapes of `nodes` into the band of `lane`, each keeping its x;
+   * their boundary events ride along, and the annotations and data objects hung on them follow.
+   * Their flows and links are drawn again.
+   */
+  moveShapesIntoLane(nodes: readonly El[], lane: El): void {
+    const deltas = new Map<El, Point>();
+    for (const node of nodes) {
+      if (node['attachedToRef'] !== undefined) continue;
+      const from = this.diagram.bounds(node.id);
+      if (from === undefined) continue;
+      const before = { x: from.x, y: from.y };
+      this.diagram.moveIntoLane(node, lane, this.participant);
+      const after = this.diagram.bounds(node.id)!;
+      deltas.set(node, { x: after.x - before.x, y: after.y - before.y });
     }
-    for (const node of [el, ...attached, ...ends]) {
+    const riders = ((this.process['flowElements'] ?? []) as El[]).filter((b) => deltas.has(b['attachedToRef']));
+    for (const b of riders) this.shiftShape(b, deltas.get(b['attachedToRef'])!);
+    this.followAnchors(deltas);
+    for (const node of [...nodes, ...riders]) {
       for (const flow of [...this.incoming(node), ...this.outgoing(node)]) this.diagram.routeFlow(flow);
       this.diagram.rerouteAround(node.id, this.links());
     }
-    this.touch(el, lane, ...ends);
-    this.change(this.C.editMoved(op.id, (lane['name'] as string | undefined) ?? lane.id));
+  }
+
+  shiftShape(el: El, by: Point): void {
+    const box = this.diagram.bounds(el.id);
+    if (box !== undefined && (by.x !== 0 || by.y !== 0)) this.diagram.setBounds(el.id, { ...box, x: box.x + by.x, y: box.y + by.y });
+  }
+
+  /** The text annotations and data objects hung on a node of `deltas` move with it (once, with the first). */
+  followAnchors(deltas: ReadonlyMap<El, Point>): void {
+    const done = new Set<El>(deltas.keys());
+    const follow = (artifact: El | undefined, node: El): void => {
+      if (artifact === undefined || done.has(artifact) || !deltas.has(node)) return;
+      done.add(artifact);
+      this.shiftShape(artifact, deltas.get(node)!);
+    };
+    for (const a of this.associations()) {
+      if (deltas.has(a['sourceRef'])) follow(a['targetRef'], a['sourceRef']);
+      else if (deltas.has(a['targetRef'])) follow(a['sourceRef'], a['targetRef']);
+    }
+    for (const node of deltas.keys()) for (const { reference } of dataOf(node)) follow(reference, node);
+  }
+
+  laneName(lane: El): string {
+    return (lane['name'] as string | undefined) || lane.id;
+  }
+
+  removeLane(op: Extract<Op, { op: 'removeLane' }>, before: number): void {
+    if (lanesOf(this.process).length === 0) return this.issue('lane', this.C.editLaneUnknown(op.lane, ''));
+    const lane = this.lane(op.lane, 'lane');
+    if (lane === undefined) return;
+    const children = (lane['childLaneSet']?.['lanes'] ?? []) as El[];
+    if (children.length > 0) return this.issue('lane', this.C.editLaneHasSubLanes(this.laneName(lane), children.map((l) => this.laneName(l)).join(', ')));
+    const only = lanesOf(this.process).length === 1;
+    const nodes = ((lane['flowNodeRef'] ?? []) as El[]).filter((n) => n['$parent'] === this.process);
+    let target: El | undefined;
+    if (op.moveStepsTo !== undefined) {
+      target = this.lane(op.moveStepsTo, 'moveStepsTo');
+      const grandchildren = (target?.['childLaneSet']?.['lanes'] ?? []) as El[];
+      if (target === lane) this.issue('moveStepsTo', this.C.editLaneSameTarget(this.laneName(lane)));
+      else if (target !== undefined && grandchildren.length > 0) {
+        this.issue('moveStepsTo', this.C.editLaneTargetNotLeaf(this.laneName(target), grandchildren.map((l) => this.laneName(l)).join(', ')));
+      }
+    } else if (!only && nodes.length > 0) {
+      this.issue('moveStepsTo', this.C.editLaneNotEmpty(this.laneName(lane), nodes.map((n) => n.id).join(', ')));
+    }
+    if (this.issues.length > before) return;
+
+    const plane = this.incremental && this.diagram.hasDi ? this.diagram.mainPlane(this.process) : undefined;
+    const old = this.diagram.bounds(lane.id);
+    const band = old === undefined ? undefined : { x: old.x, y: old.y, width: old.width, height: old.height };
+    // Its nodes go to the target lane (and the lanes above it).
+    if (target !== undefined && nodes.length > 0) {
+      for (const { lane: l } of lanesOf(this.process)) {
+        if (Array.isArray(l['flowNodeRef'])) l['flowNodeRef'] = (l['flowNodeRef'] as El[]).filter((n) => !nodes.includes(n));
+      }
+      for (const l of this.laneChain(target)) ((l['flowNodeRef'] ??= []) as El[]).push(...nodes);
+      if (plane !== undefined) this.moveShapesIntoLane(nodes, target);
+    }
+    // The lane leaves its lane set; an emptied lane set leaves its owner (the process, or a parent lane).
+    const laneSet = lane['$parent'] as El;
+    laneSet['lanes'] = ((laneSet['lanes'] ?? []) as El[]).filter((l) => l !== lane);
+    const owner = laneSet['$parent'] as El;
+    const emptied = (laneSet['lanes'] as El[]).length === 0;
+    if (emptied) {
+      if (owner.$type === 'bpmn:Lane') delete owner['childLaneSet'];
+      else {
+        owner['laneSets'] = ((owner['laneSets'] ?? []) as El[]).filter((ls) => ls !== laneSet);
+        if ((owner['laneSets'] as El[]).length === 0) delete owner['laneSets'];
+      }
+      this.free(laneSet.id);
+      this.removed.push(laneSet.id);
+    }
+    // Its sequence flows that cross the band are drawn again once the band is gone.
+    const crossing =
+      plane === undefined || band === undefined
+        ? []
+        : this.flows(this.process).filter((f) =>
+            ((this.diagram.edges.get(f.id)?.['waypoint'] ?? []) as Point[]).some((p) => p.y > band.y && p.y < band.y + band.height),
+          );
+    this.free(lane.id);
+    this.removed.push(lane.id);
+    // The lanes below move up into its band, unless it was the last lane of its set (the parent lane,
+    // or the pool, keeps the room).
+    if (plane !== undefined && band !== undefined && !emptied) {
+      const parent = owner.$type === 'bpmn:Lane' ? owner : undefined;
+      this.diagram.shiftDown(plane, band.y + band.height, -band.height, new Set(), this.diagram.growing(parent, this.participant));
+      for (const flow of [...crossing, ...nodes.flatMap((n) => [...this.incoming(n), ...this.outgoing(n)])]) this.diagram.routeFlow(flow);
+    }
+    this.touch(target, ...nodes);
+    if (only) this.change(this.C.editLastLaneRemoved(this.laneName(lane), lane.id));
+    else this.change(this.C.editLaneRemoved(this.laneName(lane), lane.id, target === undefined ? '' : this.laneName(target), nodes.map((n) => n.id).join(', ')));
+  }
+
+  moveLane(op: Extract<Op, { op: 'moveLane' }>, before: number): void {
+    if (lanesOf(this.process).length === 0) return this.issue('lane', this.C.editLaneUnknown(op.lane, ''));
+    const where = op.before !== undefined ? 'before' : 'after';
+    const lane = this.lane(op.lane, 'lane');
+    const other = this.lane((op.before ?? op.after)!, where);
+    if (lane !== undefined && other !== undefined) {
+      if (lane === other) this.issue(where, this.C.editLaneSelf(this.laneName(lane)));
+      else if (lane['$parent'] !== other['$parent']) this.issue(where, this.C.editLaneNotSibling(this.laneName(lane), this.laneName(other)));
+    }
+    if (this.issues.length > before || lane === undefined || other === undefined) return;
+    const lanes = lane['$parent']['lanes'] as El[];
+    const order = [...lanes];
+    lanes.splice(lanes.indexOf(lane), 1);
+    lanes.splice(lanes.indexOf(other) + (where === 'after' ? 1 : 0), 0, lane);
+    this.touch(lane, other);
+    const plane = this.incremental && this.diagram.hasDi ? this.diagram.mainPlane(this.process) : undefined;
+    if (plane !== undefined) this.restack(plane, order, lanes);
+    this.change(this.C.editLaneMoved(this.laneName(lane), where, this.laneName(other)));
+  }
+
+  /**
+   * Incremental layout of a lane reorder: each sibling's band moves whole to its new place, with
+   * every shape whose centre lies in it (steps keep their x); edges inside one band move with it, and
+   * the sequence flows that cross bands are routed again.
+   */
+  restack(plane: El, order: readonly El[], lanes: readonly El[]): void {
+    const boxes = order.map((l) => this.diagram.bounds(l.id));
+    if (boxes.some((b) => b === undefined)) return;
+    const bands = new Map<El, Box>(order.map((l, i) => [l, { ...boxes[i]! }]));
+    let y = Math.min(...boxes.map((b) => b!.y));
+    const dy = new Map<El, number>();
+    for (const l of lanes) {
+      dy.set(l, y - bands.get(l)!.y);
+      y += bands.get(l)!.height;
+    }
+    const left = Math.min(...boxes.map((b) => b!.x)) - 30;
+    const right = Math.max(...boxes.map((b) => b!.x + b!.width));
+    const bandOf = (p: Point): El | undefined =>
+      p.x < left || p.x > right ? undefined : order.find((l) => p.y >= bands.get(l)!.y && p.y < bands.get(l)!.y + bands.get(l)!.height);
+    const cross: El[] = [];
+    for (const di of (plane['planeElement'] ?? []) as El[]) {
+      const el = di['bpmnElement'] as El | undefined;
+      if (el === undefined || is(el, 'bpmn:Participant')) continue;
+      if (di.$type === 'bpmndi:BPMNShape') {
+        const b = di['bounds'] as Box;
+        const lane = bandOf({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
+        const by = lane === undefined ? 0 : dy.get(lane)!;
+        if (by === 0) continue;
+        b.y += by;
+        if (di['label']?.['bounds'] !== undefined) di['label']['bounds'].y += by;
+        this.diagram.moved.add(el.id);
+      } else if (di.$type === 'bpmndi:BPMNEdge') {
+        const points = (di['waypoint'] ?? []) as Point[];
+        const owners = new Set(points.map(bandOf));
+        const only = owners.size === 1 ? [...owners][0] : undefined;
+        if (only !== undefined) {
+          const by = dy.get(only)!;
+          for (const p of points) p.y += by;
+          if (di['label']?.['bounds'] !== undefined) di['label']['bounds'].y += by;
+        } else if (el.$type === 'bpmn:SequenceFlow' && points.some((p) => bandOf(p) !== undefined)) cross.push(el);
+      }
+    }
+    for (const flow of cross) this.diagram.routeFlow(flow);
+  }
+
+  annotate(op: Extract<Op, { op: 'annotate' }>): void {
+    const node = this.node(op.on, 'on');
+    if (node === undefined) return;
+    if (notesOf(node, this.associations()).some((n) => n.annotation['text'] === op.text)) return this.change(this.C.editNoteExists(op.on, op.text));
+    const { annotation, association } = attachNote(node, op.text, (type, attrs) => this.create(type, attrs), (base) => this.uniqueId(base));
+    this.touch(node, annotation, association);
+    this.change(this.C.editNoteAdded(op.on, op.text, annotation.id));
+  }
+
+  removeAnnotation(op: Extract<Op, { op: 'removeAnnotation' }>): void {
+    const node = this.node(op.on, 'on');
+    if (node === undefined) return;
+    const notes = notesOf(node, this.associations());
+    const matches = notes.filter((n) => n.annotation['text'] === op.text);
+    if (matches.length === 0) {
+      const texts = [...new Set(notes.map((n) => `"${(n.annotation['text'] as string | undefined) ?? ''}"`))].join(', ');
+      return this.issue('text', this.C.editNoNote(op.on, op.text, texts));
+    }
+    const gone: string[] = [];
+    for (const { annotation, association } of matches) {
+      this.deleteLink(association);
+      gone.push(association.id);
+      // An annotation another element still points at stays.
+      if (!this.associations().some((a) => a['sourceRef'] === annotation || a['targetRef'] === annotation)) gone.push(...this.removeArtifact(annotation));
+    }
+    this.touch(node);
+    this.change(this.C.editNoteRemoved(op.on, op.text, gone.join(', ')));
+  }
+
+  addDataObject(op: Extract<Op, { op: 'addDataObject' }>): void {
+    const node = this.node(op.on, 'on');
+    if (node === undefined) return;
+    if (!is(node, 'bpmn:Activity')) return this.issue('on', this.C.outlineFieldNotApplicable(op.on, 'data', typeName(node)));
+    if (dataOf(node).some((d) => d.direction === op.direction && dataName(d.reference) === op.name)) {
+      return this.change(this.C.editDataExists(op.name, op.on, op.direction));
+    }
+    const { reference, created, association } = attachData(node, op.name, op.direction, (type, attrs) => this.create(type, attrs), (base) => this.uniqueId(base));
+    this.touch(node, reference, association);
+    this.change(this.C.editDataAdded(op.name, op.on, op.direction, reference.id, created.length > 0));
+  }
+
+  removeDataObject(op: Extract<Op, { op: 'removeDataObject' }>, before: number): void {
+    const all = [...everything(this.process['flowElements'] ?? [])].filter((el) => el.$type === 'bpmn:DataObjectReference');
+    const refs = all.filter((el) => dataName(el) === op.name);
+    if (refs.length === 0) {
+      const names = [...new Set(all.map(dataName).filter((n) => n !== undefined))].map((n) => `"${n}"`).join(', ');
+      this.issue('name', this.C.editNoDataObject(op.name, names));
+    }
+    const node = op.on === undefined ? undefined : this.node(op.on, 'on');
+    if (this.issues.length > before) return;
+    const links = this.dataLinks().filter(
+      (a) =>
+        (node === undefined || a['$parent'] === node) &&
+        refs.some((r) => (a.$type === 'bpmn:DataInputAssociation' ? ((a['sourceRef'] ?? []) as El[]).includes(r) : a['targetRef'] === r)),
+    );
+    if (node !== undefined && links.length === 0) return this.issue('on', this.C.editDataNotConnected(op.name, op.on!));
+    const gone = this.dropDataAssociations(links);
+    gone.push(...this.dropUnusedData(refs));
+    this.touch(node);
+    this.change(this.C.editDataRemoved(op.name, op.on, gone.join(', ')));
+  }
+
+  /**
+   * The annotations and data objects without a shape (new ones, #638) get one beside their node,
+   * and associations without an edge get one, on the plane of each container.
+   */
+  placeArtifacts(): void {
+    if (!this.diagram.hasDi) return;
+    const containers = [this.process, ...[...everything(this.process['flowElements'] ?? [])].filter((el) => el.$type === 'bpmn:SubProcess')];
+    const associations = associationsOf(this.definitions, this.process);
+    for (const container of containers) {
+      const plane = this.diagram.planeFor(container, this.process);
+      if (plane === undefined) continue;
+      const nodes = ((container['flowElements'] ?? []) as El[]).filter((el) => is(el, 'bpmn:FlowNode'));
+      const own = container === this.process ? associations : ((container['artifacts'] ?? []) as El[]).filter((a) => a.$type === 'bpmn:Association');
+      placeArtifacts(this.diagram, plane, container, nodes, own, nodes.flatMap((n) => dataOf(n).map((d) => d.association)));
+    }
   }
 
   addLane(op: Extract<Op, { op: 'addLane' }>, before: number): void {
@@ -1117,11 +1502,17 @@ class Editor {
  * Reading the operations: one pass, every problem, catalog messages
  * ------------------------------------------------------------------ */
 
-/**
- * Lote Q (#638): the reader accepts the lane and artifact operations, the editor does not yet. Each
- * use is refused until the implementation lands.
- */
-const NOT_IMPLEMENTED = 'not implemented yet (#638).';
+/** What `remove` takes besides steps, flows and boundary events (#638). */
+const ARTIFACTS: ReadonlySet<string> = new Set([
+  'bpmn:TextAnnotation',
+  'bpmn:Group',
+  'bpmn:Association',
+  'bpmn:DataObject',
+  'bpmn:DataObjectReference',
+  'bpmn:DataStoreReference',
+  'bpmn:DataInputAssociation',
+  'bpmn:DataOutputAssociation',
+]);
 
 const OP_KEYS: Readonly<Record<Op['op'], readonly string[]>> = {
   add: ['op', 'step', 'after', 'between'],
@@ -1352,7 +1743,11 @@ export async function editBpmn(xml: string, operations: unknown, options: EditBp
       if (!(error instanceof LayoutError)) throw error;
       fail(C, [{ op: null, path: 'layout', message: C.editLayoutFailed(error.message) }]);
     }
+    // The content of sub-processes keeps its drawing: new annotations and data objects there get a shape.
+    editor.placeArtifacts();
   } else {
+    // New annotations and data objects get a shape beside their node (#638).
+    editor.placeArtifacts();
     // Flows that now run through a new or moved shape go around it; the flows drawn again get
     // their labels on their own segment, as `create_process` does.
     editor.diagram.untangle([...everything(process['flowElements'] ?? [])].filter((el) => el.$type === 'bpmn:SequenceFlow'));
@@ -1365,6 +1760,10 @@ export async function editBpmn(xml: string, operations: unknown, options: EditBp
     const links = editor.links();
     const touched = (link: El): boolean => editor.diagram.moved.has(link['sourceRef']?.id) || editor.diagram.moved.has(link['targetRef']?.id);
     for (const link of links) if (link.$type !== 'bpmn:MessageFlow' && touched(link)) editor.diagram.routeOther(link);
+    for (const link of editor.dataLinks()) {
+      const ref = link.$type === 'bpmn:DataInputAssociation' ? ((link['sourceRef'] ?? []) as El[])[0] : (link['targetRef'] as El | undefined);
+      if (editor.diagram.moved.has(link['$parent'].id) || (ref !== undefined && editor.diagram.moved.has(ref.id))) editor.diagram.routeOther(link);
+    }
     if (links.some((link) => link.$type === 'bpmn:MessageFlow' && touched(link))) editor.diagram.routeMessages(definitions);
   }
   const { xml: raw } = await moddle.toXML(rootElement, { format: true });

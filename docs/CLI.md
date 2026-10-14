@@ -335,7 +335,8 @@ deadline.
 duration, resources and where it goes (`end`, `terminate`, or the branches with their probability
 and `default`); the starts come first when the outline lists them (`start` or `timer start`, and the
 step each one leads to), and each boundary timer gets a line under its step (`boundary <id>  timer`
-or `timer (non-interrupting)`, its name, its delay and where it leads). `--json` prints `{ slug, outline, warnings }`, the outline in
+or `timer (non-interrupting)`, its name, its delay and where it leads), and so do its data objects
+(`data in` or `data out` and the name) and its notes (`note` and the text). `--json` prints `{ slug, outline, warnings }`, the outline in
 normal form (the form `create_process` returns). Durations, resources and branch probabilities
 come from the process's `as-is.scenario.json`. What an outline cannot carry is reported on stderr.
 
@@ -355,7 +356,8 @@ Process "Restaurant" (pedido)
 
 `process edit` applies a list of operations to one process, all or none: the JSON array the MCP
 tool `edit_process` takes as `operations` (`add`, `connect`, `remove`, `rename`, `setType`,
-`moveToLane`, `addLane`, `addBoundary`…; format and rules in [`docs/MCP.md`](MCP.md#editing-a-process)). Every
+`moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`, `annotate`, `addDataObject`…; format and rules in
+[`docs/MCP.md`](MCP.md#editing-a-process)). Every
 operation is checked, the result is validated, and the `.lila` is written only if all of it is fine;
 otherwise it exits `1`, writes nothing and lists every problem with the index of its operation. The
 process is laid out again unless `--no-layout`, which keeps every position and only places the new

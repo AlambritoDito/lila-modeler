@@ -15,6 +15,7 @@ import { editBpmn, EditError, EditOperationsSchema, type EditOperation } from '.
 import { bpmnToOutline, outlineToBpmn } from '../../src/bpmn/outline.js';
 import { validateBpmnXml } from '../../src/bpmn/validate-report.js';
 import type { ScenarioDocument } from '../../src/project/types.js';
+import { expectCleanImport } from '../fixtures/bpmn-import.js';
 import { CREDIT, ORDER } from '../fixtures/outlines.js';
 
 const repo = fileURLToPath(new URL('../../../../', import.meta.url));
@@ -601,33 +602,27 @@ describe('the operations reader: addBoundary, lanes, annotations, data objects, 
     expect(EditOperationsSchema.safeParse(ops).success).toBe(true);
   });
 
-  test('well-formed ones pass the reader: only the not-yet-built ones (#638) are refused', async () => {
+  test('well-formed ones pass the reader and are applied, in order', async () => {
     const { xml, scenario } = await credit();
-    const error = await refused(
+    const edit = await editBpmn(
       xml,
       [
         { op: 'add', step: { id: 'mail', type: 'sendTask' }, after: 'receive' },
         { op: 'setType', id: 'EndEvent_issue', type: 'terminate' },
         { op: 'connect', from: 'ok', to: 'issue', default: true },
         { op: 'addBoundary', on: 'check', boundary: { id: 'sla', type: 'timer', duration: '48h', end: 'terminate' } },
-        { op: 'removeLane', lane: 'Customer' },
-        { op: 'moveLane', lane: 'Analyst', after: 'Customer' },
+        { op: 'moveLane', lane: 'Analyst', before: 'Customer' },
         { op: 'annotate', on: 'check', text: 'Within 48 h' },
         { op: 'removeAnnotation', on: 'check', text: 'Within 48 h' },
         { op: 'addDataObject', name: 'Claim file', on: 'check', direction: 'out' },
         { op: 'removeDataObject', name: 'Claim file', on: 'check' },
+        { op: 'removeLane', lane: 'Customer', moveStepsTo: 'Analyst' },
       ],
       { scenario },
     );
-    expect(error.issues.every((i) => i.message.startsWith('not implemented yet'))).toBe(true);
-    expect(error.issues.map((i) => [i.op, i.path])).toEqual([
-      [4, 'op'],
-      [5, 'op'],
-      [6, 'op'],
-      [7, 'op'],
-      [8, 'op'],
-      [9, 'op'],
-    ]);
+    expect(edit.changes.map((c) => c.op)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(await errorsOf(edit.xml)).toEqual([]);
+    expect((await outlineOf(edit.xml, edit.scenario)).lanes).toEqual(['Analyst']);
   });
 
   test('every malformed new operation, at its index and path, at once', async () => {
@@ -886,5 +881,363 @@ describe.each([true, false])('the #631 operations (layout %s)', (layout) => {
     expect(step('wait')).toMatchObject({ type: 'eventGateway', branches: [{ to: 'answer' }, { to: 'late' }] });
     expect(step('answer')).toMatchObject({ type: 'message', duration: { type: 'constant', value: 86400 } });
     expect(step('late')).toMatchObject({ type: 'timer', duration: { type: 'constant', value: 432000 } });
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * Lote Q (#638): lanes, text annotations and data objects
+ * ------------------------------------------------------------------ */
+
+/** A pool with a parent lane (two sub-lanes) and a plain lane, no diagram. */
+const NESTED_LANES = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="x">
+  <bpmn:collaboration id="C"><bpmn:participant id="Pool" name="Claims" processRef="P"/></bpmn:collaboration>
+  <bpmn:process id="P" isExecutable="true">
+    <bpmn:laneSet id="LS">
+      <bpmn:lane id="Office" name="Office"><bpmn:flowNodeRef>s</bpmn:flowNodeRef><bpmn:flowNodeRef>a</bpmn:flowNodeRef><bpmn:flowNodeRef>b</bpmn:flowNodeRef>
+        <bpmn:childLaneSet id="LS2">
+          <bpmn:lane id="Desk" name="Desk"><bpmn:flowNodeRef>s</bpmn:flowNodeRef><bpmn:flowNodeRef>a</bpmn:flowNodeRef></bpmn:lane>
+          <bpmn:lane id="Back" name="Back"><bpmn:flowNodeRef>b</bpmn:flowNodeRef></bpmn:lane>
+        </bpmn:childLaneSet>
+      </bpmn:lane>
+      <bpmn:lane id="Field" name="Field"><bpmn:flowNodeRef>c</bpmn:flowNodeRef><bpmn:flowNodeRef>e</bpmn:flowNodeRef></bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="s"/>
+    <bpmn:task id="a" name="A"/>
+    <bpmn:task id="b" name="B"/>
+    <bpmn:task id="c" name="C"/>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="a"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="a" targetRef="b"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="b" targetRef="c"/>
+    <bpmn:sequenceFlow id="f4" sourceRef="c" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`;
+
+/** The bounds of each lane of the main plane, top to bottom. */
+async function laneBands(xml: string): Promise<{ id: string; y: number; height: number }[]> {
+  const { shapes } = await di(xml);
+  const { rootElement } = await BpmnModdle().fromXML(xml);
+  const lanes = ((rootElement as any).rootElements.find((e: any) => e.$type === 'bpmn:Process').laneSets?.[0]?.lanes ?? []) as any[];
+  return lanes.map((l) => ({ id: l.id as string, y: shapes.get(l.id)!.y, height: shapes.get(l.id)!.height })).sort((a, b) => a.y - b.y);
+}
+
+describe.each([true, false])('the #638 operations (layout %s)', (layout) => {
+  test('removeLane with moveStepsTo: its nodes (steps and ends) go to that lane, the lane leaves the model and the diagram', async () => {
+    const { xml, scenario } = await credit();
+    const edit = await editBpmn(xml, [{ op: 'removeLane', lane: 'Customer', moveStepsTo: 'Analyst' }], { scenario, layout });
+    expect(await errorsOf(edit.xml)).toEqual([]);
+    await expectCleanImport(edit.xml);
+    expect(edit.changes[0]!.message).toBe('removed lane "Customer" (Lane_1); reject, EndEvent_reject moved to lane "Analyst"');
+    expect(edit.removed).toEqual(['Lane_1']);
+    const outline = await outlineOf(edit.xml, scenario);
+    expect(outline.lanes).toEqual(['Analyst']);
+    expect(outline.steps.every((s) => s.lane === 'Analyst')).toBe(true);
+    expect(await laneOfNode(edit.xml, 'EndEvent_reject')).toBe('Lane_2');
+    const { shapes } = await di(edit.xml);
+    expect(shapes.has('Lane_1')).toBe(false);
+    const lane = shapes.get('Lane_2')!;
+    const pool = shapes.get('Participant_1')!;
+    expect(lane.y).toBe(pool.y);
+    expect(lane.height).toBe(pool.height);
+    for (const id of ['receive', 'check', 'ok', 'issue', 'reject', 'EndEvent_reject']) {
+      const box = shapes.get(id)!;
+      expect(box.y, id).toBeGreaterThanOrEqual(lane.y);
+      expect(box.y + box.height, id).toBeLessThanOrEqual(lane.y + lane.height);
+    }
+    if (!layout) {
+      // Every step keeps its column.
+      const before = (await di(xml)).shapes;
+      for (const id of ['receive', 'check', 'ok', 'issue', 'reject']) expect(shapes.get(id)!.x, id).toBe(before.get(id)!.x);
+    }
+  });
+
+  test('removeLane of an empty lane needs no moveStepsTo; of the last lane, the lane set goes and the pool stays', async () => {
+    const { xml, scenario } = await credit();
+    const edit = await editBpmn(
+      xml,
+      [
+        { op: 'addLane', name: 'Back office' },
+        { op: 'removeLane', lane: 'Back office' },
+        { op: 'removeLane', lane: 'Customer', moveStepsTo: 'Analyst' },
+        { op: 'removeLane', lane: 'Analyst' },
+      ],
+      { scenario, layout },
+    );
+    expect(await errorsOf(edit.xml)).toEqual([]);
+    await expectCleanImport(edit.xml);
+    expect(edit.changes.map((c) => c.message)).toEqual([
+      'added lane "Back office" (Lane_3)',
+      'removed lane "Back office" (Lane_3)',
+      'removed lane "Customer" (Lane_1); reject, EndEvent_reject moved to lane "Analyst"',
+      'removed lane "Analyst" (Lane_2), the last one: the process has no lanes now and its nodes stay in the pool',
+    ]);
+    expect(edit.xml).not.toContain('laneSet');
+    expect(edit.xml).toContain('<bpmn:participant id="Participant_1"');
+    const outline = await outlineOf(edit.xml, scenario);
+    expect(outline.lanes).toBeUndefined();
+    expect(outline.steps.map((s) => s.id)).toEqual(['receive', 'check', 'ok', 'issue', 'reject']);
+    const { shapes } = await di(edit.xml);
+    const pool = shapes.get('Participant_1')!;
+    for (const id of ['receive', 'check', 'ok', 'issue', 'reject']) {
+      const box = shapes.get(id)!;
+      expect(box.y >= pool.y && box.y + box.height <= pool.y + pool.height, id).toBe(true);
+    }
+  });
+
+  test('moveLane: the band moves whole, before or after a sibling; each step keeps its x', async () => {
+    const { xml, scenario } = await credit();
+    const edit = await editBpmn(xml, [{ op: 'moveLane', lane: 'Analyst', before: 'Customer' }], { scenario, layout });
+    expect(await errorsOf(edit.xml)).toEqual([]);
+    await expectCleanImport(edit.xml);
+    expect(edit.changes[0]!.message).toBe('moved lane "Analyst" above "Customer"');
+    expect((await outlineOf(edit.xml, scenario)).lanes).toEqual(['Analyst', 'Customer']);
+    const bands = await laneBands(edit.xml);
+    expect(bands.map((b) => b.id)).toEqual(['Lane_2', 'Lane_1']);
+    expect(bands[1]!.y).toBe(bands[0]!.y + bands[0]!.height);
+    const { shapes, edges } = await di(edit.xml);
+    const inBand = (id: string, lane: string): boolean => {
+      const b = shapes.get(id)!;
+      const l = shapes.get(lane)!;
+      return b.y >= l.y && b.y + b.height <= l.y + l.height;
+    };
+    for (const id of ['receive', 'check', 'ok', 'issue']) expect(inBand(id, 'Lane_2'), id).toBe(true);
+    expect(inBand('reject', 'Lane_1')).toBe(true);
+    if (!layout) {
+      const before = await di(xml);
+      for (const id of ['receive', 'check', 'ok', 'issue', 'reject']) expect(shapes.get(id)!.x, id).toBe(before.shapes.get(id)!.x);
+      // A flow inside one band moves with it unchanged in shape.
+      const dy = shapes.get('receive')!.y - before.shapes.get('receive')!.y;
+      expect(edges.get('Flow_receive_check')).toEqual(before.edges.get('Flow_receive_check')!.map((p) => ({ x: p.x, y: p.y + dy })));
+      // The flow across the bands still joins its two shapes.
+      const cross = edges.get('Flow_ok_reject')!;
+      const reject = shapes.get('reject')!;
+      expect(cross.at(-1)!.y).toBeGreaterThanOrEqual(reject.y);
+      expect(cross.at(-1)!.y).toBeLessThanOrEqual(reject.y + reject.height);
+    }
+    const back = await editBpmn(edit.xml, [{ op: 'moveLane', lane: 'Analyst', after: 'Customer' }], { scenario, layout });
+    expect((await outlineOf(back.xml, scenario)).lanes).toEqual(['Customer', 'Analyst']);
+  });
+
+  test('rename a lane by its name', async () => {
+    const { xml, scenario } = await credit();
+    const edit = await editBpmn(xml, [{ op: 'rename', id: 'Customer', name: 'Client' }], { scenario, layout });
+    expect(edit.changes[0]!.message).toBe('renamed "Lane_1": "Customer" → "Client"');
+    expect((await outlineOf(edit.xml, scenario)).lanes).toEqual(['Client', 'Analyst']);
+  });
+
+  test('annotate and removeAnnotation: the step\'s notes; the same text twice changes nothing', async () => {
+    const { xml, scenario } = await credit();
+    const edit = await editBpmn(
+      xml,
+      [
+        { op: 'annotate', on: 'check', text: 'Within 48 h' },
+        { op: 'annotate', on: 'check', text: 'Bureau B as fallback' },
+        { op: 'annotate', on: 'check', text: 'Within 48 h' },
+        { op: 'annotate', on: 'ok', text: 'Policy 7' },
+      ],
+      { scenario, layout },
+    );
+    expect(await errorsOf(edit.xml)).toEqual([]);
+    await expectCleanImport(edit.xml);
+    expect(edit.changes.map((c) => c.message)).toEqual([
+      'annotated "check": "Within 48 h" (TextAnnotation_check)',
+      'annotated "check": "Bureau B as fallback" (TextAnnotation_check_2)',
+      '"check" already has the text annotation "Within 48 h"; nothing changed',
+      'annotated "ok": "Policy 7" (TextAnnotation_ok)',
+    ]);
+    const reading = await bpmnToOutline(edit.xml, { scenario: scenario as Record<string, unknown> });
+    expect(reading.warnings).toEqual([]);
+    expect(reading.outline.steps.find((s) => s.id === 'check')!.notes).toEqual(['Within 48 h', 'Bureau B as fallback']);
+    // Each annotation is drawn beside its step, overlapping no other shape.
+    const { shapes } = await di(edit.xml);
+    const note = shapes.get('TextAnnotation_check')!;
+    for (const [id, b] of shapes) {
+      if (id === 'TextAnnotation_check' || id.startsWith('Lane_') || id.startsWith('Participant_')) continue;
+      const apart = note.x + note.width <= b.x || b.x + b.width <= note.x || note.y + note.height <= b.y || b.y + b.height <= note.y;
+      expect(apart, id).toBe(true);
+    }
+
+    const removed = await editBpmn(edit.xml, [{ op: 'removeAnnotation', on: 'check', text: 'Within 48 h' }], { scenario, layout });
+    expect(removed.changes[0]!.message).toBe('removed the text annotation "Within 48 h" from "check" (Association_check, TextAnnotation_check)');
+    expect(removed.removed).toEqual(['Association_check', 'TextAnnotation_check']);
+    await expectCleanImport(removed.xml);
+    expect((await outlineOf(removed.xml, scenario)).steps.find((s) => s.id === 'check')!.notes).toEqual(['Bureau B as fallback']);
+    expect(removed.xml).not.toContain('Within 48 h');
+  });
+
+  test('addDataObject reuses the object by name; removeDataObject disconnects it and removes it once nothing uses it', async () => {
+    const { xml, scenario } = await credit();
+    const edit = await editBpmn(
+      xml,
+      [
+        { op: 'addDataObject', name: 'Application', on: 'receive', direction: 'out' },
+        { op: 'addDataObject', name: 'Application', on: 'check', direction: 'in' },
+        { op: 'addDataObject', name: 'Application', on: 'check', direction: 'in' },
+        { op: 'addDataObject', name: 'Bureau report', on: 'check', direction: 'out' },
+      ],
+      { scenario, layout },
+    );
+    expect(await errorsOf(edit.xml)).toEqual([]);
+    await expectCleanImport(edit.xml);
+    expect(edit.changes.map((c) => c.message)).toEqual([
+      '"receive" writes data object "Application" (DataObjectReference_receive, new)',
+      '"check" reads data object "Application" (DataObjectReference_receive)',
+      '"check" already reads data object "Application"; nothing changed',
+      '"check" writes data object "Bureau report" (DataObjectReference_check, new)',
+    ]);
+    expect(edit.xml.match(/<bpmn:dataObjectReference /g)).toHaveLength(2);
+    const reading = await bpmnToOutline(edit.xml, { scenario: scenario as Record<string, unknown> });
+    expect(reading.warnings).toEqual([]);
+    const step = (outline: typeof reading.outline, id: string) => outline.steps.find((s) => s.id === id)!;
+    expect(step(reading.outline, 'receive').data).toEqual([{ name: 'Application', direction: 'out' }]);
+    expect(step(reading.outline, 'check').data).toEqual([
+      { name: 'Application', direction: 'in' },
+      { name: 'Bureau report', direction: 'out' },
+    ]);
+
+    const one = await editBpmn(edit.xml, [{ op: 'removeDataObject', name: 'Application', on: 'check' }], { scenario, layout });
+    expect(one.removed).toEqual(['DataInputAssociation_check']);
+    expect(one.xml).not.toContain('__targetRef_placeholder');
+    await expectCleanImport(one.xml);
+    expect(step(await outlineOf(one.xml, scenario), 'check').data).toEqual([{ name: 'Bureau report', direction: 'out' }]);
+
+    const all = await editBpmn(one.xml, [{ op: 'removeDataObject', name: 'Application' }], { scenario, layout });
+    expect(all.removed).toEqual(['DataOutputAssociation_receive', 'DataObjectReference_receive', 'DataObject_receive']);
+    expect(all.changes[0]!.message).toBe(
+      'disconnected data object "Application" (DataOutputAssociation_receive, DataObjectReference_receive, DataObject_receive)',
+    );
+    await expectCleanImport(all.xml);
+    expect(all.xml).not.toContain('Application');
+  });
+
+  test('remove takes annotations, data objects and associations; a removed step takes its data objects nothing else uses', async () => {
+    const { xml, scenario } = await credit();
+    const base = await editBpmn(
+      xml,
+      [
+        { op: 'annotate', on: 'check', text: 'Note' },
+        { op: 'annotate', on: 'issue', text: 'Loose soon' },
+        { op: 'addDataObject', name: 'File', on: 'check', direction: 'in' },
+        { op: 'addDataObject', name: 'Card', on: 'issue', direction: 'out' },
+      ],
+      { scenario, layout },
+    );
+    const edit = await editBpmn(
+      base.xml,
+      [
+        { op: 'remove', id: 'TextAnnotation_check' },
+        { op: 'remove', id: 'DataObjectReference_check' },
+        { op: 'remove', id: 'Association_issue' },
+        { op: 'remove', id: 'issue' },
+      ],
+      { scenario, layout },
+    );
+    expect(await errorsOf(edit.xml)).toEqual([]);
+    await expectCleanImport(edit.xml);
+    expect(edit.changes.map((c) => c.message)).toEqual([
+      'removed TextAnnotation "TextAnnotation_check"; also removed Association_check',
+      'removed DataObjectReference "DataObjectReference_check"; also removed DataInputAssociation_check, DataObject_check',
+      'removed Association "Association_issue"',
+      expect.stringContaining('removed "issue"'),
+    ]);
+    expect(edit.changes[3]!.message).toContain('DataOutputAssociation_issue');
+    expect(edit.changes[3]!.message).toContain('DataObjectReference_issue');
+    expect(edit.xml).not.toContain('DataObject_issue');
+    // The annotation that lost its association is still there, and the outline says so.
+    const reading = await bpmnToOutline(edit.xml, { scenario: scenario as Record<string, unknown> });
+    expect(reading.warnings).toEqual(['1 annotation, group or association is not part of the outline and was left out.']);
+    expect(reading.outline.steps.some((s) => s.notes !== undefined || s.data !== undefined)).toBe(false);
+  });
+});
+
+describe('the #638 refusals', () => {
+  test('removeLane: unknown, not empty, onto itself, onto a parent lane, a lane with sub-lanes', async () => {
+    const { xml, scenario } = await credit();
+    const error = await refused(
+      xml,
+      [
+        { op: 'removeLane', lane: 'Nobody' },
+        { op: 'removeLane', lane: 'Customer' },
+        { op: 'removeLane', lane: 'Customer', moveStepsTo: 'Customer' },
+        { op: 'removeLane', lane: 'Customer', moveStepsTo: 'Nobody' },
+      ],
+      { scenario },
+    );
+    expect(error.issues.map((i) => [i.op, i.path, i.message])).toEqual([
+      [0, 'lane', 'there is no lane "Nobody"; the lanes are: Customer, Analyst.'],
+      [1, 'moveStepsTo', 'lane "Customer" holds reject, EndEvent_reject; give "moveStepsTo": the lane that takes them.'],
+      [2, 'moveStepsTo', '"moveStepsTo" is the lane being removed ("Customer"); name another lane.'],
+      [3, 'moveStepsTo', 'there is no lane "Nobody"; the lanes are: Customer, Analyst.'],
+    ]);
+    const nested = await refused(NESTED_LANES, [
+      { op: 'removeLane', lane: 'Office' },
+      { op: 'removeLane', lane: 'Field', moveStepsTo: 'Office' },
+    ]);
+    expect(nested.issues.map((i) => [i.op, i.path, i.message])).toEqual([
+      [0, 'lane', 'lane "Office" has sub-lanes (Desk, Back); remove them first.'],
+      [1, 'moveStepsTo', 'lane "Office" has sub-lanes (Desk, Back); nodes go to a lane without sub-lanes.'],
+    ]);
+  });
+
+  test('removeLane of a sub-lane: its nodes go to a leaf; the last sub-lane leaves its parent a plain lane', async () => {
+    const edit = await editBpmn(NESTED_LANES, [
+      { op: 'removeLane', lane: 'Back', moveStepsTo: 'Field' },
+      { op: 'removeLane', lane: 'Desk', moveStepsTo: 'Field' },
+    ]);
+    expect(await errorsOf(edit.xml)).toEqual([]);
+    expect(edit.removed).toEqual(['Back', 'LS2', 'Desk']);
+    expect(edit.xml).not.toContain('childLaneSet');
+    expect(await laneOfNode(edit.xml, 'a')).toBe('Field');
+    expect((await outlineOf(edit.xml)).lanes).toEqual(['Office', 'Field']);
+  });
+
+  test('moveLane: only among siblings, not next to itself', async () => {
+    const error = await refused(NESTED_LANES, [
+      { op: 'moveLane', lane: 'Desk', after: 'Field' },
+      { op: 'moveLane', lane: 'Field', before: 'Field' },
+      { op: 'moveLane', lane: 'Nobody', before: 'Field' },
+    ]);
+    expect(error.issues.map((i) => [i.op, i.path, i.message])).toEqual([
+      [0, 'after', 'lanes "Desk" and "Field" are not in the same lane set; a lane moves only among its siblings.'],
+      [1, 'before', 'lane "Field" cannot go next to itself.'],
+      [2, 'lane', 'there is no lane "Nobody"; the lanes are: Office, Desk, Back, Field.'],
+    ]);
+    const edit = await editBpmn(NESTED_LANES, [{ op: 'moveLane', lane: 'Back', before: 'Desk' }]);
+    expect(edit.xml.indexOf('id="Back"')).toBeLessThan(edit.xml.indexOf('id="Desk"'));
+  });
+
+  test('annotations and data objects: unknown steps, texts and names; data only on activities', async () => {
+    const { xml, scenario } = await credit();
+    const base = await editBpmn(xml, [{ op: 'annotate', on: 'check', text: 'Note' }, { op: 'addDataObject', name: 'File', on: 'check', direction: 'in' }], { scenario });
+    const error = await refused(
+      base.xml,
+      [
+        { op: 'annotate', on: 'nope', text: 'x' },
+        { op: 'removeAnnotation', on: 'check', text: 'Other' },
+        { op: 'removeAnnotation', on: 'receive', text: 'Note' },
+        { op: 'addDataObject', name: 'File', on: 'ok', direction: 'in' },
+        { op: 'removeDataObject', name: 'Folder' },
+        { op: 'removeDataObject', name: 'File', on: 'receive' },
+        { op: 'remove', id: 'Lane_1' },
+      ],
+      { scenario },
+    );
+    expect(error.issues.map((i) => [i.op, i.path, i.message])).toEqual([
+      [0, 'on', '"nope" is not the id of an element of the model.'],
+      [1, 'text', '"check" has no text annotation "Other"; its annotations are: "Note".'],
+      [2, 'text', '"receive" has no text annotation "Note".'],
+      [3, 'on', 'step "ok": "data" does not apply to a xor.'],
+      [4, 'name', 'the process has no data object named "Folder"; its data objects are: "File".'],
+      [5, 'on', 'data object "File" is not connected to "receive".'],
+      [6, 'id', expect.stringContaining('"Lane_1" is a bpmn:Lane; only steps, sequence flows, boundary events and artifacts')],
+    ]);
+  });
+
+  test('es messages', async () => {
+    const { xml, scenario } = await credit();
+    const error = await refused(xml, [{ op: 'removeLane', lane: 'Customer' }, { op: 'removeDataObject', name: 'File' }], { scenario, locale: 'es' });
+    expect(error.message).toContain('operations[0].moveStepsTo: el carril "Customer" contiene reject, EndEvent_reject; indica "moveStepsTo": el carril que los recibe.');
+    expect(error.message).toContain('operations[1].name: el proceso no tiene un objeto de datos llamado "File".');
   });
 });

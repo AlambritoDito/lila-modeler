@@ -593,7 +593,19 @@ export const en: Catalog = {
     editRemoveAmbiguous: (id, incoming, outgoing) =>
       `cannot remove "${id}": with ${incoming} incoming and ${outgoing} outgoing flows it is not clear how to reconnect them. Remove or reconnect its flows first.`,
     editRemoveBoundary: (id, boundaries) => `cannot remove "${id}": boundary events are attached to it (${boundaries}); remove them first.`,
-    editCannotRemove: (id, type) => `"${id}" is a ${type}; only steps and sequence flows can be removed.`,
+    editCannotRemove: (id, type) =>
+      `"${id}" is a ${type}; only steps, sequence flows, boundary events and artifacts (text annotations, data objects and stores, groups, associations) can be removed.`,
+    editLaneHasSubLanes: (lane, children) => `lane "${lane}" has sub-lanes (${children}); remove them first.`,
+    editLaneNotEmpty: (lane, nodes) => `lane "${lane}" holds ${nodes}; give "moveStepsTo": the lane that takes them.`,
+    editLaneTargetNotLeaf: (lane, children) => `lane "${lane}" has sub-lanes (${children}); nodes go to a lane without sub-lanes.`,
+    editLaneSameTarget: (lane) => `"moveStepsTo" is the lane being removed ("${lane}"); name another lane.`,
+    editLaneNotSibling: (lane, other) => `lanes "${lane}" and "${other}" are not in the same lane set; a lane moves only among its siblings.`,
+    editLaneSelf: (lane) => `lane "${lane}" cannot go next to itself.`,
+    editNoNote: (step, text, notes) =>
+      `"${step}" has no text annotation "${text}"${notes === '' ? '' : `; its annotations are: ${notes}`}.`,
+    editNoDataObject: (name, names) =>
+      `the process has no data object named "${name}"${names === '' ? '' : `; its data objects are: ${names}`}.`,
+    editDataNotConnected: (name, step) => `data object "${name}" is not connected to "${step}".`,
     editBoundaryNeedsActivity: (id, boundaries) =>
       `"${id}" has boundary events attached (${boundaries}); only a task, call activity or sub-process can hold them.`,
     editNotOneEnd: (id, ends) =>
@@ -623,6 +635,18 @@ export const en: Catalog = {
     editRetyped: (id, from, to) => `"${id}": ${from} → ${to}`,
     editMoved: (id, lane) => `moved "${id}" to lane "${lane}"`,
     editLaneAdded: (name, id) => `added lane "${name}" (${id})`,
+    editLaneRemoved: (lane, id, to, nodes) => `removed lane "${lane}" (${id})${nodes === '' ? '' : `; ${nodes} moved to lane "${to}"`}`,
+    editLastLaneRemoved: (lane, id) => `removed lane "${lane}" (${id}), the last one: the process has no lanes now and its nodes stay in the pool`,
+    editLaneMoved: (lane, where, other) => `moved lane "${lane}" ${where === 'before' ? 'above' : 'below'} "${other}"`,
+    editNoteAdded: (step, text, id) => `annotated "${step}": "${text}" (${id})`,
+    editNoteExists: (step, text) => `"${step}" already has the text annotation "${text}"; nothing changed`,
+    editNoteRemoved: (step, text, ids) => `removed the text annotation "${text}" from "${step}" (${ids})`,
+    editDataAdded: (name, step, direction, id, created) =>
+      `"${step}" ${direction === 'in' ? 'reads' : 'writes'} data object "${name}" (${id}${created ? ', new' : ''})`,
+    editDataExists: (name, step, direction) =>
+      `"${step}" already ${direction === 'in' ? 'reads' : 'writes'} data object "${name}"; nothing changed`,
+    editDataRemoved: (name, step, ids) => `disconnected data object "${name}"${step === undefined ? '' : ` from "${step}"`} (${ids})`,
+    editRemovedElement: (id, type, also) => `removed ${type} "${id}"${also === '' ? '' : `; also removed ${also}`}`,
     processEdited: (name, slug, file, operations, removed) =>
       `Edited process "${name}" (${slug}) in ${file}: ${n(operations, 'operation', 'operations')}, ${n(removed, 'element', 'elements')} removed.`,
     processEditDryRun: (name, slug, file, operations, removed) =>

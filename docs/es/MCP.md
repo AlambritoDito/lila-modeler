@@ -589,7 +589,10 @@ mismo desde una terminal.
   conserva su lugar: un paso nuevo va a la derecha del paso al que sigue, en su carril (que crece una
   fila si está lleno), y solo se vuelven a trazar los flujos cuyos extremos cambiaron. Para hacer
   lugar a un paso insertado entre dos pasos muy juntos, lo que está a su derecha en ese pool se
-  corre a la derecha en un solo tanto; pools y carriles solo se ensanchan o se alargan.
+  corre a la derecha en un solo tanto; pools y carriles solo se ensanchan o se alargan, salvo con
+  `removeLane` y `moveLane`, que mueven bandas enteras: cada paso conserva su x y se vuelven a
+  trazar los flujos que cruzan de una banda a otra. Una anotación o un objeto de datos nuevo va
+  junto a su paso, sin tapar otra figura.
 - **Qué proceso**: `process` cuando el `.lila` tiene varios. Dentro de su BPMN, el proceso que lee el
   simulador (el ejecutable y no vacío); no se pueden editar pasos de otros pools.
 - La escritura es la misma escritura atómica y con candado que la de `patch_scenario`: si el archivo

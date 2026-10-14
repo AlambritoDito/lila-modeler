@@ -80,7 +80,8 @@ such as a parallel join waiting for branches of one exclusive split.
 ### 3. `edit_process` and `get_process_outline`
 
 To change a process, do not create it again: `edit_process` applies a list of operations (`add`,
-`connect`, `remove`, `rename`, `setType`, `moveToLane`, `addLane`, `addBoundary`…) all or none, keeps every id and
+`connect`, `remove`, `rename`, `setType`, `moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`, `annotate`,
+`addDataObject`…) all or none, keeps every id and
 everything the operations do not touch (documentation, RACI, attributes, other processes). Send it
 with `dryRun: true` first and show the `changes` to the person when the edit is not trivial.
 
@@ -321,9 +322,9 @@ the same `.lila`.
   and a sub-process is created collapsed. `edit_process` with `layout: true` replaces positions
   set by hand in that process; `layout: false` keeps them and places new steps simply. Move things
   in the app when the picture matters.
-- **Edits** reach only the main process of a BPMN (the one the simulator reads), and lanes cannot
-  be removed. `edit_process` neither adds start events nor changes their type: give them in the
-  outline (`starts`), or edit them in the app.
+- **Edits** reach only the main process of a BPMN (the one the simulator reads). `edit_process`
+  neither adds start events nor changes their type: give them in the outline (`starts`), or edit
+  them in the app.
 - **Scenario fields from the outline** are only `duration`, `resources` and branch `probability`.
   Arrivals, calendars, costs and capacities go through `patch_scenario` or a sheet.
 - **A long run takes its time.** The server keeps answering and reports each replication, and a

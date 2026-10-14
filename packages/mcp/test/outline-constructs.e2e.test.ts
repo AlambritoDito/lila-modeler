@@ -5,7 +5,9 @@
  * `get_process_outline` gives back the outline `create_process` stored. The 48-hour escalation of
  * the docs (`examples/outline/claim-escalation.json`) goes `create_process` → `patch_scenario`
  * (`run.duration`: at the default 1 h the deadline would never fire) → `run_simulation` →
- * `export_document` as HTML. Requires `dist/` (the root `pretest` and the CI build first).
+ * `export_document` as HTML. #638: `edit_process` reorders and removes lanes, annotates a step and
+ * connects a data object, both laid out again and in place, and the outline reads them back with no
+ * warning. Requires `dist/` (the root `pretest` and the CI build first).
  */
 import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -109,3 +111,41 @@ test('the 48-hour escalation: create_process → patch_scenario run.duration →
   const html = readFileSync(doc.file, 'utf8');
   for (const text of ['Assess claim', 'Escalate to supervisor', 'Customer replies?', '48 h']) expect(html).toContain(text);
 }, 180_000);
+
+test.each([true, false])('#638 lanes, notes and data through edit_process (layout %s), read back by get_process_outline', async (layout) => {
+  const project = `claims-638-${layout}.lila`;
+  await answer<Created>('create_process', { outline: escalation, project });
+  const edit = await answer<{ changes: { message: string }[]; warnings: unknown[] }>('edit_process', {
+    project,
+    layout,
+    operations: [
+      { op: 'moveLane', lane: 'Supervisor', before: 'Customer service' },
+      { op: 'removeLane', lane: 'Adjuster', moveStepsTo: 'Customer service' },
+      { op: 'rename', id: 'Customer service', name: 'Claims desk' },
+      { op: 'annotate', on: 'assess', text: 'Photos required' },
+      { op: 'addDataObject', name: 'Claim file', on: 'register', direction: 'out' },
+      { op: 'addDataObject', name: 'Claim file', on: 'assess', direction: 'in' },
+    ],
+  });
+  expect(edit.changes.map((c) => c.message)).toEqual([
+    'moved lane "Supervisor" above "Customer service"',
+    'removed lane "Adjuster" (Lane_2); assess, covered, pay, sla, EndEvent_pay moved to lane "Customer service"',
+    'renamed "Lane_1": "Customer service" → "Claims desk"',
+    'annotated "assess": "Photos required" (TextAnnotation_assess)',
+    '"register" writes data object "Claim file" (DataObjectReference_register, new)',
+    '"assess" reads data object "Claim file" (DataObjectReference_register)',
+  ]);
+  const read = await answer<{ outline: { lanes: string[]; steps: { id: string; lane?: string; notes?: string[]; data?: unknown[] }[] }; warnings: unknown[] }>(
+    'get_process_outline',
+    { project },
+  );
+  expect(read.warnings).toEqual([]);
+  expect(read.outline.lanes).toEqual(['Supervisor', 'Claims desk']);
+  const step = (id: string) => read.outline.steps.find((s) => s.id === id)!;
+  expect(step('assess')).toMatchObject({ lane: 'Claims desk', notes: ['Photos required'], data: [{ name: 'Claim file', direction: 'in' }] });
+  expect(step('register').data).toEqual([{ name: 'Claim file', direction: 'out' }]);
+  // As above: at the default 1 h no claim gets through a multi-hour assessment.
+  await answer('patch_scenario', { project, scenario: 'as-is', patch: [{ op: 'replace', path: '/run/duration', value: 60 * 86_400 }] });
+  const run = await answer<Summary>('run_simulation', { model: project, scenario: 'as-is', replications: 1, seed: 7 });
+  expect(Object.values(run.process.byEndEvent).reduce((total, e) => total + e.completed, 0)).toBeGreaterThan(0);
+}, 120_000);

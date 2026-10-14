@@ -1173,7 +1173,9 @@ export function createServer(options: ServerOptions = {}): McpServer {
               '(xor/or)}]; an eventGateway\'s go to timer or message steps), end?: true | "terminate", ' +
               'duration? ("20m", "normal(20m, 5m)", seconds or a distribution object), resources? ([name | ' +
               '{name, quantity}]), selection? ("and" | "or"), boundary? (tasks and call activities: [{id, ' +
-              'type: "timer", name?, label?, duration?, interrupting? (default true), to | end}])}]}. ' +
+              'type: "timer", name?, label?, duration?, interrupting? (default true), to | end}]), notes? ' +
+              '([text]: text annotations), data? (activities: [{name, direction: "in" | "out"}]: data objects ' +
+              'by name, shared)}]}. ' +
               'List order is the flow. See docs/MCP.md.',
           ),
         project: z.string().describe('Path to the .lila (created if missing), relative to the cwd of the server process.'),
@@ -1276,7 +1278,8 @@ export function createServer(options: ServerOptions = {}): McpServer {
         'form: every step names its lane, `next` only when it is not the following step, `end: ' +
         'true` (or "terminate") where the process ends, `starts` unless there is one plain start ' +
         '`StartEvent`, durations as scenario distributions in seconds). Boundary timers, event ' +
-        'gateways, default flows and the task variants are read too. Durations, delays, resources ' +
+        'gateways, default flows, the task variants, text annotations (`notes`) and data objects (`data`) ' +
+        'are read too. Durations, delays, resources ' +
         'and branch probabilities come from its `as-is.scenario.json` when it has one. `warnings` ' +
         'lists what the outline could not carry (other pools, other event types, nested lanes…).',
       inputSchema: z.object({
@@ -1308,16 +1311,20 @@ export function createServer(options: ServerOptions = {}): McpServer {
         'Applies a list of operations to one process of a .lila, all or none: `add` (a step, as in ' +
         'an outline, `after` a step or `between` two connected steps, or unconnected), `connect` ' +
         '(`default: true` out of an xor/or marks the default flow), `remove` (a step, reconnecting ' +
-        'its predecessors to its successor when that is unambiguous, a flow or a boundary event; an ' +
-        'end event left with no way in goes too), `rename`, `setType` (also `end` ↔ `terminate` on ' +
-        'an end event), `moveToLane` (with the step\'s boundary events), `addLane` and `addBoundary` ' +
-        '(a boundary timer, as in an outline). Ids never change, so renamed ' +
+        'its predecessors to its successor when that is unambiguous, a flow, a boundary event or an ' +
+        'artifact; an end event left with no way in goes too), `rename` (a lane also by its name), ' +
+        '`setType` (also `end` ↔ `terminate` on an end event), `moveToLane` (with the step\'s boundary ' +
+        'events), `addLane`, `removeLane` (its nodes to `moveStepsTo`), `moveLane` (among its ' +
+        'siblings), `addBoundary` (a boundary timer, as in an outline), `annotate`/`removeAnnotation` ' +
+        '(a text annotation on a step) and `addDataObject`/`removeDataObject` (by name; an object goes ' +
+        'when nothing uses it). Start events are neither added nor retyped. Ids never change, so renamed ' +
         'or retyped steps keep their scenario entries; durations, resources and probabilities given ' +
         'go into the base scenario `as-is.scenario.json`. The result is validated; any problem ' +
         'refuses the whole edit, writes nothing and lists every issue with the index of its ' +
         'operation (`operations[i]`). Documentation, annotations, extended attributes and other ' +
         'pools are kept. With `layout` (default true) the process is laid out again; with ' +
-        '`layout: false` every shape keeps its place and only new ones are placed. Returns what ' +
+        '`layout: false` every shape keeps its place and only new ones are placed (removeLane and ' +
+        'moveLane move whole bands, each step keeping its x). Returns what ' +
         'each operation did (`changes`), the removed ids, the scenario entries that no longer apply ' +
         '(removed, each one reported with its values in `scenarioRemovals`), notes, the validator ' +
         'warnings and the outline after the edit. With `dryRun`, ' +
@@ -1337,7 +1344,10 @@ export function createServer(options: ServerOptions = {}): McpServer {
             '{op:"connect", from, to, label?, probability?, default?, id?}; {op:"remove", id}; {op:"rename", id, name}; ' +
             '{op:"setType", id, type: an outline step type, or end|terminate (id: an end event or a step leading to one)}; ' +
             '{op:"moveToLane", id, lane}; {op:"addLane", name, id?, after?|before?}; ' +
-            '{op:"addBoundary", on, boundary:{id, type:"timer", name?, label?, duration?, interrupting?, to | end}}. ' +
+            '{op:"removeLane", lane, moveStepsTo?}; {op:"moveLane", lane, before | after}; ' +
+            '{op:"addBoundary", on, boundary:{id, type:"timer", name?, label?, duration?, interrupting?, to | end}}; ' +
+            '{op:"annotate", on, text}; {op:"removeAnnotation", on, text}; ' +
+            '{op:"addDataObject", name, on, direction: "in" | "out"}; {op:"removeDataObject", name, on?}. ' +
             'E.g. [{"op":"add","step":{"id":"verify","name":"Verify ID","duration":"5m"},"after":"receive"}, ' +
             '{"op":"connect","from":"ok","to":"verify","label":"Retry","probability":0.1}, {"op":"remove","id":"check"}, ' +
             '{"op":"rename","id":"issue","name":"Issue card"}, {"op":"setType","id":"check","type":"serviceTask"}, ' +

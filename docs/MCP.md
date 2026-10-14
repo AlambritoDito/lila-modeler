@@ -561,7 +561,10 @@ terminal.
   by as much as it grew. With `layout: false` every shape keeps its place: a new step goes right of
   the step it follows, in its lane (which grows a row when it is full), and only flows whose ends
   changed are drawn again. To make room for a step inserted between two close steps, what lies to
-  its right in that pool shifts right by one amount; pools and lanes only get wider or taller.
+  its right in that pool shifts right by one amount; pools and lanes only get wider or taller,
+  except with `removeLane` and `moveLane`, which move whole bands: every step keeps its x, and the
+  flows that cross from one band to another are drawn again. A new annotation or data object goes
+  beside its step, over no other shape.
 - **Which process**: `process` when the `.lila` holds several. Inside its BPMN, the process the
   simulator reads (the executable, non-empty one); steps of other pools cannot be edited.
 - The write is the same atomic, locked write as `patch_scenario`: if the file changed on disk since

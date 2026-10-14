@@ -339,7 +339,8 @@ o con la tool MCP `patch_scenario`) antes de correrlo, o ningún caso llega al p
 duración, recursos y a dónde va (`end`, `terminate`, o las ramas con su probabilidad y `default`);
 los inicios van primero cuando el esquema los lista (`start` o `timer start`, y el paso al que
 lleva cada uno), y cada temporizador de borde tiene una línea bajo su paso (`boundary <id>  timer`
-o `timer (non-interrupting)`, su nombre, su demora y a dónde lleva). `--json` imprime `{ slug, outline, warnings }`, con el esquema en
+o `timer (non-interrupting)`, su nombre, su demora y a dónde lleva), y también sus objetos de
+datos (`data in` o `data out` y el nombre) y sus notas (`note` y el texto). `--json` imprime `{ slug, outline, warnings }`, con el esquema en
 forma normal (la que devuelve `create_process`). Duraciones, recursos y probabilidades de rama
 salen del `as-is.scenario.json` del proceso. Lo que un esquema no puede llevar se avisa por stderr.
 
@@ -350,7 +351,8 @@ Código de salida: `0`.
 
 `process edit` aplica una lista de operaciones a un proceso, todas o ninguna: el arreglo JSON que la
 tool MCP `edit_process` recibe como `operations` (`add`, `connect`, `remove`, `rename`, `setType`,
-`moveToLane`, `addLane`, `addBoundary`…; formato y reglas en [`docs/es/MCP.md`](MCP.md#editar-un-proceso)). Se
+`moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`, `annotate`, `addDataObject`…; formato y reglas en
+[`docs/es/MCP.md`](MCP.md#editar-un-proceso)). Se
 comprueba cada operación, se valida el resultado y el `.lila` se escribe solo si todo está bien; si
 no, sale con `1`, no escribe nada y lista cada problema con el índice de su operación. El proceso se
 maqueta de nuevo salvo con `--no-layout`, que conserva todas las posiciones y solo coloca las figuras

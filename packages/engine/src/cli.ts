@@ -1153,6 +1153,9 @@ function printOutline(outline: NormalOutline, slug: string, locale: Locale): voi
       if (b.duration !== undefined) bparts.push(describeDistribution(b.duration));
       console.log(`    ${bparts.join('  ')} → ${b.label === undefined ? '' : `${b.label}: `}${b.to ?? end(b.end ?? true)}`);
     }
+    // #638: the step's data (in reads, out writes) and notes.
+    for (const d of step.data ?? []) console.log(`    data ${d.direction}  "${d.name}"`);
+    for (const note of step.notes ?? []) console.log(`    note  "${note}"`);
   }
 }
 

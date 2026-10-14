@@ -19,6 +19,7 @@ import {
 } from '../../src/bpmn/outline.js';
 import { validateBpmnXml } from '../../src/bpmn/validate-report.js';
 import { parseScenario, validateScenario } from '../../src/scenario.js';
+import { expectCleanImport } from '../fixtures/bpmn-import.js';
 import { CONSTRUCTS, CREDIT, ORDER } from '../fixtures/outlines.js';
 
 interface Box {
@@ -544,10 +545,17 @@ describe('the outline reader: starts, terminate, default flows, new types, bound
     );
   });
 
-  test('the hand reader accepts them too: no shape issue, only the not-yet-built ones (#638)', async () => {
-    const issues = await refusedWith(ESCALATION);
-    expect(issues.every((i) => i.message.startsWith('not implemented yet'))).toBe(true);
-    expect(issues.map((i) => i.path)).toEqual(['steps[0].notes', 'steps[1].data']);
+  test('the hand reader accepts them too, and they build and read back with no warning (#638 notes and data)', async () => {
+    const built = await outlineToBpmn(ESCALATION);
+    expect(built.warnings).toEqual([]);
+    const reading = await bpmnToOutline(built.xml, { scenario: built.scenario as Record<string, unknown> });
+    expect(reading.warnings).toEqual([]);
+    expect(reading.outline).toEqual(built.outline);
+    expect(built.outline.steps[0]!.notes).toEqual(['Paper claims too']);
+    expect(built.outline.steps[1]!.data).toEqual([
+      { name: 'Claim file', direction: 'in' },
+      { name: 'Assessment', direction: 'out' },
+    ]);
   });
 
   test('every malformed new field, at its path, at once', async () => {
@@ -630,7 +638,6 @@ describe('the contract rules of the new constructs (#631, #638)', () => {
       expect(error).toBeInstanceOf(OutlineError);
       const byPath = new Map<string, string[]>();
       for (const { path, message } of (error as OutlineError).issues) {
-        if (message.startsWith('not implemented yet')) continue;
         (byPath.get(path) ?? byPath.set(path, []).get(path)!).push(message);
       }
       return byPath;
@@ -1049,4 +1056,96 @@ describe('what the reader still leaves out of the new constructs, with a warning
     expect(() => normalizeOutline(outline)).not.toThrow();
     expect(outline.steps.map((s) => s.id)).toEqual(['sp', 't1']);
   });
+});
+
+/* ------------------------------------------------------------------ *
+ * #638: notes and data, built and read back
+ * ------------------------------------------------------------------ */
+
+describe('notes and data (#638)', () => {
+  const PAPERWORK = {
+    name: 'Paperwork',
+    lanes: ['Desk', 'Back office'],
+    steps: [
+      { id: 'receive', name: 'Receive', lane: 'Desk', notes: ['Paper too', 'Check the ID'], data: [{ name: 'Claim', direction: 'out' }, { name: 'Policy', direction: 'in' }] },
+      { id: 'ok', type: 'xor', name: 'Complete?', notes: ['Asked by phone'], branches: [{ to: 'file', label: 'Yes' }, { to: 'receive', label: 'No', probability: 0.1 }] },
+      { id: 'file', type: 'subprocess', name: 'File it', lane: 'Back office', data: [{ name: 'Claim', direction: 'in' }, { name: 'Archive', direction: 'out' }] },
+      { id: 'wait', type: 'timer', name: 'A day', duration: '1d', notes: ['Calendar days'], end: true },
+    ],
+  } as const;
+
+  test('one data object per name, shared by the steps that name it; normal form lists reads first', async () => {
+    const built = await outlineToBpmn(PAPERWORK);
+    expect(built.warnings).toEqual([]);
+    expect(built.xml.match(/<bpmn:dataObjectReference /g)).toHaveLength(3);
+    expect(built.xml.match(/<bpmn:textAnnotation /g)).toHaveLength(4);
+    expect(built.outline.steps[0]).toMatchObject({
+      notes: ['Paper too', 'Check the ID'],
+      data: [{ name: 'Policy', direction: 'in' }, { name: 'Claim', direction: 'out' }],
+    });
+    expect(normalizeOutline(PAPERWORK)).toEqual(built.outline);
+    const reading = await bpmnToOutline(built.xml, { scenario: built.scenario as Record<string, unknown> });
+    expect(reading.warnings).toEqual([]);
+    expect(reading.outline).toEqual(built.outline);
+    // Built again from what was read: the same model.
+    expect((await outlineToBpmn(reading.outline)).xml).toBe(built.xml);
+  });
+
+  test('the model opens with no import warning; annotations sit inside the pool, beside their step', async () => {
+    const built = await outlineToBpmn(PAPERWORK);
+    await expectCleanImport(built.xml);
+    const { rootElement } = await BpmnModdle().fromXML(built.xml);
+    const shapes = new Map<string, any>(((rootElement as any).diagrams[0].plane.planeElement as any[]).map((di) => [di.bpmnElement.id, di.bounds]));
+    const pool = shapes.get('Participant_1');
+    for (const [id, b] of shapes) {
+      if (!id.startsWith('TextAnnotation_')) continue;
+      expect(b.y, id).toBeGreaterThanOrEqual(pool.y);
+      expect(b.y + b.height, id).toBeLessThanOrEqual(pool.y + pool.height);
+    }
+  });
+
+  test('reading a model from elsewhere: repeated notes once; empty ones, loose artifacts, a second object of a name and data on events said lost', async () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="x">
+  <bpmn:process id="P" isExecutable="true">
+    <bpmn:startEvent id="s"><bpmn:dataOutputAssociation id="so"><bpmn:targetRef>form</bpmn:targetRef></bpmn:dataOutputAssociation></bpmn:startEvent>
+    <bpmn:task id="a" name="A"><bpmn:dataOutputAssociation id="o1"><bpmn:targetRef>form</bpmn:targetRef></bpmn:dataOutputAssociation>
+      <bpmn:dataOutputAssociation id="o2"><bpmn:targetRef>crm</bpmn:targetRef></bpmn:dataOutputAssociation>
+      <bpmn:dataOutputAssociation id="o3"><bpmn:targetRef>form2</bpmn:targetRef></bpmn:dataOutputAssociation></bpmn:task>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="a"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="a" targetRef="e"/>
+    <bpmn:dataObject id="formData"/>
+    <bpmn:dataObjectReference id="form" name="Form" dataObjectRef="formData"/>
+    <bpmn:dataObjectReference id="loose" name="Loose" dataObjectRef="formData"/>
+    <bpmn:dataObjectReference id="form2" name="Form" dataObjectRef="formData"/>
+    <bpmn:dataStoreReference id="crm" name="CRM"/>
+    <bpmn:textAnnotation id="n1"><bpmn:text>Twice</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="n2"><bpmn:text>Twice</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="n3"><bpmn:text> </bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="n4"><bpmn:text>On the start</bpmn:text></bpmn:textAnnotation>
+    <bpmn:association id="a1" sourceRef="a" targetRef="n1"/>
+    <bpmn:association id="a2" sourceRef="n2" targetRef="a"/>
+    <bpmn:association id="a3" sourceRef="a" targetRef="n3"/>
+    <bpmn:association id="a4" sourceRef="s" targetRef="n4"/>
+  </bpmn:process>
+</bpmn:definitions>`;
+    const { outline, warnings } = await bpmnToOutline(xml);
+    expect(outline.steps).toEqual([{ id: 'a', name: 'A', from: 's', end: true, notes: ['Twice'], data: [{ name: 'Form', direction: 'out' }] }]);
+    expect(warnings).toEqual([
+      expect.stringContaining('crm (bpmn:DataStoreReference) has no outline equivalent'),
+      'text annotations that repeat a note of the same step were read once: a "Twice".',
+      expect.stringContaining('loose (bpmn:DataObjectReference) has no outline equivalent'),
+      expect.stringContaining('form2 (bpmn:DataObjectReference) has no outline equivalent'),
+      expect.stringContaining('so (bpmn:DataOutputAssociation) has no outline equivalent'),
+      '4 annotations, groups or associations are not part of the outline and were left out.',
+    ]);
+  });
+});
+
+test('the default arrivals are recognised whatever the key order of the scenario (patch_scenario rewrites it)', async () => {
+  const built = await outlineToBpmn(CREDIT);
+  const scenario = structuredClone(built.scenario) as any;
+  scenario.elements.StartEvent = { interTriggerTimer: { value: 60, type: 'constant' }, triggerCount: 20 };
+  expect((await bpmnToOutline(built.xml, { scenario })).warnings).toEqual([]);
 });

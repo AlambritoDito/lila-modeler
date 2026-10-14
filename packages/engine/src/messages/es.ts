@@ -599,7 +599,19 @@ export const es: Catalog = {
     editRemoveAmbiguous: (id, incoming, outgoing) =>
       `no se puede quitar "${id}": con ${n(incoming, 'flujo', 'flujos')} de entrada y ${outgoing} de salida no está claro cómo reconectarlos. Quita o reconecta sus flujos primero.`,
     editRemoveBoundary: (id, boundaries) => `no se puede quitar "${id}": tiene eventos de borde (${boundaries}); quítalos primero.`,
-    editCannotRemove: (id, type) => `"${id}" es un ${type}; solo se pueden quitar pasos y flujos de secuencia.`,
+    editCannotRemove: (id, type) =>
+      `"${id}" es un ${type}; solo se pueden quitar pasos, flujos de secuencia, eventos de borde y artefactos (anotaciones de texto, objetos y almacenes de datos, grupos, asociaciones).`,
+    editLaneHasSubLanes: (lane, children) => `el carril "${lane}" tiene subcarriles (${children}); quítalos primero.`,
+    editLaneNotEmpty: (lane, nodes) => `el carril "${lane}" contiene ${nodes}; indica "moveStepsTo": el carril que los recibe.`,
+    editLaneTargetNotLeaf: (lane, children) => `el carril "${lane}" tiene subcarriles (${children}); los nodos van a un carril sin subcarriles.`,
+    editLaneSameTarget: (lane) => `"moveStepsTo" es el carril que se quita ("${lane}"); indica otro carril.`,
+    editLaneNotSibling: (lane, other) => `los carriles "${lane}" y "${other}" no están en el mismo conjunto de carriles; un carril solo se mueve entre sus hermanos.`,
+    editLaneSelf: (lane) => `el carril "${lane}" no puede ir junto a sí mismo.`,
+    editNoNote: (step, text, notes) =>
+      `"${step}" no tiene la anotación de texto "${text}"${notes === '' ? '' : `; sus anotaciones son: ${notes}`}.`,
+    editNoDataObject: (name, names) =>
+      `el proceso no tiene un objeto de datos llamado "${name}"${names === '' ? '' : `; sus objetos de datos son: ${names}`}.`,
+    editDataNotConnected: (name, step) => `el objeto de datos "${name}" no está conectado a "${step}".`,
     editBoundaryNeedsActivity: (id, boundaries) =>
       `"${id}" tiene eventos de borde (${boundaries}); solo una tarea, actividad de llamada o subproceso puede llevarlos.`,
     editNotOneEnd: (id, ends) =>
@@ -629,6 +641,18 @@ export const es: Catalog = {
     editRetyped: (id, from, to) => `"${id}": ${from} → ${to}`,
     editMoved: (id, lane) => `movido "${id}" al carril "${lane}"`,
     editLaneAdded: (name, id) => `agregado el carril "${name}" (${id})`,
+    editLaneRemoved: (lane, id, to, nodes) => `quitado el carril "${lane}" (${id})${nodes === '' ? '' : `; ${nodes} pasaron al carril "${to}"`}`,
+    editLastLaneRemoved: (lane, id) => `quitado el carril "${lane}" (${id}), el último: el proceso ya no tiene carriles y sus nodos siguen en el pool`,
+    editLaneMoved: (lane, where, other) => `movido el carril "${lane}" ${where === 'before' ? 'encima de' : 'debajo de'} "${other}"`,
+    editNoteAdded: (step, text, id) => `anotado "${step}": "${text}" (${id})`,
+    editNoteExists: (step, text) => `"${step}" ya tiene la anotación de texto "${text}"; no cambió nada`,
+    editNoteRemoved: (step, text, ids) => `quitada la anotación de texto "${text}" de "${step}" (${ids})`,
+    editDataAdded: (name, step, direction, id, created) =>
+      `"${step}" ${direction === 'in' ? 'lee' : 'escribe'} el objeto de datos "${name}" (${id}${created ? ', nuevo' : ''})`,
+    editDataExists: (name, step, direction) =>
+      `"${step}" ya ${direction === 'in' ? 'lee' : 'escribe'} el objeto de datos "${name}"; no cambió nada`,
+    editDataRemoved: (name, step, ids) => `desconectado el objeto de datos "${name}"${step === undefined ? '' : ` de "${step}"`} (${ids})`,
+    editRemovedElement: (id, type, also) => `quitado ${type} "${id}"${also === '' ? '' : `; también se quitó ${also}`}`,
     processEdited: (name, slug, file, operations, removed) =>
       `Editado el proceso "${name}" (${slug}) en ${file}: ${n(operations, 'operación', 'operaciones')}, ${n(removed, 'elemento quitado', 'elementos quitados')}.`,
     processEditDryRun: (name, slug, file, operations, removed) =>

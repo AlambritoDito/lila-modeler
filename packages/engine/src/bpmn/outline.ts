@@ -61,7 +61,8 @@ import { z } from 'zod';
 
 import lila from './lila.moddle.json' with { type: 'json' };
 import { isNCName, marcarExportador } from './ids.js';
-import { autoLayout, labelFlows, layOutLanes, LayoutError, separateSubprocessPlanes, sortOutgoing, type El } from './layout.js';
+import { autoLayout, labelFlows, layOutLanes, LayoutError, separateSubprocessPlanes, sortOutgoing, type Create, type El } from './layout.js';
+import { Diagram, everything, placeArtifacts } from './edit-layout.js';
 import { validateBpmnXml } from './validate-report.js';
 import type { ValidationResult } from './validate.js';
 import { messages, type CliMessages, type Locale } from '../messages/index.js';
@@ -384,6 +385,8 @@ interface GraphStep {
   resources?: { name: string; quantity: number }[] | undefined;
   selection?: 'and' | 'or' | undefined;
   boundary?: GraphBoundary[] | undefined;
+  notes?: string[] | undefined;
+  data?: OutlineData[] | undefined;
 }
 /** A start event and the one step it leads to. */
 interface GraphStart {
@@ -731,23 +734,9 @@ function readOutline(input: unknown, C: CliMessages, issues: OutlineIssue[]): Ra
   return { name, lanes, starts, steps };
 }
 
-/**
- * Lote Q (#638): the reader accepts notes and data, the build does not yet. Each use is refused at
- * its path until the implementation lands.
- */
-const NOT_IMPLEMENTED = 'not implemented yet (#638).';
-function notImplemented(outline: RawOutline, issues: OutlineIssue[]): void {
-  outline.steps.forEach((step, index) => {
-    for (const field of ['notes', 'data'] as const) {
-      if (step[field] !== undefined) issues.push({ path: `steps[${index}].${field}`, message: NOT_IMPLEMENTED });
-    }
-  });
-}
-
 function toGraph(input: unknown, C: CliMessages): Graph {
   const issues: OutlineIssue[] = [];
   const outline = readOutline(input, C, issues);
-  notImplemented(outline, issues);
   const at = (index: number, field?: string): string => `steps[${index}]${field === undefined ? '' : `.${field}`}`;
 
   const lanes = [...(outline.lanes ?? [])];
@@ -949,7 +938,19 @@ function toGraph(input: unknown, C: CliMessages): Graph {
       });
     }
 
-    return { id: step.id, name: step.name ?? '', type, lane, succ, duration, resources: step.resources, selection: step.selection, boundary };
+    return {
+      id: step.id,
+      name: step.name ?? '',
+      type,
+      lane,
+      succ,
+      duration,
+      resources: step.resources,
+      selection: step.selection,
+      boundary,
+      notes: step.notes,
+      data: step.data,
+    };
   });
 
   // The event gateway (R-EVG-1): every way out (a branch, `next` or the following step) goes to a
@@ -1074,6 +1075,14 @@ function toNormal(graph: Graph): NormalOutline {
         else boundary.to = b.to;
         return boundary;
       });
+    }
+    if (step.notes !== undefined && step.notes.length > 0) out.notes = [...step.notes];
+    if (step.data !== undefined && step.data.length > 0) {
+      // Reads first, then writes, each group in its order.
+      out.data = [...step.data.filter((d) => d.direction === 'in'), ...step.data.filter((d) => d.direction === 'out')].map((d) => ({
+        name: d.name,
+        direction: d.direction,
+      }));
     }
     return out;
   });
@@ -1379,6 +1388,134 @@ function baseScenario(graph: Graph, built: Built): ScenarioDocument {
   };
 }
 
+/* ------------------------------------------------------------------ *
+ * Notes and data (#638): text annotations and data objects of a step
+ * ------------------------------------------------------------------ */
+
+/** The `name` bpmn-js gives the property a data input association targets. */
+const TARGET_PLACEHOLDER = '__targetRef_placeholder';
+
+/**
+ * Attaches a text annotation with `text` to `node`, through an association from the node, in the
+ * artifacts of the node's container (the process, or its sub-process), as bpmn-js draws one.
+ */
+export function attachNote(node: El, text: string, create: Create, uniqueId: (base: string) => string): { annotation: El; association: El } {
+  const container = node['$parent'] as El;
+  const annotation = create('bpmn:TextAnnotation', { id: uniqueId(`TextAnnotation_${node.id}`), text });
+  const association = create('bpmn:Association', { id: uniqueId(`Association_${node.id}`), sourceRef: node, targetRef: annotation });
+  annotation['$parent'] = container;
+  association['$parent'] = container;
+  ((container['artifacts'] ??= []) as El[]).push(annotation, association);
+  return { annotation, association };
+}
+
+/** The data object references of `container` named `name`, in document order. */
+export function dataObjectsNamed(container: El, name: string): El[] {
+  return ((container['flowElements'] ?? []) as El[]).filter((el) => el.$type === 'bpmn:DataObjectReference' && dataName(el) === name);
+}
+
+/** The name a data object reference goes by: its own, else its data object's. */
+export function dataName(ref: El): string | undefined {
+  const name = (ref['name'] as string | undefined) || (ref['dataObjectRef']?.['name'] as string | undefined);
+  return name === '' ? undefined : name;
+}
+
+/**
+ * Connects the data object named `name` to the activity `node`, as bpmn-js does: `in` is a data
+ * input association from the object to the activity (to its `__targetRef_placeholder` property),
+ * `out` a data output association from the activity to the object. An object with that name in the
+ * node's container is reused; otherwise a `bpmn:DataObject` and its reference are created.
+ */
+export function attachData(
+  node: El,
+  name: string,
+  direction: 'in' | 'out',
+  create: Create,
+  uniqueId: (base: string) => string,
+): { reference: El; created: El[]; association: El } {
+  const container = node['$parent'] as El;
+  const created: El[] = [];
+  let reference = dataObjectsNamed(container, name)[0];
+  if (reference === undefined) {
+    const object = create('bpmn:DataObject', { id: uniqueId(`DataObject_${node.id}`) });
+    reference = create('bpmn:DataObjectReference', { id: uniqueId(`DataObjectReference_${node.id}`), name, dataObjectRef: object });
+    for (const el of [object, reference]) {
+      el['$parent'] = container;
+      ((container['flowElements'] ??= []) as El[]).push(el);
+    }
+    created.push(object, reference);
+  }
+  let association: El;
+  if (direction === 'in') {
+    const properties = (node['properties'] ??= []) as El[];
+    let property = properties.find((p) => p['name'] === TARGET_PLACEHOLDER);
+    if (property === undefined) {
+      property = create('bpmn:Property', { id: uniqueId(`Property_${node.id}`), name: TARGET_PLACEHOLDER });
+      property['$parent'] = node;
+      properties.push(property);
+    }
+    association = create('bpmn:DataInputAssociation', { id: uniqueId(`DataInputAssociation_${node.id}`), sourceRef: [reference], targetRef: property });
+    ((node['dataInputAssociations'] ??= []) as El[]).push(association);
+  } else {
+    association = create('bpmn:DataOutputAssociation', { id: uniqueId(`DataOutputAssociation_${node.id}`), targetRef: reference });
+    ((node['dataOutputAssociations'] ??= []) as El[]).push(association);
+  }
+  association['$parent'] = node;
+  return { reference, created, association };
+}
+
+/** The data object references `node` reads (`in`) and writes (`out`), in the order of its associations. */
+export function dataOf(node: El): { reference: El; direction: 'in' | 'out'; association: El }[] {
+  const out: { reference: El; direction: 'in' | 'out'; association: El }[] = [];
+  for (const a of (node['dataInputAssociations'] ?? []) as El[]) {
+    for (const ref of (a['sourceRef'] ?? []) as El[]) out.push({ reference: ref, direction: 'in', association: a });
+  }
+  for (const a of (node['dataOutputAssociations'] ?? []) as El[]) {
+    if (a['targetRef'] !== undefined) out.push({ reference: a['targetRef'], direction: 'out', association: a });
+  }
+  return out;
+}
+
+/** The texts of the annotations attached to `node` (either way), with their associations, in document order. */
+export function notesOf(node: El, associations: readonly El[]): { annotation: El; association: El }[] {
+  const out: { annotation: El; association: El }[] = [];
+  for (const a of associations) {
+    const other = a['sourceRef'] === node ? a['targetRef'] : a['targetRef'] === node ? a['sourceRef'] : undefined;
+    if (other?.$type === 'bpmn:TextAnnotation') out.push({ annotation: other, association: a });
+  }
+  return out;
+}
+
+/** The associations of `process` and of the collaborations of `definitions`. */
+export function associationsOf(definitions: El, process: El): El[] {
+  const roots = ((definitions['rootElements'] ?? []) as El[]).filter((r) => r.$type === 'bpmn:Collaboration');
+  return [process, ...roots].flatMap((el) => ((el['artifacts'] ?? []) as El[]).filter((a) => a.$type === 'bpmn:Association'));
+}
+
+/** Adds the notes and data of the steps of `graph` to the laid-out `definitions`, and draws them. */
+function addArtifacts(graph: Graph, definitions: El, create: Create): void {
+  if (!graph.steps.some((step) => step.notes !== undefined || step.data !== undefined)) return;
+  const process = ((definitions['rootElements'] ?? []) as El[]).find((el) => el.$type === 'bpmn:Process')!;
+  const used = new Set<string>();
+  for (const el of everything(definitions)) if (typeof el.id === 'string') used.add(el.id);
+  const uniqueId = (base: string): string => freeId(base, used);
+  const nodes = ((process['flowElements'] ?? []) as El[]).filter((el) => el.$type !== 'bpmn:SequenceFlow');
+  const byId = new Map(nodes.map((el) => [el.id, el]));
+  for (const step of graph.steps) {
+    const node = byId.get(step.id)!;
+    for (const note of step.notes ?? []) attachNote(node, note, create, uniqueId);
+    // In normal-form order (reads, then writes), so the normal form builds the same model.
+    const data = step.data ?? [];
+    for (const d of [...data.filter((x) => x.direction === 'in'), ...data.filter((x) => x.direction === 'out')]) {
+      attachData(node, d.name, d.direction, create, uniqueId);
+    }
+  }
+  const diagram = new Diagram(definitions, create, uniqueId);
+  const plane = diagram.mainPlane(process)!;
+  const dataAssociations = nodes.flatMap((n) => dataOf(n).map((d) => d.association));
+  placeArtifacts(diagram, plane, process, nodes, associationsOf(definitions, process), [...new Set(dataAssociations)]);
+}
+
 /**
  * Builds, lays out and validates the BPMN of `outline`. Throws `OutlineError` when the outline is
  * malformed or the model it describes does not validate (the validator's errors are the issues).
@@ -1408,6 +1545,7 @@ export async function outlineToBpmn(outline: unknown, options: OutlineToBpmnOpti
     layOutLanes((definitions as El)['diagrams'][0]['plane'] as El, process, participant, create);
   }
   labelFlows((definitions as El)['diagrams'][0]['plane'] as El, create);
+  addArtifacts(graph, definitions as El, create);
   const { xml: raw } = await moddle.toXML(definitions, { format: true });
   const xml = marcarExportador(raw);
 
@@ -1465,7 +1603,8 @@ function scenarioOutside(scenario: Record<string, any>, startIds: readonly strin
   const resources = record(scenario['resources']);
   const entries = [...Object.values(elements), ...Object.values(resources)].map(record);
   const arrivals = startIds.map((id) => elements[id]).filter((e) => e !== undefined);
-  if (arrivals.some((e) => JSON.stringify(e) !== JSON.stringify(DEFAULT_ARRIVALS))) kinds.push('arrivals');
+  // By value, not by key order: a scenario written back by patch_scenario may list the keys otherwise.
+  if (arrivals.some((e) => canonical(e) !== canonical(DEFAULT_ARRIVALS))) kinds.push('arrivals');
   if (Object.keys(record(scenario['calendars'])).length > 0 || entries.some((e) => e['calendar'] !== undefined)) kinds.push('calendars');
   if (entries.some((e) => (e['fixedCost'] ?? 0) !== 0 || (e['costPerHour'] ?? 0) !== 0)) kinds.push('costs');
   const largest = new Map<string, number>();
@@ -1484,6 +1623,13 @@ function scenarioOutside(scenario: Record<string, any>, startIds: readonly strin
   if (derived) kinds.push('capacities');
   if (Object.values(elements).some((e) => record(e)['conditions'] !== undefined)) kinds.push('conditions');
   return kinds;
+}
+
+/** JSON with the keys of every object sorted, to compare values whatever their key order. */
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) =>
+    typeof v === 'object' && v !== null && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : v,
+  );
 }
 
 function record(value: unknown): Record<string, any> {
@@ -1521,8 +1667,6 @@ export async function bpmnToOutline(xml: string, options: BpmnToOutlineOptions =
   if (otherPools.length > 0) warnings.push(C.outlineDroppedPools(otherPools.map((p) => (p['name'] as string | undefined) || p.id).join(', ')));
   const messageFlows = collaborations.reduce((n, c) => n + ((c['messageFlows'] ?? []) as El[]).length, 0);
   if (messageFlows > 0) warnings.push(C.outlineDroppedMessageFlows(messageFlows));
-  const artifacts = [process, ...collaborations].reduce((n, el) => n + ((el['artifacts'] ?? []) as El[]).length, 0);
-  if (artifacts > 0) warnings.push(C.outlineDroppedArtifacts(artifacts));
   const laneOf = new Map<string, string>();
   const lanes: string[] = [];
   for (const lane of ((process['laneSets']?.[0]?.['lanes'] ?? []) as El[])) {
@@ -1543,8 +1687,14 @@ export async function bpmnToOutline(xml: string, options: BpmnToOutlineOptions =
   const ends = new Map<string, NormalEnd>();
   const starts: El[] = [];
   const boundaries: El[] = [];
+  /** data object references: read as the `data` of the steps that use them (#638) */
+  const dataRefs: El[] = [];
   for (const el of flowElements) {
-    if (el.$type === 'bpmn:SequenceFlow') continue;
+    if (el.$type === 'bpmn:SequenceFlow' || el.$type === 'bpmn:DataObject') continue;
+    if (el.$type === 'bpmn:DataObjectReference') {
+      dataRefs.push(el);
+      continue;
+    }
     const definitions = definitionsOf(el);
     if (el.$type === 'bpmn:StartEvent') starts.push(el);
     else if (el.$type === 'bpmn:EndEvent') ends.set(el.id, definitions.includes('bpmn:TerminateEventDefinition') ? 'terminate' : true);
@@ -1653,6 +1803,38 @@ export async function bpmnToOutline(xml: string, options: BpmnToOutlineOptions =
   // default-flow marks out of anything but an xor or an or, and broken ones.
   const droppedProbabilities: string[] = [];
   const droppedDefaults: string[] = [];
+  // Notes (#638): the text annotations attached to a step, once per text; data: the named data
+  // objects an activity reads or writes. What is read is not said lost below.
+  const associations = associationsOf(rootElement as El, process);
+  const readArtifacts = new Set<El>();
+  const mergedNotes: string[] = [];
+  const usedRefs = new Set<El>();
+  /** name → the data object reference read under it: another one with that name is said lost */
+  const refByName = new Map<string, El>();
+  const lostData: El[] = [];
+  const notesFor = (el: El): string[] | undefined => {
+    const texts: string[] = [];
+    for (const { annotation, association } of notesOf(el, associations)) {
+      const text = annotation['text'] as string | undefined;
+      if (text === undefined || text.trim() === '') continue;
+      readArtifacts.add(annotation).add(association);
+      if (texts.includes(text)) mergedNotes.push(`${el.id} "${text}"`);
+      else texts.push(text);
+    }
+    return texts.length > 0 ? texts : undefined;
+  };
+  const dataFor = (el: El, type: OutlineStepType): OutlineData[] | undefined => {
+    if (!WORK.has(type) && type !== 'subprocess') return undefined;
+    const data: { name: string; direction: 'in' | 'out' }[] = [];
+    for (const { reference, direction } of dataOf(el)) {
+      const name = reference.$type === 'bpmn:DataObjectReference' ? dataName(reference) : undefined;
+      if (name === undefined) continue;
+      if ((refByName.get(name) ?? refByName.set(name, reference).get(name)) !== reference) continue;
+      usedRefs.add(reference);
+      if (!data.some((d) => d.name === name && d.direction === direction)) data.push({ name, direction });
+    }
+    return data.length > 0 ? data : undefined;
+  };
   const steps: GraphStep[] = [...kept.keys()].map((id) => {
     const el = byId.get(id)!;
     const type = kept.get(id)!;
@@ -1688,8 +1870,34 @@ export async function bpmnToOutline(xml: string, options: BpmnToOutlineOptions =
         })
       : undefined;
     const selection = element['selection'] === 'and' || element['selection'] === 'or' ? (element['selection'] as 'and' | 'or') : undefined;
-    return { id, name: (el['name'] as string | undefined) ?? '', type, lane: laneOf.get(id), succ, duration, resources, selection, boundary: keptBoundaries.get(id) };
+    return {
+      id,
+      name: (el['name'] as string | undefined) ?? '',
+      type,
+      lane: laneOf.get(id),
+      succ,
+      duration,
+      resources,
+      selection,
+      boundary: keptBoundaries.get(id),
+      notes: notesFor(el),
+      data: dataFor(el, type),
+    };
   });
+  if (mergedNotes.length > 0) warnings.push(C.outlineMergedNotes(mergedNotes.join(', ')));
+  for (const ref of dataRefs) if (!usedRefs.has(ref)) warnings.push(C.outlineUnsupported(ref.id, ref.$type));
+  // Data associations of what is not a step the outline reads as an activity (an event, a gateway…).
+  for (const el of flowElements) {
+    const type = kept.get(el.id);
+    if (type !== undefined && (WORK.has(type) || type === 'subprocess')) continue;
+    for (const { association } of dataOf(el)) if (!lostData.includes(association)) lostData.push(association);
+  }
+  for (const a of lostData) warnings.push(C.outlineUnsupported(a.id, a.$type));
+  const artifacts = [process, ...collaborations].reduce(
+    (n, el) => n + ((el['artifacts'] ?? []) as El[]).filter((a) => !readArtifacts.has(a)).length,
+    0,
+  );
+  if (artifacts > 0) warnings.push(C.outlineDroppedArtifacts(artifacts));
   if (droppedDefaults.length > 0) warnings.push(C.outlineDroppedDefaults(droppedDefaults.join(', ')));
   if (droppedProbabilities.length > 0) warnings.push(C.outlineDroppedProbabilities(droppedProbabilities.join(', ')));
   const kinds = scenarioOutside(scenario, graphStarts.map((s) => s.id), steps);
