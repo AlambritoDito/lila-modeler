@@ -196,6 +196,8 @@ export const en = {
     cerrar: 'Close',
     /** Settings → About Lila Modeler (LILA-381): closes Settings and opens the About dialog. */
     acercaDe: 'About Lila Modeler',
+    /** Settings header, File menu, ⌘K and desktop Help (#651): GitHub's bug form, prefilled. */
+    reportarProblema: 'Report a problem…',
 
     /** Validation chips over the canvas and counters of the status bar. */
     irAlPrimerProblema: 'Go to the first element with problems',
@@ -2186,5 +2188,13 @@ export const en = {
     sinNombre: { 'bpmn:Participant': 'Unnamed pool', 'bpmn:Lane': 'Unnamed lane' },
     /** The end of the replay on the time bar: one word, with the whole sentence in its title. */
     finCorto: 'End',
+  },
+  /** #653: the read-only viewer for phones and tablets (`Visor.tsx`). */
+  visor: {
+    modo: 'Viewer mode',
+    editor: 'Full editor',
+    avisoTitulo: "You're viewing the mobile version",
+    avisoTexto: 'It is limited: it only shows the processes. Use Lila Modeler from a computer for the full system.',
+    avisoOk: 'Got it',
   },
 } as const;

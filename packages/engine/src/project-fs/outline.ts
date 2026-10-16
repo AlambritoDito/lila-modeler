@@ -72,7 +72,7 @@ function absolute(file: string): string {
  * snapshot), or `null` when there is no such file. The process opened is just the first one: what
  * matters here is the whole document and the snapshot.
  */
-async function existing(path: string, locale: Locale): Promise<LilaProcess | null> {
+export async function existing(path: string, locale: Locale): Promise<LilaProcess | null> {
   let bytes: Uint8Array;
   try {
     bytes = new Uint8Array(await readFile(path));

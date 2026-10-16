@@ -1,7 +1,7 @@
 /**
- * Texts of the agent tools of #99, #403, #514 and #628 (annotate an element, the RACI matrix, a
- * scenario sheet as a tool, creating a `.lila`, the read-only inventory), English and Spanish,
- * shared by the CLI and the MCP server.
+ * Texts of the agent tools of #99, #403, #514, #628 and #633 (annotate an element, the RACI matrix,
+ * a scenario sheet as a tool, creating a `.lila`, the read-only inventory, defining an extended
+ * attribute), English and Spanish, shared by the CLI and the MCP server.
  *
  * Their own file, like `sheets.ts`: none of them is an `E-*`/`W-*` code, and keeping them out of
  * `en.ts`/`es.ts` keeps the main catalog to the problems of a model or a scenario.
@@ -24,6 +24,16 @@ export interface AgentToolMessages {
   attributeNumber: (name: string, value: string) => string;
   attributeDate: (name: string, value: string) => string;
   attributeOption: (name: string, value: string, options: string) => string;
+  // define_attribute (#633)
+  attributeIncomplete: () => string;
+  attributeRemoveTarget: () => string;
+  attributeUnknownId: (id: string, defined: string) => string;
+  attributeNameEmpty: () => string;
+  attributeTypeUnknown: (type: string, accepted: string) => string;
+  attributeAppliesToUnknown: (appliesTo: string, accepted: string) => string;
+  attributeNoOptions: (name: string) => string;
+  attributeOptionsNotList: (name: string, type: string) => string;
+  attributeDuplicate: (name: string, appliesTo: string, id: string) => string;
   none: () => string;
   sheetUnreadable: (file: string) => string;
   sheetTooLarge: (file: string) => string;
@@ -38,6 +48,16 @@ export interface AgentToolMessages {
   createScenarioDuplicate: (entry: string) => string;
   createScenarioModel: (name: string, model: string) => string;
   createEmptyName: () => string;
+  // `put_process_bpmn` / `lila process import|export-bpmn` (#632)
+  unsimulatableNote: (problem: string) => string;
+  putMode: (mode: string) => string;
+  putNoProject: (path: string) => string;
+  putReplaceName: () => string;
+  putScenarioBroken: (detail: string) => string;
+  putScenarioNote: (entry: string, problem: string) => string;
+  putSummary: (mode: 'add' | 'replace', dryRun: boolean, name: string, slug: string, file: string, revision: number) => string;
+  bpmnRequired: () => string;
+  bpmnWritten: (file: string) => string;
   // CLI chrome
   processToolUnknown: (sub: string, accepted: string) => string;
   scenarioUnknown: (sub: string, accepted: string) => string;
@@ -58,11 +78,19 @@ export interface AgentToolMessages {
   templateWritten: (file: string) => string;
   outRequired: () => string;
   newEntry: () => string;
+  attributeSaved: (name: string, id: string, file: string) => string;
+  attributeRemoved: (id: string, file: string) => string;
+  attributeDryRun: () => string;
+  attributeNoChange: () => string;
+  attributeRemovedValues: (count: number) => string;
+  attributeLine: (id: string, name: string, type: string, appliesTo: string, options: string | null, fallback: string | null) => string;
+  attributeListEmpty: (slug: string) => string;
   // `lila project show` / `lila scenario show` (#628)
   projectShowHeader: (name: string, file: string, version: number) => string;
   projectShowProcess: (slug: string, name: string, processId: string, revision: number, elements: number | null) => string;
   projectShowScenarios: (count: number) => string;
   projectShowRuns: (count: number) => string;
+  projectShowAttributes: (count: number | null) => string;
   projectShowRevision: (revision: number) => string;
   projectShowExtends: (parent: string) => string;
   projectShowRun: (replications: number, start: string | null, current: boolean) => string;
@@ -97,6 +125,18 @@ const en: AgentToolMessages = {
   attributeNumber: (name, value) => `"${value}" is not a number for attribute "${name}"; write it like 12 or -3.5.`,
   attributeDate: (name, value) => `"${value}" is not a date for attribute "${name}"; write it as YYYY-MM-DD.`,
   attributeOption: (name, value, options) => `"${value}" is not an option of attribute "${name}"; use one of ${options}.`,
+  attributeIncomplete: () =>
+    'pass the whole definition of the attribute: name, type and appliesTo, and its options and default when it has them.',
+  attributeRemoveTarget: () => 'to remove an attribute, pass its id, or its name and appliesTo.',
+  attributeUnknownId: (id, defined) =>
+    `no extended attribute has the id "${id}"; defined: ${defined}. Leave id out to create one. Nothing was written.`,
+  attributeNameEmpty: () => 'an extended attribute needs a name.',
+  attributeTypeUnknown: (type, accepted) => `"${type}" is not an attribute type; use one of ${accepted}.`,
+  attributeAppliesToUnknown: (appliesTo, accepted) => `"${appliesTo}" is not an element type for attributes; use one of ${accepted}.`,
+  attributeNoOptions: (name) => `attribute "${name}" is a list and needs at least one option.`,
+  attributeOptionsNotList: (name, type) => `attribute "${name}" is of type ${type}; only a list takes options.`,
+  attributeDuplicate: (name, appliesTo, id) =>
+    `an attribute for ${EN_CATEGORIES[appliesTo] ?? appliesTo} is already named "${name}" (${id}); pass its id to change it.`,
   none: () => 'none',
   sheetUnreadable: (file) => `${file} cannot be read as a spreadsheet (.xlsx, or a .csv/.txt table).`,
   sheetTooLarge: (file) => `${file} is too large to import.`,
@@ -108,12 +148,30 @@ const en: AgentToolMessages = {
   createDirectory: (path) => `${path} is a directory; nothing was written.`,
   createModelUnparsable: (detail) => `the BPMN cannot be read; nothing was written: ${detail}`,
   createModelInvalid: (count, detail) =>
-    `the model has ${count} validation ${count === 1 ? 'error' : 'errors'}; nothing was written: ${detail}`,
+    `the model has ${count} validation ${count === 1 ? 'error' : 'errors'}; nothing was written: ${detail}. To keep it as a diagram that does not simulate, pass allowUnsimulatable (--allow-unsimulatable).`,
   createScenarioNotObject: (name) => `scenario "${name}" must be a JSON object.`,
   createScenarioDuplicate: (entry) => `two scenarios would be saved as ${entry}.`,
   createScenarioModel: (name, model) =>
     `scenario "${name}" points to the model "${model}"; inside a .lila it is "model.bpmn" (or leave it out).`,
   createEmptyName: () => 'the project needs a name.',
+  unsimulatableNote: (problem) => `does not simulate: ${problem}`,
+  putMode: (mode) => `mode must be "add" or "replace"; got "${mode}".`,
+  putNoProject: (path) =>
+    `${path} does not exist; nothing was written. put_process_bpmn adds to an existing .lila: create it first with create_project (or create_process).`,
+  putReplaceName: () => 'with mode "replace" the process keeps its name; `name` only names a process that is added. Nothing was written.',
+  putScenarioBroken: (detail) =>
+    `the new model would leave a scenario with errors it did not have; nothing was written:\n${detail}\nPass allowUnsimulatable (--allow-unsimulatable) to save it anyway.`,
+  putScenarioNote: (entry, problem) => `${entry} cannot run as it is: ${problem}`,
+  putSummary: (mode, dryRun, name, slug, file, revision) =>
+    mode === 'add'
+      ? dryRun
+        ? `Dry run: would add process "${name}" (${slug}) to ${file}. Nothing was written.`
+        : `Added process "${name}" (${slug}) to ${file}.`
+      : dryRun
+        ? `Dry run: would replace the model of process "${name}" (${slug}) in ${file} (revision ${revision}). Nothing was written.`
+        : `Replaced the model of process "${name}" (${slug}) in ${file}: revision ${revision}.`,
+  bpmnRequired: () => 'needs --bpmn <file.bpmn>.',
+  bpmnWritten: (file) => `BPMN: ${file}`,
   processToolUnknown: (sub, accepted) => `unknown subcommand "${sub}"; use ${accepted}.`,
   scenarioUnknown: (sub, accepted) => `unknown subcommand "${sub}"; use ${accepted}.`,
   badResponsibilityArgument: (value) => `--responsibility takes TYPE:role, such as R:cashier; got "${value}".`,
@@ -133,11 +191,23 @@ const en: AgentToolMessages = {
   templateWritten: (file) => `Template: ${file}`,
   outRequired: () => 'needs --out <file.xlsx>.',
   newEntry: () => 'new',
+  attributeSaved: (name, id, file) => `Saved attribute "${name}" (${id}) in ${file}.`,
+  attributeRemoved: (id, file) => `Removed attribute ${id} from ${file}.`,
+  attributeDryRun: () => 'Dry run: the attribute would be saved as shown; nothing was written.',
+  attributeNoChange: () => 'Nothing changes: the project already says this. Nothing was written.',
+  attributeRemovedValues: (count) => `${count} ${count === 1 ? 'value' : 'values'} removed:`,
+  attributeLine: (id, name, type, appliesTo, options, fallback) =>
+    `${id}  "${name}"  ${type}, for ${EN_CATEGORIES[appliesTo] ?? appliesTo}${options === null ? '' : `, options ${options}`}${fallback === null ? '' : `, default ${fallback}`}`,
+  attributeListEmpty: (slug) => `Process ${slug} defines no extended attributes.`,
   projectShowHeader: (name, file, version) => `Project "${name}" (${file}), format version ${version}`,
   projectShowProcess: (slug, name, processId, revision, elements) =>
     `Process ${slug} "${name}": ${processId}, model revision ${revision}, ${elements === null ? 'model unreadable' : `${elements} ${elements === 1 ? 'element' : 'elements'}`}`,
   projectShowScenarios: (count) => `  ${count} ${count === 1 ? 'scenario' : 'scenarios'}${count === 0 ? '' : ':'}`,
   projectShowRuns: (count) => `  ${count} saved ${count === 1 ? 'run' : 'runs'}${count === 0 ? '' : ':'}`,
+  projectShowAttributes: (count) =>
+    count === null
+      ? '  extended attributes: unreadable model'
+      : `  ${count} extended ${count === 1 ? 'attribute' : 'attributes'}${count === 0 ? '' : ':'}`,
   projectShowRevision: (revision) => `revision ${revision}`,
   projectShowExtends: (parent) => `extends ${parent}`,
   projectShowRun: (replications, start, current) =>
@@ -166,6 +236,18 @@ const es: AgentToolMessages = {
   attributeNumber: (name, value) => `"${value}" no es un número para el atributo "${name}"; escríbelo como 12 o -3.5.`,
   attributeDate: (name, value) => `"${value}" no es una fecha para el atributo "${name}"; escríbela como AAAA-MM-DD.`,
   attributeOption: (name, value, options) => `"${value}" no es una opción del atributo "${name}"; usa una de ${options}.`,
+  attributeIncomplete: () =>
+    'pasa la definición entera del atributo: name, type y appliesTo, y sus opciones y su valor por defecto si los tiene.',
+  attributeRemoveTarget: () => 'para quitar un atributo pasa su id, o su nombre y appliesTo.',
+  attributeUnknownId: (id, defined) =>
+    `ningún atributo extendido tiene el id "${id}"; definidos: ${defined}. Omite el id para crear uno. No se escribió nada.`,
+  attributeNameEmpty: () => 'un atributo extendido necesita un nombre.',
+  attributeTypeUnknown: (type, accepted) => `"${type}" no es un tipo de atributo; usa uno de ${accepted}.`,
+  attributeAppliesToUnknown: (appliesTo, accepted) => `"${appliesTo}" no es un tipo de elemento para atributos; usa uno de ${accepted}.`,
+  attributeNoOptions: (name) => `el atributo "${name}" es una lista y necesita al menos una opción.`,
+  attributeOptionsNotList: (name, type) => `el atributo "${name}" es de tipo ${type}; solo una lista lleva opciones.`,
+  attributeDuplicate: (name, appliesTo, id) =>
+    `ya hay un atributo para ${ES_CATEGORIES[appliesTo] ?? appliesTo} llamado "${name}" (${id}); pasa su id para cambiarlo.`,
   none: () => 'ninguno',
   sheetUnreadable: (file) => `${file} no se puede leer como hoja de cálculo (.xlsx, o una tabla .csv/.txt).`,
   sheetTooLarge: (file) => `${file} es demasiado grande para importarlo.`,
@@ -177,12 +259,30 @@ const es: AgentToolMessages = {
   createDirectory: (path) => `${path} es una carpeta; no se escribió nada.`,
   createModelUnparsable: (detail) => `el BPMN no se puede leer; no se escribió nada: ${detail}`,
   createModelInvalid: (count, detail) =>
-    `el modelo tiene ${count} ${count === 1 ? 'error' : 'errores'} de validación; no se escribió nada: ${detail}`,
+    `el modelo tiene ${count} ${count === 1 ? 'error' : 'errores'} de validación; no se escribió nada: ${detail}. Para guardarlo como diagrama que no se simula, pasa allowUnsimulatable (--allow-unsimulatable).`,
   createScenarioNotObject: (name) => `el escenario "${name}" debe ser un objeto JSON.`,
   createScenarioDuplicate: (entry) => `dos escenarios se guardarían como ${entry}.`,
   createScenarioModel: (name, model) =>
     `el escenario "${name}" apunta al modelo "${model}"; dentro de un .lila es "model.bpmn" (u omítelo).`,
   createEmptyName: () => 'el proyecto necesita un nombre.',
+  unsimulatableNote: (problem) => `no se simula: ${problem}`,
+  putMode: (mode) => `mode debe ser "add" o "replace"; llegó "${mode}".`,
+  putNoProject: (path) =>
+    `${path} no existe; no se escribió nada. put_process_bpmn añade a un .lila que ya existe: créalo antes con create_project (o create_process).`,
+  putReplaceName: () => 'con mode "replace" el proceso conserva su nombre; `name` solo nombra un proceso que se añade. No se escribió nada.',
+  putScenarioBroken: (detail) =>
+    `el modelo nuevo dejaría un escenario con errores que no tenía; no se escribió nada:\n${detail}\nPasa allowUnsimulatable (--allow-unsimulatable) para guardarlo de todos modos.`,
+  putScenarioNote: (entry, problem) => `${entry} no se puede correr así: ${problem}`,
+  putSummary: (mode, dryRun, name, slug, file, revision) =>
+    mode === 'add'
+      ? dryRun
+        ? `Simulacro: se añadiría el proceso "${name}" (${slug}) a ${file}. No se escribió nada.`
+        : `Añadido el proceso "${name}" (${slug}) a ${file}.`
+      : dryRun
+        ? `Simulacro: se reemplazaría el modelo del proceso "${name}" (${slug}) en ${file} (revisión ${revision}). No se escribió nada.`
+        : `Reemplazado el modelo del proceso "${name}" (${slug}) en ${file}: revisión ${revision}.`,
+  bpmnRequired: () => 'necesita --bpmn <archivo.bpmn>.',
+  bpmnWritten: (file) => `BPMN: ${file}`,
   processToolUnknown: (sub, accepted) => `subcomando desconocido "${sub}"; usa ${accepted}.`,
   scenarioUnknown: (sub, accepted) => `subcomando desconocido "${sub}"; usa ${accepted}.`,
   badResponsibilityArgument: (value) => `--responsibility recibe TIPO:rol, como R:cajero; llegó "${value}".`,
@@ -202,11 +302,23 @@ const es: AgentToolMessages = {
   templateWritten: (file) => `Plantilla: ${file}`,
   outRequired: () => 'necesita --out <archivo.xlsx>.',
   newEntry: () => 'nuevo',
+  attributeSaved: (name, id, file) => `Guardado el atributo "${name}" (${id}) en ${file}.`,
+  attributeRemoved: (id, file) => `Quitado el atributo ${id} de ${file}.`,
+  attributeDryRun: () => 'Simulacro: el atributo quedaría así; no se escribió nada.',
+  attributeNoChange: () => 'No cambia nada: el proyecto ya dice esto. No se escribió nada.',
+  attributeRemovedValues: (count) => `${count} ${count === 1 ? 'valor quitado' : 'valores quitados'}:`,
+  attributeLine: (id, name, type, appliesTo, options, fallback) =>
+    `${id}  "${name}"  ${type}, para ${ES_CATEGORIES[appliesTo] ?? appliesTo}${options === null ? '' : `, opciones ${options}`}${fallback === null ? '' : `, por defecto ${fallback}`}`,
+  attributeListEmpty: (slug) => `El proceso ${slug} no define atributos extendidos.`,
   projectShowHeader: (name, file, version) => `Proyecto "${name}" (${file}), formato versión ${version}`,
   projectShowProcess: (slug, name, processId, revision, elements) =>
     `Proceso ${slug} "${name}": ${processId}, revisión del modelo ${revision}, ${elements === null ? 'modelo ilegible' : `${elements} ${elements === 1 ? 'elemento' : 'elementos'}`}`,
   projectShowScenarios: (count) => `  ${count} ${count === 1 ? 'escenario' : 'escenarios'}${count === 0 ? '' : ':'}`,
   projectShowRuns: (count) => `  ${count} ${count === 1 ? 'corrida guardada' : 'corridas guardadas'}${count === 0 ? '' : ':'}`,
+  projectShowAttributes: (count) =>
+    count === null
+      ? '  atributos extendidos: modelo ilegible'
+      : `  ${count} ${count === 1 ? 'atributo extendido' : 'atributos extendidos'}${count === 0 ? '' : ':'}`,
   projectShowRevision: (revision) => `revisión ${revision}`,
   projectShowExtends: (parent) => `hereda de ${parent}`,
   projectShowRun: (replications, start, current) =>

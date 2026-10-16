@@ -203,6 +203,38 @@ npx lila process raci examples/pedido.lila --json
 ```
 Exit code: `0`.
 
+## `process attribute` (#633)
+
+Define the extended attributes an element can then have (`--attribute` above), as the app's
+attribute dialog does, and list them:
+
+- `lila process attribute define <project.lila> --name <name> --type text|number|list|date
+  --applies-to task|gateway|event|subProcess|lane|process` defines one, with `--option <value>`
+  (repeatable) for a list and `--default <value>`. Pass the whole definition every time. It
+  changes the definition with `--id`; without it, the one with that name (any case) for that
+  element type; else it creates one with a deterministic id, `Attr_` and the name in lowercase
+  ASCII (`SLA (h)` → `Attr_sla_h`), so running it again changes nothing. The rules are the
+  dialog's: a name unique per element type, a list with at least one option, options only on a
+  list, a default that fits. `--remove` (with `--id`, or `--name` and `--applies-to`) removes the
+  definition and its values; retyping it, changing `--applies-to` or dropping options removes the
+  values that no longer fit. It prints the definition and each value removed; `--json` prints
+  `{ file, process, dryRun, changed, written, before, after, removedValues, definitions }`.
+- `lila process attribute list <project.lila>` prints the definitions of the process; `--json`
+  prints `{ file, process, definitions }`.
+
+`--dry-run` shows the result, values to remove included, and writes nothing. A write saves the
+`.lila` as `process annotate` does.
+
+```bash
+npx lila process attribute define examples/pedido.lila --name SLA --type number --applies-to task --default 24 --dry-run
+```
+Exit code: `0`.
+
+```bash
+npx lila process attribute list examples/pedido.lila --json
+```
+Exit code: `0`.
+
 ## `scenario import` and `scenario template` (#514)
 
 The app's «Download template» and «Import Excel/CSV…» (`docs/SCENARIO_SHEETS.md`) on a scenario
@@ -242,7 +274,9 @@ What a `.lila` holds, read without writing anything — no write, no revision ch
   keeps no date of when a run was taken; `start` is the `run.start` of the scenario it ran.
   `--json` prints `{ file, name, formatVersion, processes: [{ slug, name, processId,
   modelRevision, elements, scenarios: [{ entry, name, revision, extends }], runs: [{ id,
-  scenario, start, replications, current }] }] }`.
+  scenario, start, replications, current }], attributes }] }`, where `attributes` are the
+  extended attribute definitions of the process (see `process attribute`), `null` when the model
+  cannot be read back whole.
 - `lila scenario show <project.lila> <scenario>` prints the scenario as stored (with its
   `extends`), or with `--resolved` merged through `extends` with the engine's defaults — the
   object `patch_scenario` patches, `model` relative to the scenario. Then the validator's notes
@@ -259,6 +293,53 @@ Exit code: `0`.
 npx lila scenario show examples/pedido.lila to-be-3-cajeros --resolved
 ```
 Exit code: `0`.
+
+## `process export-bpmn` and `process import` (#632)
+
+The raw BPMN of one process of a `.lila`, out and in — the MCP tools `get_process_bpmn` and
+`put_process_bpmn` ([`docs/MCP.md`](MCP.md#raw-bpmn-of-a-process)):
+
+- `lila process export-bpmn -p <project.lila>` prints the model of the process as stored, or
+  writes it to `--out file.bpmn` (an existing file is refused unless `--force`). It writes nothing
+  into the `.lila`.
+- `lila process import -p <project.lila> --bpmn <file.bpmn>` adds the BPMN (a Bizagi export, say)
+  as a new process of the `.lila`, which must exist; a version 1 project becomes a repository.
+  The slug is `--process`, or comes from `--name`, else from the pool's, the process's or the
+  file's name; one already in the file exits `1`. The new process gets an `as-is.scenario.json`
+  with the app's defaults (20 arrivals a minute apart, a minute per task). With `--replace` it
+  replaces the model of the process `--process` instead: the revision goes up (saved runs go
+  stale), the annotations are the new model's, scenario entries that no longer apply are removed
+  and printed as notes, and a scenario error the old model did not have exits `1`.
+
+A model with validation errors exits `1` and writes nothing, unless `--allow-unsimulatable`: then
+it is kept as a diagram that does not simulate, its errors printed as notes. A file that is not
+BPMN is always refused. A model without a diagram is laid out unless `--no-layout`. The write is
+the `.lila`'s atomic, locked write (see [A `.lila` as input](#a-lila-as-input-466)), every other
+process unchanged; `--dry-run` writes nothing; `--json` prints the result object of
+`put_process_bpmn`: `{ file, mode, slug, name, processId, revision, dryRun, laidOut, summary,
+scenarioRemovals, notes, warnings, slugs }`.
+
+```bash
+npx lila process export-bpmn -p examples/pedido.lila --out results/pedido.bpmn
+```
+Exit code: `0`.
+
+```bash
+npx lila process import -p examples/pedido.lila --bpmn examples/bizagi-exports/bizagi-miwg-A.1.0-roundtrip.bpmn --dry-run
+```
+Exit code: `0`.
+
+```text
+Dry run: would add process "bizagi-miwg-A.1.0-roundtrip" (bizagi-miwg-a-1-0-roundtrip) to /…/examples/pedido.lila. Nothing was written.
+```
+
+A.3.0 has boundary events the simulator does not support, so it is refused unless
+`--allow-unsimulatable`:
+
+```bash
+npx lila process import -p examples/pedido.lila --bpmn examples/bizagi-exports/bizagi-miwg-A.3.0-roundtrip.bpmn --dry-run
+```
+Exit code: `1`.
 
 ## `mcp`
 
@@ -312,8 +393,31 @@ npx lila process create --outline examples/outline/credit-application.json -p ex
 ```
 Exit code: `1`.
 
+`examples/outline/claim-escalation.json` is the 48-hour escalation of the
+[agent guide](AGENT_GUIDE.md#example-escalate-after-48-hours): a non-interrupting boundary timer
+on «Assess claim» that sends the claim to a supervisor after 48 hours, a default flow, task
+variants, and an event gateway where the customer's confirmation races a five-day timer that ends
+the case with a terminate end event:
+
+```bash
+npx lila process create --outline examples/outline/claim-escalation.json -p claims.lila --dry-run
+```
+Exit code: `0`.
+
+```text
+Dry run: would create process "Claim handling" (claim-handling) in the new file /…/claims.lila: 10 steps, 3 lanes. Nothing was written.
+```
+
+Its base scenario runs for one hour, like every created process: lengthen `run.duration` (in the
+app, or with the MCP tool `patch_scenario`) before running it, or no case reaches the 48-hour
+deadline.
+
 `process show` prints the outline of one process, one step per line with its type, name, lane,
-duration, resources and where it goes; `--json` prints `{ slug, outline, warnings }`, the outline in
+duration, resources and where it goes (`end`, `terminate`, or the branches with their probability
+and `default`); the starts come first when the outline lists them (`start` or `timer start`, and the
+step each one leads to), and each boundary timer gets a line under its step (`boundary <id>  timer`
+or `timer (non-interrupting)`, its name, its delay and where it leads), and so do its data objects
+(`data in` or `data out` and the name) and its notes (`note` and the text). `--json` prints `{ slug, outline, warnings }`, the outline in
 normal form (the form `create_process` returns). Durations, resources and branch probabilities
 come from the process's `as-is.scenario.json`. What an outline cannot carry is reported on stderr.
 
@@ -333,7 +437,8 @@ Process "Restaurant" (pedido)
 
 `process edit` applies a list of operations to one process, all or none: the JSON array the MCP
 tool `edit_process` takes as `operations` (`add`, `connect`, `remove`, `rename`, `setType`,
-`moveToLane`, `addLane`; format and rules in [`docs/MCP.md`](MCP.md#editing-a-process)). Every
+`moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`, `annotate`, `addDataObject`…; format and rules in
+[`docs/MCP.md`](MCP.md#editing-a-process)). Every
 operation is checked, the result is validated, and the `.lila` is written only if all of it is fine;
 otherwise it exits `1`, writes nothing and lists every problem with the index of its operation. The
 process is laid out again unless `--no-layout`, which keeps every position and only places the new

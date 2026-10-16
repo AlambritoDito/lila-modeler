@@ -124,6 +124,12 @@ the project container does not change.
   no longer fit. A value whose definition is gone (edited by hand, another tool) is kept, shown
   under its `ref` in the panel and in the process document, never dropped; several values of one
   attribute on one element are all shown.
+- Without the app, the MCP tool `define_attribute` and `lila process attribute define|list` (#633)
+  define them with the same rules, in the same canonical place (moving stray copies there). Their
+  new ids are deterministic, `Attr_` and the name in lowercase ASCII (`Attr_sla_h`, then `_2`…),
+  not the app's random suffix; both are NCNames, and readers do not tell them apart. They do not
+  ask: removing a definition removes its values, and retyping, changing `appliesTo` or removing
+  options removes the values that no longer fit, listing each one in `removedValues`.
 - The definitions stay put when pools come and go: adding the first pool or deleting the last one
   carries them to the new root, deleting a pool whose process still held them moves them to the
   collaboration first, and pasting a pool never copies them (it would repeat every `id`). A task

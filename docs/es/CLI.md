@@ -210,6 +210,38 @@ npx lila process raci examples/pedido.lila --json
 ```
 Código de salida: `0`.
 
+## `process attribute` (#633)
+
+Define los atributos extendidos que luego puede tener un elemento (`--attribute` de arriba), como
+el diálogo de atributos de la app, y los lista:
+
+- `lila process attribute define <proyecto.lila> --name <nombre> --type text|number|list|date
+  --applies-to task|gateway|event|subProcess|lane|process` define uno, con `--option <valor>`
+  (repetible) para una lista y `--default <valor>`. Se pasa siempre la definición entera. Cambia la
+  definición con `--id`; sin él, la que tiene ese nombre (sin distinguir mayúsculas) para ese tipo
+  de elemento; si no hay, crea una con un id determinista, `Attr_` y el nombre en ASCII minúsculo
+  (`SLA (h)` → `Attr_sla_h`), así que repetirlo no cambia nada. Las reglas son las del diálogo: un
+  nombre único por tipo de elemento, una lista con al menos una opción, opciones solo en una lista
+  y un valor por defecto que encaje. `--remove` (con `--id`, o con `--name` y `--applies-to`) quita
+  la definición y sus valores; cambiarle el tipo, el `--applies-to` o quitarle opciones quita los
+  valores que ya no encajan. Imprime la definición y cada valor quitado; `--json` imprime
+  `{ file, process, dryRun, changed, written, before, after, removedValues, definitions }`.
+- `lila process attribute list <proyecto.lila>` imprime las definiciones del proceso; `--json`
+  imprime `{ file, process, definitions }`.
+
+`--dry-run` muestra el resultado, con los valores que se quitarían, y no escribe nada. Una
+escritura guarda el `.lila` como `process annotate`.
+
+```bash
+npx lila process attribute define examples/pedido.lila --name SLA --type number --applies-to task --default 24 --dry-run
+```
+Código de salida: `0`.
+
+```bash
+npx lila process attribute list examples/pedido.lila --json
+```
+Código de salida: `0`.
+
 ## `scenario import` y `scenario template` (#514)
 
 «Descargar plantilla» e «Importar Excel/CSV…» de la app (`docs/es/SCENARIO_SHEETS.md`) sobre un
@@ -249,7 +281,9 @@ Lo que tiene un `.lila`, leído sin escribir nada — ni escritura ni cambio de 
   después de ella). Un `.lila` no guarda la fecha en que se tomó una corrida; `start` es el
   `run.start` del escenario que corrió. `--json` imprime `{ file, name, formatVersion,
   processes: [{ slug, name, processId, modelRevision, elements, scenarios: [{ entry, name,
-  revision, extends }], runs: [{ id, scenario, start, replications, current }] }] }`.
+  revision, extends }], runs: [{ id, scenario, start, replications, current }], attributes }] }`,
+  donde `attributes` son las definiciones de atributos extendidos del proceso (ver
+  `process attribute`), `null` si el modelo no se puede releer entero.
 - `lila scenario show <proyecto.lila> <escenario>` imprime el escenario como está guardado (con su
   `extends`), o con `--resolved` fusionado por `extends` con los valores por defecto del motor —el
   objeto que parchea `patch_scenario`, con `model` relativo al escenario—. Después, las notas del
@@ -267,6 +301,51 @@ Código de salida: `0`.
 npx lila scenario show examples/pedido.lila to-be-3-cajeros --resolved
 ```
 Código de salida: `0`.
+
+## `process export-bpmn` y `process import` (#632)
+
+El BPMN de un proceso de un `.lila`, tal cual, hacia fuera y hacia dentro — las tools MCP
+`get_process_bpmn` y `put_process_bpmn` ([`docs/es/MCP.md`](MCP.md#el-bpmn-de-un-proceso)):
+
+- `lila process export-bpmn -p <proyecto.lila>` imprime el modelo del proceso como está guardado,
+  o lo escribe en `--out archivo.bpmn` (un archivo que ya existe se rechaza salvo con `--force`).
+  No escribe nada en el `.lila`.
+- `lila process import -p <proyecto.lila> --bpmn <archivo.bpmn>` añade el BPMN (una exportación de
+  Bizagi, por ejemplo) como proceso nuevo del `.lila`, que tiene que existir; un proyecto versión 1
+  pasa a ser un repositorio. El slug es `--process`, o sale de `--name`, si no del nombre del pool,
+  del proceso o del archivo; uno que ya está en el archivo sale con `1`. El proceso nuevo recibe un
+  `as-is.scenario.json` con los valores por defecto de la app (20 llegadas con un minuto entre
+  ellas, un minuto por tarea). Con `--replace` reemplaza en cambio el modelo del proceso
+  `--process`: la revisión sube (las corridas guardadas quedan obsoletas), las anotaciones son las
+  del modelo nuevo, las entradas de escenario que ya no aplican se quitan y se imprimen como notas,
+  y un error de escenario que con el modelo viejo no había sale con `1`.
+
+Un modelo con errores de validación sale con `1` y no escribe nada, salvo con
+`--allow-unsimulatable`: entonces se guarda como diagrama que no se simula, con sus errores
+impresos como notas. Un archivo que no es BPMN se rechaza siempre. Un modelo sin diagrama se
+maqueta salvo con `--no-layout`. La escritura es la escritura atómica y con candado del `.lila`
+(ver [Un `.lila` como entrada](#un-lila-como-entrada-466)), con los demás procesos intactos;
+`--dry-run` no escribe nada; `--json` imprime el objeto de resultado de `put_process_bpmn`:
+`{ file, mode, slug, name, processId, revision, dryRun, laidOut, summary, scenarioRemovals, notes,
+warnings, slugs }`.
+
+```bash
+npx lila process export-bpmn -p examples/pedido.lila --out results/pedido.bpmn
+```
+Código de salida: `0`.
+
+```bash
+npx lila process import -p examples/pedido.lila --bpmn examples/bizagi-exports/bizagi-miwg-A.1.0-roundtrip.bpmn --dry-run
+```
+Código de salida: `0`.
+
+A.3.0 tiene eventos de borde que el simulador no admite, así que se rechaza salvo con
+`--allow-unsimulatable`:
+
+```bash
+npx lila process import -p examples/pedido.lila --bpmn examples/bizagi-exports/bizagi-miwg-A.3.0-roundtrip.bpmn --dry-run
+```
+Código de salida: `1`.
 
 ## `mcp`
 
@@ -321,8 +400,30 @@ npx lila process create --outline examples/outline/credit-application.json -p ex
 ```
 Código de salida: `1`.
 
+`examples/outline/claim-escalation.json` es la escalación a las 48 horas de la
+[guía para agentes](GUIA-AGENTES.md#ejemplo-escalar-a-las-48-horas): un temporizador de borde que
+no interrumpe «Assess claim» y manda el siniestro a un supervisor a las 48 horas, un flujo por
+defecto, variantes de tarea y una compuerta por eventos donde la confirmación del cliente compite
+con un temporizador de cinco días que termina el caso con un evento de fin de terminación:
+
+```bash
+npx lila process create --outline examples/outline/claim-escalation.json -p claims.lila --dry-run --lang es
+```
+Código de salida: `0`.
+
+```text
+Simulacro: se crearía el proceso "Claim handling" (claim-handling) en el archivo nuevo /…/claims.lila: 10 pasos, 3 carriles. No se escribió nada.
+```
+
+Su escenario base corre una hora, como el de todo proceso creado: alarga `run.duration` (en la app
+o con la tool MCP `patch_scenario`) antes de correrlo, o ningún caso llega al plazo de 48 horas.
+
 `process show` imprime el esquema de un proceso, un paso por línea con su tipo, nombre, carril,
-duración, recursos y a dónde va; `--json` imprime `{ slug, outline, warnings }`, con el esquema en
+duración, recursos y a dónde va (`end`, `terminate`, o las ramas con su probabilidad y `default`);
+los inicios van primero cuando el esquema los lista (`start` o `timer start`, y el paso al que
+lleva cada uno), y cada temporizador de borde tiene una línea bajo su paso (`boundary <id>  timer`
+o `timer (non-interrupting)`, su nombre, su demora y a dónde lleva), y también sus objetos de
+datos (`data in` o `data out` y el nombre) y sus notas (`note` y el texto). `--json` imprime `{ slug, outline, warnings }`, con el esquema en
 forma normal (la que devuelve `create_process`). Duraciones, recursos y probabilidades de rama
 salen del `as-is.scenario.json` del proceso. Lo que un esquema no puede llevar se avisa por stderr.
 
@@ -333,7 +434,8 @@ Código de salida: `0`.
 
 `process edit` aplica una lista de operaciones a un proceso, todas o ninguna: el arreglo JSON que la
 tool MCP `edit_process` recibe como `operations` (`add`, `connect`, `remove`, `rename`, `setType`,
-`moveToLane`, `addLane`; formato y reglas en [`docs/es/MCP.md`](MCP.md#editar-un-proceso)). Se
+`moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`, `annotate`, `addDataObject`…; formato y reglas en
+[`docs/es/MCP.md`](MCP.md#editar-un-proceso)). Se
 comprueba cada operación, se valida el resultado y el `.lila` se escribe solo si todo está bien; si
 no, sale con `1`, no escribe nada y lista cada problema con el índice de su operación. El proceso se
 maqueta de nuevo salvo con `--no-layout`, que conserva todas las posiciones y solo coloca las figuras

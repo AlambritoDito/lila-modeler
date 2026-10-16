@@ -40,6 +40,7 @@ export const es: Strings = {
     ejecutar: 'Ejecutar la simulación',
     ayuda: 'Ayuda',
     documentacion: 'Documentación',
+    reportarProblema: 'Informar de un problema…',
     editar: 'Edición',
     deshacer: 'Deshacer',
     rehacer: 'Rehacer',
