@@ -96,7 +96,9 @@ or text posted to GitHub.
 
 ## Pull request process
 
-- One branch per ticket, opened against `main`.
+- One branch per ticket, opened against `main`, or against the batch branch `lote/<x>` when the
+  ticket belongs to a batch; the batch reaches `main` in one integration PR that bumps the version
+  (see [`docs/RELEASING.md`](docs/RELEASING.md)).
 - Commit messages are in English, with a conventional prefix:
   `feat/fix/docs/chore/test/ci(scope): summary`.
 - The merge gate is: CI green (`npm ci`, build, test, typecheck, and the web build, on both Node 22
