@@ -85,8 +85,10 @@ existen con otro alcance.
 
 ### Orden de arranque
 
-El código ADONIS empieza cuando el Lote R cierre la épica de agentes #527 (el Lote P salió en
-beta.25, el Lote Q está en curso y el R va después). El contrato RM-01, solo documentación, es
+El código ADONIS empieza cuando el Lote R (#634, #635, #636) complete la épica de agentes #527 y
+estén hechos los restos #645 y #517 (el Lote P salió en beta.25 y el Lote Q en beta.28). A partir de
+ahí, el bucle de issues en la nube ejecutará los issues aprobados como PR en borrador contra ramas
+de lote. El contrato RM-01, solo documentación, es
 [`REPOSITORY_CONTRACT.md`](REPOSITORY_CONTRACT.md), registrado como ADR-032 (aceptada el 2026-10-14
 con las decisiones del dueño) en [DECISIONS.md](DECISIONS.md). Lotes de entrega propuestos:
 
@@ -102,6 +104,37 @@ con las decisiones del dueño) en [DECISIONS.md](DECISIONS.md). Lotes de entrega
 
 #639 (multi-instancia, bucles y eventos de error en el simulador) es profundidad de simulación, no
 un paso del camino a ADONIS, y no condiciona estos lotes.
+
+### Repositorio organizacional v1
+
+Alcance acordado con el dueño el 2026-10-16: la primera entrega orientada a ADONIS, una parte de
+los lotes A1–A3. El comportamiento de ADONIS 19.1, el código actual de Lila y la brecha de cada
+punto están en el
+[mapa de capacidades](research/ADONIS-CAPABILITIES.md#mapa-de-capacidades-191-consultado-el-2026-10-15).
+
+| Punto | Alcance | Aceptación | Lote |
+| --- | --- | --- | --- |
+| **S1 Identidad** | Roles de catálogo referenciados por id desde las tareas mediante un selector; un solo renombrado; adopción de ids escritos | Rol «Receptionist» en el catálogo, referenciado desde tareas de tres procesos mediante el selector, renombrado una vez → los tres muestran el nombre nuevo; guardar el `.lila`, reabrir, mismo id; los proyectos v1/v2 abren sin cambios; los ids de `roleRef` escritos a mano pueden adoptarse | A1 |
+| **S2 Dónde se usa e integridad** | Usos de cada objeto; lint de referencias ausentes del catálogo; borrar un objeto en uso se rechaza salvo que se reemplace o se quiten sus referencias (REPOSITORY_CONTRACT.md § 3.4) | La lista de usos coincide con todas las referencias; el rechazo nombra los usos; cada alternativa es un único comando deshacible | A1 |
+| **S3 Vista RACI** | Tareas × roles por proceso y entre procesos en la app, con nombres del catálogo, exportación CSV/XLSX | Por proceso, igual a `raciMatrix` del motor | A2 |
+| **S4 Unidades** | Jerarquía de unidades, un rol pertenece a una unidad, árbol de unidades, filtro de la RACI por unidad | Árbol y filtro coinciden con `parentRef`/`unitRef`; un ciclo se muestra cortado | A1 (unidades, árbol), A2 (filtro) |
+| **S5 Carril → rol** | Comando que asigna el rol de un carril a sus tareas, como «Assign responsibilities to tasks» de ADONIS | Un único comando deshacible, nunca automático; el escenario de simulación no se toca | A2 |
+| **S6 Árbol de procesos** | Árbol derivado de las actividades de llamada, con el camino «usado en» de cada proceso | Cada llamada se resuelve a su nodo o se lista como sin resolver; los ciclos se muestran cortados | A3 |
+| **S7 Documentos** | Word/HTML muestran los nombres del catálogo; un informe por rol | Un renombrado se ve en el documento regenerado; el informe por rol es igual a la columna de ese rol en S3 | A2 |
+
+**Fase siguiente:** S8, riesgos y controles (lote A4).
+
+**Fuera de v1:** flujos de liberación, multiusuario, comentarios, permisos, portal, SSO, API REST,
+sincronización con ADOIT/ADOGRC, paneles/Insights configurables, personalización del metamodelo,
+IA, minería, Dependency Modeller, comparación de modelos, tipos de diagrama dibujado de organigrama
+y paisaje, el editor tabular, adjuntos, KPI/Ishikawa/SIPOC, consultas guardadas, control documental
+ISO, puestos y personas.
+
+Correspondencia con los lotes: v1 es S1–S7. El resto de A1–A3 (el editor tabular e Insights de A2;
+los paisajes dibujados, las cadenas de valor y el organigrama de A3, y su enlace explícito rol ↔
+pool de simulación) sigue en esos lotes pero no forma parte de v1. Los escenarios de aceptación usan
+roles y unidades; si los sistemas y documentos entran en v1 con el mismo selector y las mismas
+reglas de uso se decide al redactar los issues de A1.
 
 ## 3. Reglas de arquitectura y producto
 
@@ -192,7 +225,7 @@ Las capturas de planificación son referencias funcionales y no fixtures públic
 | [Insights, 14.0](https://docs.boc-group.com/adonis/en/docs/14.0/user_manual/igh-000000/) | Resúmenes y navegación por proceso/objeto | Depende de biblioteca; no prueba widgets idénticos entre versiones |
 | [Funciones ADONIS](https://www.boc-group.com/en/adonis/features/) | Gobierno, publicación y ecosistema | Minería, informes avanzados y automatización presentados como extensiones; verificar integraciones por separado |
 
-Fuentes del proveedor consultadas el 2026-09-26. Son versiones distintas y no establecen una edición ADONIS única exhaustiva.
+Fuentes del proveedor consultadas el 2026-09-26; el [mapa de capacidades](research/ADONIS-CAPABILITIES.md#mapa-de-capacidades-191-consultado-el-2026-10-15) de la investigación se actualizó con ADONIS 19.1 el 2026-10-15. Son versiones distintas y no establecen una edición ADONIS única exhaustiva.
 Distinguir las adiciones de análisis de calidad propias de Lila de la paridad con el proveedor.
 
 [BACKLOG.md](../../BACKLOG.md) mantiene trabajo y dependencias. Los identificadores nuevos `ORG-*` y

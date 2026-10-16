@@ -84,8 +84,9 @@ other scopes.
 
 ### Sequencing
 
-ADONIS code starts after Lote R closes the agent epic #527 (Lote P shipped in beta.25, Lote Q is
-in progress, Lote R comes next). The RM-01 contract, documentation only, is
+ADONIS code starts once Lote R (#634, #635, #636) completes the agent epic #527 and the remaining
+items #645 and #517 are done (Lote P shipped in beta.25 and Lote Q in beta.28). From then on, the
+cloud issue loop is to execute approved issues as draft PRs against batch branches. The RM-01 contract, documentation only, is
 [`REPOSITORY_CONTRACT.md`](REPOSITORY_CONTRACT.md), recorded as ADR-032 (accepted on 2026-10-14
 with the owner's decisions) in [DECISIONS.md](DECISIONS.md). Proposed delivery lots:
 
@@ -101,6 +102,34 @@ with the owner's decisions) in [DECISIONS.md](DECISIONS.md). Proposed delivery l
 
 #639 (simulator multi-instance, loops and error events) is simulation depth, not a step on the
 path to ADONIS, and does not gate these lots.
+
+### Org repository v1
+
+Scope agreed with the owner on 2026-10-16: the first ADONIS-facing delivery, a slice of lots A1–A3.
+The ADONIS 19.1 behavior, the current Lila code and the gap behind each item are in the
+[capability map](research/ADONIS-CAPABILITIES.md#capability-map-191-consulted-2026-10-15).
+
+| Item | Scope | Acceptance | Lot |
+| --- | --- | --- | --- |
+| **S1 Identity** | Catalog roles referenced by id from tasks through a picker; one rename; adoption of typed ids | Role "Receptionist" in the catalog, referenced from tasks in three processes through the picker, renamed once → all three show the new name; save the `.lila`, reopen, same id; v1/v2 projects open unchanged; hand-typed `roleRef` ids can be adopted | A1 |
+| **S2 Where used and integrity** | Uses of each object; lint for references missing from the catalog; deleting an object in use refused unless replaced or its references removed (REPOSITORY_CONTRACT.md § 3.4) | The usage list matches every reference; the refusal names the uses; each alternative is one undoable command | A1 |
+| **S3 RACI view** | Tasks × roles per process and across processes in the app, with catalog names, CSV/XLSX export | For each process, equal to the engine's `raciMatrix` | A2 |
+| **S4 Units** | Unit hierarchy, a role belongs to a unit, unit tree, RACI filter by unit | Tree and filter agree with `parentRef`/`unitRef`; a cycle is shown broken | A1 (units, tree), A2 (filter) |
+| **S5 Lane → role** | Command that assigns a lane's role to its tasks, like ADONIS "Assign responsibilities to tasks" | One undoable command, never automatic; the simulation scenario is untouched | A2 |
+| **S6 Process tree** | Tree derived from call activities, with the "used in" path of each process | Every call resolves to its node or is listed as unresolved; cycles are shown broken | A3 |
+| **S7 Documents** | Word/HTML show catalog names; a report per role | A rename shows in the regenerated document; the per-role report equals that role's S3 column | A2 |
+
+**Next phase:** S8, risks and controls (lot A4).
+
+**Out of v1:** release workflows, multi-user, comments, rights, portal, SSO, REST API, ADOIT/ADOGRC
+synchronization, configurable dashboards/Insights, metamodel customization, AI, mining, Dependency
+Modeller, model comparison, drawn org-chart and landscape diagram types, the tabular editor,
+attachments, KPI/Ishikawa/SIPOC, saved queries, ISO document control, positions and persons.
+
+Mapping to the lots: v1 is S1–S7. The rest of A1–A3 (A2's table editor and Insights, A3's drawn
+landscapes, value chains and org chart, and its explicit role ↔ simulation pool link) stays in
+those lots but is not part of v1. The acceptance scenarios use roles and units; whether systems and
+documents ship in v1 with the same picker and usage rules is settled when A1's issues are written.
 
 ## 3. Architecture and product rules
 
@@ -192,7 +221,7 @@ The screenshots supplied for planning are functional references and are not comm
 | [Insights, 14.0](https://docs.boc-group.com/adonis/en/docs/14.0/user_manual/igh-000000/) | Process/object summaries and navigation | Depends on application library; not proof of identical widgets in every release |
 | [ADONIS features](https://www.boc-group.com/en/adonis/features/) | Governance, publication and ecosystem overview | Mining, advanced reporting and automation presented as extensions; integrations need separate verification |
 
-Vendor sources reviewed on 2026-09-26. Sources cover different versions and do not establish a single exhaustive
+Vendor sources reviewed on 2026-09-26; the research [capability map](research/ADONIS-CAPABILITIES.md#capability-map-191-consulted-2026-10-15) was refreshed against ADONIS 19.1 on 2026-10-15. Sources cover different versions and do not establish a single exhaustive
 ADONIS edition baseline. Distinguish Lila-specific quality-analysis additions from vendor parity.
 
 [BACKLOG.md](../BACKLOG.md) owns implementation work and acceptance dependencies. New `ORG-*`
