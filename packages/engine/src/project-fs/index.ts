@@ -75,3 +75,14 @@ export type { LilaProcessSummary, LilaProjectInventory, LilaRunSummary, LilaScen
 export type { EditedLilaProcess, EditLilaProcessOptions } from './edit.js';
 export { putLilaProcessBpmn, readLilaProcessBpmn } from './process-bpmn.js';
 export type { LilaProcessBpmn, PutLilaProcessBpmnRequest, PutLilaProcessBpmnResult } from './process-bpmn.js';
+export { deleteLilaProcess, deleteLilaScenario, renameLilaProcess, renameLilaScenario } from './manage.js';
+export type {
+  DeleteLilaProcessRequest,
+  DeleteLilaProcessResult,
+  DeleteLilaScenarioRequest,
+  DeleteLilaScenarioResult,
+  RenameLilaProcessRequest,
+  RenameLilaProcessResult,
+  RenameLilaScenarioRequest,
+  RenameLilaScenarioResult,
+} from './manage.js';

@@ -184,15 +184,6 @@ export function proyectoDeSuelto(doc: ProjectDocument): ProjectDocument {
   return doc.processes === undefined ? top : { ...top, processes: doc.processes.map(procesoDelProyecto) };
 }
 
-/**
- * The BPMN process ids a model declares — what a call activity's `calledElement` names (#461).
- * A pattern over the XML and not a parse: it runs on a double-click, over every process of the
- * project, and only has to find `<bpmn:process id="…">` (any prefix, or none).
- */
-export function processIds(xml: string): string[] {
-  return [...xml.matchAll(/<(?:[\w.-]+:)?process\b[^>]*?\sid=(["'])(.+?)\1/g)].map((m) => m[2]!);
-}
-
 /** Editar un padre invalida sus descendientes; los escenarios independientes siguen actuales. */
 export function nextScenarioRevisions(file: string, scenarios: Readonly<Record<string, ScenarioDocument>>, revisions: Readonly<Record<string, number>>): Record<string, number> {
   const affected = new Set([file]);

@@ -30,6 +30,7 @@ flujo de abajo con una entrevista ([`MCP.md`](MCP.md#recursos-y-prompt)).
 | 6. Simular y guardar la corrida | `run_simulation` con `saveRun: true` | `lila run … --save` |
 | 7. Entregar | `export_document`, `export_results`, `export_diagram` | `lila export doc|results|diagram` |
 | 8. Mostrarlo | abrir el `.lila` en la app; se recarga con cada escritura posterior | `open -a "Lila Modeler" archivo.lila` (macOS) |
+| En cualquier momento: ordenar | `rename_process`, `delete_process`, `rename_scenario`, `delete_scenario` | `lila process rename|delete`, `lila scenario rename|delete` |
 
 Dos reglas dan forma al flujo:
 
@@ -67,6 +68,12 @@ guarda para documentar con `allowUnsimulatable: true`, con sus errores en `notes
 ```json
 { "name": "put_process_bpmn", "arguments": { "project": "tarjeta.lila", "mode": "add", "bpmn": "exportacion-bizagi.bpmn", "name": "Aclaración de cargo", "locale": "es" } }
 ```
+
+Para ordenar el archivo, `rename_process` y `rename_scenario` cambian un nombre (nunca un slug ni
+un nombre de archivo), y `delete_process` y `delete_scenario` quitan un proceso o un escenario con
+sus corridas guardadas. Los borrados rechazan, sin escribir nada, lo que rompería el proyecto: el
+último proceso o escenario, un proceso al que llama otro, un escenario del que heredan otros.
+Pruébalos antes con `dryRun: true` (ver [Renombrar y borrar](MCP.md#renombrar-y-borrar)).
 
 ### 1. De la entrevista al esquema
 

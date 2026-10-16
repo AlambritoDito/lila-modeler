@@ -16,8 +16,8 @@ import { resolveExtends, resolveScenarioPath, type ResolvedScenario } from '@lil
 import { compare } from '@lila-modeler/engine';
 import { CompareView } from './CompareView';
 import { runMetaFrom } from './compareWarnings';
-import { changeToken, defaultElement, defaultScenarios, documentToken, escenariosDelProyecto, MODELO_PROYECTO, newModelXml, nextScenarioRevisions, procesoDelProyecto, processIds, projectStore, proyectoDeSuelto, readLila, readProject, repositoryToken, tokenPart } from './project';
-import { encodeLila, isCurrentRun, processesOf, processSlug, storedRun, withProcesses, type ProcessDocument } from '@lila-modeler/engine/project';
+import { changeToken, defaultElement, defaultScenarios, documentToken, escenariosDelProyecto, MODELO_PROYECTO, newModelXml, nextScenarioRevisions, procesoDelProyecto, projectStore, proyectoDeSuelto, readLila, readProject, repositoryToken, tokenPart } from './project';
+import { encodeLila, isCurrentRun, processesOf, processIds, processSlug, storedRun, withProcesses, type ProcessDocument } from '@lila-modeler/engine/project';
 import { PestanasProcesos } from './PestanasProcesos';
 import type { ProcessIR, SimulationProgress } from '@lila-modeler/engine';
 import { Lienzo, type Alineacion, type EstadoLienzo, type EventoLienzo, type Modelador, type Servicios } from './Modeler';
