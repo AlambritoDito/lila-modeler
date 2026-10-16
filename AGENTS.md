@@ -1,8 +1,10 @@
 # Project memory
 
-Read `CONTRIBUTING.md` before changing or publishing this project. Keep public
-code/documentation and conventional commits in English; keep UI catalogs aligned
-in English and Spanish.
+Read `CONTRIBUTING.md` before changing or publishing this project. Keep code,
+comments, public documentation, conventional commits and all GitHub text (issues,
+PR titles/descriptions, review and issue comments, release notes) in English. Only
+translations (the Spanish UI catalog and `docs/es/`) go in Spanish; keep UI
+catalogs aligned in English and Spanish. Leave existing Spanish GitHub text as is.
 
 ## Approved Lila branding
 

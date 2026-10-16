@@ -64,9 +64,11 @@ of, and must not change casually: the `E-*`/`W-*` error and warning codes (catal
 
 ### Language
 
-English is the project's base language; Spanish is the first translation. New code, commit
-messages and public documentation are written in English. Existing identifiers and comments in the
-codebase are not renamed just to translate them.
+English is the project's base language; Spanish is the first translation. New code, code
+comments, commit messages, public documentation and everything posted to GitHub (issues, pull
+request titles and descriptions, review and issue comments, release notes) are written in English.
+Only translations (the Spanish UI catalog and `docs/es/`) are written in Spanish. Existing
+identifiers, comments and GitHub text already in Spanish are not rewritten just to translate them.
 
 Translations are **one plain file per language**, with no i18n library:
 
