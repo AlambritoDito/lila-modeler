@@ -121,3 +121,70 @@ export function uniqueDefinitions<T extends Pick<AttributeDefinition, 'id'>>(def
   const seen = new Set<string>();
   return definitions.filter((d) => !seen.has(d.id) && seen.add(d.id) !== undefined);
 }
+
+/**
+ * Why a definition cannot be saved, the rules of the app's attribute dialog (#633). `null` from
+ * `attributeDefinitionProblems` means it can.
+ * - `name`: the name is empty.
+ * - `duplicate`: another definition for the same element type has that name (ignoring case).
+ * - `type`, `appliesTo`: not a value of `ATTRIBUTE_TYPES` / `ELEMENT_CATEGORIES`.
+ * - `options`: a `list` without options.
+ * - `optionsNotList`: options on a type that is not `list`.
+ * - `default`: the default does not fit (`validateAttributeValue`).
+ */
+export type AttributeDefinitionProblem =
+  | { kind: 'name' | 'type' | 'appliesTo' | 'options' | 'optionsNotList' }
+  | { kind: 'duplicate'; id: string }
+  | { kind: 'default'; problem: AttributeValueProblem };
+
+/**
+ * `definition` as the app's dialog saves it: the name and the options trimmed, empty and repeated
+ * options dropped (and `options` with them when none is left), an empty default left out.
+ */
+export function normalizeAttributeDefinition(definition: AttributeDefinition): AttributeDefinition {
+  const { options, default: fallback, ...rest } = definition;
+  const kept = [...new Set((options ?? []).map((o) => o.trim()).filter((o) => o !== ''))];
+  return {
+    ...rest,
+    name: definition.name.trim(),
+    ...(fallback === undefined || fallback === '' ? {} : { default: fallback }),
+    ...(kept.length === 0 ? {} : { options: kept }),
+  };
+}
+
+/**
+ * The first reason `definition` (normalized) cannot sit next to `others`, or `null`. Only the
+ * definition being saved is checked: a problem the file already had elsewhere does not block it.
+ */
+export function attributeDefinitionProblems(
+  definition: AttributeDefinition,
+  others: readonly AttributeDefinition[],
+): AttributeDefinitionProblem | null {
+  if (definition.name.trim() === '') return { kind: 'name' };
+  if (!(ATTRIBUTE_TYPES as readonly string[]).includes(definition.type)) return { kind: 'type' };
+  if (!(ELEMENT_CATEGORIES as readonly string[]).includes(definition.appliesTo)) return { kind: 'appliesTo' };
+  if (definition.type === 'list' && (definition.options ?? []).length === 0) return { kind: 'options' };
+  if (definition.type !== 'list' && definition.options !== undefined) return { kind: 'optionsNotList' };
+  const name = definition.name.trim().toLowerCase();
+  const twin = others.find((d) => d.id !== definition.id && d.appliesTo === definition.appliesTo && d.name.trim().toLowerCase() === name);
+  if (twin !== undefined) return { kind: 'duplicate', id: twin.id };
+  const problem = validateAttributeValue(definition, definition.default ?? '');
+  return problem === null ? null : { kind: 'default', problem };
+}
+
+/**
+ * The id of a new definition named `name` (#633): `Attr_` and the name as lowercase ASCII (accents
+ * dropped, anything else `_`), then `_2`, `_3`… past the ids in `taken`. Deterministic, so a dry
+ * run and the write that follows it name the attribute alike; always an NCName (ADR-012).
+ */
+export function attributeIdFor(name: string, taken: ReadonlySet<string>): string {
+  const slug = name
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  const base = `Attr_${slug === '' ? 'attribute' : slug}`;
+  if (!taken.has(base)) return base;
+  for (let n = 2; ; n++) if (!taken.has(`${base}_${n}`)) return `${base}_${n}`;
+}

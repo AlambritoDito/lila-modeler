@@ -51,6 +51,15 @@ const EN_USAGE = `Usage: lila validate <file.bpmn|project.lila> [--process slug]
                              [--responsibility R|A|C|I:role ...] [--clear-responsibilities]
                              [--ref kind=id ...] [--attribute id=value ...] [--dry-run] [--json]
        lila process raci <project.lila> [--process slug] [--json|--csv]
+       lila process export-bpmn -p <project.lila> [--process slug] [--out file.bpmn] [--force]
+       lila process import -p <project.lila> --bpmn <file.bpmn> [--replace] [--process slug]
+                           [--name name] [--no-layout] [--allow-unsimulatable] [--dry-run] [--json]
+       lila process attribute define <project.lila> --name name --type text|number|list|date
+                                     --applies-to task|gateway|event|subProcess|lane|process
+                                     [--option value ...] [--default value] [--id id]
+                                     [--process slug] [--dry-run] [--json]
+       lila process attribute define <project.lila> --remove --id id|--name name --applies-to type
+       lila process attribute list <project.lila> [--process slug] [--json]
        lila scenario import <project.lila> <scenario> <sheet.xlsx|sheet.csv> [--process slug]
                             [--dry-run] [--json]
        lila scenario template <project.lila> <scenario> --out sheet.xlsx [--process slug] [--force]
@@ -69,6 +78,9 @@ Commands:
              edit: applies a list of operations to a process, all or none. See docs/CLI.md.
              annotate: writes an element's description, RACI, catalog references and extended
              attributes into the .lila. raci: prints the RACI matrix of the process document.
+             export-bpmn: prints or writes the BPMN of a process. import: adds a .bpmn as a new
+             process of a .lila, or --replace the model of one.
+             attribute: defines (or removes) an extended attribute, or lists them.
   scenario   import: applies a scenario sheet (.xlsx/.csv) to a scenario of the .lila, like the
              app's Import Excel/CSV. template: writes that sheet, filled in, for a person.
              show: prints a scenario as stored (or --resolved) with the validator's notes.
@@ -134,6 +146,25 @@ process annotate options:
   --ref kind=id     systemRef, documentRef, riskRef, controlRef, kpiRef, input or output;
                     repeatable; replaces the lists of the kinds given (kind= empties one).
   --attribute k=v   An extended attribute by id or name; repeatable; "k=" removes its value.
+  --dry-run         Shows the result without writing.
+
+process import options:
+  --bpmn file       The BPMN 2.0 file (a Bizagi export, say).
+  --replace         Replaces the model of the process (--process) instead of adding one.
+  --process slug    Without --replace: slug of the new process (default: from its name).
+  --name name       Without --replace: name of the new process (default: its pool's, its
+                    process's or the file's).
+  --no-layout       Keeps a model without a diagram as it is (default: laid out).
+  --allow-unsimulatable  Saves a model with validation errors, as a diagram that does not
+                    simulate; the errors are printed as notes.
+  --dry-run         Checks everything and writes nothing.
+
+process attribute define options:
+  --name, --type, --applies-to  The whole definition, every time; found by --id, else by name
+                    (any case) and --applies-to, else created with a new id.
+  --option v        A list's option; repeatable. --default v: what an element without a value shows.
+  --remove          Removes the definition and its values. Retyping, --applies-to or fewer
+                    options also remove the values that no longer fit; both list them.
   --dry-run         Shows the result without writing.
 
 scenario import options:
@@ -484,17 +515,32 @@ export const en: Catalog = {
       `the model or the scenario ${scenario} of ${file} changed while the simulation ran; the run was not saved. Run it again.`,
     runSaved: (id, file, slug) => `Run ${id} saved in ${file} (process ${slug}).`,
     outlineInvalid: (detail) => `the outline is invalid:\n${detail}`,
-    outlineDuplicateId: (id) => `step id "${id}" is used more than once.`,
-    outlineBadId: (id) => `step id "${id}" is not a valid BPMN id (letters, digits, "_", "-" and ".", not starting with a digit).`,
+    outlineDuplicateId: (id) => `id "${id}" is used more than once (steps, starts and boundary events share one set of ids).`,
+    outlineBadId: (id) => `id "${id}" is not a valid BPMN id (letters, digits, "_", "-" and ".", not starting with a digit).`,
     outlineReservedId: (id) => `step id "${id}" clashes with an id Lila generates (start, end, flows, lanes, diagram); rename the step.`,
     outlineDuplicateLane: (lane) => `lane "${lane}" is listed more than once.`,
     outlineUnknownLane: (step, lane) => `step "${step}": lane "${lane}" is not in "lanes".`,
+    outlineStartUnknownLane: (start, lane) => `start "${start}": lane "${lane}" is not in "lanes".`,
+    outlineFromWithoutStarts: (step) => `step "${step}": "from" names start events, so it needs "starts".`,
+    outlineUnknownStart: (step, start) => `step "${step}": "${start}" is not the id of a start in "starts".`,
+    outlineStartUnused: (start) => `start "${start}" leads nowhere: name it in the "from" of the step it leads to.`,
+    outlineStartManySteps: (start, steps) =>
+      `start "${start}" is in the "from" of several steps (${steps}); a start leads to one step. Put a gateway after it, or add a start.`,
     outlineUnknownTarget: (step, target) => `step "${step}": "${target}" is not the id of a step.`,
-    outlineBranchesNeedGateway: (step, type) => `step "${step}": "branches" needs a gateway (xor, or, and), not ${type}.`,
+    outlineBranchesNeedGateway: (step, type) => `step "${step}": "branches" needs a gateway (xor, or, and, eventGateway), not ${type}.`,
     outlineBranchTarget: (step) => `step "${step}": each branch needs either "to" (a step id) or "end": true.`,
+    outlineBoundaryTarget: (boundary) => `boundary "${boundary}" needs exactly one of "to" (a step id) and "end".`,
+    outlineManyDefaults: (step) => `gateway "${step}": only one branch can be the default ("default": true).`,
+    outlineEventGatewayTarget: (step, target) =>
+      `event gateway "${step}": every way out goes to a timer or message step, and "${target}" is not one (an end, a task or a gateway cannot follow it).`,
+    outlineEventTargetWaysIn: (target, gateway, waysIn) =>
+      `step "${target}" follows the event gateway "${gateway}", so that must be its only way in; it has ${waysIn}. Check "next", "to", "from" and the step before it in the list.`,
+    outlineMessageNeedsEventGateway: (step) => `step "${step}": a message step only goes after an event gateway, as one of its branches.`,
+    outlineDuplicateData: (step, name, direction) => `step "${step}": data "${name}" (${direction}) is listed more than once.`,
+    outlineDuplicateNote: (step, text) => `step "${step}": the note "${text}" is listed more than once.`,
     outlineManyNextNeedGateway: (step) => `step "${step}": several "next" steps need a gateway (xor, or, and); add one.`,
     outlineEndWithNext: (step) => `step "${step}": "end" cannot be combined with "next" or "branches".`,
-    outlineFieldNotApplicable: (step, field, type) => `step "${step}": "${field}" does not apply to a ${type}.`,
+    outlineFieldNotApplicable: (step, field, type) => `step "${step}": "${field}" does not apply to a${/^[aeioux]/i.test(type) ? 'n' : ''} ${type}.`,
     outlineProbabilityOnAnd: (step) => `step "${step}": a parallel gateway (and) takes every branch; "probability" does not apply.`,
     outlineProbabilitySum: (step, sum) => `step "${step}": the branch probabilities add up to ${sum}, more than 1.`,
     outlineBadDuration: (step, text) =>
@@ -503,16 +549,23 @@ export const en: Catalog = {
     outlineNoProcess: () => 'the BPMN has no process.',
     outlineUnsupported: (id, type) => `${id} (${type}) has no outline equivalent and was left out.`,
     outlineLostFlow: (id) => `${id}: a flow to or from an element the outline left out was dropped.`,
+    outlineStartManyFlows: (start, flows) =>
+      `start event ${start} has several outgoing flows; an outline start leads to one step, so these were left out: ${flows}.`,
+    outlineDroppedTrigger: (id, definitions) => `${id}: the outline has no ${definitions}; it is read as a plain event.`,
     outlineUnknownKey: (key) => `unknown field "${key}".`,
     outlineNotObject: () => 'must be an object.',
     outlineNotText: () => 'must be a non-empty text.',
     outlineNotTextList: () => 'must be a list of non-empty texts.',
+    outlineNotList: () => 'must be a non-empty list.',
     outlineNotBoolean: () => 'must be true or false.',
     outlineNotProbability: () => 'must be a number between 0 and 1.',
     outlineNotQuantity: () => 'must be a whole number of at least 1.',
     outlineNoSteps: () => 'must be a non-empty list of steps.',
     outlineBadType: (value, accepted) => `"${value}" is not a step type; use one of ${accepted}.`,
     outlineBadNext: () => 'must be a step id or a list of step ids.',
+    outlineBadFrom: () => 'must be a start id or a list of start ids.',
+    outlineBadEnd: () => 'must be true, false or "terminate".',
+    outlineBadChoice: (accepted) => `must be one of ${accepted}.`,
     outlineBadResource: () => 'must be a resource name or {"name", "quantity"}.',
     outlineBadSelection: () => 'must be "and" (every resource) or "or" (any one of them).',
     outlineNoWayOut: (step) => `from step "${step}" no path reaches an end: a case that gets here would loop forever. Give the loop an exit.`,
@@ -521,9 +574,15 @@ export const en: Catalog = {
       `parallel join "${join}" waits for branches of the exclusive gateway "${split}", which only ever takes one: cases would wait there forever. Use an xor (or or) join.`,
     outlineDroppedPools: (names) => `other pools are not part of the outline and were left out: ${names}.`,
     outlineDroppedMessageFlows: (count) => `${n(count, 'message flow is', 'message flows are')} not part of the outline and ${count === 1 ? 'was' : 'were'} left out.`,
-    outlineDroppedEventNames: (events) => `start and end events are implicit in an outline; their names were left out: ${events}.`,
+    outlineDroppedEventNames: (events) => `end events are implicit in an outline; their names were left out: ${events}.`,
     outlineDroppedArtifacts: (count) => `${n(count, 'annotation, group or association is', 'annotations, groups or associations are')} not part of the outline and ${count === 1 ? 'was' : 'were'} left out.`,
-    outlineDroppedDefaults: (ids) => `default-flow marks are not part of the outline and were left out: ${ids}.`,
+    outlineDroppedDefaults: (ids) => `default-flow marks out of anything but an xor or an or, and broken ones, are not part of the outline and were left out: ${ids}.`,
+    outlineDroppedFlowNames: (flows) => `the names of flows out of a start event are not part of the outline and were left out: ${flows}.`,
+    outlineMergedNotes: (notes) => `text annotations that repeat a note of the same step were read once: ${notes}.`,
+    outlineDroppedTimerExpressions: (ids) =>
+      `timer expressions in the BPMN are not part of the outline (durations live in the scenario) and were left out: ${ids}.`,
+    outlineDroppedProbabilities: (flows) =>
+      `branch probabilities the outline cannot carry (not out of an xor or an or, or an xor's adding up to more than 1) were left out: ${flows}.`,
     outlineScenarioOutside: (kinds) =>
       `the scenario's ${kinds.split(',').map((k) => ({ arrivals: 'arrivals', calendars: 'calendars', costs: 'costs', capacities: 'resource capacities and types', conditions: 'conditional routing' } as Record<string, string>)[k] ?? k).join(', ')} are not part of the outline; they stay in the scenario, which this reading does not change.`,
     processSlugNewFile: (slug, derived) =>
@@ -536,7 +595,7 @@ export const en: Catalog = {
       `Created process "${name}" (${slug}) in ${newFile ? 'the new file ' : ''}${file}: ${n(steps, 'step', 'steps')}, ${n(lanes, 'lane', 'lanes')}, base scenario as-is.scenario.json.`,
     processDryRun: (name, slug, file, steps, lanes, newFile) =>
       `Dry run: would create process "${name}" (${slug}) in ${newFile ? 'the new file ' : ''}${file}: ${n(steps, 'step', 'steps')}, ${n(lanes, 'lane', 'lanes')}. Nothing was written.`,
-    processUnknownSubcommand: (sub) => `unknown subcommand "${sub}"; use create, show, edit, annotate or raci.`,
+    processUnknownSubcommand: (sub) => `unknown subcommand "${sub}"; use create, show, edit, annotate, raci, export-bpmn, import or attribute.`,
     processMissingOption: (option) => `missing ${option}.`,
     processShowHeader: (name, slug) => `Process "${name}" (${slug})`,
     processShowLanes: (lanes) => `Lanes: ${lanes}`,
@@ -550,6 +609,7 @@ export const en: Catalog = {
     editIdTaken: (id) => `id "${id}" is already used in the model.`,
     editAfterAndBetween: () => 'use either "after" or "between", not both.',
     editAfterAndBefore: () => 'use either "after" or "before", not both.',
+    editBeforeOrAfter: () => 'give "before" or "after": the lane it goes next to.',
     editAfterEnd: (id) => `"${id}" is an end event: nothing can follow it. Use "between" with the step before it.`,
     editAfterAmbiguous: (id, count) =>
       `"${id}" has ${count} outgoing flows, so "after" is ambiguous; use "between": ["${id}", "<next step id>"].`,
@@ -564,9 +624,23 @@ export const en: Catalog = {
     editRemoveAmbiguous: (id, incoming, outgoing) =>
       `cannot remove "${id}": with ${incoming} incoming and ${outgoing} outgoing flows it is not clear how to reconnect them. Remove or reconnect its flows first.`,
     editRemoveBoundary: (id, boundaries) => `cannot remove "${id}": boundary events are attached to it (${boundaries}); remove them first.`,
-    editCannotRemove: (id, type) => `"${id}" is a ${type}; only steps and sequence flows can be removed.`,
+    editCannotRemove: (id, type) =>
+      `"${id}" is a ${type}; only steps, sequence flows, boundary events and artifacts (text annotations, data objects and stores, groups, associations) can be removed.`,
+    editLaneHasSubLanes: (lane, children) => `lane "${lane}" has sub-lanes (${children}); remove them first.`,
+    editLaneNotEmpty: (lane, nodes) => `lane "${lane}" holds ${nodes}; give "moveStepsTo": the lane that takes them.`,
+    editLaneTargetNotLeaf: (lane, children) => `lane "${lane}" has sub-lanes (${children}); nodes go to a lane without sub-lanes.`,
+    editLaneSameTarget: (lane) => `"moveStepsTo" is the lane being removed ("${lane}"); name another lane.`,
+    editLaneNotSibling: (lane, other) => `lanes "${lane}" and "${other}" are not in the same lane set; a lane moves only among its siblings.`,
+    editLaneSelf: (lane) => `lane "${lane}" cannot go next to itself.`,
+    editNoNote: (step, text, notes) =>
+      `"${step}" has no text annotation "${text}"${notes === '' ? '' : `; its annotations are: ${notes}`}.`,
+    editNoDataObject: (name, names) =>
+      `the process has no data object named "${name}"${names === '' ? '' : `; its data objects are: ${names}`}.`,
+    editDataNotConnected: (name, step) => `data object "${name}" is not connected to "${step}".`,
     editBoundaryNeedsActivity: (id, boundaries) =>
       `"${id}" has boundary events attached (${boundaries}); only a task, call activity or sub-process can hold them.`,
+    editNotOneEnd: (id, ends) =>
+      `"${id}" is neither an end event nor a step that leads to exactly one (${ends === '' ? 'it leads to none' : `it leads to ${ends}`}); give the id of the end event.`,
     editLaneUnknown: (lane, lanes) =>
       lanes === '' ? `there is no lane "${lane}": the process has no lanes; add one with addLane.` : `there is no lane "${lane}"; the lanes are: ${lanes}.`,
     editLaneAmbiguous: (lane, ids) => `several lanes are named "${lane}" (${ids}); use the lane id.`,
@@ -582,6 +656,8 @@ export const en: Catalog = {
     editPositionLane: (lane) => `in lane "${lane}"`,
     editAdded: (id, type, position) => `added ${type} "${id}" ${position}`,
     editConnected: (from, to, flow) => `connected "${from}" → "${to}" (${flow})`,
+    editBoundaryAdded: (id, host, interrupting, target) =>
+      `attached the ${interrupting ? 'interrupting' : 'non-interrupting'} boundary timer "${id}" to "${host}" → ${target}`,
     editRemovedFlow: (id) => `removed flow "${id}"`,
     editRemovedStep: (id, reconnected, also) =>
       `removed "${id}"${reconnected === '' ? '' : `; reconnected ${reconnected}`}${also === '' ? '' : `; also removed ${also}`}`,
@@ -590,6 +666,18 @@ export const en: Catalog = {
     editRetyped: (id, from, to) => `"${id}": ${from} → ${to}`,
     editMoved: (id, lane) => `moved "${id}" to lane "${lane}"`,
     editLaneAdded: (name, id) => `added lane "${name}" (${id})`,
+    editLaneRemoved: (lane, id, to, nodes) => `removed lane "${lane}" (${id})${nodes === '' ? '' : `; ${nodes} moved to lane "${to}"`}`,
+    editLastLaneRemoved: (lane, id) => `removed lane "${lane}" (${id}), the last one: the process has no lanes now and its nodes stay in the pool`,
+    editLaneMoved: (lane, where, other) => `moved lane "${lane}" ${where === 'before' ? 'above' : 'below'} "${other}"`,
+    editNoteAdded: (step, text, id) => `annotated "${step}": "${text}" (${id})`,
+    editNoteExists: (step, text) => `"${step}" already has the text annotation "${text}"; nothing changed`,
+    editNoteRemoved: (step, text, ids) => `removed the text annotation "${text}" from "${step}" (${ids})`,
+    editDataAdded: (name, step, direction, id, created) =>
+      `"${step}" ${direction === 'in' ? 'reads' : 'writes'} data object "${name}" (${id}${created ? ', new' : ''})`,
+    editDataExists: (name, step, direction) =>
+      `"${step}" already ${direction === 'in' ? 'reads' : 'writes'} data object "${name}"; nothing changed`,
+    editDataRemoved: (name, step, ids) => `disconnected data object "${name}"${step === undefined ? '' : ` from "${step}"`} (${ids})`,
+    editRemovedElement: (id, type, also) => `removed ${type} "${id}"${also === '' ? '' : `; also removed ${also}`}`,
     processEdited: (name, slug, file, operations, removed) =>
       `Edited process "${name}" (${slug}) in ${file}: ${n(operations, 'operation', 'operations')}, ${n(removed, 'element', 'elements')} removed.`,
     processEditDryRun: (name, slug, file, operations, removed) =>

@@ -106,15 +106,15 @@ or Actions → Release → Run workflow → pick the tag → tick `publish_npm`.
 
 ### Moving `latest` during the beta line
 
-While `latest` is itself a prerelease (the beta line before 1.0.0), the workflow moves it to each
-new beta after publishing, so `npx -y @lila-modeler/mcp` without `@beta` gets the current version.
-Once a stable version is `latest`, a beta never moves it again. A rerun repairs a `latest` that
-did not move.
+While `latest` is itself a prerelease (the beta line before 1.0.0), it should follow each new
+beta, so `npx -y @lila-modeler/mcp` without `@beta` gets the current version. Once a stable version
+is `latest`, a beta never moves it again.
 
-Moving a dist-tag through OIDC needs **Allow npm dist-tag** ticked on each package's trusted
-publisher, next to **Allow npm publish** (off by default). Without it the publish succeeds and the
-step fails on `npm dist-tag`. Tick it and rerun, or move it by hand (npm asks for 2FA in the
-browser):
+The workflow tries, in a separate step after both packages are published: for each package whose
+`latest` is empty or a prerelease, `npm dist-tag add` up to 3 times, 30 s apart. That step never
+fails the job. In practice `npm dist-tag` usually answers **E401** under OIDC trusted publishing,
+even with **Allow npm dist-tag** ticked on the trusted publisher, so expect a
+`latest not moved` warning on the run. Then move it by hand (npm asks for 2FA in the browser):
 
 ```bash
 npm dist-tag add @lila-modeler/engine@1.0.0-beta.N latest

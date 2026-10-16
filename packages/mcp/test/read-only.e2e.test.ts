@@ -102,3 +102,14 @@ test('#628: get_project and get_scenario read the .lila and write nothing', asyn
   expect(missing.text).toMatch(/^get_scenario: no hay un escenario "nope"/);
   expect(readFileSync(join(cwd, 'credit.lila')).equals(bytes)).toBe(true);
 }, 120_000);
+
+test('#632: get_process_bpmn reads the model as stored and writes nothing', async () => {
+  const bytes = readFileSync(join(cwd, 'credit.lila'));
+  const read = await answer<{ process: string; processId: string; revision: number; xml: string }>('get_process_bpmn', { project: 'credit.lila' });
+  expect(read).toMatchObject({ process: 'credit-application', processId: 'Process_credit_application' });
+  expect(read.xml).toMatch(/^<\?xml[\s\S]*<bpmn:process id="Process_credit_application"/);
+  const missing = await call('get_process_bpmn', { project: 'credit.lila', process: 'nope' });
+  expect(missing.isError).toBe(true);
+  expect(missing.text).toMatch(/^get_process_bpmn: .* has no process "nope"/);
+  expect(readFileSync(join(cwd, 'credit.lila')).equals(bytes)).toBe(true);
+}, 120_000);

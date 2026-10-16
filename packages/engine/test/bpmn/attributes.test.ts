@@ -8,8 +8,11 @@ import { BpmnModdle } from 'bpmn-moddle';
 import { describe, expect, it } from 'vitest';
 import { annotateElement, readAnnotations } from '../../src/bpmn/annotate.js';
 import {
+  attributeDefinitionProblems,
+  attributeIdFor,
   categoryOf,
   effectiveAttributes,
+  normalizeAttributeDefinition,
   validateAttributeValue,
   type AttributeDefinition,
 } from '../../src/bpmn/attributes.js';
@@ -145,5 +148,47 @@ describe('lila:attributeDefinition and lila:attributeValue', () => {
       const moddle = BpmnModdle({ lila });
       expect((await moddle.toXML((await moddle.fromXML(now)).rootElement, { format: true })).xml).toBe(now);
     }
+  });
+});
+
+describe('attribute definitions, the rules of the app\'s dialog (#633)', () => {
+  const sla: AttributeDefinition = { id: 'Attr_sla', name: 'SLA', type: 'number', appliesTo: 'task' };
+
+  it('a new id: Attr_ and the name as lowercase ASCII, then _2, _3… past the ids taken', () => {
+    expect(attributeIdFor('SLA (h)', new Set())).toBe('Attr_sla_h');
+    expect(attributeIdFor('Nivel de riesgo', new Set())).toBe('Attr_nivel_de_riesgo');
+    expect(attributeIdFor('  Área técnica ñ ', new Set())).toBe('Attr_area_tecnica_n');
+    expect(attributeIdFor('日本', new Set())).toBe('Attr_attribute');
+    expect(attributeIdFor('SLA', new Set(['Attr_sla', 'Attr_sla_2']))).toBe('Attr_sla_3');
+    // Deterministic: the same name and the same file give the same id.
+    expect(attributeIdFor('SLA', new Set(['Attr_sla']))).toBe(attributeIdFor('SLA', new Set(['Attr_sla'])));
+  });
+
+  it('normalizes as the dialog saves: trimmed name and options, no empty or repeated option, no empty default', () => {
+    expect(normalizeAttributeDefinition({ ...sla, name: ' SLA ', default: '' })).toEqual(sla);
+    expect(
+      normalizeAttributeDefinition({ id: 'a', name: 'L', type: 'list', appliesTo: 'task', options: [' Low', 'Low', '', 'High '] }),
+    ).toEqual({ id: 'a', name: 'L', type: 'list', appliesTo: 'task', options: ['Low', 'High'] });
+    expect(normalizeAttributeDefinition({ ...sla, options: [' '] })).toEqual(sla);
+  });
+
+  it('names the first problem, or null', () => {
+    expect(attributeDefinitionProblems(sla, [])).toBeNull();
+    expect(attributeDefinitionProblems({ ...sla, name: '  ' }, [])).toEqual({ kind: 'name' });
+    expect(attributeDefinitionProblems({ ...sla, type: 'money' }, [])).toEqual({ kind: 'type' });
+    expect(attributeDefinitionProblems({ ...sla, appliesTo: 'flow' }, [])).toEqual({ kind: 'appliesTo' });
+    expect(attributeDefinitionProblems({ ...sla, type: 'list' }, [])).toEqual({ kind: 'options' });
+    expect(attributeDefinitionProblems({ ...sla, options: ['a'] }, [])).toEqual({ kind: 'optionsNotList' });
+    expect(attributeDefinitionProblems({ ...sla, default: '4,5' }, [])).toEqual({ kind: 'default', problem: 'number' });
+    expect(
+      attributeDefinitionProblems({ id: 'l', name: 'L', type: 'list', appliesTo: 'task', options: ['a'], default: 'b' }, []),
+    ).toEqual({ kind: 'default', problem: 'option' });
+  });
+
+  it('a name is unique per element type, ignoring case; the definition itself does not count', () => {
+    const twin = { ...sla, id: 'Attr_other', name: 'sla' };
+    expect(attributeDefinitionProblems(sla, [twin])).toEqual({ kind: 'duplicate', id: 'Attr_other' });
+    expect(attributeDefinitionProblems(sla, [{ ...twin, appliesTo: 'gateway' }])).toBeNull();
+    expect(attributeDefinitionProblems(sla, [sla])).toBeNull();
   });
 });

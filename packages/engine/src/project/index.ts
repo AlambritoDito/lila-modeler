@@ -9,4 +9,5 @@ export type { ProjectErrorCode } from './document.js';
 export { decodeLila, encodeLila, lilaEntryNames, readRepositoryManifest, repositoryManifestOf } from './lila.js';
 export type { ProcessManifest, RepositoryManifest } from './lila.js';
 export { isCurrentRun, storedRun, withStoredRun } from './runs.js';
+export { DEFAULT_ARRIVALS, DEFAULT_PROCESSING_TIME, DEFAULT_RUN, defaultScenario } from './default-scenario.js';
 export type { StoredRunInput } from './runs.js';

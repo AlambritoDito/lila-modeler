@@ -169,6 +169,31 @@ describe('editLilaProcess', () => {
     expect(await main(['run', timer, 'as-is', '--replications', '1'])).toBe(0);
   });
 
+  test('#631: removing a boundary timer removes its delay; an xor retyped to an and loses its branch probabilities', async () => {
+    const file = join(scratch, 'credit.lila');
+    await createLilaProcess(file, CREDIT);
+    const added = await editLilaProcess(file, [
+      { op: 'addBoundary', on: 'check', boundary: { id: 'sla', type: 'timer', duration: '48h', interrupting: false, to: 'reject' } },
+    ]);
+    expect(added.scenarioRemovals).toEqual([]);
+    let document = decodeLila(new Uint8Array(readFileSync(file)));
+    expect((document.scenarios['as-is.scenario.json']!.elements as Record<string, unknown>)['sla']).toEqual({ processingTime: { type: 'constant', value: 172800 } });
+
+    const removed = await editLilaProcess(file, [{ op: 'remove', id: 'sla' }]);
+    expect(removed.scenarioRemovals).toEqual([
+      { scenario: 'as-is.scenario.json', id: 'sla', removed: { processingTime: { type: 'constant', value: 172800 } }, entry: true },
+    ]);
+    document = decodeLila(new Uint8Array(readFileSync(file)));
+    expect((document.scenarios['as-is.scenario.json']!.elements as Record<string, unknown>)['sla']).toBeUndefined();
+
+    const retyped = await editLilaProcess(file, [{ op: 'setType', id: 'ok', type: 'and' }]);
+    expect(retyped.scenarioRemovals).toEqual([
+      { scenario: 'as-is.scenario.json', id: 'Flow_ok_issue', removed: { probability: 0.7 }, entry: true },
+      { scenario: 'as-is.scenario.json', id: 'Flow_ok_reject', removed: { probability: 0.3 }, entry: true },
+    ]);
+    expect(await main(['run', file, 'as-is', '--replications', '1'])).toBe(0);
+  });
+
   test('two concurrent edits: one is written, the other is refused, nothing is lost', async () => {
     const file = await repository();
     const results = await Promise.allSettled([

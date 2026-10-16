@@ -34,6 +34,7 @@ function documentoBase(overrides: Partial<ProjectDocument> = {}): ProjectDocumen
 class FakeBridge implements LilaBridge {
   readonly platform = 'desktop' as const;
   readonly version = 'test';
+  readonly system = { platform: 'darwin', arch: 'arm64', version: '15.1.0' };
 
   private readonly chooseFolderQueue: (string | null)[] = [];
   readonly writes: { dir: string; document: ProjectDocument; options?: WriteProjectOptions }[] = [];

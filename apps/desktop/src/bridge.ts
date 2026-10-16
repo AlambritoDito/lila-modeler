@@ -62,6 +62,12 @@ export type SaveOutcome = 'saved' | 'diagram-only' | 'cancelled' | 'failed';
 export interface LilaBridge {
   readonly platform: typeof LILA_PLATFORM;
   readonly version: string;
+  /**
+   * The machine the app runs on, for «Report a problem…» (#651): `process.platform`,
+   * `process.arch` and `process.getSystemVersion()` (e.g. `darwin`, `arm64`, `15.1.0`). `version`
+   * above is Electron's, not the OS's.
+   */
+  readonly system: { readonly platform: string; readonly arch: string; readonly version: string };
 
   /**
    * Abre el selector nativo. Por defecto elige una CARPETA de proyecto (ADR-018); en macOS el
@@ -290,6 +296,8 @@ export interface TemaGuardado {
 export type MenuAction =
   | 'ajustes'
   | 'acerca'
+  // Help → Report a problem… (#651): the renderer builds the prefilled GitHub form and `window.open`s it.
+  | 'reportarProblema'
   | 'nuevo'
   | 'abrir'
   | 'abrirArchivo'

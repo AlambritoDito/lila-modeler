@@ -3,7 +3,7 @@
 > Read this in: [Español](es/MCP.md)
 
 `packages/mcp` (`@lila-modeler/mcp`) provides a stdio [MCP](https://modelcontextprotocol.io) server
-backed by `@lila-modeler/engine`. Its eighteen tools reuse the CLI validation and simulation pipeline — see
+backed by `@lila-modeler/engine`. Its twenty-one tools reuse the CLI validation and simulation pipeline — see
 [`docs/CLI.md`](CLI.md) for the same pipeline driven from a terminal instead of an MCP client.
 
 For the whole flow an agent follows — interview, outline, scenario, run, document, and seeing the
@@ -62,13 +62,17 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
 - **`get_process_outline({ project, process?, locale? })`** reads one process of a `.lila` back as an
   outline: `{ file, slug, name, outline, warnings }`.
 - **`edit_process({ project, process?, operations, dryRun?, layout?, locale? })`** applies a list of
-  operations (add, connect, remove, rename, setType, moveToLane, addLane) to one process of a
+  operations (add, connect, remove, rename, setType, moveToLane, addLane, removeLane, moveLane,
+  addBoundary, annotate, removeAnnotation, addDataObject, removeDataObject) to one process of a
   `.lila`, all or none. Returns `{ file, slug, name, dryRun, summary, changes, removed,
   scenarioRemovals, notes, warnings, outline }`. See [Editing a process](#editing-a-process).
 
 - **`annotate_element({ project, process?, elementId, documentation?, responsibilities?, refs?, attributes?, dryRun?, locale? })`**
   writes the description, RACI, catalog references and extended attributes of one element of a
   `.lila` process. Returns `{ file, process, elementId, documentationOn?, dryRun, changed, written, before, after }`.
+- **`define_attribute({ project, process?, id?, name?, type?, appliesTo?, options?, default?, remove?, dryRun?, locale? })`**
+  defines, changes or removes an extended attribute of a `.lila` process, the one `annotate_element`
+  fills in. Returns `{ file, process, dryRun, changed, written, before, after, removedValues, definitions }`.
 - **`get_raci_matrix({ project, process?, locale? })`** returns the process's RACI matrix:
   `{ file, process, roles, rows }`.
 - **`import_scenario_sheet({ project, process?, scenario, sheet, dryRun?, locale? })`** applies a
@@ -76,19 +80,26 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
   `{ file, process, scenario, sheet, dryRun, written, tables, changes, issues }`.
 - **`export_scenario_template({ project, process?, scenario, saveTo, overwrite?, locale? })`**
   writes that sheet as `.xlsx`, filled in. Returns `{ file, project, process, scenario }`.
-- **`create_project({ path, name, bpmn, scenarios?, overwrite?, locale? })`** creates a new `.lila`
+- **`create_project({ path, name, bpmn, scenarios?, overwrite?, allowUnsimulatable?, locale? })`** creates a new `.lila`
   from a BPMN you already have (an agent that starts from steps uses `create_process`) and
-  scenarios. Returns `{ file, name, processId, laidOut, warnings, scenarios }`.
+  scenarios. Returns `{ file, name, processId, laidOut, warnings, notes, scenarios }`.
 - **`get_project({ project, locale? })`** lists what a `.lila` holds, writing nothing: its
   processes, their scenarios and their saved runs, current or stale. Returns
   `{ file, name, formatVersion, processes }`.
 - **`get_scenario({ project, process?, scenario, resolved?, locale? })`** reads one scenario as
   stored, or resolved through `extends`, with the validator's notes, writing nothing. Returns
   `{ file, process, entry, revision, resolved, scenario, runnable, notes }`.
+- **`get_process_bpmn({ project, process?, locale? })`** reads the BPMN XML of one process as
+  stored, writing nothing. Returns `{ file, process, processId, revision, xml }`.
+- **`put_process_bpmn({ project, process?, bpmn, mode, name?, layout?, allowUnsimulatable?, dryRun?, locale? })`**
+  adds a BPMN as a new process of an existing `.lila` (`mode: "add"`) or replaces the model of
+  one (`mode: "replace"`). Returns `{ file, mode, slug, name, processId, revision, dryRun,
+  laidOut, summary, scenarioRemovals, notes, warnings, slugs }`.
 
-The three export tools are described in [App-free exports](#app-free-exports); the five after
-them in [Modelling tools for agents](#modelling-tools-for-agents); the last two in
-[Reading a project](#reading-a-project).
+The three export tools are described in [App-free exports](#app-free-exports); the six after
+them in [Modelling tools for agents](#modelling-tools-for-agents); `get_project` and
+`get_scenario` in [Reading a project](#reading-a-project); the last two in
+[Raw BPMN of a process](#raw-bpmn-of-a-process).
 
 Every tool that takes a model also takes a `.lila` project; see [A `.lila` as input](#a-lila-as-input).
 
@@ -161,7 +172,9 @@ processes, scenarios and runs through the errors of other tools.
   repository of several processes and 1 otherwise. Each process has `slug` (what `process` takes),
   `name`, `processId` (its `bpmn:process`), `modelRevision`, `elements` (flow nodes: tasks, events,
   gateways; `null` when the model cannot be read), `scenarios` (`entry`, `name`, `revision`,
-  `extends`) and `runs` (`id`, `scenario`, `start`, `replications`, `current`). A run is
+  `extends`), `runs` (`id`, `scenario`, `start`, `replications`, `current`) and `attributes`, the
+  extended attributes it defines (`id`, `name`, `type`, `appliesTo`, `default?`, `options?`;
+  `null` when the model cannot be read back whole). A run is
   `current: false` (stale) when the model or its scenario changed after it: `export_results` and
   `export_document` take it only by id. A `.lila` keeps no date of when a run was taken; `start` is
   the simulated start (`run.start`) of the scenario it ran.
@@ -182,6 +195,61 @@ nothing either (#627), but it is not meant for reading.
 
 ```json
 { "name": "get_scenario", "arguments": { "project": "credit.lila", "scenario": "as-is", "resolved": true } }
+```
+
+## Raw BPMN of a process
+
+`get_process_bpmn` and `put_process_bpmn` (#632) read and write the BPMN of one process of a
+`.lila` as XML, through the same codec and lock as every other tool: the way to bring in a model
+drawn elsewhere (a Bizagi export, say) as another process of a project, or to hand a process to a
+BPMN tool and take it back. `lila process export-bpmn` and `lila process import` (`docs/CLI.md`) do
+the same from a terminal.
+
+- **`get_process_bpmn`** returns the model exactly as stored: `xml`, its `revision`, and
+  `processId`, the `bpmn:process` the project simulates (as `get_project` lists it). It writes
+  nothing.
+- **`put_process_bpmn`** takes `bpmn` as inline XML (it starts with `<`) or a path to a `.bpmn`,
+  and validates it as `create_project` does: a model with validation errors is refused.
+  - **`mode: "add"`** adds it as a new process of a `.lila` that exists (to start a new file, use
+    `create_project`); a version 1 project becomes a repository. Its slug is `process`, or comes
+    from `name`, else from its pool's name, its process's name or the file's name; a slug already
+    in the file is refused. It gets an `as-is.scenario.json` as the app gives a new process: 20
+    arrivals one minute apart on each start event and a minute of work on each task, ready to
+    run and to patch.
+  - **`mode: "replace"`** replaces the model of the process `process` (implicit when the `.lila`
+    holds one). It keeps its name (`name` is refused here) and its scenarios; its revision goes up,
+    so its saved runs are stale. The `lila:` annotations (RACI, references, extended attributes)
+    and documentation are those of the new model: the old ones go with the old model. Scenario
+    entries that no longer apply — those of an element the new model does not have, and the fields
+    an element that changed type can no longer take — are removed and listed in
+    `scenarioRemovals`, `{ scenario, id, removed, entry }`, exactly as `edit_process` lists them,
+    and `notes` says the same in words. If a scenario still gets an error it did not have with the
+    old model, the call is refused.
+  - **`allowUnsimulatable: true`** keeps a model the simulator cannot run — message or signal
+    events, collaborations, loops, a diagram drawn for documentation — the way the app saves one.
+    Any validation error is accepted, and so is a scenario error on replace; each comes back in
+    `notes` (`does not simulate: E-NOSOP: …`). A file that is not XML, not BPMN or has no
+    `bpmn:process` is still refused. Nothing marks the process: «does not simulate» is what
+    `get_scenario` says (`runnable: false`, the errors in its `notes`) and `run_simulation`
+    refuses it, until the model is fixed.
+  - **`layout`** (default `true`) draws a model without a diagram (no `bpmndi` shapes) with the
+    auto-layout of `create_project` (`laidOut: true`); `false` keeps it as given.
+  - The write is the atomic, locked write of `patch_scenario`: if the file changed on disk since
+    it was read, the call is refused (`E-CAMBIO-EXTERNO`) and nothing is lost. Every other
+    process stays byte for byte. `dryRun` checks everything and writes nothing.
+
+```json
+{ "name": "put_process_bpmn", "arguments": { "project": "credit.lila", "mode": "add",
+  "bpmn": "examples/bizagi-exports/bizagi-miwg-A.1.0-roundtrip.bpmn", "name": "MIWG A.1.0" } }
+```
+
+```json
+{ "name": "get_process_bpmn", "arguments": { "project": "credit.lila", "process": "miwg-a-1-0" } }
+```
+
+```json
+{ "name": "put_process_bpmn", "arguments": { "project": "credit.lila", "process": "miwg-a-1-0", "mode": "replace",
+  "bpmn": "miwg-edited.bpmn", "allowUnsimulatable": true, "dryRun": true } }
 ```
 
 ## App-free exports
@@ -257,20 +325,60 @@ included), validates it like `validate_bpmn`, and writes it into the `.lila`. `l
 ```
 
 - **List order is the flow**: each step follows the previous one unless it has `next` (one id, or
-  several after a gateway), `branches` (gateways only: `{ label?, to, probability? }`, or
-  `{ label?, end: true, probability? }` for a branch that ends the process) or `end: true`. The
-  last step ends the process. Start and end events are added.
-- **`type`** defaults to `task`; the others are `userTask`, `serviceTask`, `callActivity`, `xor`,
-  `and`, `or`, `timer` (an intermediate timer event) and `subprocess` (a collapsed embedded
-  sub-process with a pass-through start and end inside).
-- **Step ids become the BPMN ids**, so scenarios key on them. They must be valid BPMN ids and must
-  not clash with the ids Lila generates (`StartEvent`, `EndEvent_<step>`, `Flow_…`, `Lane_<n>`,
-  `Process_…`, `<id>_di`).
+  several after a gateway), `branches` (gateways only: `{ label?, to, probability?, default? }`, or
+  `{ label?, end: true | "terminate", probability?, default? }` for a branch that ends the process)
+  or `end` (`true`, or `"terminate"` for a terminate end event, which ends the whole case, every
+  parallel path included). The last step ends the process. End events are added, and so is the
+  start unless `starts` is given.
+- **`type`** defaults to `task`; the others are the task variants `userTask`, `serviceTask`,
+  `sendTask`, `receiveTask`, `manualTask`, `scriptTask` and `businessRuleTask` (they simulate as
+  `task`), `callActivity`, the gateways `xor`, `and`, `or` and `eventGateway`, the waits `timer` (an
+  intermediate timer event) and `message` (an intermediate message event), and `subprocess` (a
+  collapsed embedded sub-process with a pass-through start and end inside).
+- **Default flows.** `default: true` marks one branch of an `xor` or an `or` as its default flow
+  (one per gateway). In an `xor` it does not change the split: what is left of 1 still goes to the
+  branches without a probability (R-XOR-2). In an `or` it is the fallback taken when no other
+  branch is (R-OR-3).
+- **The event gateway** (R-EVG-1). Every way out of an `eventGateway` — its branches, `next`, or the
+  following step — goes to a `timer` or `message` step, never to an end, a task or a gateway; so an
+  `eventGateway` cannot be the last step, have `end`, or have a branch with `end`. Each of those
+  steps has that gateway as its only way in: the step before it in the list must not fall into it,
+  and no other `next`, `to`, `from`, boundary event or second gateway may lead to it. A `message`
+  step is only valid there. The branches take no `probability` and no `default`: the first event to
+  happen wins. A branch without a `duration` never fires (R-EVG-5), and when none has one, cases
+  stay at the gateway (R-EVG-6).
+- **Starts.** `starts: [{ id, name?, type?, lane? }]` (`type` `none` or `timer`) replaces the
+  implicit start; the start ids are yours. Each start is in the `from` of exactly one step (a start
+  has one outgoing flow: to fork, put a gateway after it), and `from` only names starts and only
+  exists with `starts`. A start's `lane` follows the rule of a step's and defaults to the lane of
+  its step. `type: "timer"` is notation: the cases arrive by the scenario's arrivals on that start,
+  as on a plain one (SEMANTICS §2), not by a calendar of the timer.
+- **Boundary events.** `boundary: [{ id, type: "timer", name?, label?, duration?, interrupting?, to | end }]`
+  on a task (any variant) or a call activity; not on a sub-process (#639). `to` names the step the
+  boundary leads to; `end` (`true` or `"terminate"`) ends that path with the end event
+  `EndEvent_<boundary id>`. `interrupting: false` leaves the task running and starts a parallel
+  path; the default cuts it short. `label` names the flow out of it. The `duration` counts from the
+  moment a case reaches the task, waiting for resources included; without one the boundary never
+  fires (R-BND-8). A deadline longer than the run (`run.duration` is 1 h by default) never fires
+  either: lengthen the run with `patch_scenario`.
+- **Notes and data.** `notes: [text]` attaches text annotations to a step, in order, each text
+  once per step (a repeated one is an error). `data: [{ name,
+  direction }]` connects data objects to an activity (a task, a call activity or a sub-process):
+  `in`, it reads the object; `out`, it writes it. Steps naming the same object share it; a name and
+  direction appear once per step.
+- **Ids.** Starts, steps and boundary events share one set of ids: unique, valid BPMN ids (NCName),
+  and `next`/`to` name only steps (a `next` naming a start or a boundary event is "not the id of a
+  step"), `from` only starts. Step ids become the BPMN ids, so scenarios key on them. No id may
+  clash with the ids Lila generates (`StartEvent` without `starts`, `EndEvent_<step>`,
+  `EndEvent_<boundary>`, `Flow_…`, `Lane_<n>`, `Process_…`, `<id>_di`). When two generated ids
+  would clash (the second end of `x` and the end of a step `x_2`), the later one takes the first
+  free `_<n>` suffix.
 - **`lane`** defaults to the previous step's lane (the first lane for the first step). Lanes not
   listed in `lanes` are an error when `lanes` is given and are collected in order when it is not.
 - **The base scenario.** The process gets `as-is.scenario.json`: the app's default arrivals for a
-  new process (20 cases, one a minute), every `duration` as `processingTime` (tasks) or delay
-  (timers), every `resources` entry (a name, or `{ name, quantity }`; a resource is created with
+  new process (20 cases, one a minute) on each start, so two starts bring two streams of cases;
+  every `duration` as `processingTime` (of a task, and the delay of a `timer`, a `message` or a
+  boundary event), every `resources` entry (a name, or `{ name, quantity }`; a resource is created with
   the capacity of its largest request; with several, `selection: "or"` takes any one of them
   instead of all), and every branch `probability` as the probability of its
   flow. The XOR branches left without one share what is left of 1. A `duration` is a number of
@@ -291,7 +399,8 @@ included), validates it like `validate_bpmn`, and writes it into the `.lila`. `l
   is a problem too, one per stuck step, and so is an outline whose model does not validate (the
   validator's errors come back with their codes, at the step they are about).
 - **`notes`** are Lila's own warnings on an outline that is accepted, such as a parallel (`and`)
-  join that waits for branches of one exclusive (`xor`) split, where cases would wait forever.
+  join that waits for branches of one exclusive split (an `xor`, an `eventGateway`, or a task and
+  its interrupting boundary event), where cases would wait forever.
 
 ```json
 { "name": "create_process", "arguments": { "project": "credit.lila", "outline": { "name": "Credit application", "lanes": ["Customer", "Analyst"], "steps": [ … ] } } }
@@ -303,25 +412,86 @@ included), validates it like `validate_bpmn`, and writes it into the `.lila`. `l
   "summary": "Created process \"Credit application\" (credit-application) in the new file /work/credit.lila: 5 steps, 2 lanes, base scenario as-is.scenario.json." }
 ```
 
-`get_process_outline` returns the outline in **normal form**: every step names its lane, `type` is
-left out for `task`, `next` appears only when it is not simply the following step, every step
-that finishes the process has `end: true`, gateway successors are `branches`, durations are
-distribution objects in seconds and the XOR probabilities are filled in. That is the form
-`create_process` returns as `outline`, so a process round-trips. Durations, resources and
-probabilities (and resource `selection`) come from the process's `as-is.scenario.json` when it has
-one. For a process Lila did not generate, `warnings` says once per kind what the outline leaves
-out: other pools, message flows, the names of start and end events, annotations, default-flow
-marks, other event types, nested lanes, and the parts of the scenario an outline does not carry
-(arrivals, calendars, costs, resource capacities and types, conditional routing; the scenario
-itself is not changed). A process with no name takes the one in the `.lila`, else its id. The
-steps keep the document order.
+`get_process_outline` returns the outline in **normal form**: every step names its lane, and so
+does every start; `type` is left out for `task`; `next` appears only when it is not simply the
+following step; every step that finishes the process has `end: true` (`"terminate"` for a
+terminate end event); gateway successors are `branches` (an `eventGateway` always has them, even
+a single one) with `default: true` on the default flow of an `xor` or `or`; durations are
+distribution objects in seconds and the XOR probabilities are filled in. `starts` is left out in
+the trivial case — a single plain start `StartEvent` with no name in the lane of its step — and
+then that step is moved to the head of the list (the others keep their order) and no step has
+`from`; so `starts: [{ "id": "StartEvent" }]` with `from` on the third step normalizes to the
+outline without `starts` whose first step is that one. Otherwise every start is listed and the
+steps keep the document order. `from` lists a step's starts in the order of `starts`, one id as a
+string and several as a list (like `next`). `boundary` keeps its order, with `interrupting` only
+when it is `false`. `notes` keeps its order (when read, the document order of the associations).
+`data` lists the reads first and then the writes, each in its order. That is the form `create_process` returns as `outline`, so a process round-trips.
+Durations, resources and probabilities (and resource `selection`) come from the process's
+`as-is.scenario.json` when it has one.
+
+For a process Lila did not generate, the reading never returns an outline that `create_process`
+would refuse: what an outline cannot say is left out, and `warnings` says so once per kind. That
+covers other pools, message flows, the names of end events and of the flows out of a start,
+start events other than plain or timer and end events other than plain or terminate (read as
+plain events), a start with several outgoing flows (only the first is kept), event-based gateways
+the simulator does not run (R-EVG-1: an instantiating or parallel one, or one with a branch to
+anything but a timer or message catch event with one way in and one way out, such as a receive
+task) and message catch events that are not a branch of one (left out with their flows),
+boundary events other than timers, and boundary timers on a sub-process (#639), with an incoming
+flow or with several outgoing flows, the timer expressions of the XML (`timeDuration`,
+`timeDate`, `timeCycle` of timer starts, timer steps and boundary timers: durations live in the
+scenario), default-flow marks out of anything but an `xor` or an `or` (and broken ones), branch
+probabilities an outline cannot carry (out of an `and` or an `eventGateway`, or an `xor`'s adding
+up to more than 1), groups, text annotations not attached to a step or with no text, a text
+annotation that repeats a note of the same step (read once), data stores, data objects with no
+name, two data objects with the same name, data associations with something that is not an
+activity, nested lanes, and the parts of the scenario an outline does not carry (arrivals, calendars, costs,
+resource capacities and types, conditional routing; the scenario itself is not changed). A
+process with no name takes the one in the `.lila`, else its id.
+
+### Example: a 48-hour escalation
+
+`examples/outline/claim-escalation.json` (the outline is in the [agent guide](AGENT_GUIDE.md#example-escalate-after-48-hours))
+models «if the adjuster has not decided in 48 hours, a supervisor steps in» as a non-interrupting
+boundary timer on the task, and «the customer confirms or, after five days, the claim is closed» as
+an event gateway between a `message` step and a `timer` step that ends with `"terminate"`:
+
+```json
+{ "id": "assess", "name": "Assess claim", "type": "userTask", "lane": "Adjuster",
+  "duration": "triangular(4h, 24h, 72h)", "resources": ["Adjuster"],
+  "boundary": [ { "id": "sla", "type": "timer", "name": "48 h", "duration": "48h", "interrupting": false,
+                  "label": "No decision in 48 h", "to": "escalate" } ] }
+```
+
+The base scenario runs for one hour (`run.duration` 3600 s), so no case would ever reach the
+48-hour deadline or the five-day wait: lengthen the run with `patch_scenario` before
+`run_simulation`. The four calls, as the e2e test `outline-constructs.e2e.test.ts` makes them:
+
+```json
+{ "name": "create_process", "arguments": { "project": "claims.lila", "outline": { "name": "Claim handling", … } } }
+{ "name": "patch_scenario", "arguments": { "project": "claims.lila", "scenario": "as-is",
+  "patch": [ { "op": "replace", "path": "/run/duration", "value": 5184000 } ] } }
+{ "name": "run_simulation", "arguments": { "model": "claims.lila", "scenario": "as-is", "saveRun": true } }
+{ "name": "export_document", "arguments": { "project": "claims.lila", "format": "html", "saveTo": "claims.html" } }
+```
+
+The deadline is the scenario entry `elements.sla.processingTime`, never a `timeDuration` in the
+XML. `elements.sla.completed` counts the deadlines that fired. `byEndEvent` counts each case at the
+end of the path that finished last, so an escalated claim that was then paid counts under
+`EndEvent_pay`. To put the same deadline on a process that already exists, use `addBoundary`:
+
+```json
+{ "name": "edit_process", "arguments": { "project": "claims.lila", "operations": [
+  { "op": "addBoundary", "on": "assess", "boundary": { "id": "sla", "type": "timer", "name": "48 h",
+    "duration": "48h", "interrupting": false, "label": "No decision in 48 h", "to": "escalate" } } ] } }
+```
 
 ## Modelling tools for agents
 
-`annotate_element`, `get_raci_matrix`, `import_scenario_sheet`, `export_scenario_template` and
-`create_project` (#99, #403, #514) let an agent build and document a project with no app. The CLI
-has the first four as `lila process annotate|raci` and `lila scenario import|template`
-(`docs/CLI.md`). Every write goes through the same atomic, locked `.lila` save as
+`annotate_element`, `define_attribute`, `get_raci_matrix`, `import_scenario_sheet`,
+`export_scenario_template` and `create_project` (#99, #633, #403, #514) let an agent build and
+document a project with no app. The CLI has the first five as `lila process
+annotate|attribute|raci` and `lila scenario import|template` (`docs/CLI.md`). Every write goes through the same atomic, locked `.lila` save as
 `patch_scenario` (see [A `.lila` as input](#a-lila-as-input)): only the process touched changes,
 the others are carried through byte for byte, and an invalid input is `isError` with nothing
 written. `dryRun: true` answers what would change and writes nothing.
@@ -341,6 +511,22 @@ written. `dryRun: true` answers what would change and writes nothing.
   the process it references (written there, and named in `documentationOn`), and a process
   inside a pool keeps its RACI and references on the pool, so `responsibilities` or `refs` on
   such a process are refused with a message that names the pool.
+- **`define_attribute`** declares an extended attribute (#633), so `annotate_element` can fill it
+  in: `get_project` lists what a process defines. Pass the whole definition every time: `name`,
+  `type` (`text`, `number`, `list`, `date`), `appliesTo` (`task`, `gateway`, `event`,
+  `subProcess`, `lane` for pools and lanes, `process`), and `options` and `default` when it has
+  them. It changes the definition with that `id`; without `id`, the one with that name (any case)
+  and `appliesTo`; else it creates one with a deterministic id, `Attr_` and the name in lowercase
+  ASCII (`"SLA (h)"` → `Attr_sla_h`, then `_2`… when taken), so a dry run and the write name it
+  alike and calling it again changes nothing (`changed: false`). The rules are the app's attribute
+  dialog's: a name unique per element type (ignoring case), a `list` with at least one option
+  (trimmed, repeats dropped), `options` only on a `list`, and a `default` that fits the type.
+  Definitions are written on the `bpmn:collaboration` (else the process), and copies elsewhere are
+  moved there (`docs/BPMN_EXTENSION.md`). A rename keeps every value. `remove: true` (with `id`, or
+  `name` and `appliesTo`) removes the definition and its values; retyping, changing `appliesTo` or
+  taking options away removes the values that no longer fit, as the app's «clear» does. Either
+  way `removedValues` lists them (`[{ elementId, value }]`), in a `dryRun` too; `definitions` is
+  the process's whole list afterwards.
 - **`get_raci_matrix`** lists what the process document (`export_document`) lists under
   «Responsibilities (RACI)», in the same order: one row per element with responsibilities, with
   its `id`, `name`, `lane` (when it has one), the raw `responsibilities`, and `cells` (role →
@@ -356,7 +542,9 @@ written. `dryRun: true` answers what would change and writes nothing.
 - **`export_scenario_template`** is the app's «Download template»: hand it to a person, then
   import what comes back. An existing `saveTo` is refused unless `overwrite`.
 - **`create_project`** takes `bpmn` as inline XML (it starts with `<`) or a path to a `.bpmn`.
-  A model with validation errors is refused. `scenarios` are `[{ "name", "scenario" }]`, saved
+  A model with validation errors is refused, unless `allowUnsimulatable: true` (#632): then it is
+  kept as a diagram that does not simulate, and its errors come back in `notes` (see
+  [Raw BPMN of a process](#raw-bpmn-of-a-process)). `scenarios` are `[{ "name", "scenario" }]`, saved
   as `<name>.scenario.json`; a scenario with neither `model` nor `extends` gets
   `"model": "model.bpmn"`, and one that names another model is refused. A scenario that cannot
   run yet is a draft: it is saved, and comes back with `runnable: false` and its `errors`. The
@@ -376,6 +564,16 @@ written. `dryRun: true` answers what would change and writes nothing.
 { "name": "annotate_element", "arguments": { "project": "project.lila", "elementId": "Task_TomarPedido",
   "documentation": "Takes the order at the counter.", "responsibilities": [{ "type": "R", "roleRef": "cashier" }, { "type": "A", "roleRef": "manager" }],
   "refs": { "systemRef": ["POS"] } } }
+```
+
+```json
+{ "name": "define_attribute", "arguments": { "project": "project.lila", "name": "Risk level", "type": "list",
+  "appliesTo": "task", "options": ["Low", "High"], "default": "Low" } }
+```
+
+```json
+{ "name": "annotate_element", "arguments": { "project": "project.lila", "elementId": "Task_TomarPedido",
+  "attributes": { "Risk level": "High" } } }
 ```
 
 ```json
@@ -416,13 +614,20 @@ terminal.
 
 | Operation | Fields | What it does |
 | --- | --- | --- |
-| `add` | `step`, `after?` or `between?` | Adds a step. `step` is an outline step without its connections: `{ id, name?, type?, lane?, duration?, resources? }`. With `after: id`, the new step takes over that step's outgoing flow (refused when it has several: use `between`). With `between: [from, to]`, it goes on the flow from → to. The flow it lands on keeps its id, name and probability; a new flow continues to the old successor. Without either, it is added unconnected. `lane` defaults to the lane of the step it follows. |
-| `connect` | `from`, `to`, `label?`, `probability?`, `id?` | Adds a sequence flow (id `Flow_<from>_<to>` by default). `probability` only out of an `xor` or `or` gateway. |
-| `remove` | `id` | Removes a step and reconnects: its incoming flows go to its successor when it has at most one; a step with no incoming flow loses its outgoing ones; a step with several incoming and several outgoing flows (a split after a join) is refused. A step with boundary events is refused. Message flows and associations attached to it go with it. A sequence flow can be removed too. |
-| `rename` | `id`, `name` | Renames any element: step, flow, lane, pool, process. `""` clears the name. |
-| `setType` | `id`, `type` | One of the outline types. Name, documentation, extension elements and flows stay; a sub-process turned into something else loses its content (listed in `removed`). |
-| `moveToLane` | `id`, `lane` | Lane by name or id. |
+| `add` | `step`, `after?` or `between?` | Adds a step. `step` is an outline step without its connections, boundary events, notes or data: `{ id, name?, type?, lane?, duration?, resources? }`, any outline type. With `after: id`, the new step takes over that step's outgoing flow (refused when it has several: use `between`). With `between: [from, to]`, it goes on the flow from → to. The flow it lands on keeps its id, name and probability; a new flow continues to the old successor. Without either, it is added unconnected. `lane` defaults to the lane of the step it follows. |
+| `connect` | `from`, `to`, `label?`, `probability?`, `default?`, `id?` | Adds a sequence flow (id `Flow_<from>_<to>` by default). `probability` and `default: true` (the gateway's default flow) only out of an `xor` or `or` gateway; `default: true` is refused when the gateway already has a default flow. No operation marks an existing flow as the default or clears the mark: in one call, `connect` the same steps again (with `default: true` or without it, and the `label` and `probability` to keep) and `remove` the old flow, after removing the gateway's current default flow if it has one; the flow gets a new id. |
+| `remove` | `id` | Removes a step and reconnects: its incoming flows go to its successor when it has at most one; a step with no incoming flow loses its outgoing ones; a step with several incoming and several outgoing flows (a split after a join) is refused. A step with boundary events is refused. Message flows and associations attached to it go with it, and so do its text annotations, its data associations and the data objects nothing else uses (listed in the change). An end event left with no incoming flow goes too (listed in `removed`). A sequence flow, a boundary event, a text annotation, a data object or data store, a group or an association can be removed too. |
+| `rename` | `id`, `name` | Renames any element: step, flow, lane, pool, process. A lane can also be named by its name, when no element has that id. `""` clears the name. |
+| `setType` | `id`, `type` | One of the outline types, or `end`/`terminate` to turn an end event into a terminate end and back. For those two, `id` is the end event's (`EndEvent_<step>` in a process Lila made; the outline does not show it otherwise), or a step that leads to exactly one end event: then that end is retyped, not the step. `end`/`terminate` on anything else (neither an end event nor a step with exactly one end event after it) is refused. Name, documentation, extension elements and flows stay; a sub-process turned into something else loses its content (listed in `removed`). An `xor` or `or` turned into an `and` or an `eventGateway` loses the probabilities of its outgoing flows (listed in `scenarioRemovals`). |
+| `moveToLane` | `id`, `lane` | Lane by name or id. The step's boundary events, and the end events they lead to, move with it. |
 | `addLane` | `name`, `id?`, `after?` or `before?` | Adds a lane (at the bottom by default). The first lane of a process without lanes holds all its steps, and a process without a pool gets one. |
+| `removeLane` | `lane`, `moveStepsTo?` | Removes a lane (by name or id). A lane that holds any node — a step, a start, an end event, a boundary event or its end — needs `moveStepsTo`, another lane with no sub-lanes that takes them. A lane with sub-lanes is refused. The only lane of the process is the exception: removing it removes the lane set, its nodes stay in the pool without lanes, and `moveStepsTo` is not needed. |
+| `moveLane` | `lane`, `before` or `after` | Moves a lane above (`before`) or below (`after`) a sibling lane; exactly one of the two. |
+| `addBoundary` | `on`, `boundary` | Attaches a boundary timer to a task (any variant) or a call activity, not a sub-process. `boundary` is as in an outline: `{ id, type: "timer", name?, label?, duration?, interrupting?, to \| end }`. Its `duration` goes into the base scenario. |
+| `annotate` | `on`, `text` | Attaches a BPMN text annotation to a step (it reads back as the step's `notes`). The same text on the same step again changes nothing, so `removeAnnotation` is never ambiguous. Not to be confused with `annotate_element`, which writes the documentation, RACI and attributes (`lila:` annotations). |
+| `removeAnnotation` | `on`, `text` | Removes the annotation with that text attached to the step, with its association (every one, in a model from elsewhere that repeats it). |
+| `addDataObject` | `name`, `on`, `direction` | Connects a data object to an activity (a task, a call activity or a sub-process): `in`, the activity reads it; `out`, the activity writes it. An object with that name in the process is reused, otherwise one is created. |
+| `removeDataObject` | `name`, `on?` | Disconnects the data object from the activity `on`, or from every activity without it. The object goes when nothing uses it any more. |
 
 - **Ids never change.** A renamed step keeps its scenario entries, and so does a retyped one, as
   far as they still apply. `duration`, `resources` and `selection` of an added step and the
@@ -432,15 +637,16 @@ terminal.
 - **After an edit the process still simulates.** Scenario entries that no longer apply are removed
   from every scenario of the process: the whole entry of an element the edit removed, and the
   fields a retyped element cannot take (resources on a gateway, a sub-process or a timer; a
-  duration on a sub-process…). Nothing goes silently: `scenarioRemovals` lists each one as
+  duration on a sub-process…), and the probabilities of the flows out of a gateway retyped to
+  `and` or `eventGateway`. Nothing goes silently: `scenarioRemovals` lists each one as
   `{ scenario, id, removed, entry }`, with the removed fields and their previous values, so an agent
   can put them back elsewhere with `patch_scenario`; `notes` says the same in words, and a dry run
   returns the same report. Then every scenario is validated against the edited model, and an error
   it did not have before refuses the edit. `removed` lists every id that left the model. `notes`
   also flags an XOR whose branch probabilities no longer add up to 1, naming the flows to patch.
 - **What is not touched stays**: documentation, `lila:` annotations (RACI, references, extended
-  attributes), other vendors' extensions, text annotations, data objects, other pools and message
-  flows. A model the BPMN reader cannot read completely is refused rather than written back with
+  attributes), other vendors' extensions, the text annotations, data objects and groups no
+  operation names, other pools and message flows. A model the BPMN reader cannot read completely is refused rather than written back with
   something missing.
 - **Layout.** By default (`layout: true`) the edited process is laid out again with the same
   layouter and lane fix as `create_process`: positions set by hand in that process are lost; text
@@ -450,7 +656,10 @@ terminal.
   by as much as it grew. With `layout: false` every shape keeps its place: a new step goes right of
   the step it follows, in its lane (which grows a row when it is full), and only flows whose ends
   changed are drawn again. To make room for a step inserted between two close steps, what lies to
-  its right in that pool shifts right by one amount; pools and lanes only get wider or taller.
+  its right in that pool shifts right by one amount; pools and lanes only get wider or taller,
+  except with `removeLane` and `moveLane`, which move whole bands: every step keeps its x, and the
+  flows that cross from one band to another are drawn again. A new annotation or data object goes
+  beside its step, over no other shape.
 - **Which process**: `process` when the `.lila` holds several. Inside its BPMN, the process the
   simulator reads (the executable, non-empty one); steps of other pools cannot be edited.
 - The write is the same atomic, locked write as `patch_scenario`: if the file changed on disk since
@@ -810,4 +1019,5 @@ stays in the foreground, so it is not a CI smoke test.
   it are lost); an expanded sub-process becomes a collapsed one, and vertical pools (as Bizagi
   draws them) become horizontal. With `layout: false`, placement is simple: right of the
   predecessor, in its lane; it does not untangle crossings. Only the main process of the BPMN can
-  be edited, and nested lanes only through their leaf lanes.
+  be edited, and nested lanes only through their leaf lanes. Start events are neither added nor
+  retyped by `edit_process`: give them in the outline (`starts`) or change them in the app.

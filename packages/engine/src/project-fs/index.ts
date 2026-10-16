@@ -50,6 +50,7 @@ export {
   annotateLilaElement,
   createLilaProject,
   importLilaScenarioSheet,
+  readBpmnArgument,
   lilaRaciMatrix,
   lilaScenarioTemplate,
   raciCsv,
@@ -66,7 +67,11 @@ export type {
   SheetImportRequest,
   SheetImportResult,
 } from './agent-tools.js';
+export { attributeDefinitionsOf, defineLilaAttribute, lilaAttributeList } from './attributes.js';
+export type { DefineAttributeRequest, DefineAttributeResult, LilaAttributeList, RemovedAttributeValue } from './attributes.js';
 export { editLilaProcess } from './edit.js';
 export { lilaProjectInventory, lilaScenarioView } from './inventory.js';
 export type { LilaProcessSummary, LilaProjectInventory, LilaRunSummary, LilaScenarioSummary, LilaScenarioView } from './inventory.js';
 export type { EditedLilaProcess, EditLilaProcessOptions } from './edit.js';
+export { putLilaProcessBpmn, readLilaProcessBpmn } from './process-bpmn.js';
+export type { LilaProcessBpmn, PutLilaProcessBpmnRequest, PutLilaProcessBpmnResult } from './process-bpmn.js';
