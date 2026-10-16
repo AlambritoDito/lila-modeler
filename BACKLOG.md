@@ -6,6 +6,40 @@ Fecha: 2026-09-03. Complementa `LILA_MODELER_ESTRUCTURA.md` (decisiones, diseño
 
 **Dónde se gestiona**: en GitHub Issues del repo privado `AlambritoDito/lila-modeler`. El número de issue coincide con el id del ticket (`LILA-026` = `#26`); las 20 épicas son los issues `#112`–`#131` con su lista de tareas; los hitos M0–M6 son milestones. Este archivo es la fuente que generó los issues; si cambia el alcance, se edita aquí y se actualiza el issue, no al revés.
 
+## Ampliación organizacional — 2026-09-26 (revisada 2026-10-14, base `7dd61e2`, beta.26)
+
+Dirección aprobada: [roadmap completo y matriz de brechas](docs/es/ROADMAP.md); épica GitHub
+#497 (etiqueta `later`). Primero repositorio local, catálogo, tablas, RACI e Insights (fases 1–2);
+después mapas, riesgos, análisis y modelos complementarios; servidor/gobierno en fase 7 y
+ecosistema en fase 8. M6 ya no bloquea el repositorio ni el catálogo local. Las fases nuevas no
+renumeran M0–M6.
+
+**Orden**: el código ADONIS empieza cuando el Lote R cierre la épica de agentes #527 (Lote P
+mezclado en beta.25; Q en curso; R después). El contrato RM-01 (solo documentación) es
+`docs/REPOSITORY_CONTRACT.md` + ADR-032, aceptada el 2026-10-14 con las decisiones del dueño. Lotes propuestos: A0 contrato · A1 almacén
+por objeto + catálogo (roles, unidades, sistemas, documentos) + selectores + explorador · A2 tabla
++ matriz RACI agregada + Insights · A3 mapas/cadenas de valor + organigrama + enlace rol↔pool ·
+A4 riesgos/controles · A5 KPIs, Ishikawa, SIPOC, impacto · después fases 6–8. #639 (simulador:
+multi-instancia, bucles, eventos de error) **no** está en el camino a ADONIS.
+
+Ya existe (no reabrir): repositorio v2 con varios procesos por `.lila` bajo `processes/<slug>/`
+(#498/#461, Lote H #521; slugs en Lote N #614), pestañas por proceso y navegación a call
+activities; `lila:versionTag`; anotaciones `lila:*` (documentación, RACI, referencias por ID);
+atributos extendidos (#509); documento del proceso Word/HTML (#454); importación de parámetros
+desde Excel/CSV (#514); matriz RACI **por proceso** en motor/CLI/MCP (#99: `lila process raci`,
+`get_raci_matrix`). Todavía no: objetos de catálogo `catalog/<tipo>/<id>.json`, `ProjectStore`
+por objeto con carga diferida, adjuntos, explorador/búsqueda de repositorio, índice inverso de
+usos, matriz RACI agregada o en la app, mapas, historial de versiones. No cerrar un ticket por
+existir solamente su base; esta revisión es documental y no certifica paridad ADONIS.
+
+Los IDs LILA se conservan. E20 es la épica de idiomas (#283) y **E21–E26 ya son épicas de GitHub**
+(#330, #335, #336, #443, #444, #445); por eso las épicas organizacionales nuevas se llaman
+`ORG-1`…`ORG-9` (locales, bajo #497) y `RM-*` son claves de planificación, **no números de issue
+de GitHub**. El alcance ampliado sustituye las estimaciones antiguas de E14–E18: dimensionar por
+entregas tras fijar contratos. #92 tal como está escrito (`catalog.json` monolítico) queda
+sustituido por un archivo por objeto (ADR-029). No se han creado ni actualizado issues remotos con
+esta revisión.
+
 **Convenciones**
 
 - `LILA-nnn` es el id del ticket. Las épicas son `E0`…`E19`. Los hitos `M0`…`M6` son los de la sección 7 del documento de estructura.
@@ -582,7 +616,12 @@ Tickets más gruesos a propósito: se desglosan cuando llegue su turno.
 - Tamaño M · Depende de LILA-041
 - Qué: activar los campos reservados; DST.
 
-### E13 — Servidor self-hosted para intranet (M6)
+### E13 — Servidor self-hosted para intranet (M6; fase 7 del roadmap)
+
+Consume el contrato por objeto de RM-01/RM-02. No es prerrequisito de E15 ni del repositorio
+local. Conservar los IDs siguientes; ampliar REST, almacenamiento y RemoteStore a los objetos
+del repositorio versión 3 y adjuntos. La aceptación incluye carpeta → servidor → carpeta sin pérdidas. Los tamaños
+históricos de esta sección no estiman el alcance del repositorio.
 
 #### LILA-083 · `packages/server` con REST `/api/v1`
 - Tamaño L · Depende de LILA-029, LILA-038
@@ -613,60 +652,126 @@ Tickets más gruesos a propósito: se desglosan cuando llegue su turno.
 - Qué: `Dockerfile` multi-stage, `docker-compose.yml` (server + postgres), variables de entorno documentadas.
 - Aceptación: `docker compose up` en una máquina Linux limpia; dos usuarios en la misma red ven la misma lista de procesos; uno guarda una versión y el otro la ve al recargar.
 
-### E14 — Repositorio y versiones
+### E14 — Versiones y gobierno del repositorio (#126; fase 7)
 
-#### LILA-089 · Versiones con `lila:versionTag` y lista de versiones
-- Tamaño M · Depende de LILA-084
-#### LILA-090 · Comparar versiones (diff XML + `compare()` de resultados)
-- Tamaño M · Depende de LILA-089
-#### LILA-091 · Flujo de liberación (Draft → Released → Valid until), comentarios, búsqueda
-- Tamaño L · Depende de LILA-089
+ORG-1 entrega primero el repositorio local. Estas tareas agregan historial y gobierno; una
+etiqueta de versión editable no equivale a una versión publicada ni a una aprobación.
 
-### E15 — Catálogo y RACI
+#### LILA-089 · Historial de versiones con `lila:versionTag`
+- Depende de RM-01, RM-02; el historial local no depende de LILA-084.
+- Qué: instantáneas identificables y lista de versiones; conservar la etiqueta ya implementada.
+- Aceptación: recuperar una instantánea sin alterar el borrador ni sus escenarios; referencias
+  entre versiones no se resuelven por nombre.
 
-#### LILA-092 · `catalog.json` y editor de catálogo (roles, sistemas, documentos, riesgos, controles, KPIs)
-- Tamaño M · Depende de LILA-060
-#### LILA-093 · Referencias `lila:*Ref` con selector desde el catálogo en el panel de propiedades
-- Tamaño S · Depende de LILA-092
-#### LILA-094 · Matriz RACI (consulta sobre IR × responsabilidades) y export
-- Tamaño M · Depende de LILA-093
-#### LILA-095 · Lint "actividad sin responsable" y referencias colgantes
-- Tamaño S · Depende de LILA-093
-#### LILA-096 · Pools de recursos del escenario referenciando roles del catálogo
-- Tamaño S · Depende de LILA-092
+#### LILA-090 · Comparación semántica de versiones
+- Depende de LILA-089.
+- Qué: cambios en BPMN, documentación y relaciones; comparación de resultados por separado.
+- Aceptación: mostrar alta/baja/cambio por ID y versión, distinguir cambio visual de semántico;
+  no confundir AS-IS/TO-BE de escenarios con historial de modelos.
 
-### E16 — MCP de modelado para agentes
+#### LILA-091 · Revisión, liberación y vigencia
+- Depende de LILA-089, LILA-085, RM-18.
+- Qué: borrador → revisión → publicación, vigencia, comentarios y portal; contrato en RM-17.
+- Aceptación: editor propone, aprobador autorizado publica, lector ve la versión publicada;
+  publicación inmutable con historial de decisiones y sin sobrescrituras silenciosas.
 
-#### LILA-097 · `create_process_draft` (IR mínimo → .bpmn con `bpmn-auto-layout`)
-- Tamaño M · Depende de LILA-053
-#### LILA-098 · `create_activity`, `connect_elements`, `create_gateway`, `delete_element`, `rename`
-- Tamaño M · Depende de LILA-097
-#### LILA-099 · `annotate_element` (documentation, RACI, refs) y `get_raci_matrix`
-- Tamaño S · Depende de LILA-022, LILA-094
-#### LILA-100 · Permisos por tool (`process:read`, `process:write`, `simulation:run`, …) y audit log
-- Tamaño M · Depende de LILA-085
+### E15 — Catálogo y RACI (#127; fases 1–3)
 
-### E17 — Asistencia IA y agente de entrevistas
+#### LILA-092 · Catálogo por objeto y editor
+- Depende de RM-01, RM-02.
+- Qué: `catalog/<tipo>/<id>.json` sustituye el `catalog.json` propuesto; tipos iniciales rol,
+  unidad, sistema/aplicación y documento. Riesgos/controles/KPIs se activan en sus fases.
+- Aceptación: crear/editar un objeto y compartirlo en dos procesos; renombrarlo actualiza sus
+  apariciones; consulta de usos sin duplicar objetos por nombre.
 
-#### LILA-101 · `Finding` e `Interview` como documentos JSON en `processes/<clave>/findings/`
-- Tamaño S
-#### LILA-102 · Ingesta de transcripciones y extracción (actividades, actores, sistemas, decisiones, tiempos, dolores)
-- Tamaño L · Depende de LILA-097, LILA-101
-#### LILA-103 · Detección de contradicciones entre entrevistas y solicitud de faltantes
-- Tamaño M · Depende de LILA-102
-#### LILA-104 · Revisión de calidad del proceso y TO-BE sugerido como escenario con `extends`
-- Tamaño M · Depende de LILA-055
+#### LILA-093 · Selectores de referencias `lila:*Ref`
+- Depende de LILA-092, RM-03.
+- Qué: reutilizar las extensiones existentes con selectores tipados y enlaces al catálogo.
+- Aceptación: guardar/abrir conserva IDs y extensiones ajenas; referencias importadas sin objeto
+  permanecen visibles como no resueltas, sin inventar objetos.
 
-### E18 — Process mining (proceso Python separado, AGPL aislado)
+#### LILA-094 · Matriz RACI agregada y exportación
+- Depende de LILA-093, RM-04.
+- Base existente: la matriz **por proceso** de #99 (`raciMatrix` en
+  `packages/engine/src/process-document.ts`, `lila process raci`, `get_raci_matrix`), con roles
+  como IDs `roleRef` sin catálogo y sin vista en la app.
+- Qué: consultar responsabilidades de todo el repositorio y del catálogo; vista en la app,
+  navegación y exportación.
+- Aceptación: filas por actividad y roles con R/A/C/I; abrir actividad/rol desde la matriz;
+  incluir elementos documentables fuera del perfil simulable.
 
-#### LILA-105 · `mining/` con pm4py: importar XES/CSV con las columnas del event log de Lila
-- Tamaño M
-#### LILA-106 · Descubrimiento ligero de escenario observado (llegadas, empíricas por actividad, probabilidades de gateway)
-- Tamaño L · Depende de LILA-105
-#### LILA-107 · "Documentado vs observado" con el mismo `compare()`; desviaciones y rework
-- Tamaño M · Depende de LILA-106
-#### LILA-108 · Puente opcional a Simod y salida OCEL 2.0
-- Tamaño M · Depende de LILA-078, LILA-105
+#### LILA-095 · Calidad documental y referencias colgantes
+- Depende de LILA-093, RM-03.
+- Qué: avisos por falta de responsables, referencias no resueltas y objetos utilizados antes
+  de borrarlos. No convertir documentación incompleta en error de simulación.
+- Aceptación: diagnóstico identifica modelo/versión/elemento y navega al origen; borrar un objeto
+  en uso no elimina referencias silenciosamente.
+
+#### LILA-096 · Enlace entre roles y pools de simulación
+- Depende de LILA-092, RM-10; fase 3.
+- Qué: relación explícita de catálogo a configuración del escenario; contratos antes del código.
+- Aceptación: asignar RACI no crea capacidad/coste/calendario; cambiar escenario no cambia la
+  definición del rol; corridas conservan sus entradas reproducibles.
+
+### E16 — MCP de modelado para agentes (#128; ampliación al repositorio en fase 8)
+
+LILA-097–099 están cerrados por la épica de agentes #527: `create_process` (lista de pasos → BPMN
+con `bpmn-auto-layout`, #97), `edit_process` (operaciones atómicas con dry-run, #98) y
+`annotate_element` + `get_raci_matrix` por proceso (#99), también como `lila process
+annotate|raci`. No se reabren. Lo pendiente de fase 8 es ampliarlos a objetos de catálogo y a
+consultas del repositorio (usos, matriz agregada) cuando existan RM-03 y LILA-094: mismas
+respuestas en API/MCP y UI para la misma revisión.
+
+#### LILA-100 · Permisos de herramientas y auditoría
+- Depende de LILA-085, RM-18.
+- Qué: aplicar autorización de servidor también a herramientas y registrar modificaciones.
+- Aceptación: un lector no escribe mediante MCP/REST; el log identifica actor y revisión.
+
+### E17 — Asistencia IA y entrevistas (fase 8)
+
+#### LILA-101 · Contratos `Finding` e `Interview`
+- Depende de RM-01, RM-19.
+- Qué: documentos con procedencia y referencias al modelo; distinguir propuestas de IA de
+  hallazgos operativos de calidad y no duplicar sus identidades.
+- Aceptación: cada afirmación extraída conserva fuente; importar/guardar no publica propuestas.
+
+#### LILA-102 · Ingesta de entrevistas y extracción
+- Depende de LILA-097, LILA-101.
+- Qué: actividades, actores, sistemas, decisiones, tiempos y problemas como propuestas revisables.
+- Aceptación: revisar diferencias antes de aplicar y mantener el vínculo con el fragmento fuente.
+
+#### LILA-103 · Contradicciones y faltantes
+- Depende de LILA-102.
+- Aceptación: señalar fuentes en conflicto sin escoger una como hecho confirmado; registrar
+  resolución humana y conservar datos faltantes como tales.
+
+#### LILA-104 · Calidad del proceso y TO-BE sugerido
+- Depende de LILA-055, RM-08.
+- Aceptación: propuesta explícita de escenario/modelo con procedencia, sin sobrescribir AS-IS;
+  resultados simulados identificados como tales, nunca presentados como observaciones reales.
+
+### E18 — Process mining (fase 8; proceso Python separado)
+
+#### LILA-105 · Importar XES/CSV observado
+- Depende de RM-12, RM-20.
+- Qué: mapeo explícito de actividades, casos, tiempo/unidades y procedencia; pm4py aislado en
+  proceso separado, revisar obligaciones de licencia antes de distribuir (no inferir exención).
+- Aceptación: fixture sintético con filas inválidas y faltantes produce diagnóstico trazable.
+
+#### LILA-106 · Escenario observado
+- Depende de LILA-105.
+- Qué: llegadas, distribuciones empíricas y probabilidades con cobertura y supuestos declarados.
+- Aceptación: no inventar datos ausentes ni modificar escenario base; reproducción desde fixture.
+
+#### LILA-107 · Documentado frente a observado
+- Depende de LILA-106, RM-12.
+- Aceptación: alinear unidades, poblaciones y periodos antes de comparar; métricas incompatibles
+  se explican, sin fabricar intervalos de confianza para datos que no los tienen.
+
+#### LILA-108 · Adaptadores Simod/OCEL
+- Depende de LILA-078, LILA-105, RM-20.
+- Aceptación: contrato de mapeo, fixture, versiones probadas y pérdidas explícitas por adaptador;
+  no afirmar interoperabilidad por compartir extensión de archivo.
 
 ### E19 — Distribución
 
@@ -676,3 +781,186 @@ Tickets más gruesos a propósito: se desglosan cuando llegue su turno.
 - Tamaño S · Depende de LILA-109
 #### LILA-111 · Evaluar Tauri si los ~150 MB del instalador se vuelven problema
 - Tamaño S · Depende de —
+
+## Roadmap organizacional — épicas locales ORG-1…ORG-9 (bajo #497)
+
+**Lo siguiente está planeado, salvo las bases marcadas como existentes.** `ORG-*` y `RM-*` no son
+issues de GitHub (E21–E26 ya lo son: ver arriba). Orden y matriz de referencia:
+[roadmap](docs/es/ROADMAP.md). Empieza tras el Lote R (#527). Los contratos de fases futuras se
+fijan al iniciar cada fase, no se inventan en el primer hito. Tamaños pendientes de desglosar; no
+constituyen compromisos de fecha.
+
+Lotes propuestos: **A0** RM-01 · **A1** RM-02, RM-03, RM-05, LILA-092, LILA-093, RM-14 (objetos
+documento y bytes de adjuntos, obligatorios en A1 según el contrato § 5.1) · **A2** RM-04, RM-06,
+LILA-094, LILA-095, RM-07, RM-08 · **A3** RM-09, RM-10, LILA-096 · **A4** RM-11 · **A5** RM-12,
+RM-13 · después ORG-7 (fase 6), ORG-8/E13/E14 (fase 7) y ORG-9/E16–E18 (fase 8).
+
+### ORG-1 — Repositorio local y compatibilidad (fase 1; lotes A0–A1)
+
+Base existente: manifiesto v2 con `processes[]` y `processes/<slug>/` (#498, #521, #614;
+`packages/engine/src/project/`, `docs/PROJECT_FORMAT.md` § Version 2), guardado v1 byte a byte con
+un solo proceso, pestañas por proceso y escenarios/corridas por proceso.
+
+#### RM-01 · Contrato del repositorio por objeto e identidad (lote A0)
+- Depende de ADR-029; leer CONTRIBUTING y contratos antes de cambiar código.
+- Hecho como `docs/REPOSITORY_CONTRACT.md` (+ `docs/es/`) y ADR-032, aceptada el 2026-10-14.
+- Qué: definir la versión 3 del repositorio sobre la disposición v2 existente (ids de proceso,
+  objetos de catálogo, adjuntos), referencias `{ process, element }` con `version` reservado,
+  revisiones, list/read/write por objeto, adjuntos, límites y recuperación; conservar las reglas
+  actuales de guardado v1/v2 y de slugs.
+- Aceptación: fixtures v1/v2, colisiones de IDs, versión no soportada y fallo de guardado;
+  decidir presupuestos de rendimiento con hardware y dataset sintético identificados.
+- Superficies: formato de proyecto, tipos compartidos, ProjectStore y contratos IPC.
+
+#### RM-02 · Almacén y contenedor por objeto
+- Depende de RM-01.
+- Ya existe: lector/escritor v2 de varios procesos (carpeta y `.lila`), abrir v1 sin reescribir.
+- Qué: `ProjectStore` por objeto con carga diferida (hoy la sesión guarda el `ProjectDocument`
+  entero), navegador con persistencia apta para objetos/bytes (IndexedDB), IPC de escritorio por
+  objeto solo si fallan los presupuestos (A1 puede mantener el documento entero sin bytes de
+  adjuntos ni entradas conservadas, contrato § 5.1);
+  lectura/escritura de `catalog/` sin descartarlo como entrada desconocida.
+- Aceptación: los casos v1/v2 actuales siguen idénticos byte a byte (más las entradas
+  desconocidas, que ahora se conservan, contrato § 1.4); un repositorio con catálogo (versión 3)
+  se guarda y reabre en web/escritorio; fallos no destruyen la última versión recuperable.
+
+#### RM-03 · Índice de identidad, relaciones y usos
+- Depende de RM-01, RM-02.
+- Qué: reconstruir índice derivado; relaciones inversas y resolución contextual de referencias.
+- Aceptación: mismo ID BPMN en dos modelos no colisiona; mover carpetas no rompe enlaces;
+  advertir referencias faltantes y borrar objetos utilizados sin pérdidas silenciosas.
+
+#### RM-04 · Lectura documental y comandos comunes
+- Depende de RM-01, RM-02.
+- Qué: proyección del BPMN completo, incluidas construcciones no simulables; comandos semánticos
+  de edición y transacciones de lote compartidos por diagrama, tabla y futuras herramientas.
+- Aceptación: preservar extensiones ajenas, identidad y undo/redo; lote inválido no deja cambios
+  parciales; documentación no depende de ejecutar ni validar el perfil de simulación.
+
+#### RM-05 · Explorador y sesión de repositorio
+- Depende de RM-02, RM-03, LILA-092.
+- Ya existe: pestañas del lienzo, una por proceso, con crear/renombrar/borrar.
+- Qué: explorador de procesos y objetos, carpetas, búsqueda y propietarios/metadatos por modelo.
+- Aceptación: abrir dos procesos, cambiar pestaña y guardar sin cruzar escenarios, selección ni
+  resultados; indicadores de cambios pendientes y recuperación comprobados.
+
+### ORG-2 — Vista tabular editable (fase 2; lote A2)
+
+#### RM-06 · Tabla de elementos y objetos
+- Depende de RM-04, LILA-093.
+- Qué: filtros, columnas configurables, navegación al diagrama/objeto, edición múltiple y
+  exportación CSV/XLSX; propiedades no aplicables indicadas como tales.
+- Aceptación: editar documentación/nombre/referencias y deshacer desde cualquiera de las vistas;
+  exportación corresponde a filtros y columnas; teclado y catálogos EN/ES completos.
+
+### ORG-3 — Insights, indicadores y mejora (fases 2 y 5; lotes A2 y A5)
+
+#### RM-07 · Insights iniciales por proceso y objeto
+- Depende de RM-03, LILA-094, LILA-095.
+- Qué: responsabilidades, documentos/entradas/salidas, sistemas, usos y avisos de datos faltantes.
+- Aceptación: widgets derivados, sin segunda copia editable; cada fila abre su origen; un objeto
+  renombrado aparece actualizado en los dos procesos del caso sintético.
+
+#### RM-08 · Aceptación integrada del primer hito
+- Depende de RM-05, RM-06, RM-07, RM-14.
+- Qué: ejecutar el caso de seis pasos del roadmap en web y escritorio con datos sintéticos.
+- Aceptación: conservar adjuntos, referencias, escenarios y corridas al cerrar/reabrir; tests de
+  identidad, errores, idiomas/teclado y presupuestos de RM-01; regresiones del motor/CLI/MCP verdes.
+
+#### RM-12 · KPIs, madurez y paneles organizacionales
+- Depende de RM-07, RM-11; fase 5.
+- Qué: contrato de indicadores/metas/mediciones y paneles; distinguir manual, simulado y observado,
+  fuente, fecha, unidades, población y vigencia. Clasificación, madurez y potencial de mejora.
+- Aceptación: sin dato no equivale a cero; mostrar resultados antiguos como tales; navegar de
+  indicador agregado a evidencia; ninguna métrica deducida se etiqueta como observada.
+
+#### RM-13 · Dependencias y mejora continua
+- Depende de RM-09, RM-12.
+- Qué: análisis de impacto, objetivos, iniciativas, etiquetas/temas, SIPOC, Ishikawa y seguimiento;
+  definir contratos por tipo antes de implementar cada análisis.
+- Aceptación: cambio de aplicación enumera procesos afectados; una iniciativa enlaza objetivo,
+  evidencia y comparación TO-BE sin alterar el AS-IS.
+
+### ORG-4 — Mapas de procesos y organización (fase 3; lote A3)
+
+#### RM-09 · Mapas y navegación jerárquica
+- Depende de RM-03, RM-05.
+- Qué: contrato versionado de mapas y registro extensible de tipos/relaciones; macroprocesos,
+  cadenas de valor y navegación hasta BPMN. Separar objeto y aparición gráfica.
+- Aceptación: mover una aparición no duplica el proceso; navegación por ID sobrevive renombrado;
+  detectar jerarquías cíclicas y destinos ausentes, sin bucles de navegación.
+
+#### RM-10 · Organización y recursos compartidos
+- Depende de RM-09, LILA-092.
+- Qué: organigramas, unidades, roles, puestos, personas, colaboradores externos, recursos y
+  centros de coste; enlaces a tareas/procesos y consulta de responsabilidades.
+- Aceptación: un recurso compartido conserva identidad y usos; reorganizar unidades no reasigna
+  silenciosamente tareas ni modifica capacidades de escenarios.
+
+### ORG-5 — Riesgos, controles y cumplimiento (fase 4; lote A4)
+
+#### RM-11 · Catálogo, mapas y evaluaciones de riesgos/controles
+- Depende de RM-09, RM-10, RM-14.
+- Qué: contrato de riesgos, agrupaciones, controles, objetivos de control, requisitos, responsables,
+  evidencias y tratamientos; mapas y matriz de calor con escala explícita e inherente/residual.
+- Aceptación: proceso → riesgo → control → dueño/evidencia; reportar cobertura faltante y valoración
+  ausente; control asociado no reduce automáticamente el riesgo; evaluación conserva fecha/fuente.
+- Dividir en tickets de contrato, catálogo, vistas y evaluación antes de programar.
+
+### ORG-6 — Documentación y archivos (fases 1–2; publicación en fase 7)
+
+#### RM-14 · Documentos y adjuntos portables
+- Depende de RM-01, RM-02, LILA-093.
+- Qué: metadatos, propietario, tipo, entradas/salidas/referencias y archivos gestionados;
+  representación de bytes y límites definidos en RM-01.
+- Aceptación: archivo → carpeta → archivo conserva bytes y referencias; archivo faltante o límite
+  excedido produce diagnóstico recuperable; no aplicar el descarte de entradas desconocidas a
+  las entradas soportadas de la versión 3.
+
+#### RM-15 · Publicación documental y portal
+- Depende de LILA-091, RM-14.
+- Qué: documentos de proceso con diagramas, responsabilidades, entradas/salidas y referencias;
+  exportación PDF/Word/HTML y portal de consulta de versiones aprobadas.
+- Aceptación: salida identifica versión/vigencia; referencias navegables y maquetación verificadas;
+  usuario lector no accede a borradores sin permiso.
+
+### ORG-7 — Familias de modelos complementarios (fase 6)
+
+#### RM-16 · Tipos de modelos y contratos incrementales
+- Depende de RM-09, RM-11, RM-13.
+- Qué: entregar por familias: documentos; TI (aplicación/servicio/interfaz/operación/nodo);
+  productos/componentes; datos (entidad/atributo); casos de uso/actores; decisiones, datos de
+  entrada y fuentes/modelos de conocimiento; colaboración/comunicación y modelos transversales.
+- Aceptación: cada familia tiene contrato y fixture antes de implementarse; un objeto se reutiliza
+  entre BPMN y mapa sin duplicación; referencias y disposición sobreviven guardar/abrir.
+- DMN requiere ADR de estándar antes de código; modelar decisiones no implica ejecutarlas.
+
+### ORG-8 — Colaboración y calidad operativa (fase 7)
+
+#### RM-17 · Contratos de liberación y colaboración
+- Depende de RM-01, RM-03, LILA-089.
+- Qué: fijar estados/transiciones, revisiones inmutables, permisos y conflictos; precisar CRDT
+  propuesto en ADR-029 antes de construir colaboración en tiempo real.
+- Aceptación: casos documentados de cambios simultáneos, aprobación sobre versión antigua,
+  comentarios y restauración; ninguna escritura pierde trabajo silenciosamente.
+
+#### RM-18 · Servidor, autorización y colaboración
+- Depende de RM-17, LILA-083, LILA-084, LILA-085, LILA-086.
+- Qué: permisos sobre objetos/acciones, comentarios, auditoría, avisos y colaboración según contrato.
+- Aceptación: dos usuarios editan con conflictos gestionados; accesos UI/REST/MCP coherentes;
+  restauración y exportación carpeta → servidor → carpeta sin pérdidas.
+
+#### RM-19 · Registros de calidad
+- Depende de RM-18, RM-11.
+- Qué: auditorías, hallazgos, no conformidades y CAPA con dueño, fechas, estado y enlaces al diseño.
+- Aceptación: trazabilidad y notificaciones; registros no cambian la versión publicada del modelo;
+  opción local, si se ofrece, conserva advertencia de concurrencia de ADR-029.
+
+### ORG-9 — Integraciones y observaciones (fase 8)
+
+#### RM-20 · Contratos de intercambio y conectores
+- Depende de RM-12, LILA-099, LILA-100.
+- Qué: import/export de repositorio, conectores de indicadores observados, API/MCP, mapeos y
+  adaptadores a motores de workflows externos; documentar cobertura por formato/proveedor.
+- Aceptación: fixture sintético por adaptador, unidades/IDs/versiones probadas y pérdidas
+  explícitas; errores no modifican parcialmente el repositorio; ningún motor operativo propio.

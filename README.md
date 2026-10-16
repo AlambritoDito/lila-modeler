@@ -252,7 +252,12 @@ English is the base language; Spanish versions live under `docs/es/`.
   "for agents" section.
 - [`MCP.md`](docs/MCP.md) — the MCP server and its twenty-one tools.
 - [`THEMES.md`](docs/THEMES.md) — the theme format.
-- [`DECISIONS.md`](docs/DECISIONS.md) — architecture decision records (ADR-001 … ADR-031).
+- [`DECISIONS.md`](docs/DECISIONS.md) — architecture decision records (ADR-001 … ADR-032).
+- [`ROADMAP.md`](docs/ROADMAP.md) — the organizational roadmap: planned repository, catalog,
+  tables, RACI, Insights, maps, risks and governance; current gaps and phased acceptance
+  (research notes in [`docs/research/`](docs/research/README.md)).
+- [`REPOSITORY_CONTRACT.md`](docs/REPOSITORY_CONTRACT.md) — the repository contract (RM-01,
+  ADR-032): version 3 with catalog objects, identity, attachments and per-object storage, planned.
 - [`BIZAGI_PARITY.md`](docs/BIZAGI_PARITY.md) — reference behaviour checklist and documented
   differences.
 - [`COMING-FROM-BIZAGI.md`](docs/COMING-FROM-BIZAGI.md) — screen-by-screen guide for Bizagi users.
@@ -269,11 +274,15 @@ English is the base language; Spanish versions live under `docs/es/`.
 
 Open epics, in [GitHub Issues](https://github.com/AlambritoDito/lila-modeler/issues?q=is%3Aopen+label%3Aepic):
 
-- **#335** — semantics still pending for numeric parity with Bizagi: message, boundary and
-  event-based events, saturation, utilization denominator.
+- **#124** — extra BPMN coverage: BPSim and QBP adapters, and constructs beyond the supported
+  profile (start/completion quantity, boundary, message and signal events, event-based gateway);
+  for the simulator, #639: multi-instance, loops, error boundary events, boundary events on
+  sub-processes, message and throw events.
 - **#336** — trust and adoption: getting-started guide, signing and notarization (#109), publishing
   `@lila-modeler/engine` on npm (#48), usability validation.
 - **#125** — self-hosted server. **#130** — process mining (parameters from event logs).
+- **#497** — the organizational repository in the spirit of ADONIS (catalog, RACI, process maps,
+  risks and controls), starting after the agent epic #527: see [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Contributing
 
