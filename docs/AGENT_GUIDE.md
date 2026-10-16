@@ -29,7 +29,7 @@ interview ([`MCP.md`](MCP.md#resources-and-prompt)).
 | 6. Simulate and keep the run | `run_simulation` with `saveRun: true` | `lila run … --save` |
 | 7. Hand over | `export_document`, `export_results`, `export_diagram` | `lila export doc|results|diagram` |
 | 8. Show it | open the `.lila` in the app; it reloads on every later write | `open -a "Lila Modeler" file.lila` (macOS) |
-| Any time: tidy up | `rename_process`, `delete_process`, `rename_scenario`, `delete_scenario` | `lila process rename|delete`, `lila scenario rename|delete` |
+| Any time: tidy up | `rename_process`, `delete_process`, `rename_scenario`, `delete_scenario` | `lila process rename\|delete`, `lila scenario rename\|delete` |
 
 Two rules shape the flow:
 

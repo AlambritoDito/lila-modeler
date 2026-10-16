@@ -3,7 +3,7 @@
 > Read this in: [Español](es/MCP.md)
 
 `packages/mcp` (`@lila-modeler/mcp`) provides a stdio [MCP](https://modelcontextprotocol.io) server
-backed by `@lila-modeler/engine`. Its twenty-one tools reuse the CLI validation and simulation pipeline — see
+backed by `@lila-modeler/engine`. Its twenty-five tools reuse the CLI validation and simulation pipeline — see
 [`docs/CLI.md`](CLI.md) for the same pipeline driven from a terminal instead of an MCP client.
 
 For the whole flow an agent follows — interview, outline, scenario, run, document, and seeing the
@@ -266,7 +266,8 @@ the same from a terminal.
 ## Renaming and deleting
 
 `rename_process`, `delete_process`, `rename_scenario` and `delete_scenario` (#634) tidy up a
-`.lila` with the rules of the app. One tool per operation, so the two deletes are announced as
+`.lila`. The renames follow the app; the deletes refuse what would leave the project with a
+dangling reference. One tool per operation, so the two deletes are announced as
 destructive (`destructiveHint: true`) and the two renames are not. Every refusal explains why, in
 the call's language, and writes nothing. Every write is the atomic, locked write of
 `patch_scenario` (`E-CAMBIO-EXTERNO` when the file changed on disk since it was read), every other
@@ -291,8 +292,8 @@ the file was saved; `summary` says what happened in one line.
 - **`delete_scenario`** removes a scenario with its revision and its saved runs, listed in
   `removedRuns`; `get_project` no longer lists them. The last scenario of a process cannot be
   deleted, and neither can one that other scenarios extend: the refusal lists them. Deleting
-  `as-is.scenario.json` is allowed, but `edit_process` stores the durations it is given there, so
-  `notes` warns that it no longer can.
+  `as-is.scenario.json` is allowed, but `edit_process` stores the durations, resources and branch
+  probabilities it is given there, so `notes` warns that it no longer can.
 
 ```json
 { "name": "rename_process", "arguments": { "project": "credit.lila", "process": "miwg-a-1-0", "name": "Card dispute" } }
@@ -303,11 +304,11 @@ the file was saved; `summary` says what happened in one line.
 ```
 
 ```json
-{ "name": "rename_scenario", "arguments": { "project": "examples/pedido.lila", "scenario": "to-be-3-cajeros", "name": "TO-BE" } }
+{ "name": "rename_scenario", "arguments": { "project": "examples/pedido.lila", "scenario": "to-be-3-cajeros", "name": "TO-BE", "dryRun": true } }
 ```
 
 ```json
-{ "name": "delete_scenario", "arguments": { "project": "examples/pedido.lila", "scenario": "TO-BE", "dryRun": true } }
+{ "name": "delete_scenario", "arguments": { "project": "examples/pedido.lila", "scenario": "to-be-3-cajeros", "dryRun": true } }
 ```
 
 ## MCP and CLI side by side

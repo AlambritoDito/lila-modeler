@@ -177,6 +177,22 @@ describe('deleteLilaProcess', () => {
     expect(inventory.processes[0]).toMatchObject({ processId: copy.model.id, runs: [] });
   });
 
+  test('reads call activities as XML: references decoded, quoted ">" kept, comments and CDATA left out', async () => {
+    const xml = (body: string): string => CALLER_XML.replace(/<bpmn:callActivity [^\n]*\n/, `${body}\n`);
+    const quoted = { ...llamador(), model: { ...llamador().model, xml: xml('<bpmn:callActivity id="Call_Pedido" name="a &#62; b &#x26; c" documentation=\'calledElement="nope"\' calledElement="Process&#95;Restaurante" />') } };
+    let file = await repository([quoted]);
+    await refused(file, () => deleteLilaProcess({ file, process: 'pedido' }), /llamador\/Call_Pedido \(a > b & c\)/);
+    const raw = { ...llamador(), model: { ...llamador().model, xml: xml('<bpmn:callActivity id="Call_Raw" name="a > b" calledElement="Process_Restaurante" />') } };
+    file = await repository([raw]);
+    await refused(file, () => deleteLilaProcess({ file, process: 'pedido' }), /llamador\/Call_Raw \(a > b\)/);
+    const hidden = {
+      ...llamador(),
+      model: { ...llamador().model, xml: xml('<!-- <bpmn:callActivity id="Old" calledElement="Process_Restaurante" /> --><bpmn:task id="Call_Pedido"><bpmn:documentation><![CDATA[<callActivity id="Doc" calledElement="Process_Restaurante"/>]]></bpmn:documentation></bpmn:task>') },
+    };
+    file = await repository([hidden]);
+    expect((await deleteLilaProcess({ file, process: 'pedido', dryRun: true })).written).toBe(false);
+  });
+
   test('the process that calls is deleted freely', async () => {
     const file = await repository([llamador()]);
     expect((await deleteLilaProcess({ file, process: 'llamador' })).slugs).toEqual(['pedido']);
@@ -203,6 +219,15 @@ describe('renameLilaScenario', () => {
     const bytes = readFileSync(file);
     expect(await renameLilaScenario({ file, scenario: 'as-is', name: 'Today', dryRun: true })).toMatchObject({ dryRun: true, written: false, revision: 2 });
     expect(await renameLilaScenario({ file, scenario: 'as-is', name: 'AS-IS' })).toMatchObject({ written: false, revision: 1 });
+    expect(readFileSync(file).equals(bytes)).toBe(true);
+  });
+
+  test('the same name is no change even when another scenario answers to it too', async () => {
+    const file = await repository([]);
+    const document = read(file);
+    writeFileSync(file, encodeLila({ ...document, scenarios: { ...document.scenarios, 'AS-IS.scenario.json': { version: 1, model: 'model.bpmn' } } }));
+    const bytes = readFileSync(file);
+    expect(await renameLilaScenario({ file, scenario: 'as-is.scenario.json', name: 'AS-IS' })).toMatchObject({ written: false });
     expect(readFileSync(file).equals(bytes)).toBe(true);
   });
 
@@ -249,7 +274,7 @@ describe('deleteLilaScenario', () => {
     writeFileSync(file, encodeLila({ ...document, scenarios: { ...document.scenarios, 'to-be-3-cajeros.scenario.json': { ...own, model: 'model.bpmn' } } }));
     const result = await deleteLilaScenario({ file, scenario: 'as-is' });
     expect(result.removedRuns).toEqual(['run-1']);
-    expect(result.notes).toEqual([expect.stringMatching(/edit_process .* can no longer store them/)]);
+    expect(result.notes).toEqual([expect.stringMatching(/edit_process .* durations, resources and branch probabilities .* can no longer take them/)]);
   });
 });
 

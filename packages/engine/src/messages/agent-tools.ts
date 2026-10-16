@@ -190,7 +190,7 @@ const en: AgentToolMessages = {
   bpmnWritten: (file) => `BPMN: ${file}`,
   manageEmptyName: () => 'the new name cannot be empty. Nothing was written.',
   manageSingleProcess: (file) =>
-    `${file} has a single process, whose name is the project's; a process is renamed only in a project with two or more. Nothing was written.`,
+    `${file} has a single process, and a project with one process is saved under the project's name; a process is renamed only in a project with two or more. Nothing was written.`,
   manageLastProcess: (slug, file) => `${slug} is the only process of ${file}, and a project keeps at least one. Nothing was written.`,
   manageProcessCalled: (slug, callers) =>
     `process ${slug} is the target of call activities in other processes: ${callers}. Point them at another process first. Nothing was written.`,
@@ -202,7 +202,7 @@ const en: AgentToolMessages = {
   manageScenarioNameTaken: (name, other) =>
     `the scenario ${other} of this process already goes by "${name}", so the name would no longer find one scenario. Nothing was written.`,
   manageBaseScenarioNote: (entry) =>
-    `${entry} is gone: edit_process (lila process edit) keeps the durations it is given there, and can no longer store them.`,
+    `${entry} is gone: edit_process (lila process edit) stores the durations, resources and branch probabilities it is given in that scenario, so it can no longer take them.`,
   manageNoChange: () => 'Nothing changes: it already has that name. Nothing was written.',
   processRenamed: (dryRun, slug, before, after, file) =>
     dryRun
@@ -337,7 +337,7 @@ const es: AgentToolMessages = {
   bpmnWritten: (file) => `BPMN: ${file}`,
   manageEmptyName: () => 'el nombre nuevo no puede estar vacío. No se escribió nada.',
   manageSingleProcess: (file) =>
-    `${file} tiene un solo proceso, que se llama como el proyecto; un proceso solo se renombra en un proyecto con dos o más. No se escribió nada.`,
+    `${file} tiene un solo proceso, y un proyecto con un proceso se guarda con el nombre del proyecto; un proceso solo se renombra en un proyecto con dos o más. No se escribió nada.`,
   manageLastProcess: (slug, file) => `${slug} es el único proceso de ${file}, y un proyecto conserva al menos uno. No se escribió nada.`,
   manageProcessCalled: (slug, callers) =>
     `el proceso ${slug} es el destino de actividades de llamada de otros procesos: ${callers}. Apúntalas a otro proceso antes. No se escribió nada.`,
@@ -349,7 +349,7 @@ const es: AgentToolMessages = {
   manageScenarioNameTaken: (name, other) =>
     `el escenario ${other} de este proceso ya se llama "${name}", así que el nombre dejaría de encontrar un solo escenario. No se escribió nada.`,
   manageBaseScenarioNote: (entry) =>
-    `${entry} ya no está: edit_process (lila process edit) guarda ahí las duraciones que recibe, y ya no podrá guardarlas.`,
+    `${entry} ya no está: edit_process (lila process edit) guarda en ese escenario las duraciones, los recursos y las probabilidades de rama que recibe, así que ya no podrá recibirlos.`,
   manageNoChange: () => 'No cambia nada: ya tiene ese nombre. No se escribió nada.',
   processRenamed: (dryRun, slug, before, after, file) =>
     dryRun

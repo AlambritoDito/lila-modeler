@@ -3,7 +3,9 @@
  * `delete_process`, `rename_scenario` and `delete_scenario` (MCP) and `lila process rename|delete`
  * and `lila scenario rename|delete` (CLI) do. Both are thin layers over these four functions.
  *
- * The rules are the app's (`App.tsx` `renombrarProceso`/`borrarProceso`, `SelectorEscenario.tsx`):
+ * The renames and the last-process rule follow the app (`App.tsx` `renombrarProceso`/`borrarProceso`,
+ * `SelectorEscenario.tsx`); the app has no scenario delete, and the `calledElement` and `extends`
+ * refusals are this module's own (#634), so a delete never leaves a dangling reference:
  *
  * - A process is renamed by its `name`; its slug never changes. A one-process project has no
  *   process name of its own (it is written as version 1, named after the project), so a rename is
@@ -86,7 +88,7 @@ export interface RenameLilaScenarioRequest extends ManageTarget {
 }
 
 export interface RenameLilaScenarioResult extends ManageResult {
-  /** Slug of the process, as it is in the file after the write. */
+  /** Slug of the process, as it is in the file after the write (on a dry run, as it is now). */
   readonly process: string;
   /** The entry name; a rename never changes it. */
   readonly entry: string;
@@ -105,7 +107,7 @@ export interface DeleteLilaScenarioRequest extends ManageTarget {
 }
 
 export interface DeleteLilaScenarioResult extends ManageResult {
-  /** Slug of the process, as it is in the file after the write. */
+  /** Slug of the process, as it is in the file after the write (on a dry run, as it is now). */
   readonly process: string;
   readonly entry: string;
   /** The ids of the stored runs of the scenario, removed with it. */
@@ -127,10 +129,11 @@ function withProcess(input: LilaProcess, change: (process: ProcessDocument) => P
   );
 }
 
-/** Writes `next` unless `dryRun`; returns the slug of `input`'s process as it is in the file then. */
+/** Writes `next` unless `dryRun`; returns the slug of `input`'s process in the file after it. */
 async function save(input: LilaProcess, next: ProjectDocument, dryRun: boolean, locale: Locale): Promise<string> {
-  if (dryRun) return input.process.slug;
   // #613: a one-process version 2 archive is written as version 1, and its slug follows its name.
+  // A dry run reports the slug as it is now, as `edit_process` and `import_scenario_sheet` do.
+  if (dryRun) return input.process.slug;
   return lilaWritten(input, await writeLilaProject(input, next, locale)).slug;
 }
 
@@ -157,32 +160,40 @@ export async function renameLilaProcess(request: RenameLilaProcessRequest): Prom
   };
 }
 
-/** `&amp;` and the other four XML entities, for a name read out of the XML by a pattern. */
+const NAMED_ENTITIES: Readonly<Record<string, string>> = { lt: '<', gt: '>', quot: '"', apos: "'", amp: '&' };
+
+/** An attribute value with its entity and character references decoded (`&amp;`, `&#38;`, `&#x26;`). */
 function unescapeXml(text: string): string {
-  return text
-    .replaceAll('&lt;', '<')
-    .replaceAll('&gt;', '>')
-    .replaceAll('&quot;', '"')
-    .replaceAll('&apos;', "'")
-    .replaceAll('&amp;', '&');
+  return text.replace(/&(?:#(\d+)|#x([0-9a-fA-F]+)|(lt|gt|quot|apos|amp));/g, (whole, dec?: string, hex?: string, named?: string) => {
+    if (named !== undefined) return NAMED_ENTITIES[named]!;
+    const code = dec !== undefined ? Number(dec) : Number.parseInt(hex!, 16);
+    return code <= 0x10ffff ? String.fromCodePoint(code) : whole;
+  });
 }
 
-function attribute(tag: string, name: string): string | undefined {
-  const match = new RegExp(`\\s${name}=(["'])(.*?)\\1`).exec(tag);
-  return match === null ? undefined : unescapeXml(match[2]!);
+/** The attributes of a start tag, by qualified name; a quoted value may hold `>` or another `name="…"`. */
+function attributesOf(tag: string): Map<string, string> {
+  const attributes = new Map<string, string>();
+  for (const [, name, quoted] of tag.matchAll(/\s([\w.:-]+)\s*=\s*("[^"]*"|'[^']*')/g)) {
+    if (!attributes.has(name!)) attributes.set(name!, unescapeXml(quoted!.slice(1, -1)));
+  }
+  return attributes;
 }
 
 /**
  * The call activities of `xml` whose `calledElement` is one of `ids`, as `id (name)`. A pattern over
- * the XML, as `processIds`: a `tns:Process_B` names `Process_B`, as on the app's double-click.
+ * the XML, as `processIds`, with comments and CDATA left out and quoted values read whole: a
+ * `tns:Process_B` names `Process_B`, as on the app's double-click.
  */
 function callersOf(xml: string, ids: readonly string[]): string[] {
   const callers: string[] = [];
-  for (const [tag] of xml.matchAll(/<(?:[\w.-]+:)?callActivity\b[^>]*>/g)) {
-    const target = attribute(tag, 'calledElement')?.trim() ?? '';
+  const markup = xml.replace(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>/g, '');
+  for (const [tag] of markup.matchAll(/<(?:[\w.-]+:)?callActivity\b(?:[^>"']|"[^"]*"|'[^']*')*>/g)) {
+    const attributes = attributesOf(tag);
+    const target = attributes.get('calledElement')?.trim() ?? '';
     if (target === '' || !(ids.includes(target) || ids.includes(target.slice(target.lastIndexOf(':') + 1)))) continue;
-    const id = attribute(tag, 'id') ?? '';
-    const name = attribute(tag, 'name')?.trim() ?? '';
+    const id = attributes.get('id') ?? '';
+    const name = attributes.get('name')?.trim() ?? '';
     callers.push(name === '' ? id : `${id} (${name})`);
   }
   return callers;
@@ -258,12 +269,12 @@ export async function renameLilaScenario(request: RenameLilaScenarioRequest): Pr
   const { scenarios, scenarioRevisions } = input.process;
   const own = scenarios[entry]!['name'];
   const before = typeof own === 'string' ? own : null;
+  const changed = after !== before;
   // Any other scenario `findLilaScenario` would find by this name: by its entry, or by its "name".
   const other = Object.keys(scenarios)
     .sort()
     .find((name) => name !== entry && (name === after || name === `${after}.scenario.json` || scenarios[name]?.['name'] === after));
-  if (other !== undefined) throw new Error(T.manageScenarioNameTaken(after, other));
-  const changed = after !== before;
+  if (changed && other !== undefined) throw new Error(T.manageScenarioNameTaken(after, other));
   let slug = input.process.slug;
   let revision = scenarioRevisions[entry] ?? 0;
   if (changed) {

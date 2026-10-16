@@ -3,7 +3,7 @@
 > Leer en: [English](../MCP.md)
 
 `packages/mcp` (`@lila-modeler/mcp`) es un servidor [MCP](https://modelcontextprotocol.io) por stdio sobre
-`@lila-modeler/engine`, sin lógica propia: veintiuna tools, sobre el mismo pipeline de validación y
+`@lila-modeler/engine`, sin lógica propia: veinticinco tools, sobre el mismo pipeline de validación y
 simulación que la CLI — ver [`docs/es/CLI.md`](CLI.md) para ese mismo pipeline manejado desde una
 terminal en vez de un cliente MCP.
 
@@ -295,7 +295,8 @@ export-bpmn` y `lila process import` (`docs/es/CLI.md`) hacen lo mismo desde una
 ## Renombrar y borrar
 
 `rename_process`, `delete_process`, `rename_scenario` y `delete_scenario` (#634) ordenan un `.lila`
-con las reglas de la app. Hay una tool por operación, así que los dos borrados se anuncian como
+Los renombres siguen a la app; los borrados rechazan lo que dejaría al proyecto con una referencia
+colgante. Hay una tool por operación, así que los dos borrados se anuncian como
 destructivos (`destructiveHint: true`) y los dos renombres no. Cada rechazo explica por qué, en el
 idioma de la llamada, y no escribe nada. Cada escritura es la escritura atómica y con candado de
 `patch_scenario` (`E-CAMBIO-EXTERNO` si el archivo cambió en disco desde que se leyó), los demás
@@ -320,8 +321,8 @@ guardó el archivo; `summary` dice en una línea lo que pasó.
 - **`delete_scenario`** quita un escenario con su revisión y sus corridas guardadas, que se listan
   en `removedRuns`; `get_project` deja de listarlas. El último escenario de un proceso no se puede
   borrar, y tampoco uno del que heredan otros escenarios: el rechazo los lista. Borrar
-  `as-is.scenario.json` se permite, pero `edit_process` guarda ahí las duraciones que recibe, así
-  que `notes` avisa que ya no podrá.
+  `as-is.scenario.json` se permite, pero `edit_process` guarda ahí las duraciones, los recursos y
+  las probabilidades de rama que recibe, así que `notes` avisa que ya no podrá.
 
 ```json
 { "name": "rename_process", "arguments": { "project": "credito.lila", "process": "miwg-a-1-0", "name": "Disputa de tarjeta", "locale": "es" } }
@@ -332,11 +333,11 @@ guardó el archivo; `summary` dice en una línea lo que pasó.
 ```
 
 ```json
-{ "name": "rename_scenario", "arguments": { "project": "examples/pedido.lila", "scenario": "to-be-3-cajeros", "name": "TO-BE" } }
+{ "name": "rename_scenario", "arguments": { "project": "examples/pedido.lila", "scenario": "to-be-3-cajeros", "name": "TO-BE", "dryRun": true } }
 ```
 
 ```json
-{ "name": "delete_scenario", "arguments": { "project": "examples/pedido.lila", "scenario": "TO-BE", "dryRun": true } }
+{ "name": "delete_scenario", "arguments": { "project": "examples/pedido.lila", "scenario": "to-be-3-cajeros", "dryRun": true } }
 ```
 
 ## MCP y CLI lado a lado

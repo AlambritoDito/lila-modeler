@@ -30,7 +30,7 @@ flujo de abajo con una entrevista ([`MCP.md`](MCP.md#recursos-y-prompt)).
 | 6. Simular y guardar la corrida | `run_simulation` con `saveRun: true` | `lila run … --save` |
 | 7. Entregar | `export_document`, `export_results`, `export_diagram` | `lila export doc|results|diagram` |
 | 8. Mostrarlo | abrir el `.lila` en la app; se recarga con cada escritura posterior | `open -a "Lila Modeler" archivo.lila` (macOS) |
-| En cualquier momento: ordenar | `rename_process`, `delete_process`, `rename_scenario`, `delete_scenario` | `lila process rename|delete`, `lila scenario rename|delete` |
+| En cualquier momento: ordenar | `rename_process`, `delete_process`, `rename_scenario`, `delete_scenario` | `lila process rename\|delete`, `lila scenario rename\|delete` |
 
 Dos reglas dan forma al flujo:
 

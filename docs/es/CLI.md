@@ -387,6 +387,11 @@ npx lila --lang es scenario delete examples/pedido.lila as-is --dry-run
 ```
 Código de salida: `1`.
 
+```bash
+npx lila --lang es scenario delete examples/pedido.lila to-be-3-cajeros --dry-run --json
+```
+Código de salida: `0`.
+
 pedido es un proyecto de un solo proceso, así que su proceso no se puede renombrar ni borrar:
 
 ```bash
