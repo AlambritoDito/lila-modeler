@@ -49,13 +49,23 @@ Never pick by age, never pick an issue that is not in the queue, and never label
 
 1. `gh issue edit <n> --add-label claude-wip`
 2. Comment on the issue: `Claimed by the cloud issue loop at <UTC timestamp>. Branch: <branch>.`
-3. Branch name: `feat/<n>-<slug>` or `fix/<n>-<slug>`. Only these two prefixes count as earlier
-   attempts; branches of other agents (`codex/…`, `lote-…`) are never touched.
-   - An open draft PR labelled `claude-loop` whose body says "incomplete" is an earlier attempt:
-     check out its branch and **continue** it. Push to that branch and do not open a second PR.
-   - A `feat|fix/<n>-*` branch with no PR (a crashed run): continue it the same way, then open the PR.
-   - A PR from such a branch that was closed without merging means the maintainer rejected it:
-     stop with `needs-info`.
+   This comment is how later runs find this run's branch, so always name the branch you push to.
+3. Your branch: if the session assigns one you must push to (cloud sessions get `claude/<name>`
+   and may push nowhere else), use it. Otherwise use `feat/<n>-<slug>` or `fix/<n>-<slug>`.
+4. Earlier attempts are found by evidence on GitHub, never by branch prefix. Branches of other
+   agents (`codex/…`, `lote-…`) are never touched.
+   - **Attempt PRs**: PRs labelled `claude-loop` that reference #n
+     (`gh pr list --state all --label claude-loop --search "<n> in:body" --json number,state,body,headRefName,comments`).
+   - **Attempt branches**: the branches named in the issue's `Claimed by the cloud issue loop`
+     comments that still exist on origin.
+   - A closed, unmerged attempt PR without a `Superseded by #<m>` comment means the maintainer
+     rejected it: stop with `needs-info`.
+   - An open draft attempt PR whose body says "incomplete": **continue** it.
+     `git fetch origin <its branch>`, then `git checkout -B <your branch> origin/<its branch>`.
+     If your branch is the same as its branch, push and do not open a second PR. If not, deliver
+     a new draft PR from your branch, then comment `Superseded by #<new>` on the old PR and close it.
+   - An attempt branch with commits ahead of `origin/<base>` and no attempt PR (a crashed run):
+     continue it the same way, then open the PR.
    - Otherwise branch from `origin/<base>`.
    Add commits on top; never force-push, never rewrite or drop commits you did not make.
 
