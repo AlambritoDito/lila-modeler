@@ -27,12 +27,13 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 
 import { parseBpmn, type TargetingScenario } from './bpmn/parse.js';
 import { validateBpmnModel, type ValidatedBpmnModel } from './bpmn/validate-report.js';
 import type { ValidationResult } from './bpmn/validate.js';
-import type { RunResult } from './core/result.js';
+import type { EventLogRow, RunResult } from './core/result.js';
+import { eventLogCsvWriter } from './csv.js';
 import type { BaseTimeUnit } from './format.js';
 import { messages, type Locale } from './messages/index.js';
 import { isLilaPath } from './project-fs/paths.js';
@@ -62,8 +63,19 @@ export function absolutePath(file: string): string {
  * el modelo real, no la ortografía usada para llegar a él.
  */
 export function comparablePath(file: string): string {
-  const normalized = existsSync(file) ? realpathSync(file) : resolve(file);
+  const normalized = realpathOfNearest(resolve(file));
   return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+/**
+ * A file that does not exist yet (a `logTo` or `saveTo` target) is resolved through its nearest
+ * existing directory, so a symlinked parent (`/tmp` → `/private/tmp` on macOS) still compares equal.
+ */
+function realpathOfNearest(absolute: string): string {
+  if (existsSync(absolute)) return realpathSync(absolute);
+  const parent = dirname(absolute);
+  if (parent === absolute) return absolute;
+  return join(realpathOfNearest(parent), basename(absolute));
 }
 
 export function readJsonFile(file: string, locale: Locale = 'en'): unknown {
@@ -336,6 +348,12 @@ export function compareWarnings(
 
 export interface StagedFile {
   readonly target: string;
+  /**
+   * The open descriptor of the temporary file, `undefined` once closed. The MCP `logTo` (#665)
+   * hands it to the simulation worker, which shares the process's descriptors and streams the log
+   * into it, while the server keeps the file to commit or abort.
+   */
+  readonly descriptor: number | undefined;
   /** Texto (CSV, JSON) o bytes crudos: `lila run --xlsx` publica un zip por esta misma vía. */
   write(contents: string | Uint8Array): void;
   close(): void;
@@ -372,6 +390,9 @@ export function stageFile(target: string, locale: Locale = 'en'): StagedFile {
 
   return {
     target,
+    get descriptor() {
+      return descriptor;
+    },
     write(contents) {
       if (descriptor === undefined) {
         throw new Error(messages(locale).cli.temporaryFileClosed(temporary));
@@ -425,4 +446,80 @@ export function writeJsonAtomic(file: string, data: unknown, locale: Locale = 'e
     throw error;
   }
   return target;
+}
+
+/**
+ * Publishes raw bytes (an `.xlsx`) with the same atomic technique as the CSV and the JSON: a
+ * temporary file and a `rename`, and nothing replaces an existing path without
+ * `assertReplaceableFile`. Returns the absolute path written. Used by `lila run|compare --xlsx` and
+ * by `compare_scenarios` with `format: "xlsx"` (#665): the same bytes, published the same way.
+ */
+export function writeBytesAtomic(file: string, bytes: Uint8Array, locale: Locale = 'en'): string {
+  const target = absolutePath(file);
+  assertReplaceableFile(target, locale);
+  mkdirSync(dirname(target), { recursive: true });
+  const staged = stageFile(target, locale);
+  try {
+    staged.write(bytes);
+    staged.commit();
+  } catch (error) {
+    staged.abort();
+    throw error;
+  }
+  return target;
+}
+
+export interface EventLogSink {
+  onEvent(row: EventLogRow): void;
+  close(): void;
+  commit(): void;
+  abort(): void;
+}
+
+/**
+ * Writes the event log to `file` in blocks while `simulate` runs, without holding every
+ * replication. The temporary file is published only after a complete run (`commit`). Moved from
+ * `cli.ts` (#665); `lila run --csv` opens it on `<dir>/log.csv`.
+ *
+ * ponytail: buffer de 1 MiB + `writeFileSync(fd, ...)` en vez de un `WriteStream`. `simulate` es
+ * síncrona y no admite pausa, así que un stream asíncrono no podría aplicar backpressure: se
+ * limitaría a acumular en memoria justo lo que este ticket quiere evitar. La escritura bloqueante
+ * sí acota el pico al tamaño del buffer, y el `rename` del temporal conserva la publicación
+ * atómica de LILA-046. Si algún día `simulate` se vuelve reanudable, aquí entra `once(s,'drain')`.
+ */
+export function openEventLogSink(file: string, startMs: number, locale: Locale = 'en'): EventLogSink {
+  const staged = stageTarget(file, locale);
+  const writer = eventLogCsvWriter((chunk) => staged.write(chunk), startMs);
+  let closed = false;
+
+  const close = (): void => {
+    if (closed) return;
+    writer.flush();
+    staged.close();
+    closed = true;
+  };
+
+  return {
+    onEvent: (row) => writer.onEvent(row),
+    close,
+    commit() {
+      close();
+      staged.commit();
+    },
+    abort() {
+      staged.abort();
+    },
+  };
+}
+
+/**
+ * Stages `file` for a write that is committed later: its directory is created, an existing
+ * directory at `file` is refused, and nothing is published until `commit`. The MCP `logTo` (#665)
+ * stages the log this way before the run, so a failed or cancelled call can always `abort` it.
+ */
+export function stageTarget(file: string, locale: Locale = 'en'): StagedFile {
+  const target = absolutePath(file);
+  mkdirSync(dirname(target), { recursive: true });
+  assertReplaceableFile(target, locale);
+  return stageFile(target, locale);
 }
