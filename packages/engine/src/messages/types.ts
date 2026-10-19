@@ -521,6 +521,23 @@ export interface CliMessages {
   editBadCalledProcess: () => string;
   editCalled: (id: string, name: string, slug: string) => string;
   editCallCleared: (id: string) => string;
+
+  /* --- `resolveExtends` (`scenario.ts`) and JSON Patch (`json-patch.ts`), #645 ---------------- */
+  /** `chain` is the files of the cycle, already joined by ` -> `. */
+  extendsCycle: (chain: string) => string;
+  scenarioNotObject: (file: string) => string;
+  extendsNotPath: (file: string) => string;
+  patchRoot: () => string;
+  patchBadPointer: (pointer: string) => string;
+  patchForbiddenSegment: (key: string, pointer: string) => string;
+  patchForbiddenKey: (key: string, path: string) => string;
+  patchMissingSegment: (segment: string) => string;
+  patchNotContainer: () => string;
+  patchUnsupportedOp: (op: string) => string;
+  patchNeedsValue: (op: string, path: string) => string;
+  patchTestFailed: (path: string) => string;
+  patchBadIndex: (path: string) => string;
+  patchMissingPath: (path: string) => string;
 }
 
 /**

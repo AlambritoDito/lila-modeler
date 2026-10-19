@@ -776,6 +776,24 @@ export const es: Catalog = {
     editBadCalledProcess: () => 'debe ser el slug de un proceso del proyecto, o null para quitar el proceso llamado.',
     editCalled: (id, name, slug) => `"${id}" ahora llama a ${name} (${slug})`,
     editCallCleared: (id) => `"${id}" ya no llama a ningún proceso`,
+
+    extendsCycle: (chain) => `extends: ciclo en la cadena de herencia: ${chain}`,
+    scenarioNotObject: (file) => `${file}: el escenario debe ser un objeto JSON.`,
+    extendsNotPath: (file) => `${file}: extends debe ser una ruta a otro escenario.`,
+    patchRoot: () => 'json patch: la raíz del documento no se puede parchear.',
+    patchBadPointer: (pointer) => `json patch: puntero inválido: ${pointer}`,
+    patchForbiddenSegment: (key, pointer) =>
+      `json patch: segmento prohibido "${key}" en ${pointer}: escribiría en el prototipo del objeto.`,
+    patchForbiddenKey: (key, path) =>
+      `json patch: clave prohibida "${key}" en el value de ${path}: escribiría en el prototipo del objeto.`,
+    patchMissingSegment: (segment) => `json patch: no existe la ruta hasta "${segment}".`,
+    patchNotContainer: () => 'json patch: la ruta no llega a un objeto o array.',
+    patchUnsupportedOp: (op) =>
+      `json patch: operación no soportada: "${op}" (solo add/replace/remove/test; move/copy no están implementadas).`,
+    patchNeedsValue: (op, path) => `json patch: la operación "${op}" requiere "value" (${path}).`,
+    patchTestFailed: (path) => `json patch: test falló en ${path}.`,
+    patchBadIndex: (path) => `json patch: índice inválido en ${path}.`,
+    patchMissingPath: (path) => `json patch: no existe la ruta ${path}.`,
   },
   mcp: {
     nodeType: (type) => TIPOS_NODO[type] ?? type,

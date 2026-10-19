@@ -1221,8 +1221,10 @@ function deepMerge(
  *   para que un `model` heredado de otro directorio siga apuntando al mismo `.bpmn`.
  * - Ciclos rechazados con error que cita los archivos implicados.
  * - El `extends` desaparece del resultado: ya está aplicado.
+ * - Its own errors come in `locale` (#645); `read`'s are its own.
  */
-export function resolveExtends(path: string, read: ScenarioReader): Record<string, unknown> {
+export function resolveExtends(path: string, read: ScenarioReader, locale: Locale = 'en'): Record<string, unknown> {
+  const C = messages(locale).cli;
   const chain: Array<{ path: string; scenario: Record<string, unknown> }> = [];
   const seen = new Set<string>();
   let current = normalizePath(path);
@@ -1230,19 +1232,19 @@ export function resolveExtends(path: string, read: ScenarioReader): Record<strin
   for (;;) {
     if (seen.has(current)) {
       const cycle = [...chain.map((link) => link.path), current].join(' -> ');
-      throw new Error(`extends: ciclo en la cadena de herencia: ${cycle}`);
+      throw new Error(C.extendsCycle(cycle));
     }
     seen.add(current);
 
     const raw = read(current);
-    if (!isPlainObject(raw)) throw new Error(`${current}: el escenario debe ser un objeto JSON.`);
+    if (!isPlainObject(raw)) throw new Error(C.scenarioNotObject(current));
 
     chain.push({ path: current, scenario: raw });
 
     const parent = raw['extends'];
     if (parent === undefined || parent === null) break;
     if (typeof parent !== 'string') {
-      throw new Error(`${current}: extends debe ser una ruta a otro escenario.`);
+      throw new Error(C.extendsNotPath(current));
     }
     current = resolveScenarioPath(current, parent);
   }

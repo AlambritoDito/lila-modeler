@@ -18,6 +18,15 @@ export const detailSchema = z
       'that wait most and grouped warnings. full: the whole result (every element and flow).',
   );
 
+/** `detail` of `compare_scenarios` (#645): its summary is not `run_simulation`'s. */
+export const compareDetailSchema = z
+  .enum(['summary', 'full'])
+  .optional()
+  .describe(
+    'summary (default): the process and resource rows, every other row marked significant for some ' +
+      'scenario, and omittedRows (how many were left out). full: every row of the comparison.',
+  );
+
 /** How many elements `topWaits` lists. */
 export const TOP_WAITS = 5;
 
@@ -63,11 +72,19 @@ export interface RunSummary {
  */
 const LOOSE_NUMBER = /(?<![\w.-])\d+(?:[.,]\d+)?(?![\w])/g;
 
-/** One entry per warning, in order of first appearance; copies that differ only in loose numbers count as one. */
+/** `W-JOIN-BLOQUEADO: Join_1: …`: the code and the element (or pool, or flow) the warning is about. */
+const CODED = /^([EW]-[A-Z0-9-]+): ([^:]+?): /;
+
+/**
+ * One entry per warning, in order of first appearance. A coded warning is one per code and subject
+ * (#645: `1 case was` and `3 cases were` of one join are the same warning); any other, copies that
+ * differ only in loose numbers count as one.
+ */
 export function groupWarnings(warnings: readonly string[]): GroupedWarning[] {
   const groups = new Map<string, GroupedWarning>();
   for (const message of warnings) {
-    const key = message.replace(LOOSE_NUMBER, '#');
+    const coded = CODED.exec(message);
+    const key = coded === null ? message.replace(LOOSE_NUMBER, '#') : `${coded[1]} ${coded[2]}`;
     const group = groups.get(key);
     if (group === undefined) groups.set(key, { message, count: 1 });
     else group.count += 1;
@@ -160,7 +177,13 @@ export const runSummarySchema = z.object({
     withinServiceLevel: z.number().optional(),
   }),
   bottlenecks: z.array(z.object({ elementId: z.string(), resourceWaitTotal: z.number(), utilization: z.number() })),
-  resources: z.record(z.string(), z.object({ utilization: z.number(), resourceWaitTotal: z.number(), totalCost: z.number() })),
+  resources: z
+    .record(z.string(), z.object({ utilization: z.number(), resourceWaitTotal: z.number(), totalCost: z.number() }))
+    .describe(
+      'Per resource. resourceWaitTotal is the resource wait (seconds) of the elements that request it: an ' +
+        'element that requests two resources counts its whole wait for each, so the totals of two resources ' +
+        'can hold the same wait and do not add up to the process wait.',
+    ),
   topWaits: z.array(
     z.object({
       elementId: z.string(),

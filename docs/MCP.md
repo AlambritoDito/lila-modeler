@@ -23,12 +23,12 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
   and validation status. An optional scenario path resolves `extends` and adds referenced
   resources. An unreadable scenario is reported in the summary without failing the tool.
 - **`run_simulation({ model?, process?, scenario, seed?, replications?, saveTo?, saveRun?, logTo?, detail?, locale? })`** validates
-  the model and scenario, simulates and returns the same `RunResult` as
-  `lila run --json`. It supports resources and calendars. `scenario` may be a JSON file path
-  or an inline resolved scenario. `model` defaults to `scenario.model`; a supplied different
-  model is rejected. The response includes text, `structuredContent` and an `outputSchema`.
-  By default the answer is a summary; `detail: "full"` returns the whole `RunResult` (see
-  [Summary or full results](#summary-or-full-results)). Long runs report progress and can be
+  the model and scenario, simulates and, by default, answers with a summary of the run;
+  `detail: "full"` returns the whole `RunResult`, the same as `lila run --json` (see
+  [Summary or full results](#summary-or-full-results)). It supports resources and calendars.
+  `scenario` may be a JSON file path or an inline resolved scenario. `model` defaults to
+  `scenario.model`; a supplied different model is rejected. The response includes text,
+  `structuredContent` and an `outputSchema`. Long runs report progress and can be
   cancelled ([Progress and cancellation](#progress-and-cancellation)).
   With a `.lila` `model` and a scenario of it, `saveRun: true` stores the run in the project (see
   [Saving a run](#saving-a-run)). `logTo` writes the event log to a CSV file: the same bytes as the
@@ -96,7 +96,8 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
   from a BPMN you already have (an agent that starts from steps uses `create_process`) and
   scenarios. Returns `{ file, name, processId, laidOut, warnings, notes, scenarios }`.
 - **`get_project({ project, locale? })`** lists what a `.lila` holds, writing nothing: its
-  processes, their scenarios and their saved runs, current or stale. Returns
+  processes, their scenarios and their saved runs, current or stale. `project` must be a `.lila`
+  file, as in `patch_scenario`. Returns
   `{ file, name, formatVersion, processes }`.
 - **`get_scenario({ project, process?, scenario, resolved?, locale? })`** reads one scenario as
   stored, or resolved through `extends`, with the validator's notes, writing nothing. Returns
@@ -199,7 +200,9 @@ processes, scenarios and runs through the errors of other tools.
   extended attributes it defines (`id`, `name`, `type`, `appliesTo`, `default?`, `options?`;
   `null` when the model cannot be read back whole). A run is
   `current: false` (stale) when the model or its scenario changed after it: `export_results` and
-  `export_document` take it only by id. A `.lila` keeps no date of when a run was taken; `start` is
+  `export_document` take it only by id. Only the scenario the run ran counts: a change in its
+  `extends` parent alone leaves the run `current`, although the resolved scenario is no longer
+  the one that ran. A `.lila` keeps no date of when a run was taken; `start` is
   the simulated start (`run.start`) of the scenario it ran.
 - **`get_scenario`** returns `{ file, process, entry, revision, resolved, scenario, runnable, notes }`.
   `scenario` is the entry as stored (with its `extends`), or with `resolved: true` merged through
@@ -207,7 +210,13 @@ processes, scenarios and runs through the errors of other tools.
   to the scenario. `notes` are the validator's against the process model — errors (`E-…`) first,
   then warnings (`W-…`), the checks `run_simulation` makes before it simulates — so it works as a
   scenario lint; `runnable` is `false` when there is an error. A scenario whose `extends` cannot be
-  resolved comes back with `scenario: null` (when resolved) and the reason in `notes`.
+  resolved comes back with `scenario: null` (when resolved) and the reason in `notes`. So does a
+  process whose `model.bpmn` does not parse: `runnable: false`, with the parser's error in
+  `notes`.
+
+Both take only a `.lila` file in `project`: a folder or an empty path is refused with the same
+message as `patch_scenario`. Like `get_process_bpmn`, `get_process_outline`, `get_raci_matrix`,
+`validate_bpmn` and `describe_process`, they declare `readOnlyHint: true`.
 
 To read a scenario, use `get_scenario`, not a `patch_scenario` with only `test`: that one writes
 nothing either (#627), but it is not meant for reading.
@@ -805,8 +814,10 @@ The summary of `run_simulation` (`"detail": "summary"`):
 - `process`: cycle time, wait time, throughput, cost per case and `byEndEvent`, as in the full result;
 - `bottlenecks`, as in the full result;
 - `resources`: for each resource, `utilization`, `resourceWaitTotal` (the resource wait, in seconds,
-  of the elements that request it; an element that requests two resources counts for both) and
-  `totalCost`;
+  of the elements that request it) and `totalCost`. An element that requests two resources counts
+  its whole wait for each of them, so the same wait shows in both totals: in `examples/pedido`,
+  Cook and Oven show the same figure. The totals of several resources do not add up to the
+  process wait;
 - `topWaits`: the five elements that wait most (resource wait plus off-hours wait), with their
   `name`, `completed`, `resourceWaitMean`, `resourceWaitTotal`, `offHoursWaitMean` and
   `queueLengthMean`;
@@ -844,7 +855,8 @@ guide's flow, steps 1 to 8, followed by the interview; without `transcript` it a
 
 They are the docs themselves: from a checkout the server reads `docs/`, and the published package
 carries copies of the same files in `dist/resources/` (`prepack` runs
-`packages/mcp/scripts/bundle-resources.mjs`).
+`packages/mcp/scripts/bundle-resources.mjs`). A client that only has MCP cannot follow a relative
+link, so the server makes them absolute links to the docs on GitHub (`main`).
 
 ```json
 { "method": "resources/read", "params": { "uri": "lila://guide" } }
@@ -856,9 +868,12 @@ carries copies of the same files in `dist/resources/` (`prepack` runs
 (a `ping`, other calls) while a run works. When the call carries `_meta.progressToken`, the server
 sends `notifications/progress` once per completed replication, with `progress` (replications done)
 and `total` (`run.replications`, or the sum over the scenarios of a comparison). A client's
-`notifications/cancelled` stops the run at once: the worker is terminated, nothing is saved (the
-temporary file of a `logTo` is removed too), and, as MCP requires, no answer is sent for the
-cancelled request.
+`notifications/cancelled` that arrives while a run simulates stops it at once: the worker is
+terminated, nothing is saved (the temporary file of a `logTo` is removed too), and, as MCP
+requires, no answer is sent for the cancelled request. Once the simulation is over (for
+`compare_scenarios`, the last scenario's), the writes are not interrupted: a cancellation that
+arrives while `saveTo`, `saveRun` or `logTo` is being written still leaves those files written;
+only the answer is not sent.
 
 ```json
 { "method": "tools/call", "params": { "name": "run_simulation", "arguments": { "scenario": "examples/pedido/as-is.scenario.json", "replications": 30 }, "_meta": { "progressToken": 1 } } }
@@ -1126,6 +1141,13 @@ stays in the foreground, so it is not a CI smoke test.
 - With `detail: "full"`, simulation results are returned as both text and `structuredContent`,
   doubling a large payload; the default summary keeps it small.
 - `compare_scenarios` returns structured content but does not publish an `outputSchema`.
+- There is no limit on concurrent simulations: each `run_simulation` and `compare_scenarios` call
+  runs in its own worker thread, so a client that sends several at once runs them all in parallel,
+  with the CPU and memory of each.
+- The packages declare Node 22 or later, but running the tests from `src/` (`npm test`) needs
+  Node 22.18 or later: the server then starts its simulation worker from `src/simulate-worker.ts`,
+  which relies on Node's TypeScript type stripping (on by default from 22.18). The built server
+  (`dist/`) runs on any Node 22.
 - File writes use server permissions and can overwrite files without an interactive confirmation.
 - `create_process` lays out with `bpmn-auto-layout` 1.3, which draws no pool or lanes: Lila keeps
   its columns and rows, moves each node into its lane, routes the flows again orthogonally (around

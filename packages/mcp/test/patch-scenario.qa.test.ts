@@ -51,8 +51,9 @@ function copyAsIs(name = 'copia.scenario.json', dir = scratch): string {
   return path;
 }
 
+/** In Spanish, the language these checks were written in (#645: the JSON Patch errors are catalog texts). */
 async function patch(args: Record<string, unknown>): Promise<{ isError?: unknown; content: unknown }> {
-  return (await client.callTool({ name: 'patch_scenario', arguments: args })) as {
+  return (await client.callTool({ name: 'patch_scenario', arguments: { locale: 'es', ...args } })) as {
     isError?: unknown;
     content: unknown;
   };

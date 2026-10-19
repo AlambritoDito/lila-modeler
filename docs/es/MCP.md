@@ -29,16 +29,17 @@ Schema del escenario como recursos, y el flujo de la guía como el prompt `inter
   `extends`) agrega los recursos referenciados por elemento; si el escenario no se puede leer, el
   resumen dice por qué y la tool no falla.
 - **`run_simulation({ model?, process?, scenario, seed?, replications?, saveTo?, saveRun?, logTo?, detail?, locale? })`** (LILA-054) — valida
-  modelo y escenario, simula y devuelve exactamente el mismo `RunResult` que
-  `lila run --json` (elementos, flujos, recursos, proceso, bottlenecks y avisos). `scenario` acepta
+  modelo y escenario, simula y, por defecto, responde con un resumen de la corrida;
+  `detail: "full"` devuelve el `RunResult` completo, exactamente el mismo que `lila run --json`
+  (elementos, flujos, recursos, proceso, bottlenecks y avisos; ver
+  [Resumen o resultado completo](#resumen-o-resultado-completo)). `scenario` acepta
   una ruta `.json` (resuelve `extends`, igual que la CLI) o el escenario ya resuelto como objeto
   inline; `model` es opcional y por defecto es `scenario.model`; se rechaza un modelo distinto.
   Ningún campo de nivel 2/3 se rechaza (LILA-184): `resources` y `calendars` los simula el motor desde LILA-033…036 y LILA-041.
   `saveTo` escribe el mismo JSON de forma atómica que `lila run --json <ruta>`. Trae
   `outputSchema` (`@lila-modeler/engine/result-schema`) y responde `structuredContent` además del texto.
-  Por defecto la respuesta es un resumen; `detail: "full"` devuelve el `RunResult` completo (ver
-  [Resumen o resultado completo](#resumen-o-resultado-completo)). Una corrida larga informa su
-  progreso y se puede cancelar ([Progreso y cancelación](#progreso-y-cancelación)).
+  Una corrida larga informa su progreso y se puede cancelar
+  ([Progreso y cancelación](#progreso-y-cancelación)).
   Con un `model` `.lila` y un escenario suyo, `saveRun: true` guarda la corrida en el proyecto (ver
   [Guardar una corrida](#guardar-una-corrida)). `logTo` escribe el event log en un archivo CSV: los
   mismos bytes que el `log.csv` de `lila run --csv` con el mismo modelo, escenario, semilla y
@@ -141,7 +142,8 @@ mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
   nuevo a partir de un BPMN que ya existe (un agente que parte de pasos usa `create_process`) y
   escenarios. Devuelve `{ file, name, processId, laidOut, warnings, notes, scenarios }`.
 - **`get_project({ project, locale? })`** (#628) — lista lo que tiene un `.lila` sin escribir nada:
-  sus procesos, sus escenarios y sus corridas guardadas, vigentes u obsoletas. Devuelve
+  sus procesos, sus escenarios y sus corridas guardadas, vigentes u obsoletas. `project` tiene que
+  ser un archivo `.lila`, como en `patch_scenario`. Devuelve
   `{ file, name, formatVersion, processes }`.
 - **`get_scenario({ project, process?, scenario, resolved?, locale? })`** (#628) — lee un escenario
   como está guardado, o resuelto por `extends`, con las notas del validador, sin escribir nada.
@@ -229,7 +231,9 @@ descubrir sus procesos, escenarios y corridas por los errores de otras tools.
   `attributes`, los atributos extendidos que define (`id`, `name`, `type`, `appliesTo`, `default?`,
   `options?`; `null` si el modelo no se puede releer entero). Una
   corrida tiene `current: false` (obsoleta) cuando el modelo o su escenario cambiaron después de
-  ella: `export_results` y `export_document` solo la toman por id. Un `.lila` no guarda la fecha en
+  ella: `export_results` y `export_document` solo la toman por id. Solo cuenta el escenario que
+  corrió: un cambio solo en su padre de `extends` deja la corrida `current`, aunque el escenario
+  resuelto ya no sea el que corrió. Un `.lila` no guarda la fecha en
   que se tomó una corrida; `start` es el inicio simulado (`run.start`) del escenario que corrió.
 - **`get_scenario`** devuelve `{ file, process, entry, revision, resolved, scenario, runnable, notes }`.
   `scenario` es la entrada como está guardada (con su `extends`), o con `resolved: true` fusionada
@@ -238,7 +242,12 @@ descubrir sus procesos, escenarios y corridas por los errores de otras tools.
   —primero los errores (`E-…`), luego los avisos (`W-…`), las comprobaciones que hace
   `run_simulation` antes de simular—, así que sirve de lint de escenarios; `runnable` es `false`
   cuando hay un error. Un escenario cuyo `extends` no se puede resolver vuelve con
-  `scenario: null` (al resolverlo) y el motivo en `notes`.
+  `scenario: null` (al resolverlo) y el motivo en `notes`. Igual un proceso cuyo `model.bpmn` no
+  se puede leer: `runnable: false`, con el error del lector en `notes`.
+
+Las dos solo aceptan un archivo `.lila` en `project`: una carpeta o una ruta vacía se rechaza con
+el mismo mensaje que `patch_scenario`. Como `get_process_bpmn`, `get_process_outline`,
+`get_raci_matrix`, `validate_bpmn` y `describe_process`, declaran `readOnlyHint: true`.
 
 Para leer un escenario usa `get_scenario`, no un `patch_scenario` con solo `test`: ese tampoco
 escribe nada (#627), pero no es para leer.
@@ -832,7 +841,10 @@ El resumen de `run_simulation` (`"detail": "summary"`):
 - `process`: tiempo de ciclo, espera, throughput, costo por caso y `byEndEvent`, como en el resultado completo;
 - `bottlenecks`, como en el resultado completo;
 - `resources`: por recurso, `utilization`, `resourceWaitTotal` (la espera por recurso, en segundos,
-  de los elementos que lo piden; un elemento que pide dos recursos cuenta para los dos) y `totalCost`;
+  de los elementos que lo piden) y `totalCost`. Un elemento que pide dos recursos cuenta su espera
+  entera para cada uno, así que la misma espera aparece en los dos totales: en `examples/pedido`,
+  Cook y Oven muestran la misma cifra. Los totales de varios recursos no suman la espera del
+  proceso;
 - `topWaits`: los cinco elementos que más esperan (espera por recurso más espera fuera de horario),
   con su `name`, `completed`, `resourceWaitMean`, `resourceWaitTotal`, `offHoursWaitMean` y
   `queueLengthMean`;
@@ -873,7 +885,9 @@ primero.
 
 Son los propios documentos: desde un checkout el servidor lee `docs/`, y el paquete publicado lleva
 copias de los mismos archivos en `dist/resources/` (`prepack` corre
-`packages/mcp/scripts/bundle-resources.mjs`).
+`packages/mcp/scripts/bundle-resources.mjs`). Un cliente que solo tiene MCP no puede seguir un
+enlace relativo, así que el servidor los convierte en enlaces absolutos a los docs en GitHub
+(`main`).
 
 ```json
 { "method": "resources/read", "params": { "uri": "lila://guide" } }
@@ -885,9 +899,12 @@ copias de los mismos archivos en `dist/resources/` (`prepack` corre
 respondiendo (un `ping`, otras llamadas) mientras corre una simulación. Cuando la llamada trae
 `_meta.progressToken`, el servidor manda `notifications/progress` una vez por replicación terminada,
 con `progress` (replicaciones hechas) y `total` (`run.replications`, o la suma sobre los escenarios
-de una comparación). Un `notifications/cancelled` del cliente detiene la corrida en el acto: el
-worker se termina, no se guarda nada (también se borra el temporal de un `logTo`) y, como pide MCP,
-no se responde a la petición cancelada.
+de una comparación). Un `notifications/cancelled` del cliente que llega mientras se simula detiene
+la corrida en el acto: el worker se termina, no se guarda nada (también se borra el temporal de un
+`logTo`) y, como pide MCP, no se responde a la petición cancelada. Una vez terminada la simulación
+(en `compare_scenarios`, la del último escenario), las escrituras no se interrumpen: una
+cancelación que llega mientras se escribe `saveTo`, `saveRun` o `logTo` deja esos archivos
+escritos; solo no se manda la respuesta.
 
 ```json
 { "method": "tools/call", "params": { "name": "run_simulation", "arguments": { "scenario": "examples/pedido/as-is.scenario.json", "replications": 30 }, "_meta": { "progressToken": 1 } } }
@@ -1241,6 +1258,13 @@ el navegador y se queda en primer plano**: no lo lances desde un agente ni en CI
   mensaje. El resumen por defecto lo mantiene pequeño.
 - **`compare_scenarios` no publica `outputSchema`** (no hay esquema zod de `CompareResult` en el
   repo), aunque sí manda `structuredContent`. Un cliente estricto puede rechazarlo.
+- **No hay límite de simulaciones simultáneas.** Cada llamada a `run_simulation` y
+  `compare_scenarios` corre en su propio worker thread, así que un cliente que manda varias a la vez
+  las corre todas en paralelo, cada una con su CPU y su memoria.
+- **Los tests desde `src/` piden Node 22.18 o posterior.** Los paquetes declaran Node 22 o
+  posterior, pero al correr los tests (`npm test`) el servidor arranca su worker de simulación desde
+  `src/simulate-worker.ts`, que depende del type stripping de TypeScript de Node (activo por
+  defecto desde 22.18). El servidor compilado (`dist/`) corre en cualquier Node 22.
 - **Todo pasa por el disco del servidor.** `saveTo` escribe con los permisos del proceso servidor y
   sobrescribe sin preguntar; no hay sandbox de rutas.
 - **`create_process` maqueta con `bpmn-auto-layout` 1.3, que no dibuja pool ni carriles**: Lila

@@ -769,6 +769,24 @@ export const en: Catalog = {
     editBadCalledProcess: () => 'must be the slug of a process of the project, or null to remove the called process.',
     editCalled: (id, name, slug) => `"${id}" now calls ${name} (${slug})`,
     editCallCleared: (id) => `"${id}" no longer calls a process`,
+
+    extendsCycle: (chain) => `extends: cycle in the inheritance chain: ${chain}`,
+    scenarioNotObject: (file) => `${file}: the scenario must be a JSON object.`,
+    extendsNotPath: (file) => `${file}: extends must be a path to another scenario.`,
+    patchRoot: () => 'json patch: the document root cannot be patched.',
+    patchBadPointer: (pointer) => `json patch: invalid pointer: ${pointer}`,
+    patchForbiddenSegment: (key, pointer) =>
+      `json patch: forbidden segment "${key}" in ${pointer}: it would write to the object's prototype.`,
+    patchForbiddenKey: (key, path) =>
+      `json patch: forbidden key "${key}" in the value of ${path}: it would write to the object's prototype.`,
+    patchMissingSegment: (segment) => `json patch: the path up to "${segment}" does not exist.`,
+    patchNotContainer: () => 'json patch: the path does not reach an object or array.',
+    patchUnsupportedOp: (op) =>
+      `json patch: unsupported operation: "${op}" (only add/replace/remove/test; move/copy are not implemented).`,
+    patchNeedsValue: (op, path) => `json patch: the "${op}" operation requires "value" (${path}).`,
+    patchTestFailed: (path) => `json patch: test failed at ${path}.`,
+    patchBadIndex: (path) => `json patch: invalid index at ${path}.`,
+    patchMissingPath: (path) => `json patch: the path ${path} does not exist.`,
   },
   mcp: {
     nodeType: (type) => NODE_TYPES[type] ?? type,
