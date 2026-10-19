@@ -1,28 +1,36 @@
 /**
  * `lila process annotate|raci` (#99), `lila scenario import|template` (#514), the read-only
  * `lila project show` and `lila scenario show` (#628), `lila process export-bpmn|import` (#632) and
- * `lila process attribute define|list` (#633): the CLI side of the MCP tools `annotate_element`,
- * `get_raci_matrix`, `import_scenario_sheet`, `export_scenario_template`, `get_project`,
- * `get_scenario`, `get_process_bpmn`, `put_process_bpmn` and `define_attribute`, over the same
+ * `lila process attribute define|list` (#633), `lila scenario patch` and `lila project create` (#635):
+ * the CLI side of the MCP tools `annotate_element`, `get_raci_matrix`, `import_scenario_sheet`,
+ * `export_scenario_template`, `get_project`, `get_scenario`, `get_process_bpmn`, `put_process_bpmn`,
+ * `define_attribute`, `patch_scenario` (for a `.lila`) and `create_project`, over the same
  * `@lila-modeler/engine/project-fs` functions. Kept out of `cli.ts` so that file only dispatches here.
  */
+import { existsSync, lstatSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import type { Annotations, AttributeDefinition, Responsibility } from './bpmn/index.js';
+import { readJsonFile } from './cli-shared.js';
 import { agentToolMessages, messages, type Locale } from './messages/index.js';
 import {
   annotateLilaElement,
+  createLilaProject,
   defineLilaAttribute,
   importLilaScenarioSheet,
+  isLilaPath,
   lilaAttributeList,
   lilaProjectInventory,
   lilaRaciMatrix,
   lilaScenarioTemplate,
   lilaScenarioView,
+  patchLilaScenario,
   putLilaProcessBpmn,
   raciCsv,
   readLilaProcessBpmn,
   writeExportFile,
+  type JsonPatchOp,
   type LilaProjectInventory,
   type LilaRaciMatrix,
 } from './project-fs/index.js';
@@ -402,14 +410,67 @@ async function scenarioShowCommand(argv: readonly string[], locale: Locale): Pro
   return 0;
 }
 
-/** `lila scenario import|template|show`. */
+/** The `--patch` file: a non-empty JSON list of RFC 6902 operations, as `patch_scenario` takes them. */
+function readPatch(file: string, locale: Locale): JsonPatchOp[] {
+  const patch = readJsonFile(file, locale);
+  const isOp = (op: unknown): op is JsonPatchOp =>
+    typeof op === 'object' && op !== null && typeof (op as JsonPatchOp).op === 'string' && typeof (op as JsonPatchOp).path === 'string';
+  if (!Array.isArray(patch) || patch.length === 0 || !patch.every(isOp)) throw new Error(agentToolMessages(locale).patchNotList(file));
+  return patch;
+}
+
+/** `lila scenario patch` (#635): `patch_scenario` on a scenario of a `.lila`, by the same engine function. */
+async function scenarioPatchCommand(argv: readonly string[], locale: Locale): Promise<number> {
+  const T = agentToolMessages(locale);
+  const C = messages(locale).cli;
+  const { values, positionals } = parseArgs({
+    args: [...argv],
+    options: {
+      patch: { type: 'string' },
+      process: { type: 'string' },
+      'save-to': { type: 'string' },
+      'extends-from': { type: 'string' },
+      name: { type: 'string' },
+      description: { type: 'string' },
+      'dry-run': { type: 'boolean' },
+      json: { type: 'boolean' },
+    },
+    allowPositionals: true,
+  });
+  if (positionals.length !== 2) return usageError('scenario patch', C.expectedPositionals('<project.lila> <scenario>'), locale);
+  if (values.patch === undefined) return usageError('scenario patch', T.patchRequired(), locale);
+  const [file, scenario] = positionals as [string, string];
+  const result = await patchLilaScenario({
+    file,
+    process: values.process,
+    scenario,
+    patch: readPatch(values.patch, locale),
+    saveTo: values['save-to'],
+    extendsFrom: values['extends-from'],
+    name: values.name,
+    description: values.description,
+    dryRun: values['dry-run'] === true,
+    locale,
+  });
+  if (values.json === true) {
+    console.log(JSON.stringify(result, null, 2));
+    return 0;
+  }
+  // A no-op or a dry run says why nothing was written in its first note.
+  if (result.written) console.log(T.scenarioPatched(result.entry, result.process, result.file));
+  result.notes.forEach((note, index) => console.log(index === 0 && !result.written ? note : `${C.warningLabel()} ${note}`));
+  return 0;
+}
+
+/** `lila scenario import|template|show|patch`. */
 export async function dispatchScenarioTools(argv: readonly string[], locale: Locale): Promise<number> {
   if (wantsHelp(argv)) return help(locale);
   const [sub, ...rest] = argv;
   if (sub === 'import') return importCommand(rest, locale);
   if (sub === 'template') return templateCommand(rest, locale);
   if (sub === 'show') return scenarioShowCommand(rest, locale);
-  return usageError('scenario', agentToolMessages(locale).scenarioUnknown(sub ?? '', 'import, template, show'), locale);
+  if (sub === 'patch') return scenarioPatchCommand(rest, locale);
+  return usageError('scenario', agentToolMessages(locale).scenarioUnknown(sub ?? '', 'import, template, show, patch'), locale);
 }
 
 /** The inventory as text: one block per process, its scenarios and its saved runs. */
@@ -431,12 +492,66 @@ function printInventory(inventory: LilaProjectInventory, locale: Locale): void {
   }
 }
 
-/** `lila project show` (#628): what a `.lila` holds. Writes nothing. */
+/** `lila project create` (#635): `create_project`, by the same engine function. `--force` is its `overwrite`. */
+async function projectCreateCommand(argv: readonly string[], locale: Locale): Promise<number> {
+  const T = agentToolMessages(locale);
+  const C = messages(locale).cli;
+  const { values, positionals } = parseArgs({
+    args: [...argv],
+    options: {
+      name: { type: 'string' },
+      bpmn: { type: 'string' },
+      scenario: { type: 'string', multiple: true },
+      force: { type: 'boolean' },
+      'allow-unsimulatable': { type: 'boolean' },
+      json: { type: 'boolean' },
+    },
+    allowPositionals: true,
+  });
+  if (positionals.length !== 1) return usageError('project create', C.expectedPositionals('<path.lila>'), locale);
+  if (values.name === undefined) return usageError('project create', T.createNameRequired(), locale);
+  if (values.bpmn === undefined) return usageError('project create', T.bpmnRequired(), locale);
+  // The engine's refusal names MCP's `overwrite`; here the switch is --force. The engine checks again under the lock.
+  const target = resolve(positionals[0]!).replaceAll('\\', '/');
+  if (values.force !== true && isLilaPath(target) && existsSync(target) && !lstatSync(target).isDirectory()) {
+    return usageError('project create', C.exportTargetExists(target), locale);
+  }
+  const scenarios = (values.scenario ?? []).map((value) => {
+    const [name, file] = pairOf('--scenario', value, locale);
+    return { name, scenario: readJsonFile(file, locale) };
+  });
+  const result = await createLilaProject({
+    path: positionals[0]!,
+    name: values.name,
+    bpmn: values.bpmn,
+    scenarios,
+    overwrite: values.force === true,
+    allowUnsimulatable: values['allow-unsimulatable'] === true,
+    locale,
+  });
+  if (values.json === true) {
+    console.log(JSON.stringify(result, null, 2));
+    return 0;
+  }
+  console.log(T.projectCreated(result.name, result.file, result.processId));
+  if (result.laidOut) console.log(T.projectLaidOut());
+  for (const scenario of result.scenarios) {
+    console.log(T.projectScenario(scenario.entry, scenario.runnable));
+    for (const error of scenario.errors) console.log(`    ${C.errorLabel()} ${error}`);
+    for (const warning of scenario.warnings) console.log(`    ${C.warningLabel()} ${warning}`);
+  }
+  for (const note of result.notes) console.log(`${C.warningLabel()} ${note}`);
+  for (const warning of result.warnings) console.log(`${C.warningLabel()} ${warning}`);
+  return 0;
+}
+
+/** `lila project show` (#628): what a `.lila` holds, writing nothing; `lila project create` (#635). */
 export async function dispatchProjectTools(argv: readonly string[], locale: Locale): Promise<number> {
   if (wantsHelp(argv)) return help(locale);
   const C = messages(locale).cli;
   const [sub, ...rest] = argv;
-  if (sub !== 'show') return usageError('project', agentToolMessages(locale).processToolUnknown(sub ?? '', 'show'), locale);
+  if (sub === 'create') return projectCreateCommand(rest, locale);
+  if (sub !== 'show') return usageError('project', agentToolMessages(locale).processToolUnknown(sub ?? '', 'show, create'), locale);
   const { values, positionals } = parseArgs({ args: rest, options: { json: { type: 'boolean' } }, allowPositionals: true });
   if (positionals.length !== 1) return usageError('project show', C.expectedPositionals('<project.lila>'), locale);
   const inventory = await lilaProjectInventory({ file: positionals[0]!, locale });

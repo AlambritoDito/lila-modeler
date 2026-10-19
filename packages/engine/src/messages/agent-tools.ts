@@ -1,7 +1,8 @@
 /**
- * Texts of the agent tools of #99, #403, #514, #628 and #633 (annotate an element, the RACI matrix,
- * a scenario sheet as a tool, creating a `.lila`, the read-only inventory, defining an extended
- * attribute), English and Spanish, shared by the CLI and the MCP server.
+ * Texts of the agent tools of #99, #403, #514, #628, #633 and #635 (annotate an element, the RACI
+ * matrix, a scenario sheet as a tool, creating a `.lila`, the read-only inventory, defining an
+ * extended attribute, patching a scenario from the CLI), English and Spanish, shared by the CLI and
+ * the MCP server.
  *
  * Their own file, like `sheets.ts`: none of them is an `E-*`/`W-*` code, and keeping them out of
  * `en.ts`/`es.ts` keeps the main catalog to the problems of a model or a scenario.
@@ -97,6 +98,15 @@ export interface AgentToolMessages {
   scenarioShowHeader: (entry: string, slug: string, revision: number, resolved: boolean) => string;
   scenarioShowNotes: (count: number) => string;
   scenarioShowRunnable: (runnable: boolean) => string;
+  // `lila scenario patch` / `patch_scenario` `dryRun`, `lila project create` (#635)
+  patchDryRun: (entry: string) => string;
+  patchRequired: () => string;
+  patchNotList: (file: string) => string;
+  scenarioPatched: (entry: string, slug: string, file: string) => string;
+  createNameRequired: () => string;
+  projectCreated: (name: string, file: string, processId: string) => string;
+  projectLaidOut: () => string;
+  projectScenario: (entry: string, runnable: boolean) => string;
 }
 
 /** Extended-attribute element types (`appliesTo`), as the app's attribute dialog names them. */
@@ -216,6 +226,15 @@ const en: AgentToolMessages = {
     `Scenario ${entry} of process ${slug}, revision ${revision}${resolved ? ', resolved' : ', as stored'}:`,
   scenarioShowNotes: (count) => `${count} ${count === 1 ? 'note' : 'notes'} from the validator:`,
   scenarioShowRunnable: (runnable) => (runnable ? 'It can run.' : 'It cannot run as it is: see the errors above.'),
+  patchDryRun: (entry) => `Dry run: the result validates and would be written to ${entry}; nothing was written.`,
+  patchRequired: () => 'needs --patch <ops.json>.',
+  patchNotList: (file) =>
+    `${file} must be a non-empty JSON list of operations, each with "op" and "path" (RFC 6902); nothing was written.`,
+  scenarioPatched: (entry, slug, file) => `Saved scenario ${entry} of process ${slug} in ${file}.`,
+  createNameRequired: () => 'needs --name <name>.',
+  projectCreated: (name, file, processId) => `Created project "${name}" (${file}), process ${processId}.`,
+  projectLaidOut: () => 'The model had no diagram; one was drawn.',
+  projectScenario: (entry, runnable) => `  ${entry}: ${runnable ? 'can run' : 'draft, cannot run yet:'}`,
 };
 
 const es: AgentToolMessages = {
@@ -327,6 +346,15 @@ const es: AgentToolMessages = {
     `Escenario ${entry} del proceso ${slug}, revisión ${revision}${resolved ? ', resuelto' : ', como está guardado'}:`,
   scenarioShowNotes: (count) => `${count} ${count === 1 ? 'nota' : 'notas'} del validador:`,
   scenarioShowRunnable: (runnable) => (runnable ? 'Se puede correr.' : 'No se puede correr así: mira los errores de arriba.'),
+  patchDryRun: (entry) => `Simulacro: el resultado valida y se escribiría en ${entry}; no se escribió nada.`,
+  patchRequired: () => 'necesita --patch <operaciones.json>.',
+  patchNotList: (file) =>
+    `${file} debe ser una lista JSON no vacía de operaciones, cada una con "op" y "path" (RFC 6902); no se escribió nada.`,
+  scenarioPatched: (entry, slug, file) => `Se guardó el escenario ${entry} del proceso ${slug} en ${file}.`,
+  createNameRequired: () => 'necesita --name <nombre>.',
+  projectCreated: (name, file, processId) => `Se creó el proyecto "${name}" (${file}), proceso ${processId}.`,
+  projectLaidOut: () => 'El modelo no tenía diagrama; se dibujó uno.',
+  projectScenario: (entry, runnable) => `  ${entry}: ${runnable ? 'se puede correr' : 'borrador, todavía no se puede correr:'}`,
 };
 
 export const AGENT_TOOL_MESSAGES: Readonly<Record<Locale, AgentToolMessages>> = { en, es };

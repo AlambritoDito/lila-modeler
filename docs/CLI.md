@@ -294,6 +294,54 @@ npx lila scenario show examples/pedido.lila to-be-3-cajeros --resolved
 ```
 Exit code: `0`.
 
+## `scenario patch` and `project create` (#635)
+
+The CLI side of the MCP tools `patch_scenario` (for a `.lila`) and `create_project`
+([`docs/MCP.md`](MCP.md#mcp-and-cli-side-by-side)), over the same engine functions:
+
+- `lila scenario patch <project.lila> <scenario> --patch <ops.json>` applies a
+  [JSON Patch](https://www.rfc-editor.org/rfc/rfc6902) (`add`, `replace`, `remove` and `test`;
+  no `move` or `copy`) to a scenario of the `.lila`, validates the result against the process
+  model and writes it only when it validates. Without `--save-to` it patches the scenario in
+  place: the patch applies to the resolved scenario, which is written whole, without `extends`.
+  With `--save-to name` it creates (or replaces) the scenario `name`, which `extends` the scenario
+  given (or `--extends-from name`) and holds only the keys the patch touched. `--name` and
+  `--description` set those of the result. An invalid patch, or a result that does not validate,
+  exits `1` and writes nothing. A patch that changes nothing writes nothing and says so: the
+  scenario keeps its revision and its saved runs stay current. `--dry-run` validates everything
+  and writes nothing; `--json` prints `{ scenario, file, process, entry, written, dryRun, notes }`.
+  Patching a loose `.json` scenario is MCP only: from the CLI, edit the file.
+- `lila project create <path.lila> --name name --bpmn <file.bpmn>` creates a new `.lila` with one
+  process. A model with validation errors exits `1`, unless `--allow-unsimulatable`: then it is
+  kept as a diagram that does not simulate, its errors printed as notes. `--scenario name=file.json`
+  (repeatable) adds a scenario saved as `name.scenario.json`; a scenario that cannot run yet is
+  kept as a draft and listed with what it lacks. A model without a diagram gets one. The file is
+  written whole or not at all, and an existing file exits `1` unless `--force`. `--json` prints
+  `{ file, name, processId, laidOut, warnings, notes, scenarios }`.
+
+```bash
+npx lila scenario patch examples/pedido.lila as-is --patch examples/outline/pedido-patch.json --save-to to-be-4-cocineros --dry-run
+```
+Exit code: `0`.
+
+```text
+Dry run: the result validates and would be written to to-be-4-cocineros.scenario.json; nothing was written.
+warning W-ELEMENTO-SIN-PARAMETROS: the element exists in the model and has no parameters; it takes its default values (elements.Task_Empacar).
+```
+
+The file already exists, so `project create` refuses it without `--force`:
+
+```bash
+npx lila project create examples/pedido.lila --name Orders --bpmn examples/pedido/model.bpmn
+```
+Exit code: `1`.
+
+```text
+npx lila project create orders.lila --name Orders --bpmn examples/pedido/model.bpmn --scenario as-is=examples/pedido/as-is.scenario.json
+npx lila scenario patch orders.lila as-is --patch examples/outline/pedido-patch.json --save-to to-be-4-cocineros
+npx lila compare orders.lila as-is to-be-4-cocineros
+```
+
 ## `process export-bpmn` and `process import` (#632)
 
 The raw BPMN of one process of a `.lila`, out and in — the MCP tools `get_process_bpmn` and

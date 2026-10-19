@@ -1,5 +1,6 @@
 /**
- * JSON Patch (RFC 6902) mínimo para `patch_scenario` (LILA-055): `add`/`replace`/`remove`/`test`
+ * JSON Patch (RFC 6902) mínimo para `patch_scenario` (LILA-055) y `lila scenario patch` (#635; se
+ * mudó aquí desde `packages/mcp` para que la CLI lo use sin importar el paquete MCP): `add`/`replace`/`remove`/`test`
  * sobre objetos y arrays planos, con punteros RFC 6901. Sin `move`/`copy` (ponytail): son las dos
  * operaciones que leen de una ubicación distinta a la que escriben, duplicarían la navegación, y
  * ningún caso de uso de `patch_scenario` las necesita — documentado en `docs/MCP.md`.

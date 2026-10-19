@@ -38,12 +38,13 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
   with the same `CompareResult` as `lila compare --json`. Notes cover seeds, units, insufficient
   replications for confidence intervals, and engine warnings. By default `comparison` keeps the
   process and resource rows and the significant ones; `detail: "full"` returns every row.
-- **`patch_scenario({ scenario, project?, process?, patch, saveTo?, extendsFrom?, name?, description?, locale? })`**
+- **`patch_scenario({ scenario, project?, process?, patch, saveTo?, extendsFrom?, name?, description?, dryRun?, locale? })`**
   applies [JSON Patch](https://www.rfc-editor.org/rfc/rfc6902), validates the result and writes
-  only when valid. It returns `{ scenario, file, written, notes }` (plus `process` and `entry` inside a
+  only when valid. It returns `{ scenario, file, written, dryRun, notes }` (plus `process` and `entry` inside a
   `.lila`). A patch that changes nothing (only `test`, or a `saveTo` whose target already holds the
   result) writes nothing: `written` is `false`, `notes` says so first, and the scenario keeps its
-  revision, so its saved runs stay current (#627).
+  revision, so its saved runs stay current (#627). `dryRun: true` validates the same way and
+  writes nothing (`written: false`, with a note). For a `.lila` it is `lila scenario patch`.
 
 - **`export_diagram({ project | path, process?, saveTo?, overwrite?, locale? })`** draws the
   diagram of a `.lila` process (`project`) or a `.bpmn` (`path`) as SVG with the engine's own
@@ -490,8 +491,8 @@ end of the path that finished last, so an escalated claim that was then paid cou
 
 `annotate_element`, `define_attribute`, `get_raci_matrix`, `import_scenario_sheet`,
 `export_scenario_template` and `create_project` (#99, #633, #403, #514) let an agent build and
-document a project with no app. The CLI has the first five as `lila process
-annotate|attribute|raci` and `lila scenario import|template` (`docs/CLI.md`). Every write goes through the same atomic, locked `.lila` save as
+document a project with no app. The CLI has them as `lila process
+annotate|attribute|raci`, `lila scenario import|template` and `lila project create` (`docs/CLI.md`). Every write goes through the same atomic, locked `.lila` save as
 `patch_scenario` (see [A `.lila` as input](#a-lila-as-input)): only the process touched changes,
 the others are carried through byte for byte, and an invalid input is `isError` with nothing
 written. `dryRun: true` answers what would change and writes nothing.
@@ -675,6 +676,37 @@ terminal.
   "scenarioRemovals": [], "notes": [ "gateway \"ok\": the probabilities of its outgoing flows in as-is.scenario.json now add up to 1.1; adjust them with patch_scenario, one {\"op\": \"replace\", \"path\": \"/elements/<flow>/probability\", \"value\": …} per flow of Flow_ok_issue, Flow_ok_reject, Flow_ok_verify." ],
   "warnings": [], "outline": { … } }
 ```
+
+## MCP and CLI side by side
+
+Every tool runs the same engine code as its CLI command, so an agent that only has a shell gets
+the same answers. The CLI's `--json` prints what the tool returns.
+
+| MCP tool or field | CLI | Note |
+| --- | --- | --- |
+| `validate_bpmn` | `lila validate --json` | |
+| `describe_process` | `lila validate` | The CLI prints the IR and the problems; the readable `resumen` is written for an agent and is MCP only. |
+| `run_simulation` | `lila run --json` | `saveRun` is `--save`, `saveTo` is `--json <file>`. The event log of `--csv` (`log.csv`) has no MCP field yet: #665. The four result CSVs of `--csv` come from a stored run with `export_results`. |
+| `compare_scenarios` | `lila compare --json` | `--xlsx` and `--all` have no MCP field yet: #665. |
+| `patch_scenario` with `project` | `lila scenario patch` | `dryRun` is `--dry-run`. |
+| `patch_scenario` without `project` | none | Patching a loose `.json` scenario is MCP only; from the CLI, edit the file. |
+| `export_diagram` | `lila export diagram` | |
+| `export_document` | `lila export doc` | |
+| `export_results` | `lila export results` | Per-element wait percentiles: #666. |
+| `create_process` | `lila process create` | |
+| `get_process_outline` | `lila process show` | |
+| `edit_process` | `lila process edit` | |
+| `annotate_element` | `lila process annotate` | |
+| `define_attribute` | `lila process attribute define` | `lila process attribute list` lists them; `get_project` does for MCP. |
+| `get_raci_matrix` | `lila process raci` | `--csv` is CLI only: an agent builds the CSV from `rows`. |
+| `import_scenario_sheet` | `lila scenario import` | |
+| `export_scenario_template` | `lila scenario template` | |
+| `create_project` | `lila project create` | `overwrite` is `--force`; `scenarios` are `--scenario name=file.json`. |
+| `get_project` | `lila project show` | |
+| `get_scenario` | `lila scenario show` | |
+| `get_process_bpmn` | `lila process export-bpmn` | |
+| `put_process_bpmn` | `lila process import` | `mode: "replace"` is `--replace`. |
+| Resources and the prompt | none | Part of the protocol; the CLI has `--help` and `docs/`. |
 
 ## Summary or full results
 

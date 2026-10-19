@@ -17,11 +17,15 @@ example of issue #97, verbatim.
   "Take order", a rename, a type change, two lanes and a move to the kitchen lane.
 - `pedido-edit-ambiguous.json`: an edit that is refused as a whole: removing the parallel split
   would leave its two branches with nowhere to come from.
+- `pedido-patch.json`: a JSON Patch (#635) for `lila scenario patch` and the MCP tool
+  `patch_scenario` on the `as-is` scenario of `examples/pedido.lila`: it checks that there are three
+  cooks, then makes it four.
 
 ```bash
 npx lila process create --outline examples/outline/credit-application.json -p credit.lila --dry-run
 npx lila process create --outline examples/outline/claim-escalation.json -p claims.lila --dry-run
 npx lila process edit -p examples/pedido.lila --ops examples/outline/pedido-edit.json --dry-run
+npx lila scenario patch examples/pedido.lila as-is --patch examples/outline/pedido-patch.json --save-to to-be-4-cocineros --dry-run
 ```
 
 Assumptions: arrivals are the app's defaults for a new process (20 cases, one per minute) and the

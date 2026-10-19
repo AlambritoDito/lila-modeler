@@ -302,6 +302,55 @@ npx lila scenario show examples/pedido.lila to-be-3-cajeros --resolved
 ```
 Código de salida: `0`.
 
+## `scenario patch` y `project create` (#635)
+
+El lado CLI de las tools MCP `patch_scenario` (para un `.lila`) y `create_project`
+([`docs/es/MCP.md`](MCP.md#mcp-y-cli-lado-a-lado)), sobre las mismas funciones del motor:
+
+- `lila scenario patch <proyecto.lila> <escenario> --patch <ops.json>` aplica un
+  [JSON Patch](https://www.rfc-editor.org/rfc/rfc6902) (`add`, `replace`, `remove` y `test`; sin
+  `move` ni `copy`) a un escenario del `.lila`, valida el resultado contra el modelo del proceso y
+  solo lo escribe si valida. Sin `--save-to` parchea el escenario en sitio: el patch se aplica al
+  escenario resuelto, que se escribe entero, sin `extends`. Con `--save-to nombre` crea (o
+  reemplaza) el escenario `nombre`, que hereda (`extends`) del escenario dado (o de
+  `--extends-from nombre`) y solo trae las claves que tocó el patch. `--name` y `--description`
+  fijan los del resultado. Un patch inválido, o un resultado que no valida, sale con `1` y no
+  escribe nada. Un patch que no cambia nada no escribe nada y lo dice: el escenario conserva su
+  revisión y sus corridas guardadas siguen vigentes. `--dry-run` valida todo y no escribe nada;
+  `--json` imprime `{ scenario, file, process, entry, written, dryRun, notes }`. Parchear un
+  escenario `.json` suelto es solo de MCP: desde la CLI, se edita el archivo.
+- `lila project create <ruta.lila> --name nombre --bpmn <archivo.bpmn>` crea un `.lila` nuevo con un
+  proceso. Un modelo con errores de validación sale con `1`, salvo con `--allow-unsimulatable`:
+  entonces se guarda como un diagrama que no simula y sus errores se imprimen como notas.
+  `--scenario nombre=archivo.json` (repetible) añade un escenario que se guarda como
+  `nombre.scenario.json`; uno que todavía no puede correr se guarda como borrador y se lista con lo
+  que le falta. Un modelo sin diagrama recibe uno. El archivo se escribe entero o nada, y un
+  archivo que ya existe sale con `1` salvo con `--force`. `--json` imprime
+  `{ file, name, processId, laidOut, warnings, notes, scenarios }`.
+
+```bash
+npx lila scenario patch examples/pedido.lila as-is --patch examples/outline/pedido-patch.json --save-to to-be-4-cocineros --dry-run --lang es
+```
+Código de salida: `0`.
+
+```text
+Simulacro: el resultado valida y se escribiría en to-be-4-cocineros.scenario.json; no se escribió nada.
+aviso W-ELEMENTO-SIN-PARAMETROS: el elemento existe en el modelo y no tiene parámetros; toma sus valores por defecto (elements.Task_Empacar).
+```
+
+El archivo ya existe, así que `project create` lo rechaza sin `--force`:
+
+```bash
+npx lila project create examples/pedido.lila --name Pedidos --bpmn examples/pedido/model.bpmn --lang es
+```
+Código de salida: `1`.
+
+```text
+npx lila project create pedidos.lila --name Pedidos --bpmn examples/pedido/model.bpmn --scenario as-is=examples/pedido/as-is.scenario.json
+npx lila scenario patch pedidos.lila as-is --patch examples/outline/pedido-patch.json --save-to to-be-4-cocineros
+npx lila compare pedidos.lila as-is to-be-4-cocineros
+```
+
 ## `process export-bpmn` y `process import` (#632)
 
 El BPMN de un proceso de un `.lila`, tal cual, hacia fuera y hacia dentro — las tools MCP

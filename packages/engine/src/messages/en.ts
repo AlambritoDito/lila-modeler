@@ -64,7 +64,12 @@ const EN_USAGE = `Usage: lila validate <file.bpmn|project.lila> [--process slug]
                             [--dry-run] [--json]
        lila scenario template <project.lila> <scenario> --out sheet.xlsx [--process slug] [--force]
        lila scenario show <project.lila> <scenario> [--process slug] [--resolved] [--json]
+       lila scenario patch <project.lila> <scenario> --patch <ops.json> [--process slug]
+                           [--save-to name] [--extends-from name] [--name n] [--description d]
+                           [--dry-run] [--json]
        lila project show <project.lila> [--json]
+       lila project create <path.lila> --name name --bpmn <file.bpmn> [--scenario name=file.json ...]
+                           [--force] [--allow-unsimulatable] [--json]
        lila mcp
 
 Commands:
@@ -84,7 +89,10 @@ Commands:
   scenario   import: applies a scenario sheet (.xlsx/.csv) to a scenario of the .lila, like the
              app's Import Excel/CSV. template: writes that sheet, filled in, for a person.
              show: prints a scenario as stored (or --resolved) with the validator's notes.
+             patch: applies a JSON Patch to a scenario, in place or as a new scenario that
+             extends it (--save-to); written only if the result validates.
   project    show: lists the processes of a .lila, their scenarios and saved runs. Read only.
+             create: makes a new .lila from a .bpmn and optional scenarios.
   mcp        Starts the MCP server over stdio (for Claude Code / Desktop). See docs/MCP.md.
 
 A model can be a .bpmn or a .lila project. With a .lila, a scenario is a .json path or, when no
@@ -169,6 +177,23 @@ process attribute define options:
 
 scenario import options:
   --dry-run         Shows the planned changes and the rows not applied without writing.
+
+scenario patch options:
+  --patch file      The JSON list of operations (RFC 6902 add/replace/remove/test).
+  --save-to name    Creates this scenario with extends and only the keys the patch touched,
+                    instead of patching the scenario in place.
+  --extends-from n  With --save-to: the parent of extends (default: the patched scenario).
+  --name, --description  Of the resulting scenario.
+  --dry-run         Validates everything and writes nothing.
+
+project create options:
+  --name name       Name of the project.
+  --bpmn file       The model; a model with validation errors is refused.
+  --scenario n=f    A scenario JSON saved as n.scenario.json; repeatable. Drafts are kept
+                    and listed with what they lack.
+  --force           Replaces an existing file.
+  --allow-unsimulatable  Keeps a model with validation errors, as a diagram that does not
+                    simulate; the errors are printed as notes.
 
 mcp options:
   None. It speaks MCP over stdin/stdout; the paths of the tools resolve against the
