@@ -724,9 +724,16 @@ export const en: Catalog = {
     editNotACallActivity: (id, type) => `"${id}" is a ${type}, not a call activity (callActivity); only a call activity calls a process.`,
     editCallNeedsLila: () =>
       'setCalledProcess needs a .lila: the called process is named by its slug among the processes of the project (edit_process, lila process edit).',
-    editCallUnknownProcess: (slug, slugs) => `the project has no process "${slug}"; its processes are: ${slugs}.`,
+    editCallUnknownProcess: (slug, slugs) =>
+      slugs === '' ? `the project has no process "${slug}", and no other process to call.` : `the project has no process "${slug}"; the processes a call activity can call are: ${slugs}.`,
     editCallSelf: (slug, processId) =>
       `"${slug}" has the BPMN process id ${processId}, that of the process being edited: a call activity cannot call its own process.`,
+    editCallShared: (slug, processId, others, count) =>
+      `"${slug}" has the BPMN process id ${processId}, which ${others} ${count === 1 ? 'declares' : 'declare'} too: a call activity cannot tell them apart; give one of them another id (put_process_bpmn with mode "replace").`,
+    editCallUnresolved: (slug, declared) =>
+      declared === ''
+        ? `the model of "${slug}" declares no BPMN process, so a call activity cannot name it.`
+        : `cannot tell which BPMN process of "${slug}" to call: its model declares ${declared}, and none of them is its model id or the process it simulates.`,
     editBadCalledProcess: () => 'must be the slug of a process of the project, or null to remove the called process.',
     editCalled: (id, name, slug) => `"${id}" now calls ${name} (${slug})`,
     editCallCleared: (id) => `"${id}" no longer calls a process`,

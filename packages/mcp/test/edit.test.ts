@@ -145,7 +145,7 @@ test('setCalledProcess (#664): calledElement written and read back by get_proces
   expect(bytes('calls.lila').equals(before)).toBe(true);
 
   for (const [bad, message] of [
-    ['nope', 'operations[0].process: the project has no process "nope"; its processes are: credit-application, billing.'],
+    ['nope', 'operations[0].process: the project has no process "nope"; the processes a call activity can call are: credit-application.'],
     ['billing', 'operations[0].process: "billing" has the BPMN process id Process_billing, that of the process being edited'],
   ]) {
     const refused = await call('edit_process', { project: 'calls.lila', process: 'billing', operations: [{ op: 'setCalledProcess', id: 'runCredit', process: bad }] });

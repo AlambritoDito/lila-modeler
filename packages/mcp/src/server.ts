@@ -1125,8 +1125,8 @@ export function createServer(options: ServerOptions = {}): McpServer {
         'siblings), `addBoundary` (a boundary timer, as in an outline), `annotate`/`removeAnnotation` ' +
         '(a text annotation on a step), `addDataObject`/`removeDataObject` (by name; an object goes ' +
         'when nothing uses it) and `setCalledProcess` (the process a call activity calls, by the slug of ' +
-        'another process of the .lila: its `calledElement` becomes that process\'s BPMN process id; ' +
-        '`process: null` removes it). Start events are neither added nor retyped. Ids never change, so renamed ' +
+        'another process of the .lila: its `calledElement` becomes that process\'s BPMN process id, ' +
+        'refused when another process declares the same id; `process: null` removes it). Start events are neither added nor retyped. Ids never change, so renamed ' +
         'or retyped steps keep their scenario entries; durations, resources and probabilities given ' +
         'go into the base scenario `as-is.scenario.json`. The result is validated; any problem ' +
         'refuses the whole edit, writes nothing and lists every issue with the index of its ' +

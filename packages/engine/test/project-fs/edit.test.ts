@@ -14,7 +14,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { EditError } from '../../src/bpmn/edit.js';
 import { main } from '../../src/cli.js';
-import { decodeLila, encodeLila, processesOf, withProcesses } from '../../src/project/index.js';
+import { outlineToBpmn } from '../../src/bpmn/outline.js';
+import { decodeLila, encodeLila, processesOf, processIds, withProcesses, type ProcessDocument } from '../../src/project/index.js';
 import { createLilaProcess, deleteLilaProcess, editLilaProcess, readLilaProcessBpmn } from '../../src/project-fs/index.js';
 import { CREDIT, ORDER } from '../fixtures/outlines.js';
 
@@ -288,7 +289,7 @@ describe('setCalledProcess (#664)', () => {
     const after = processOf(file, 'order-fulfilment');
     expect(fix(after.model.xml)).not.toContain('calledElement');
     expect(after.model.revision).toBe(revision + 2);
-    await deleteLilaProcess({ file, process: 'credit-application', dryRun: true });
+    await expect(deleteLilaProcess({ file, process: 'credit-application', dryRun: true })).resolves.toMatchObject({ dryRun: true, process: 'credit-application' });
   });
 
   test('dryRun writes nothing; unknown slug, own slug, a step that is not a call activity: refused, nothing written', async () => {
@@ -309,7 +310,7 @@ describe('setCalledProcess (#664)', () => {
       { op: 'setCalledProcess', id: 'take', process: 'credit-application' },
     ]);
     expect(error.issues.map((i) => [i.op, i.path, i.message])).toEqual([
-      [0, 'process', 'the project has no process "billing"; its processes are: order-fulfilment, credit-application.'],
+      [0, 'process', 'the project has no process "billing"; the processes a call activity can call are: credit-application.'],
       [1, 'process', '"order-fulfilment" has the BPMN process id Process_order_fulfilment, that of the process being edited: a call activity cannot call its own process.'],
       [2, 'id', '"take" is a userTask, not a call activity (callActivity); only a call activity calls a process.'],
     ]);
@@ -336,7 +337,95 @@ describe('setCalledProcess (#664)', () => {
     const written = sha(file);
     writeFileSync(ops, JSON.stringify([{ op: 'setCalledProcess', id: 'fix', process: 'nope' }]));
     expect(await main(['process', 'edit', '-p', file, '--process', 'order-fulfilment', '--ops', ops, '--lang', 'es'])).toBe(1);
-    expect(out.join('\n')).toContain('operations[0].process: el proyecto no tiene un proceso "nope"; sus procesos son: order-fulfilment, credit-application.');
+    expect(out.join('\n')).toContain('operations[0].process: el proyecto no tiene un proceso "nope"; los procesos a los que una actividad de llamada puede llamar son: credit-application.');
     expect(sha(file)).toBe(written);
+  });
+
+  /** A process whose model is `xml` (BPMN process id(s) as given) and whose manifest says `id`. */
+  const made = (slug: string, xml: string, id: string, scenarios: ProcessDocument['scenarios'] = {}): ProcessDocument => ({
+    slug,
+    name: slug.toUpperCase(),
+    model: { id, name: 'model.bpmn', xml, revision: 1 },
+    scenarios,
+    scenarioRevisions: Object.fromEntries(Object.keys(scenarios).map((k) => [k, 1])),
+    runs: [],
+  });
+  /** `extra` written next to the processes of `file`. */
+  const add = (file: string, extra: ProcessDocument[]): void => {
+    const document = decodeLila(new Uint8Array(readFileSync(file)));
+    writeFileSync(file, encodeLila(withProcesses(document, [...processesOf(document), ...extra])));
+  };
+  const built = async (outline: unknown, processId: string) => {
+    const { xml, scenario } = await outlineToBpmn(outline, { processId });
+    return { xml, scenarios: { 'as-is.scenario.json': scenario } };
+  };
+
+  test('a BPMN process id two processes declare is refused, both ways: the call could not tell them apart', async () => {
+    const file = join(scratch, 'shared.lila');
+    const billing = await built(ORDER, 'Process_1');
+    const shipping = await built(CREDIT, 'Process_1');
+    const twin = await built(CREDIT, 'Process_Twin');
+    await createLilaProcess(file, CREDIT);
+    add(file, [
+      made('billing', billing.xml, 'Process_1', billing.scenarios),
+      made('shipping', shipping.xml, 'Process_1', shipping.scenarios),
+      made('b', twin.xml, 'Process_Twin', twin.scenarios),
+      made('c', twin.xml, 'Process_Twin', twin.scenarios),
+    ]);
+    const hash = sha(file);
+    const error = await editLilaProcess(
+      file,
+      [
+        { op: 'setCalledProcess', id: 'fix', process: 'c' },
+        { op: 'setCalledProcess', id: 'fix', process: 'shipping' },
+        { op: 'setCalledProcess', id: 'fix', process: 'billing' },
+      ],
+      { process: 'billing' },
+    ).catch((e: unknown) => e as EditError);
+    expect(error).toBeInstanceOf(EditError);
+    const shared = (slug: string, id: string, other: string): string =>
+      `"${slug}" has the BPMN process id ${id}, which "${other}" declares too: a call activity cannot tell them apart; give one of them another id (put_process_bpmn with mode "replace").`;
+    expect((error as EditError).issues.map((i) => [i.op, i.path, i.message])).toEqual([
+      [0, 'process', shared('c', 'Process_Twin', 'b')],
+      // The process being edited declares it: not "its own process", another one with the same id.
+      [1, 'process', shared('shipping', 'Process_1', 'billing')],
+      [2, 'process', '"billing" has the BPMN process id Process_1, that of the process being edited: a call activity cannot call its own process.'],
+    ]);
+    expect(sha(file)).toBe(hash);
+    // A process with an id of its own can still be called.
+    const ok = await editLilaProcess(file, [{ op: 'setCalledProcess', id: 'fix', process: 'credit-application' }], { process: 'billing' });
+    expect(ok.changes[0]!.message).toBe('"fix" now calls Credit application (credit-application)');
+  });
+
+  test('a manifest model.id the model does not declare: its only process, else the one it simulates, else refused', async () => {
+    const file = await calls();
+    const stale = await built(CREDIT, 'Process_stale');
+    const pedido = processesOf(decodeLila(new Uint8Array(readFileSync(exampleLila))))[0]!;
+    expect(processIds(pedido.model.xml)).toEqual(['Process_Restaurante', 'Process_Cliente']);
+    add(file, [
+      made('stale', stale.xml, 'b9c1e6a0-uuid', stale.scenarios),
+      { ...pedido, slug: 'pedido', model: { ...pedido.model, id: 'e2a1-uuid' } },
+      made('lost', '<definitions><process id="Process_A"><process id="Process_B">', 'e2a1-uuid'),
+    ]);
+
+    await editLilaProcess(file, [{ op: 'setCalledProcess', id: 'fix', process: 'stale' }], { process: 'order-fulfilment' });
+    expect(fix(processOf(file, 'order-fulfilment').model.xml)).toContain('calledElement="Process_stale"');
+    await expect(deleteLilaProcess({ file, process: 'stale', dryRun: true })).rejects.toThrow('order-fulfilment/fix (Fix)');
+
+    await editLilaProcess(file, [{ op: 'setCalledProcess', id: 'fix', process: 'pedido' }], { process: 'order-fulfilment' });
+    expect(fix(processOf(file, 'order-fulfilment').model.xml)).toContain('calledElement="Process_Restaurante"');
+    await expect(deleteLilaProcess({ file, process: 'pedido', dryRun: true })).rejects.toThrow('order-fulfilment/fix (Fix)');
+
+    const hash = sha(file);
+    const error = await editLilaProcess(file, [{ op: 'setCalledProcess', id: 'fix', process: 'lost' }], { process: 'order-fulfilment' }).catch((e: unknown) => e as EditError);
+    expect(error).toBeInstanceOf(EditError);
+    expect((error as EditError).issues).toEqual([
+      {
+        op: 0,
+        path: 'process',
+        message: 'cannot tell which BPMN process of "lost" to call: its model declares Process_A, Process_B, and none of them is its model id or the process it simulates.',
+      },
+    ]);
+    expect(sha(file)).toBe(hash);
   });
 });

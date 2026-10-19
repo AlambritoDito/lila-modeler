@@ -200,19 +200,45 @@ export function pruneScenarios(
 }
 
 /**
- * What `setCalledProcess` can name (#664): every process of the project by slug, with the BPMN
- * process id the app opens on a double-click (`processIds`): its `model.id`, or the model's only
- * process id when the manifest's is not one of them.
+ * The BPMN process id a call activity names to call `process` (#664): one its model declares
+ * (`processIds`, what the app's double-click and `delete_process` match), so that the call
+ * resolves. Its `model.id` when it is one; else the only one; else the process it simulates
+ * (`parseBpmn`'s rule, as for the edited process); else `undefined`.
  */
-function callTargetsOf(processes: readonly ProcessDocument[]): Map<string, CallTarget> {
-  return new Map(
-    processes.map((p) => {
-      const ids = processIds(p.model.xml);
-      const processId = ids.length === 1 && !ids.includes(p.model.id) ? ids[0]! : p.model.id;
-      return [p.slug, { processId, name: p.name }];
-    }),
-  );
+async function calledIdOf(process: ProcessDocument, declared: readonly string[]): Promise<string | undefined> {
+  if (declared.includes(process.model.id)) return process.model.id;
+  if (declared.length === 1) return declared[0];
+  try {
+    const { id } = (await parseBpmn(process.model.xml, { scenarios: Object.values(process.scenarios) })).ir;
+    return declared.includes(id) ? id : undefined;
+  } catch {
+    return undefined;
+  }
 }
+
+/**
+ * What `setCalledProcess` can name (#664): every process of the project by slug, with the BPMN
+ * process id a call activity names (`calledIdOf`) and the other processes whose model declares that
+ * id too (then a call cannot tell them apart). `edited` is marked `self`.
+ */
+async function callTargetsOf(processes: readonly ProcessDocument[], edited: string): Promise<Map<string, CallTarget>> {
+  const declared = processes.map((p) => processIds(p.model.xml));
+  const targets = new Map<string, CallTarget>();
+  for (const [i, p] of processes.entries()) {
+    if (p.slug === edited) {
+      targets.set(p.slug, { processId: undefined, name: p.name, self: true, declared: declared[i] });
+      continue;
+    }
+    const processId = await calledIdOf(p, declared[i]!);
+    const sharedWith = processId === undefined ? [] : processes.filter((q, j) => j !== i && declared[j]!.includes(processId)).map((q) => q.slug);
+    targets.set(p.slug, { processId, name: p.name, sharedWith, declared: declared[i] });
+  }
+  return targets;
+}
+
+/** Whether `operations` holds a `setCalledProcess`: only then are the call targets worked out. */
+const callsAProcess = (operations: unknown): boolean =>
+  Array.isArray(operations) && operations.some((op) => typeof op === 'object' && op !== null && (op as { op?: unknown }).op === 'setCalledProcess');
 
 /**
  * Applies `operations` to one process of `file` (see `editBpmn` and the header). Throws
@@ -235,7 +261,7 @@ export async function editLilaProcess(file: string, operations: unknown, options
     scenarioName: BASE_SCENARIO,
     processId: simulated.id,
     scenarios: Object.values(current.scenarios),
-    callTargets: callTargetsOf(processesOf(input.document)),
+    callTargets: callsAProcess(operations) ? await callTargetsOf(processesOf(input.document), current.slug) : undefined,
   });
 
   // Scenario entries that no longer apply go, each one reported with what it held.

@@ -11,7 +11,7 @@ import { BpmnModdle } from 'bpmn-moddle';
 import { describe, expect, test } from 'vitest';
 
 import { annotateElement, readAnnotations } from '../../src/bpmn/annotate.js';
-import { editBpmn, EditError, EditOperationsSchema, type EditOperation } from '../../src/bpmn/edit.js';
+import { editBpmn, EditError, EditOperationsSchema, type CallTarget, type EditOperation } from '../../src/bpmn/edit.js';
 import { bpmnToOutline, outlineToBpmn } from '../../src/bpmn/outline.js';
 import { validateBpmnXml } from '../../src/bpmn/validate-report.js';
 import type { ScenarioDocument } from '../../src/project/types.js';
@@ -1751,11 +1751,15 @@ describe('setCalledProcess (#664)', () => {
   async function order() {
     const built = await outlineToBpmn(ORDER);
     const own = /<bpmn:process id="([^"]+)"/.exec(built.xml)![1]!;
-    const callTargets = new Map([
-      ['order-fulfilment', { processId: own, name: 'Order fulfilment' }],
+    const callTargets = new Map<string, CallTarget>([
+      ['order-fulfilment', { processId: undefined, name: 'Order fulfilment', self: true }],
       ['credit-application', { processId: 'Process_credit_application', name: 'Credit application' }],
+      ['b', { processId: 'Process_1', name: 'B', sharedWith: ['c'] }],
+      ['c', { processId: 'Process_1', name: 'C', sharedWith: ['b', 'd'] }],
+      ['twin', { processId: own, name: 'Twin' }],
+      ['lost', { processId: undefined, name: 'Lost', declared: ['Process_A', 'Process_B'] }],
     ]);
-    return { xml: built.xml, scenario: built.scenario, callTargets };
+    return { xml: built.xml, scenario: built.scenario, callTargets, own };
   }
   const callActivity = (xml: string): string => /<bpmn:callActivity id="fix"[^>]*>/.exec(xml)![0];
 
@@ -1804,8 +1808,8 @@ describe('setCalledProcess (#664)', () => {
     expect(callActivity(cleared.xml)).not.toContain('calledElement');
   });
 
-  test('refused: an unknown slug (the slugs listed), its own process, a step that is not a call activity, an unknown id', async () => {
-    const { xml, callTargets } = await order();
+  test('refused: an unknown slug (the other slugs listed), its own process, a shared or unresolvable id, a step that is not a call activity, an unknown id', async () => {
+    const { xml, callTargets, own } = await order();
     const error = await refused(
       xml,
       [
@@ -1814,16 +1818,26 @@ describe('setCalledProcess (#664)', () => {
         { op: 'setCalledProcess', id: 'take', process: 'credit-application' },
         { op: 'setCalledProcess', id: 'nope', process: 'credit-application' },
         { op: 'setCalledProcess', id: 'fix', process: 'credit-application' },
+        { op: 'setCalledProcess', id: 'fix', process: 'b' },
+        { op: 'setCalledProcess', id: 'fix', process: 'c' },
+        { op: 'setCalledProcess', id: 'fix', process: 'twin' },
+        { op: 'setCalledProcess', id: 'fix', process: 'lost' },
       ],
       { callTargets },
     );
-    const own = callTargets.get('order-fulfilment')!.processId;
     expect(error.issues.map((i) => [i.op, i.path, i.message])).toEqual([
-      [0, 'process', 'the project has no process "billing"; its processes are: order-fulfilment, credit-application.'],
+      [0, 'process', 'the project has no process "billing"; the processes a call activity can call are: credit-application, b, c, twin, lost.'],
       [1, 'process', `"order-fulfilment" has the BPMN process id ${own}, that of the process being edited: a call activity cannot call its own process.`],
       [2, 'id', '"take" is a userTask, not a call activity (callActivity); only a call activity calls a process.'],
       [3, 'id', '"nope" is not the id of an element of the model.'],
+      [5, 'process', '"b" has the BPMN process id Process_1, which "c" declares too: a call activity cannot tell them apart; give one of them another id (put_process_bpmn with mode "replace").'],
+      [6, 'process', '"c" has the BPMN process id Process_1, which "b", "d" declare too: a call activity cannot tell them apart; give one of them another id (put_process_bpmn with mode "replace").'],
+      // A map without sharedWith still never writes the edited process's own id.
+      [7, 'process', `"twin" has the BPMN process id ${own}, that of the process being edited: a call activity cannot call its own process.`],
+      [8, 'process', 'cannot tell which BPMN process of "lost" to call: its model declares Process_A, Process_B, and none of them is its model id or the process it simulates.'],
     ]);
+    const es = await refused(xml, [{ op: 'setCalledProcess', id: 'fix', process: 'b' }], { callTargets, locale: 'es' });
+    expect(es.message).toContain('operations[0].process: "b" tiene el id de proceso BPMN Process_1, que "c" también declara: una actividad de llamada no puede distinguirlos');
   });
 
   test('a bare model (no callTargets) refuses it: it needs a .lila', async () => {

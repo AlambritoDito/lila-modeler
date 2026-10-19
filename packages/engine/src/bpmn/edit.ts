@@ -251,10 +251,19 @@ export interface EditBpmnOptions {
 
 /** A process `setCalledProcess` can name (#664). */
 export interface CallTarget {
-  /** The BPMN process id the call activity's `calledElement` gets. */
-  readonly processId: string;
+  /**
+   * The BPMN process id the call activity's `calledElement` gets; `undefined` when none of the ids
+   * its model declares can be told to be the process (the operation is then refused).
+   */
+  readonly processId: string | undefined;
   /** The process's name, for messages. */
   readonly name: string;
+  /** `true` for the process being edited: a call activity does not call its own process. */
+  readonly self?: boolean | undefined;
+  /** The other processes of the project whose model declares `processId` too: the call would be ambiguous. */
+  readonly sharedWith?: readonly string[] | undefined;
+  /** The BPMN process ids its model declares, for messages. */
+  readonly declared?: readonly string[] | undefined;
 }
 
 export interface BpmnEdit {
@@ -1471,7 +1480,15 @@ class Editor {
       return this.change(this.C.editCallCleared(op.id));
     }
     const target = targets.get(op.process);
-    if (target === undefined) return this.issue('process', this.C.editCallUnknownProcess(op.process, [...targets.keys()].join(', ')));
+    if (target === undefined) {
+      const others = [...targets].filter(([, t]) => t.self !== true).map(([slug]) => slug);
+      return this.issue('process', this.C.editCallUnknownProcess(op.process, others.join(', ')));
+    }
+    if (target.self === true) return this.issue('process', this.C.editCallSelf(op.process, this.process.id));
+    if (target.processId === undefined) return this.issue('process', this.C.editCallUnresolved(op.process, (target.declared ?? []).join(', ')));
+    // Another process declaring the same id: the app would open the first one, and delete_process guard both.
+    const shared = target.sharedWith ?? [];
+    if (shared.length > 0) return this.issue('process', this.C.editCallShared(op.process, target.processId, shared.map((s) => `"${s}"`).join(', '), shared.length));
     if (target.processId === this.process.id) return this.issue('process', this.C.editCallSelf(op.process, target.processId));
     node['calledElement'] = target.processId;
     this.touch(node);
