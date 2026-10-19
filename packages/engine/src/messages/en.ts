@@ -531,7 +531,7 @@ export const en: Catalog = {
     exportDocumentNoRun: () => 'No current run: the document has the model and no results.',
     exportNoCharts: () => 'The charts of the run are left out: the engine has no rasteriser.',
     exportPercentilesNotReproduced: () =>
-      'The per-element wait percentiles are left out: simulating the run\'s stored inputs again did not give back its stored process KPIs (another engine version or platform can change the last digit).',
+      'The per-element wait percentiles are left out: the run\'s stored inputs do not reproduce its stored results (a cancelled run, or another engine version or platform, which can change the last digit).',
     exportPercentilesFailed: (reason) =>
       `The per-element wait percentiles are left out: simulating the run's stored inputs again failed: ${reason}`,
     exportTargetExists: (target) => `${target} already exists; nothing was written. Pass --force (\`overwrite\` in MCP) to replace it.`,

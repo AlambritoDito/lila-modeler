@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { parseBpmn, renderSvg } from '../../src/bpmn/index.js';
 import { main } from '../../src/cli.js';
 import { elementsCsv, flowsCsv, processCsv, resourcesCsv } from '../../src/csv.js';
-import { RESOURCE_WAIT, elementPercentiles, type EventLogRow } from '../../src/index.js';
+import { RESOURCE_WAIT, elementPercentiles, elementSamples, type EventLogRow } from '../../src/index.js';
 import { decodeLila, encodeLila } from '../../src/project/index.js';
 import { exportDocument, exportResults } from '../../src/project-fs/index.js';
 import { readWorkbook } from '../../src/xlsx-read.js';
@@ -260,7 +260,10 @@ describe('per-element wait percentiles (#666)', () => {
     expect(await main([...args, '--csv', join(dir, 'log')])).toBe(0);
     const rows = readLogCsv(readFileSync(join(dir, 'log', 'log.csv'), 'utf8'));
     expect(new Set(rows.map((row) => row.replication))).toEqual(new Set([0, 1]));
-    const expected = elementPercentiles(rows, [0.5, 0.9, 0.95], { warmup: 3600, measure: RESOURCE_WAIT });
+    const warmup = decodeLila(readFileSync(file)).runs[0]!.inputs.scenario.run as { warmup: number };
+    expect(warmup.warmup).toBeGreaterThan(0);
+    const expected = elementPercentiles(rows, [0.5, 0.9, 0.95], { warmup: warmup.warmup, measure: RESOURCE_WAIT });
+    const sizes = elementSamples(rows, warmup.warmup, RESOURCE_WAIT);
 
     const csv = await exportResults({ file, format: 'csv' });
     expect(csv.percentiles).toEqual({ included: true });
@@ -268,7 +271,10 @@ describe('per-element wait percentiles (#666)', () => {
     expect(Object.keys(files)).toEqual(['elements.csv', 'flows.csv', 'resources.csv', 'process.csv', 'percentiles.csv']);
     const exported = readPercentilesCsv(files['percentiles.csv']!);
     expect([...exported.keys()].sort()).toEqual([...expected.keys()].sort());
-    for (const [id, [, ...ps]] of exported) expect(ps, id).toEqual(expected.get(id));
+    for (const [id, [n, ...ps]] of exported) {
+      expect(ps, id).toEqual(expected.get(id));
+      expect(n, id).toBe(sizes.get(id)!.length);
+    }
     // n is the instances measured, over both replications.
     const { ir } = await parseBpmn(XML);
     const tasks = Object.keys(ir.nodes).filter((id) => ir.nodes[id]!.type === 'task');
@@ -331,18 +337,29 @@ describe('per-element wait percentiles (#666)', () => {
     expect(tampered.result.process.cycleTime.mean).not.toBe(mean);
     writeFileSync(file, encodeLila({ ...project, runs: [tampered] }));
 
-    const note = /^The per-element wait percentiles are left out: simulating the run's stored inputs again did not give back its stored process KPIs/;
+    const note = /^The per-element wait percentiles are left out: the run's stored inputs do not reproduce its stored results/;
     const csv = await exportResults({ file, format: 'csv' });
     expect(csv.percentiles.included).toBe(false);
     expect(csv.percentiles.note).toMatch(note);
     expect(Object.keys(csv.data)).toEqual(['elements.csv', 'flows.csv', 'resources.csv', 'process.csv']);
     const xlsx = await exportResults({ file, format: 'xlsx' });
     expect(readWorkbook(xlsx.data as Uint8Array).map((sheet) => sheet.name)).toEqual(['Summary', 'Elements', 'Flows', 'Resources', 'Parameters']);
-    expect((await exportResults({ file, format: 'xlsx', locale: 'es' })).percentiles.note).toMatch(/^Los percentiles de espera por elemento quedan fuera: volver a simular/);
+    expect((await exportResults({ file, format: 'xlsx', locale: 'es' })).percentiles.note).toMatch(/^Los percentiles de espera por elemento quedan fuera: las entradas guardadas de la corrida no reproducen/);
 
     // The CLI still writes the export, and prints the note on stderr.
     expect(await main(['export', 'results', file, '--out', join(dir, 'r.xlsx')])).toBe(0);
     expect(err.at(-1)).toMatch(note);
+
+    // The process KPIs alone can match while an element's wait drifts: the elements are compared too.
+    const wait = stored.result.elements;
+    const [task] = Object.keys(wait).filter((id) => wait[id]!.resourceWait.mean > 0);
+    expect(task).toBeDefined();
+    const elements = { ...wait, [task!]: { ...wait[task!]!, resourceWait: { ...wait[task!]!.resourceWait, mean: wait[task!]!.resourceWait.mean * (1 + Number.EPSILON) } } };
+    writeFileSync(file, encodeLila({ ...project, runs: [{ ...stored, result: { ...stored.result, elements } }] }));
+    expect((await exportResults({ file, format: 'csv' })).percentiles.note).toMatch(note);
+    // And the untouched run reproduces.
+    writeFileSync(file, encodeLila({ ...project, runs: [stored] }));
+    expect((await exportResults({ file, format: 'csv' })).percentiles).toEqual({ included: true });
   });
 
   test('a stored scenario with other replications than the result, or a cancelled run, is not re-simulated', async () => {
@@ -351,7 +368,7 @@ describe('per-element wait percentiles (#666)', () => {
     await pedidoWithRuns(file, ['as-is.scenario.json']);
     expect((await exportResults({ file, format: 'csv' })).percentiles).toEqual({
       included: false,
-      note: expect.stringMatching(/did not give back its stored process KPIs/) as unknown as string,
+      note: expect.stringMatching(/do not reproduce its stored results/) as unknown as string,
     });
     await pedidoWithRuns(file, ['as-is.scenario.json'], { reproducible: true });
     const project = decodeLila(readFileSync(file));

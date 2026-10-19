@@ -332,7 +332,7 @@ the file was saved; `summary` says what happened in one line.
 - **Wait percentiles** (#666): `export_results` adds the resource-wait p50/p90/p95 per element
   (a `Percentiles` sheet, or `percentiles.csv`), computed as the app's Simulate dock does but over
   every replication, from simulating the run's stored inputs again. When that re-run does not give
-  back the stored `process` KPIs exactly (another engine version, or arm64 against x64), they are
+  back the stored results exactly (another engine version, or arm64 against x64), they are
   left out and `percentiles` is `{ included: false, note }`. See `docs/RESULTS_FORMAT.md` § 12.
 - **Nothing is overwritten.** An existing file at `saveTo` (or, for CSV, any of its files in
   the directory) is `isError` and nothing is written, unless `overwrite: true`. The project (or

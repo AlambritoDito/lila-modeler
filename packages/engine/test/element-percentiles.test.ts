@@ -69,4 +69,21 @@ describe('elementSampler', () => {
     expect(sampler.samples()).toEqual(elementSamples(rows, 100, RESOURCE_WAIT));
     expect(sampler.samples().get('T')).toEqual([3]);
   });
+
+  it('with replicationsInOrder, decides each replication when the next starts, with the same result', () => {
+    const rows = [
+      row({ caseId: '1', activityInstanceId: 'a', enabledAt: 50, resourceWait: 1 }),
+      row({ caseId: '2', activityInstanceId: 'b', enabledAt: 150, resourceWait: 2 }),
+      row({ replication: 1, caseId: '1', activityInstanceId: 'a', enabledAt: 120, resourceWait: 3 }),
+      row({ replication: 1, caseId: '1', activityInstanceId: 'c', enabledAt: 130, resourceWait: 4 }),
+      row({ replication: 2, caseId: '1', activityInstanceId: 'a', enabledAt: 90, resourceWait: 5 }),
+    ];
+    const sampler = elementSampler(100, RESOURCE_WAIT, { replicationsInOrder: true });
+    for (const [index, r] of rows.entries()) {
+      sampler.add(r);
+      // Reading in between changes nothing.
+      expect(sampler.samples()).toEqual(elementSamples(rows.slice(0, index + 1), 100, RESOURCE_WAIT));
+    }
+    expect(sampler.samples().get('T')).toEqual([2, 3, 4]);
+  });
 });

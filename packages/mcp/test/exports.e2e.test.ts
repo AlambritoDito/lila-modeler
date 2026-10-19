@@ -91,7 +91,7 @@ test('export_results: an xlsx readWorkbook opens, CSV files, and a clear error w
   // cannot be reproduced: no percentiles, and the answer says why.
   expect(JSON.parse(csv.text).percentiles).toEqual({
     included: false,
-    note: expect.stringMatching(/^The per-element wait percentiles are left out: simulating the run's stored inputs again did not give back/) as unknown as string,
+    note: expect.stringMatching(/^The per-element wait percentiles are left out: the run's stored inputs do not reproduce its stored results/) as unknown as string,
   });
 
   const empty = join(temp, 'empty.lila');

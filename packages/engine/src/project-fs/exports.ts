@@ -227,8 +227,8 @@ function canonicalJson(value: unknown): string {
 /**
  * #666: the resource-wait sample per element of a stored run, which keeps no event log, from
  * simulating its own inputs again (same seed); the rows stream into the sampler and none is kept.
- * The sample counts only when the re-run gives the stored `process` KPIs back exactly (compared as
- * JSON, as they were stored); otherwise a note says why it is left out. A different engine version
+ * The sample counts only when the re-run gives the stored `process` and `elements` metrics back
+ * exactly (compared as JSON, as they were stored); otherwise a note says why it is left out. A different engine version
  * or platform can change the last digit, so a mismatch is expected there, not an error.
  */
 function rerunSamples(
@@ -242,14 +242,15 @@ function rerunSamples(
   if (stored.cancelled === true || (stored.replications?.count ?? 1) !== (scenario.run.replications ?? 1)) {
     return { note: C.exportPercentilesNotReproduced() };
   }
-  const sampler = elementSampler(scenario.run.warmup, RESOURCE_WAIT);
+  const sampler = elementSampler(scenario.run.warmup, RESOURCE_WAIT, { replicationsInOrder: true });
   let again: RunResult;
   try {
     again = simulate(ir, scenario, { locale, onEvent: (row) => sampler.add(row) });
   } catch (error) {
     return { note: C.exportPercentilesFailed(error instanceof Error ? error.message : String(error)) };
   }
-  if (canonicalJson(again.process) !== canonicalJson(stored.process)) return { note: C.exportPercentilesNotReproduced() };
+  const same = (result: RunResult): string => canonicalJson({ process: result.process, elements: result.elements });
+  if (same(again) !== same(stored)) return { note: C.exportPercentilesNotReproduced() };
   return { samples: sampler.samples() };
 }
 

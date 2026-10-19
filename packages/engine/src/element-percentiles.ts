@@ -3,8 +3,9 @@
  *
  * `RunResult.elements[id]` carries means, totals and extremes but no percentile, so anything that
  * wants a p50/p95 per activity has to rebuild it from the log rows. This module is the one place
- * that does it, with the engine's own rules, so the app's views and `exportResults` never disagree
- * on the population:
+ * that does it, with the engine's own rules, so the app's views and `exportResults` apply the same
+ * population rules (the views read replication 0 of the in-memory log sample; the export, every
+ * replication):
  *
  * - **One sample per activity instance.** An instance with several pool assignments emits one row
  *   per assignment (ADR-025); it is counted once, keyed by `replication:activityInstanceId`.
@@ -19,7 +20,9 @@
  *   `process.*.p50/p90/p95`.
  *
  * `elementSampler` takes the rows one at a time, so a caller can feed it from `simulate`'s
- * `onEvent` without keeping the log; it holds one number per completed instance.
+ * `onEvent` without keeping the log. It keeps an entry per case and per completed instance until
+ * the cohort is decided; with `replicationsInOrder` (what `simulate` emits) it decides each
+ * replication when the next one starts, so only one replication is held besides the numbers.
  *
  * Pure: no `node:*`, no React; types only from `core/`.
  */
@@ -58,13 +61,32 @@ export interface ElementSampler {
 /**
  * A sampler of `measure` per element: one value per completed activity instance of the measured
  * cohort (cases that started at or after `warmup`, in seconds since `run.start`). Rows may come in
- * any order; the cohort is decided when `samples()` is called.
+ * any order; the cohort is decided when `samples()` is called. `replicationsInOrder` promises that
+ * every row of a replication comes before the first row of the next one (`simulate`'s order).
  */
-export function elementSampler(warmup = 0, measure: InstanceMeasure = WAIT): ElementSampler {
-  const caseStart = new Map<string, number>();
-  const byInstance = new Map<string, { element: string; caseKey: string; value: number }>();
+export function elementSampler(
+  warmup = 0,
+  measure: InstanceMeasure = WAIT,
+  { replicationsInOrder = false }: { replicationsInOrder?: boolean } = {},
+): ElementSampler {
+  let caseStart = new Map<string, number>();
+  let byInstance = new Map<string, { element: string; caseKey: string; value: number }>();
+  const decided = new Map<string, number[]>();
+  let replication: number | undefined;
+  const decide = (): void => {
+    for (const { element, caseKey, value } of byInstance.values()) {
+      if ((caseStart.get(caseKey) ?? -Infinity) < warmup) continue;
+      const list = decided.get(element);
+      if (list === undefined) decided.set(element, [value]);
+      else list.push(value);
+    }
+    caseStart = new Map();
+    byInstance = new Map();
+  };
   return {
     add(row) {
+      if (replicationsInOrder && replication !== undefined && row.replication !== replication) decide();
+      replication = row.replication;
       const caseKey = `${row.replication}:${row.caseId}`;
       const before = caseStart.get(caseKey);
       if (before === undefined || row.enabledAt < before) caseStart.set(caseKey, row.enabledAt);
@@ -72,7 +94,8 @@ export function elementSampler(warmup = 0, measure: InstanceMeasure = WAIT): Ele
       byInstance.set(`${row.replication}:${row.activityInstanceId}`, { element: row.elementId, caseKey, value: measure(row) });
     },
     samples() {
-      const samples = new Map<string, number[]>();
+      // A copy: what is still pending is decided into it, so a later `add` is not lost.
+      const samples = new Map([...decided].map(([id, list]) => [id, [...list]]));
       for (const { element, caseKey, value } of byInstance.values()) {
         if ((caseStart.get(caseKey) ?? -Infinity) < warmup) continue;
         const list = samples.get(element);

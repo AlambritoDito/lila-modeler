@@ -537,7 +537,7 @@ export const es: Catalog = {
     exportDocumentNoRun: () => 'Sin corrida actual: el documento lleva el modelo y no los resultados.',
     exportNoCharts: () => 'Las gráficas de la corrida quedan fuera: el motor no rasteriza.',
     exportPercentilesNotReproduced: () =>
-      'Los percentiles de espera por elemento quedan fuera: volver a simular las entradas guardadas de la corrida no reprodujo sus KPI de proceso guardados (otra versión del motor u otra plataforma puede cambiar el último dígito).',
+      'Los percentiles de espera por elemento quedan fuera: las entradas guardadas de la corrida no reproducen sus resultados guardados (una corrida cancelada, u otra versión del motor u otra plataforma, que puede cambiar el último dígito).',
     exportPercentilesFailed: (reason) =>
       `Los percentiles de espera por elemento quedan fuera: volver a simular las entradas guardadas de la corrida falló: ${reason}`,
     exportTargetExists: (target) => `${target} ya existe; no se escribió nada. Pasa --force (\`overwrite\` en MCP) para reemplazarlo.`,

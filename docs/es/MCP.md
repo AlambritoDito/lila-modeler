@@ -360,7 +360,7 @@ guardó el archivo; `summary` dice en una línea lo que pasó.
 - **Percentiles de espera** (#666): `export_results` añade los p50/p90/p95 de la espera por recurso
   por elemento (una hoja `Percentiles`, o `percentiles.csv`), calculados como el dock de Simular de
   la app pero sobre todas las replicaciones, volviendo a simular las entradas guardadas de la
-  corrida. Cuando esa nueva corrida no devuelve exactamente los KPI de `process` guardados (otra
+  corrida. Cuando esa nueva corrida no devuelve exactamente los resultados guardados (otra
   versión del motor, o arm64 frente a x64), quedan fuera y `percentiles` es
   `{ included: false, note }`. Ver `docs/es/RESULTS_FORMAT.md` § 12.
 - **No se sobrescribe nada.** Si ya existe un archivo en `saveTo` (o, en CSV, cualquiera de los

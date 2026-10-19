@@ -440,7 +440,7 @@ surfaces that show results, and none of them redefines a name on its own:
 |---|---|---|
 | `lila run` (console tables) | `columnHeader(scope, metric, unit)` | `baseTimeUnit`, with suffix ` (min)` / ` (h)` … |
 | `lila compare` (the *Metric* column) | `columnLabel(scope, metric)` | the row carries the unit; the label does not |
-| `csv.ts`'s CSV (`elements.csv`, `flows.csv`, `resources.csv`, `process.csv`) | `columnLabel(scope, metric)` | **seconds** (section 1), which is why the label is bare: `Busy time`, not `Busy time (min)` |
+| `csv.ts`'s CSV (`elements.csv`, `flows.csv`, `resources.csv`, `process.csv`, and `percentiles.csv` of `lila export results`, section 12) | `columnLabel(scope, metric)` | **seconds** (section 1), which is why the label is bare: `Busy time`, not `Busy time (min)` |
 | the web app's `ResultsView` | `columnLabel(...)` + ` (unit)` on durations | `baseTimeUnit`, same as the CLI |
 
 In other words: the name is unique, and the unit suffix is added only by whoever converts to
@@ -686,8 +686,8 @@ name says so, like the CSV's and the console's.
 A stored run keeps no event log, so the app-free results export (`docs/CLI.md`, `docs/MCP.md`)
 rebuilds the per-element percentiles by **simulating the run's own stored inputs again** (its
 model and resolved scenario, same seed, every replication). The rows stream into the sampler and
-none is kept. The resulting sample counts only when the re-run gives back the stored `process`
-KPIs exactly; the stored run itself is never changed.
+none is kept. The resulting sample counts only when the re-run gives back the stored `process` and
+`elements` metrics exactly; the stored run itself is never changed.
 
 | Sheet / file | Columns | Content |
 |---|---|---|
@@ -697,14 +697,19 @@ The population is the app's Simulate dock and quick view rule, from the same eng
 (`elementPercentiles` in `packages/engine/src/element-percentiles.ts`): one sample per completed
 activity instance of the measured cohort (cases that started at or after `run.warmup`), with linear
 interpolation like `process.*.p50/p90/p95`. Unlike the dock, which reads replication 0 of the
-in-memory log sample, the export covers **all replications**. The column names are Lila extras with
+in-memory log sample, the export covers **all replications**, pooled into one sample: with
+several replications it is one percentile of the pooled sample, not the mean of per-replication
+percentiles that `process.*.p50/p90/p95` and the `Summary` sheet report. The column names are Lila extras with
 no Bizagi equivalent; they go through `columnLabel('elements', 'resourceWait.p50')` and so on.
 
 When the re-run does not reproduce the run, the sheet and the file are left out and the answer
 carries a note (`percentiles: { included: false, note }` in MCP, the note on stderr in the CLI).
 The engine's floating-point results can differ in the last digit between arm64 and x64, so a run
 saved by the app on one platform and exported on another may land here. That is the designed
-behaviour, not an error. The five sheets and the four CSV files are byte-identical either way.
+behaviour, not an error. A cancelled run, or a stored scenario whose replications differ from the
+result's, is not simulated again and gets the same note. The five sheets and the four CSV files are
+byte-identical either way. With `--force` / `overwrite`, a `percentiles.csv` left in the directory
+by an earlier export is not removed when this one has none.
 
 ### `compare --xlsx`: one sheet per scenario plus `Comparison`
 

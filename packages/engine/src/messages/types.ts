@@ -313,7 +313,7 @@ export interface CliMessages {
   exportDocxNoDiagram: () => string;
   exportDocumentNoRun: () => string;
   exportNoCharts: () => string;
-  /** #666: the re-simulation of a stored run did not give its stored `process` KPIs back. */
+  /** #666: a stored run cannot be reproduced from its inputs (re-run mismatch, cancelled, other replications). */
   exportPercentilesNotReproduced: () => string;
   /** #666: the re-simulation of a stored run failed; `reason` is the engine's message. */
   exportPercentilesFailed: (reason: string) => string;
