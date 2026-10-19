@@ -116,7 +116,12 @@ the app uses:
 
 - `lila export diagram <model.bpmn|project.lila>` draws the diagram with the engine's own SVG
   renderer (the BPMN DI geometry, Lila Light colours on white). Without `--out` it prints the SVG
-  on stdout.
+  on stdout. With `--overlay bottlenecks|heatmap` (#669) it colours the diagram with a stored run
+  of the `.lila` on the app's scale and Lila Light's `sim.bottleneck` colours: `bottlenecks` tints
+  the canvas's bottleneck cut, each with its mean wait and utilization; `heatmap` tints every
+  measured task as the Results heat map does, with its wait, and marks the cut. The run is drawn
+  on the model it ran on. An overlay on a `.bpmn`, or with no stored run, is an error; so is
+  `--run` or `--scenario` without `--overlay`.
 - `lila export doc <project.lila> --out file.docx|file.html` writes the process document, as the
   app's «Export document»: diagram, descriptions in flow order, the scenario and the results of
   a stored run. The HTML embeds the SVG diagram. The Word file has **no diagram**, and neither

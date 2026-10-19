@@ -42,6 +42,7 @@ const ES_USAGE = `Uso: lila validate <archivo.bpmn|proyecto.lila> [--process slu
      lila compare <modelo.bpmn|proyecto.lila> <a> <b> [...] [--process slug] [--seed n]
                   [--replications n] [--json resultado.json] [--xlsx libro.xlsx] [--all]
      lila export diagram <modelo.bpmn|proyecto.lila> [--process slug] [--out archivo.svg] [--force]
+                         [--overlay bottlenecks|heatmap] [--run id|latest] [--scenario nombre]
      lila export doc <proyecto.lila> --out archivo.docx|archivo.html [--format docx|html]
                      [--process slug] [--run id|latest] [--scenario nombre] [--force]
      lila export results <proyecto.lila> --out libro.xlsx|directorio [--format xlsx|csv]
@@ -145,6 +146,8 @@ Opciones de export:
   --run id|latest   La corrida guardada: latest (por defecto) es la del modelo y escenario actuales;
                     el documento solo admite una corrida actual y, si no hay, va sin resultados.
   --scenario nombre Con latest, la corrida de ese escenario (necesario si varios tienen una).
+  --overlay c       diagram: lo colorea con una corrida guardada del .lila, como la app:
+                    bottlenecks (el corte de cuellos del lienzo) o heatmap (el mapa de calor).
   --force           Reemplaza archivos existentes; sin él no se sobrescribe nada.
   El documento Word va sin diagrama y ningún documento lleva las gráficas de la corrida: el motor
   no rasteriza. El documento HTML sí lleva el diagrama.
@@ -552,6 +555,14 @@ export const es: Catalog = {
     exportFileNeeded: (path) => `"${path}" termina en barra; nombra el archivo que se escribe.`,
     exportRunAndScenario: () =>
       'el id de una corrida ya dice qué escenario: pasa --run <id> o --scenario (`run` o `scenario` en MCP), no los dos.',
+    exportOverlayNeedsLila: (file) =>
+      `${file} no es un proyecto .lila: una capa colorea el diagrama con una corrida guardada, y las corridas se guardan en un .lila.`,
+    exportOverlayNoRun: (overlay, detail) => `la capa "${overlay}" necesita una corrida guardada: ${detail}`,
+    exportRunNeedsOverlay: () =>
+      'una corrida (--run o --scenario, `run` o `scenario` en MCP) solo aplica al diagrama con una capa: pasa --overlay bottlenecks|heatmap.',
+    exportInvalidOverlay: (value) => `--overlay solo acepta: bottlenecks, heatmap; se recibió "${value}".`,
+    exportOverlayWait: (wait) => `Espera ${wait}`,
+    exportOverlayBottleneck: () => 'CUELLO',
     saveRunNeedsLila: () => 'guardar la corrida (--save, `saveRun` en MCP) necesita un modelo .lila.',
     saveRunNeedsArchiveScenario: (scenario) =>
       `guardar la corrida necesita un escenario del .lila, y "${scenario}" no lo es: nombra un escenario del proceso.`,

@@ -327,6 +327,15 @@ export interface CliMessages {
   exportTargetIsSource: (target: string) => string;
   exportFileNeeded: (path: string) => string;
   exportRunAndScenario: () => string;
+  /* --- the run overlay of `lila export diagram` / `export_diagram` (#669) -- */
+  exportOverlayNeedsLila: (file: string) => string;
+  exportOverlayNoRun: (overlay: string, detail: string) => string;
+  exportRunNeedsOverlay: () => string;
+  exportInvalidOverlay: (value: string) => string;
+  /** The heat map's badge: the task's mean resource wait, `wait` with its short unit. */
+  exportOverlayWait: (wait: string) => string;
+  /** The mark of the bottleneck ranking's tasks in the heat map. */
+  exportOverlayBottleneck: () => string;
   /* --- saving a run into a `.lila` (#538): `lila run --save`, `run_simulation` `saveRun` -- */
   saveRunNeedsLila: () => string;
   saveRunNeedsArchiveScenario: (scenario: string) => string;
