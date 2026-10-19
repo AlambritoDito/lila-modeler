@@ -376,9 +376,9 @@ async function runSimulation(
     if (typeof scenario === 'string') taken.push(absolutePath(scenario));
     if (saveTo !== undefined) taken.push(absolutePath(saveTo));
     const target = absolutePath(logTo);
-    // macOS volumes are case-insensitive by default: `Run.json` and `run.json` are one file there.
+    // macOS volumes ignore case and Unicode normalization by default: `Run.json` and `run.json` are one file there.
     const key = (file: string): string =>
-      globalThis.process.platform === 'darwin' ? comparablePath(file).toLowerCase() : comparablePath(file);
+      globalThis.process.platform === 'darwin' ? comparablePath(file).normalize('NFC').toLowerCase() : comparablePath(file);
     if (taken.some((file) => key(file) === key(target))) return fail(M.logToTaken(target));
   }
 
@@ -394,7 +394,8 @@ async function runSimulation(
       { signal: progress.signal, onReplication: progress.report },
     );
     const result = resultWithBoundaryWarnings(simulated, modelValidation, scenarioProblems);
-    // A cancellation that arrives once the worker is done still saves nothing (docs/MCP.md).
+    // A cancellation that arrives once the worker is done still saves nothing (docs/MCP.md). This is
+    // the only cut-off: past it, `saveTo`, `saveRun` and the log are written together.
     progress.signal?.throwIfAborted();
 
     if (saveTo !== undefined) writeJsonAtomic(saveTo, result, locale);
@@ -409,7 +410,6 @@ async function runSimulation(
     if (saveRun === true) {
       written.savedRun = await saveSimulationRun(lila!, scenario as string, withOverrides, result, locale);
     }
-    progress.signal?.throwIfAborted();
     log?.commit();
     if (Object.keys(written).length > 0) content.push({ type: 'text', text: JSON.stringify(written, null, 2) });
     return { content, isError: false, structuredContent: answer };

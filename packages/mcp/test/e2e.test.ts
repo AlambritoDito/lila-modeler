@@ -277,6 +277,9 @@ test('logTo (#665): a failed call keeps the old file, a successful one replaces 
     arguments: { scenario: asIs, seed: 3, logTo, saveTo: join(dir, 'a-directory') },
   });
   expect(failed.isError).toBe(true);
+  // It failed on `saveTo`, after the run, not on the `logTo` check before it.
+  expect(textOf(failed)).toContain(join(dir, 'a-directory'));
+  expect(textOf(failed)).not.toContain('`logTo`');
   expect(readFileSync(logTo, 'utf8')).toBe('old\n');
   expect(readdirSync(dir).sort()).toEqual(['a-directory', 'run.csv']);
 
