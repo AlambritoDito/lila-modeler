@@ -95,7 +95,8 @@ mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
   guardada. Devuelve `{ file, format, project, process, run, notes }`.
 - **`export_results({ project, process?, run?, scenario?, format, saveTo, overwrite?, locale? })`** —
   escribe los resultados de una corrida guardada (`format`: `xlsx`, o `csv` en el directorio
-  `saveTo`). Devuelve `{ files, format, project, process, run }`.
+  `saveTo`). Devuelve `{ files, format, project, process, run, percentiles }`; `percentiles` es
+  `{ included, note? }`, ver [Exportar sin la app](#exportar-sin-la-app).
 - **`create_process({ outline, project, process?, name?, dryRun?, locale? })`** (#97) — convierte un
   esquema del proceso —carriles más una lista ordenada de pasos— en un proceso BPMN maquetado y
   validado, y lo escribe como un proceso nuevo del `.lila` `project` (o en un `.lila` nuevo). Nunca
@@ -356,8 +357,14 @@ guardó el archivo; `summary` dice en una línea lo que pasó.
   documento solo admite una corrida actual; sin ella va sin resultados y el `run` de la respuesta
   es `null`. `export_results` sin corrida es `isError`, con un mensaje que lo dice. Los resultados
   de una corrida anterior se exportan contra el modelo con el que corrió.
+- **Percentiles de espera** (#666): `export_results` añade los p50/p90/p95 de la espera por recurso
+  por elemento (una hoja `Percentiles`, o `percentiles.csv`), calculados como el dock de Simular de
+  la app pero sobre todas las replicaciones, volviendo a simular las entradas guardadas de la
+  corrida. Cuando esa nueva corrida no devuelve exactamente los resultados guardados (otra
+  versión del motor, o arm64 frente a x64), quedan fuera y `percentiles` es
+  `{ included: false, note }`. Ver `docs/es/RESULTS_FORMAT.md` § 12.
 - **No se sobrescribe nada.** Si ya existe un archivo en `saveTo` (o, en CSV, cualquiera de los
-  cuatro del directorio), la tool devuelve `isError` y no escribe nada, salvo con
+  suyos en el directorio), la tool devuelve `isError` y no escribe nada, salvo con
   `overwrite: true`. El proyecto (o `.bpmn`) que se exporta nunca es un destino, con `overwrite` o
   sin él. Las escrituras son atómicas: primero un temporal y luego se publica.
 
@@ -776,7 +783,7 @@ completo en un archivo, como `saveTo` (las tools responden con un resumen salvo 
 | `patch_scenario` sin `project` | ninguno | Parchear un escenario `.json` suelto es solo de MCP; desde la CLI, se edita el archivo. |
 | `export_diagram` | `lila export diagram` | |
 | `export_document` | `lila export doc` | |
-| `export_results` | `lila export results` | Percentiles de espera por elemento: #666. |
+| `export_results` | `lila export results` | La misma hoja `Percentiles` y `percentiles.csv`; la CLI imprime la `percentiles.note` por stderr. |
 | `create_process` | `lila process create` | |
 | `get_process_outline` | `lila process show` | |
 | `edit_process` | `lila process edit` | |

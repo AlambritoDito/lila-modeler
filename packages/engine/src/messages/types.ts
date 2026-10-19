@@ -183,6 +183,8 @@ export interface CliMessages {
   xlsxSheetFlows: () => string;
   xlsxSheetResources: () => string;
   xlsxSheetParameters: () => string;
+  /** The resource-wait percentiles sheet of `exportResults` (#666). */
+  xlsxSheetPercentiles: () => string;
   xlsxSheetComparison: () => string;
   xlsxColumnSection: () => string;
   xlsxColumnParameter: () => string;
@@ -311,6 +313,10 @@ export interface CliMessages {
   exportDocxNoDiagram: () => string;
   exportDocumentNoRun: () => string;
   exportNoCharts: () => string;
+  /** #666: a stored run cannot be reproduced from its inputs (re-run mismatch, cancelled, other replications). */
+  exportPercentilesNotReproduced: () => string;
+  /** #666: the re-simulation of a stored run failed; `reason` is the engine's message. */
+  exportPercentilesFailed: (reason: string) => string;
   exportTargetExists: (target: string) => string;
   exportNotDirectory: (path: string) => string;
   exportUnknownKind: (kind: string) => string;

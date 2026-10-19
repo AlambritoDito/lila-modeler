@@ -1046,9 +1046,12 @@ export function createServer(options: ServerOptions = {}): McpServer {
       title: 'Export results',
       description:
         'Writes the results of a run stored in a .lila, like `lila run --xlsx`/`--csv`: `xlsx` is ' +
-        'one workbook (Summary, Elements, Flows, Resources, Parameters) at `saveTo`; `csv` writes ' +
-        'elements, flows, resources and process .csv into the directory `saveTo` (a stored run ' +
-        'keeps no event log). `run` "latest" (default) is the run of the current model and ' +
+        'one workbook (Summary, Elements, Flows, Resources, Parameters, Percentiles) at `saveTo`; ' +
+        '`csv` writes elements, flows, resources, process and percentiles .csv into the directory ' +
+        '`saveTo`. Percentiles are the p50/p90/p95 resource wait per element in seconds, over all ' +
+        'replications, from simulating the run\'s stored inputs again (a stored run keeps no event ' +
+        'log); `percentiles.included` is false, with a `note`, when that re-run does not reproduce ' +
+        'the stored process KPIs. `run` "latest" (default) is the run of the current model and ' +
         'scenario; an older run is exported by id against the model it ran on. An error says so ' +
         'when the process has no run. Like `lila export results`.',
       inputSchema: z.object({
@@ -1069,7 +1072,7 @@ export function createServer(options: ServerOptions = {}): McpServer {
         const files = results.data instanceof Uint8Array
           ? [writeExportFile(saveTo, results.data, { overwrite, source: results.file, locale: language })]
           : writeExportDirectory(saveTo, results.data, { overwrite, source: results.file, locale: language });
-        return textResult({ files, format, project: results.file, process: results.process, run: results.run });
+        return textResult({ files, format, project: results.file, process: results.process, run: results.run, percentiles: results.percentiles });
       } catch (error) {
         return errorResult(toolMessage('export_results', message(error)));
       }

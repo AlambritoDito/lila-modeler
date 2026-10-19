@@ -190,7 +190,7 @@ reports progress per replication and can be cancelled.
 - `export_document` writes the process document as `docx` or `html`: process, lanes, steps with
   their descriptions and RACI, gateways with their probabilities and the results of the current
   run. The HTML embeds the diagram as SVG.
-- `export_results` writes the run's tables as `.xlsx` (or four CSV files).
+- `export_results` writes the run's tables as `.xlsx` (or CSV files), with the wait percentiles per element.
 - `export_diagram` returns or writes the diagram as SVG.
 
 None of them overwrites a file unless `overwrite: true`, and none ever writes over the project.

@@ -390,6 +390,7 @@ export const en: Catalog = {
     xlsxSheetFlows: () => 'Flows',
     xlsxSheetResources: () => 'Resources',
     xlsxSheetParameters: () => 'Parameters',
+    xlsxSheetPercentiles: () => 'Percentiles',
     xlsxSheetComparison: () => 'Comparison',
     xlsxColumnSection: () => 'Section',
     xlsxColumnParameter: () => 'Parameter',
@@ -529,6 +530,10 @@ export const en: Catalog = {
       'The Word document has no diagram: Word needs a PNG and the engine has no rasteriser. The HTML document has it.',
     exportDocumentNoRun: () => 'No current run: the document has the model and no results.',
     exportNoCharts: () => 'The charts of the run are left out: the engine has no rasteriser.',
+    exportPercentilesNotReproduced: () =>
+      'The per-element wait percentiles are left out: the run\'s stored inputs do not reproduce its stored results (a cancelled run, or another engine version or platform, which can change the last digit).',
+    exportPercentilesFailed: (reason) =>
+      `The per-element wait percentiles are left out: simulating the run's stored inputs again failed: ${reason}`,
     exportTargetExists: (target) => `${target} already exists; nothing was written. Pass --force (\`overwrite\` in MCP) to replace it.`,
     exportNotDirectory: (path) => `cannot write into ${path}: it is a file, not a directory.`,
     exportUnknownKind: (kind) => `unknown export "${kind}": expected diagram, doc or results.`,

@@ -54,7 +54,8 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
   Returns `{ file, format, project, process, run, notes }`.
 - **`export_results({ project, process?, run?, scenario?, format, saveTo, overwrite?, locale? })`**
   writes the results of a stored run (`format`: `xlsx`, or `csv` into the directory `saveTo`).
-  Returns `{ files, format, project, process, run }`.
+  Returns `{ files, format, project, process, run, percentiles }`; `percentiles` is
+  `{ included, note? }`, see [App-free exports](#app-free-exports).
 - **`create_process({ outline, project, process?, name?, dryRun?, locale? })`** turns an outline —
   lanes plus an ordered list of steps — into a laid-out, validated BPMN process and writes it as a
   new process of the `.lila` `project` (or a new `.lila`). It never replaces a process. Returns
@@ -328,7 +329,12 @@ the file was saved; `summary` says what happened in one line.
   document only takes a current run; without one it goes without results, and the `run` of the
   answer is `null`. `export_results` without a run is `isError`, with a message that says so. An
   older run's results are exported against the model it ran on.
-- **Nothing is overwritten.** An existing file at `saveTo` (or, for CSV, any of the four files in
+- **Wait percentiles** (#666): `export_results` adds the resource-wait p50/p90/p95 per element
+  (a `Percentiles` sheet, or `percentiles.csv`), computed as the app's Simulate dock does but over
+  every replication, from simulating the run's stored inputs again. When that re-run does not give
+  back the stored results exactly (another engine version, or arm64 against x64), they are
+  left out and `percentiles` is `{ included: false, note }`. See `docs/RESULTS_FORMAT.md` § 12.
+- **Nothing is overwritten.** An existing file at `saveTo` (or, for CSV, any of its files in
   the directory) is `isError` and nothing is written, unless `overwrite: true`. The project (or
   `.bpmn`) being exported is never a destination, with `overwrite` or not. Writes are atomic
   (a temporary file, then published).
@@ -753,7 +759,7 @@ answer with a summary unless `detail: "full"`).
 | `patch_scenario` without `project` | none | Patching a loose `.json` scenario is MCP only; from the CLI, edit the file. |
 | `export_diagram` | `lila export diagram` | |
 | `export_document` | `lila export doc` | |
-| `export_results` | `lila export results` | Per-element wait percentiles: #666. |
+| `export_results` | `lila export results` | Same `Percentiles` sheet and `percentiles.csv`; the CLI prints the `percentiles.note` on stderr. |
 | `create_process` | `lila process create` | |
 | `get_process_outline` | `lila process show` | |
 | `edit_process` | `lila process edit` | |

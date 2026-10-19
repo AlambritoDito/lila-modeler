@@ -394,6 +394,7 @@ export const es: Catalog = {
     xlsxSheetFlows: () => 'Flujos',
     xlsxSheetResources: () => 'Recursos',
     xlsxSheetParameters: () => 'Parámetros',
+    xlsxSheetPercentiles: () => 'Percentiles',
     xlsxSheetComparison: () => 'Comparación',
     xlsxColumnSection: () => 'Sección',
     xlsxColumnParameter: () => 'Parámetro',
@@ -535,6 +536,10 @@ export const es: Catalog = {
       'El documento Word va sin diagrama: Word necesita un PNG y el motor no rasteriza. El documento HTML sí lo lleva.',
     exportDocumentNoRun: () => 'Sin corrida actual: el documento lleva el modelo y no los resultados.',
     exportNoCharts: () => 'Las gráficas de la corrida quedan fuera: el motor no rasteriza.',
+    exportPercentilesNotReproduced: () =>
+      'Los percentiles de espera por elemento quedan fuera: las entradas guardadas de la corrida no reproducen sus resultados guardados (una corrida cancelada, u otra versión del motor u otra plataforma, que puede cambiar el último dígito).',
+    exportPercentilesFailed: (reason) =>
+      `Los percentiles de espera por elemento quedan fuera: volver a simular las entradas guardadas de la corrida falló: ${reason}`,
     exportTargetExists: (target) => `${target} ya existe; no se escribió nada. Pasa --force (\`overwrite\` en MCP) para reemplazarlo.`,
     exportNotDirectory: (path) => `no se puede escribir dentro de ${path}: es un archivo, no un directorio.`,
     exportUnknownKind: (kind) => `exportación desconocida "${kind}": se espera diagram, doc o results.`,
