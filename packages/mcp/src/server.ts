@@ -58,7 +58,6 @@ import {
 import { runResultSchema } from '@lila-modeler/engine/result-schema';
 import {
   resolveExtends,
-  schemaIssueLines,
   scenarioErrors,
   parseScenario,
   validateScenario,

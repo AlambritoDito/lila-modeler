@@ -410,9 +410,15 @@ async function scenarioShowCommand(argv: readonly string[], locale: Locale): Pro
   return 0;
 }
 
+/** A JSON file named on the command line; one that is not there is refused in the CLI's language. */
+function readJsonArgument(file: string, locale: Locale): unknown {
+  if (!existsSync(file) || lstatSync(file).isDirectory()) throw new Error(messages(locale).mcp.fileMissing(resolve(file).replaceAll('\\', '/')));
+  return readJsonFile(file, locale);
+}
+
 /** The `--patch` file: a non-empty JSON list of RFC 6902 operations, as `patch_scenario` takes them. */
 function readPatch(file: string, locale: Locale): JsonPatchOp[] {
-  const patch = readJsonFile(file, locale);
+  const patch = readJsonArgument(file, locale);
   const isOp = (op: unknown): op is JsonPatchOp =>
     typeof op === 'object' && op !== null && typeof (op as JsonPatchOp).op === 'string' && typeof (op as JsonPatchOp).path === 'string';
   if (!Array.isArray(patch) || patch.length === 0 || !patch.every(isOp)) throw new Error(agentToolMessages(locale).patchNotList(file));
@@ -518,7 +524,7 @@ async function projectCreateCommand(argv: readonly string[], locale: Locale): Pr
   }
   const scenarios = (values.scenario ?? []).map((value) => {
     const [name, file] = pairOf('--scenario', value, locale);
-    return { name, scenario: readJsonFile(file, locale) };
+    return { name, scenario: readJsonArgument(file, locale) };
   });
   const result = await createLilaProject({
     path: positionals[0]!,

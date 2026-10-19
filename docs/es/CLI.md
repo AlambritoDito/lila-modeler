@@ -346,6 +346,12 @@ npx lila project create examples/pedido.lila --name Pedidos --bpmn examples/pedi
 Código de salida: `1`.
 
 ```text
+lila project create: /…/examples/pedido.lila ya existe; no se escribió nada. Pasa --force (`overwrite` en MCP) para reemplazarlo.
+```
+
+Un recorrido completo, en una carpeta tuya: crear un proyecto, derivar un escenario y comparar los dos.
+
+```text
 npx lila project create pedidos.lila --name Pedidos --bpmn examples/pedido/model.bpmn --scenario as-is=examples/pedido/as-is.scenario.json
 npx lila scenario patch pedidos.lila as-is --patch examples/outline/pedido-patch.json --save-to to-be-4-cocineros
 npx lila compare pedidos.lila as-is to-be-4-cocineros

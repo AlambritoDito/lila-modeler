@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { main } from '../../src/cli.js';
-import { decodeLila } from '../../src/project/index.js';
+import { decodeLila, encodeLila, type ProcessDocument, type ProjectDocument } from '../../src/project/index.js';
 import { lilaScenarioView, patchLilaScenario } from '../../src/project-fs/index.js';
 import { EXAMPLE_LILA } from './export-fixture.js';
 
@@ -191,6 +191,33 @@ describe('lila scenario patch', () => {
     expect(code).toBe(1);
     expect(out.join('\n')).toMatch(error);
     expect(readFileSync(file).equals(bytes)).toBe(true);
+  });
+
+  test('--process picks a process of a repository; the other one is carried through unchanged', async () => {
+    const base = stored();
+    const copia: ProcessDocument = {
+      slug: 'copia', name: 'Copia', model: base.model, scenarios: { [AS_IS]: base.scenarios[AS_IS]! }, scenarioRevisions: { [AS_IS]: 3 }, runs: [],
+    };
+    const repository: ProjectDocument = { ...base, process: { slug: 'pedido', name: 'Pedido' }, processes: [copia] };
+    writeFileSync(file, encodeLila(repository));
+    const before = stored();
+    const code = await main(['scenario', 'patch', file, 'as-is', '--process', 'copia', '--patch', patchFile(FOUR_COOKS), '--save-to', 'cuatro', '--json']);
+    expect(code, out.join('\n')).toBe(0);
+    expect(JSON.parse(out.join('\n'))).toMatchObject({ process: 'copia', entry: 'cuatro.scenario.json', written: true });
+
+    const after = stored();
+    const copiaAfter = after.processes!.find((p) => p.slug === 'copia')!;
+    expect(copiaAfter.scenarios['cuatro.scenario.json']).toMatchObject({ extends: AS_IS, resources: { cocinero: { capacity: 4 } } });
+    expect(copiaAfter.scenarioRevisions[AS_IS]).toBe(3);
+    // The first process (the top level of a repository) is untouched.
+    expect(after.scenarios).toEqual(before.scenarios);
+    expect(after.scenarioRevisions).toEqual(before.scenarioRevisions);
+    expect(after.model).toEqual(before.model);
+  });
+
+  test('a missing --patch file is named in the language of the call', async () => {
+    expect(await main(['scenario', 'patch', file, 'as-is', '--patch', join(scratch, 'nada.json'), '--lang', 'es'])).toBe(1);
+    expect(out.join('\n')).toMatch(/no existe el archivo .*nada\.json/);
   });
 
   test('the wrong number of positionals is a usage error', async () => {

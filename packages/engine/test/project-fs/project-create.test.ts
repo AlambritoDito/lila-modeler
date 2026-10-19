@@ -3,7 +3,7 @@
  * The file it writes is one `lila project show` reads; an existing file is refused, byte for byte
  * untouched, unless `--force`.
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -109,6 +109,28 @@ describe('lila project create', () => {
     expect(await main(['project', 'create', file, ...args])).toBe(1);
     expect(out.join('\n')).toMatch(error);
     expect(existsSync(file)).toBe(false);
+  });
+
+  test('a .lila path that is a folder is refused, with --force too', async () => {
+    const folder = join(scratch, 'folder.lila');
+    mkdirSync(folder);
+    for (const force of [[], ['--force']]) {
+      out = [];
+      expect(await main(['project', 'create', folder, '--name', 'X', '--bpmn', pedidoBpmn, ...force])).toBe(1);
+      expect(out.join('\n')).toMatch(/is a directory; nothing was written/);
+    }
+  });
+
+  test('two --scenario with the same name are refused', async () => {
+    const file = join(scratch, 'dup.lila');
+    expect(await main(['project', 'create', file, '--name', 'X', '--bpmn', pedidoBpmn, '--scenario', `a=${pedidoAsIs}`, '--scenario', `a=${pedidoToBe}`])).toBe(1);
+    expect(out.join('\n')).toMatch(/two scenarios would be saved as a\.scenario\.json/);
+    expect(existsSync(file)).toBe(false);
+  });
+
+  test('a missing --scenario file is named in the language of the call', async () => {
+    expect(await main(['project', 'create', join(scratch, 'x.lila'), '--name', 'X', '--bpmn', pedidoBpmn, '--scenario', 'a=', '--lang', 'es'])).toBe(1);
+    expect(out.join('\n')).toMatch(/no existe/);
   });
 
   test('a path that is not a .lila is refused', async () => {

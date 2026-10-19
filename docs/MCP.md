@@ -680,7 +680,9 @@ terminal.
 ## MCP and CLI side by side
 
 Every tool runs the same engine code as its CLI command, so an agent that only has a shell gets
-the same answers. The CLI's `--json` prints what the tool returns.
+the same answers. The `--json` of the project, process and scenario commands prints what the tool
+returns; `lila run|compare --json <file>` write the full result to a file, like `saveTo` (the tools
+answer with a summary unless `detail: "full"`).
 
 | MCP tool or field | CLI | Note |
 | --- | --- | --- |

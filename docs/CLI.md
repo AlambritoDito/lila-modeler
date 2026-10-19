@@ -337,6 +337,12 @@ npx lila project create examples/pedido.lila --name Orders --bpmn examples/pedid
 Exit code: `1`.
 
 ```text
+lila project create: /…/examples/pedido.lila already exists; nothing was written. Pass --force (`overwrite` in MCP) to replace it.
+```
+
+A full round trip, in a folder of your own: create a project, derive a scenario, compare the two.
+
+```text
 npx lila project create orders.lila --name Orders --bpmn examples/pedido/model.bpmn --scenario as-is=examples/pedido/as-is.scenario.json
 npx lila scenario patch orders.lila as-is --patch examples/outline/pedido-patch.json --save-to to-be-4-cocineros
 npx lila compare orders.lila as-is to-be-4-cocineros

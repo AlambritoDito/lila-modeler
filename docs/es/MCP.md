@@ -79,7 +79,7 @@ Schema del escenario como recursos, y el flujo de la guía como el prompt `inter
   El patch soporta `add`/`replace`/`remove`/`test` (RFC 6902) con punteros RFC 6901
   (`/resources/cajero/capacity`); **no** soporta `move` ni `copy` — son las dos operaciones que
   leen de una ubicación distinta a la que escriben, y ningún caso de uso de esta tool las necesita
-  (`packages/mcp/src/json-patch.ts`). Un patch que deja el escenario inválido — `probability` fuera
+  (`packages/engine/src/json-patch.ts`). Un patch que deja el escenario inválido — `probability` fuera
   de `[0, 1]`, `capacity < 1`, una `ref` que no existe en `resources`, un `id` que no existe en el
   modelo, … — es `isError: true` y **no escribe nada**, en ninguno de los dos modos.
 
@@ -701,8 +701,9 @@ mismo desde una terminal.
 ## MCP y CLI lado a lado
 
 Cada tool corre el mismo código del motor que su comando de la CLI, así que un agente que solo
-tiene una terminal obtiene las mismas respuestas. El `--json` de la CLI imprime lo que devuelve la
-tool.
+tiene una terminal obtiene las mismas respuestas. El `--json` de los comandos project, process y
+scenario imprime lo que devuelve la tool; `lila run|compare --json <archivo>` escriben el resultado
+completo en un archivo, como `saveTo` (las tools responden con un resumen salvo con `detail: "full"`).
 
 | Tool o campo MCP | CLI | Nota |
 | --- | --- | --- |
