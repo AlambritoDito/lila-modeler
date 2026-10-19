@@ -44,6 +44,7 @@ import { GraficaDeInstancias, GraficaDeUtilizacion, GraficasDelProceso, type Log
 import { exactDuration, formatDisplay, formatDisplayDuration, formatDisplayDurationWithUnit } from './formatDisplay';
 import { guardarDesdeBoton } from './guardarArchivo';
 import { getLocale, strings, useStrings } from './i18n';
+import { nombreRecurso } from './recursosModelo';
 
 export interface ResultsViewProps {
   ir: ProcessIR;
@@ -383,7 +384,7 @@ function flowRows(ir: ProcessIR, result: RunResult): FlowRow[] {
 
 function resourceNames(scenario: ResolvedScenario): Record<string, string> {
   return Object.fromEntries(
-    Object.entries(scenario.resources ?? {}).map(([id, resource]) => [id, resource.name ?? id]),
+    Object.entries(scenario.resources ?? {}).map(([id, resource]) => [id, nombreRecurso(id, resource)]),
   );
 }
 

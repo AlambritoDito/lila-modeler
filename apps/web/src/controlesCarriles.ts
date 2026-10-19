@@ -130,7 +130,8 @@ export class LilaControlesCarriles {
    * diagram-js keeps one overlay container per element, in the order the elements first got an
    * overlay, so after a reorder the Tab key would walk the lanes in their old order. The containers
    * of the pools and lanes are put back in drawing order (pool by pool, each lane before its nested
-   * lanes); being positioned absolutely, they do not move on screen.
+   * lanes, and the pool's own container — which holds the last «+» — after all of them); being
+   * positioned absolutely, they do not move on screen.
    */
   private ordenarTab(pools: Forma[]): void {
     const raiz = this.canvas.getContainer().querySelector('.djs-overlay-container');
@@ -141,7 +142,7 @@ export class LilaControlesCarriles {
       if (id !== null) porId.set(id, hijo);
     }
     const enOrden = (el: Forma): Forma[] => [el, ...carrilesDe(el).flatMap(enOrden)];
-    for (const el of pools.flatMap(enOrden)) {
+    for (const el of pools.flatMap((pool) => [...carrilesDe(pool).flatMap(enOrden), pool])) {
       const contenedor = porId.get(el.id);
       if (contenedor !== undefined) raiz.append(contenedor);
     }
@@ -178,7 +179,12 @@ export class LilaControlesCarriles {
       this.anadirOverlay(carril, { left: 0, top: 0 }, mas(i));
       this.pintarAsas(carril);
     });
-    this.anadirOverlay(lista.at(-1)!, v ? { right: 0, top: 0 } : { left: 0, bottom: 0 }, mas(lista.length));
+    // The last «+» sits on the last lane's far corner but hangs from the pool: on the last lane it
+    // would share that lane's overlay container and come before the ⠿ of its nested lanes (#645).
+    const ultimo = lista.at(-1)!;
+    this.anadirOverlay(pool, v
+      ? { right: pool.x + pool.width - (ultimo.x + ultimo.width), top: ultimo.y - pool.y }
+      : { left: ultimo.x - pool.x, bottom: pool.y + pool.height - (ultimo.y + ultimo.height) }, mas(lista.length));
   }
 
   /** The ⠿ of `carril` and of its nested lanes, next to each one's header strip. */
