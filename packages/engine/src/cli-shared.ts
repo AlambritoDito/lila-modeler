@@ -27,7 +27,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 
 import { parseBpmn, type TargetingScenario } from './bpmn/parse.js';
 import { validateBpmnModel, type ValidatedBpmnModel } from './bpmn/validate-report.js';
@@ -63,8 +63,19 @@ export function absolutePath(file: string): string {
  * el modelo real, no la ortografía usada para llegar a él.
  */
 export function comparablePath(file: string): string {
-  const normalized = existsSync(file) ? realpathSync(file) : resolve(file);
+  const normalized = realpathOfNearest(resolve(file));
   return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+/**
+ * A file that does not exist yet (a `logTo` or `saveTo` target) is resolved through its nearest
+ * existing directory, so a symlinked parent (`/tmp` → `/private/tmp` on macOS) still compares equal.
+ */
+function realpathOfNearest(absolute: string): string {
+  if (existsSync(absolute)) return realpathSync(absolute);
+  const parent = dirname(absolute);
+  if (parent === absolute) return absolute;
+  return join(realpathOfNearest(parent), basename(absolute));
 }
 
 export function readJsonFile(file: string, locale: Locale = 'en'): unknown {

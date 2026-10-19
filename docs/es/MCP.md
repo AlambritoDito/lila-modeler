@@ -1044,7 +1044,7 @@ mcp_servers:
   `mcp_lila_<tool>` (`mcp_lila_create_process`); los argumentos son los de esta página.
 - `tools: { include: [...] }` limita lo que ve el agente; por ejemplo, a las de solo lectura
   `get_project`, `get_scenario`, `validate_bpmn`, `describe_process`, `get_process_outline`,
-  `get_raci_matrix` y `run_simulation` (que solo escribe con `saveTo` o `saveRun`).
+  `get_raci_matrix` y `run_simulation` (que solo escribe con `saveTo`, `saveRun` o `logTo`).
 
 El mismo bloque, con `command` y `args`, es la configuración stdio genérica para cualquier otro
 cliente MCP.

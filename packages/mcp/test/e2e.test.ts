@@ -7,9 +7,9 @@
  * "simula examples/pedido con as-is y dime el cuello de botella" y "qué pasa si agrego un cajero".
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { Client } from '@modelcontextprotocol/client';
@@ -263,6 +263,53 @@ test('logTo (#665): a directory is refused and a cancelled run leaves neither th
   expect(existsSync(logTo)).toBe(false);
   const after = await client.callTool({ name: 'run_simulation', arguments: { scenario: asIs, seed: 4, replications: 1 } });
   expect(after.isError ?? false).toBe(false);
+}, 120_000);
+
+test('logTo (#665): a failed call keeps the old file, a successful one replaces it; inputs and aliases are refused', async () => {
+  const dir = join(temp, 'log-replace');
+  mkdirSync(join(dir, 'a-directory'), { recursive: true });
+  const logTo = join(dir, 'run.csv');
+  writeFileSync(logTo, 'old\n');
+
+  // The run succeeds, then `saveTo` (a directory) fails: the log is not published, nothing is left.
+  const failed = await client.callTool({
+    name: 'run_simulation',
+    arguments: { scenario: asIs, seed: 3, logTo, saveTo: join(dir, 'a-directory') },
+  });
+  expect(failed.isError).toBe(true);
+  expect(readFileSync(logTo, 'utf8')).toBe('old\n');
+  expect(readdirSync(dir).sort()).toEqual(['a-directory', 'run.csv']);
+
+  // A relative `logTo` resolves against the server's cwd and comes back absolute.
+  const replaced = await client.callTool({
+    name: 'run_simulation',
+    arguments: { scenario: asIs, seed: 3, logTo: relative(repo, logTo) },
+  });
+  expect(replaced.isError ?? false).toBe(false);
+  expect(writtenOf(replaced)).toEqual([{ log: logTo.replaceAll('\\', '/') }]);
+  expect(readFileSync(logTo, 'utf8')).toMatch(/^[^\n]+,[^\n]+\n/);
+  expect(readdirSync(dir).sort()).toEqual(['a-directory', 'run.csv']);
+
+  // The model is an input too, and a symlinked directory names the same file as its target.
+  const model = 'examples/pedido/model.bpmn';
+  const before = readFileSync(join(repo, model));
+  const onModel = await client.callTool({
+    name: 'run_simulation',
+    arguments: { model, scenario: asIs, seed: 3, logTo: model },
+  });
+  expect(onModel.isError).toBe(true);
+  expect(textOf(onModel)).toContain('`logTo`');
+  expect(readFileSync(join(repo, model)).equals(before)).toBe(true);
+
+  mkdirSync(join(dir, 'real'));
+  symlinkSync(join(dir, 'real'), join(dir, 'link'), 'dir');
+  const aliased = await client.callTool({
+    name: 'run_simulation',
+    arguments: { scenario: asIs, seed: 3, saveTo: join(dir, 'link', 'r.json'), logTo: join(dir, 'real', 'r.json') },
+  });
+  expect(aliased.isError).toBe(true);
+  expect(textOf(aliased)).toContain('`logTo`');
+  expect(readdirSync(join(dir, 'real'))).toEqual([]);
 }, 120_000);
 
 test('compare_scenarios (#665): format "xlsx" is the workbook of `lila compare --xlsx`, all is detail "full"', async () => {

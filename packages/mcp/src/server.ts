@@ -376,7 +376,10 @@ async function runSimulation(
     if (typeof scenario === 'string') taken.push(absolutePath(scenario));
     if (saveTo !== undefined) taken.push(absolutePath(saveTo));
     const target = absolutePath(logTo);
-    if (taken.some((file) => comparablePath(file) === comparablePath(target))) return fail(M.logToTaken(target));
+    // macOS volumes are case-insensitive by default: `Run.json` and `run.json` are one file there.
+    const key = (file: string): string =>
+      globalThis.process.platform === 'darwin' ? comparablePath(file).toLowerCase() : comparablePath(file);
+    if (taken.some((file) => key(file) === key(target))) return fail(M.logToTaken(target));
   }
 
   // #665: the log is staged here, before the run, so that whatever ends this call (an error, the
@@ -391,6 +394,8 @@ async function runSimulation(
       { signal: progress.signal, onReplication: progress.report },
     );
     const result = resultWithBoundaryWarnings(simulated, modelValidation, scenarioProblems);
+    // A cancellation that arrives once the worker is done still saves nothing (docs/MCP.md).
+    progress.signal?.throwIfAborted();
 
     if (saveTo !== undefined) writeJsonAtomic(saveTo, result, locale);
 
@@ -404,6 +409,7 @@ async function runSimulation(
     if (saveRun === true) {
       written.savedRun = await saveSimulationRun(lila!, scenario as string, withOverrides, result, locale);
     }
+    progress.signal?.throwIfAborted();
     log?.commit();
     if (Object.keys(written).length > 0) content.push({ type: 'text', text: JSON.stringify(written, null, 2) });
     return { content, isError: false, structuredContent: answer };
@@ -821,14 +827,14 @@ export function createServer(options: ServerOptions = {}): McpServer {
           .describe(
             'With a .lila `model` and a scenario of it: store the run in the project, as the app does ' +
               '(it opens as the current run; export_document/export_results use it). A second content ' +
-              'block returns { savedRun: { id, file, process, scenario } }.',
+              'block returns { savedRun: { id, file, process, scenario } } (with `logTo`, { log, savedRun }).',
           ),
         logTo: z
           .string()
           .optional()
           .describe(
             'Path of a CSV file for the event log, as the log.csv of `lila run --csv`. Written only after ' +
-              'a complete run; the second content block returns { log: <absolute path> }.',
+              'a complete run; the second content block returns { log: <absolute path> } (with `saveRun`, { log, savedRun }).',
           ),
         detail: detailSchema,
         locale: localeSchema,
