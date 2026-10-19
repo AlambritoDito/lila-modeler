@@ -3,7 +3,7 @@
  * the results of a stored run as `.xlsx` or CSV, from a `.lila` (or, for the diagram, a `.bpmn`).
  * The CLI (`lila export`) and the MCP server (`export_diagram`, `export_document`,
  * `export_results`) are thin layers over these functions; the work itself is the engine's own
- * `renderSvg`, `buildProcessDocument`/`toDocx`/`toHtml`, `scenarioWorkbook` and the `*Csv`
+ * `renderSvg`, `buildProcessDocument`/`toDocx`/`toHtml`, `scenarioSheets` and the `*Csv`
  * functions, the same ones the app and `lila run` use.
  *
  * Runs. A `.lila` stores the runs the app saved, each with the model and scenario revisions it ran
@@ -20,14 +20,20 @@
 import { closeSync, existsSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 
-import { parseBpmn, readAnnotations, renderSvg } from '../bpmn/index.js';
+import { parseBpmn, readAnnotations, renderSvg, type SvgTint } from '../bpmn/index.js';
+import { bottleneckCut, heatMap, WAIT_LEVEL_COLOURS, type WaitLevel } from '../bottleneck-levels.js';
+import type { ProcessIR } from '../core/ir.js';
+import { simulate } from '../core/run.js';
 import type { RunResult } from '../core/result.js';
-import { elementsCsv, flowsCsv, processCsv, resourcesCsv } from '../csv.js';
+import { elementsCsv, flowsCsv, percentilesCsv, processCsv, resourcesCsv } from '../csv.js';
+import { RESOURCE_WAIT, elementSampler } from '../element-percentiles.js';
+import { formatDuration, SECONDS_PER_UNIT, type BaseTimeUnit } from '../format.js';
 import { messages, type Locale } from '../messages/index.js';
 import { buildProcessDocument, toDocx, toHtml } from '../process-document.js';
 import { isCurrentRun, type StoredRun } from '../project/index.js';
 import { parseScenario, resolveExtends, schemaIssueLines, type ResolvedScenario } from '../scenario.js';
-import { resourceNamesOf, scenarioWorkbook } from '../xlsx-report.js';
+import { percentilesSheet, resourceNamesOf, scenarioSheets } from '../xlsx-report.js';
+import { workbook } from '../xlsx.js';
 import { findLilaScenario, lilaScenarioPath, lilaScenarioReader, openLilaProcess, type LilaProcess } from './input.js';
 import { isLilaPath } from './paths.js';
 
@@ -64,17 +70,88 @@ async function openLila(source: ExportSource): Promise<LilaProcess> {
   return openLilaProcess(source.file, { process: source.process, locale });
 }
 
-/** The diagram of a `.bpmn`, or of one process of a `.lila`, as SVG (`renderSvg`). */
-export async function exportDiagram(source: ExportSource): Promise<{ svg: string; file: string; process?: string }> {
+/** A stored run drawn over the diagram (#669), with the app's scale (`bottleneck-levels.ts`). */
+export type DiagramOverlay = 'bottlenecks' | 'heatmap';
+
+export const DIAGRAM_OVERLAYS: readonly DiagramOverlay[] = ['bottlenecks', 'heatmap'];
+
+/**
+ * The diagram of a `.bpmn`, or of one process of a `.lila`, as SVG (`renderSvg`). With `overlay`,
+ * coloured with a stored run of the `.lila` (selected as for the document, see the header), as the
+ * app colours it: `'bottlenecks'` tints the canvas's bottleneck cut, `'heatmap'` every measured task
+ * as the Results heat map does, with the cut marked. The run is drawn on the model it ran on.
+ */
+export async function exportDiagram(
+  source: ExportSource & RunSelection & { readonly overlay?: DiagramOverlay | undefined },
+): Promise<{ svg: string; file: string; process?: string; run?: ExportedRun }> {
   const locale = source.locale ?? 'en';
+  const C = messages(locale).cli;
+  if (source.overlay !== undefined && !DIAGRAM_OVERLAYS.includes(source.overlay)) throw new Error(C.exportInvalidOverlay(String(source.overlay)));
+  if (source.overlay === undefined && (source.run !== undefined || source.scenario !== undefined)) throw new Error(C.exportRunNeedsOverlay());
   if (isLilaPath(source.file)) {
     const lila = await openLilaProcess(source.file, { process: source.process, locale });
-    return { svg: await renderSvg(lila.process.model.xml), file: lila.file, process: lila.process.slug };
+    if (source.overlay === undefined) return { svg: await renderSvg(lila.process.model.xml), file: lila.file, process: lila.process.slug };
+    // No run at all says what the overlay needs; any other selection error speaks for itself.
+    if (lila.process.runs.length === 0) {
+      throw new Error(C.exportOverlayNoRun(source.overlay, C.exportNoRun(lila.file, lila.process.slug, '')));
+    }
+    const run = selectRun(lila, source, false, locale)!;
+    const tint = await overlayTint(lila, run, source.overlay, locale);
+    return {
+      svg: await renderSvg(run.inputs.xml, { tint }),
+      file: lila.file,
+      process: lila.process.slug,
+      run: { id: run.id, scenario: run.scenarioName, current: isCurrent(lila, run) },
+    };
   }
-  if (source.process !== undefined) throw new Error(messages(locale).cli.processOnlyForLila());
+  if (source.process !== undefined) throw new Error(C.processOnlyForLila());
   const file = absolute(source.file);
+  if (source.overlay !== undefined) throw new Error(C.exportOverlayNeedsLila(file));
   if (!existsSync(file)) throw new Error(messages(locale).mcp.fileMissing(file));
   return { svg: await renderSvg(readFileSync(file, 'utf8')), file };
+}
+
+/** From the coarsest unit to the finest: the first one in which the wait is 1 or more wins. */
+const SHORT_UNITS: readonly BaseTimeUnit[] = ['day', 'h', 'min', 's'];
+const SHORT_UNIT_LABELS: Readonly<Record<BaseTimeUnit, string>> = { day: 'd', h: 'h', min: 'min', s: 's' };
+
+/** A wait as the app's canvas label writes it: its coarsest unit, at most one decimal. */
+function shortWait(seconds: number): string {
+  const unit = SHORT_UNITS.find((u) => seconds >= SECONDS_PER_UNIT[u]) ?? 's';
+  const step = SECONDS_PER_UNIT[unit] / 10;
+  return `${formatDuration(Math.round(seconds / step) * step, unit)} ${SHORT_UNIT_LABELS[unit]}`;
+}
+
+/** `renderSvg`'s `tint` for `overlay` of `run`, keyed by the ids of the file the run saw. */
+async function overlayTint(lila: LilaProcess, run: StoredRun, overlay: DiagramOverlay, locale: Locale): Promise<Record<string, SvgTint>> {
+  const C = messages(locale).cli;
+  // #546: the process that run simulated, chosen as the app chose it.
+  const { ir } = await parseBpmn(run.inputs.xml, { scenarios: [run.inputs.scenario, ...Object.values(lila.process.scenarios)] });
+  const result = run.result as RunResult;
+  // Result keys are IR ids; the drawing is keyed by the ids written in the file.
+  const fileId = (id: string): string => (Object.hasOwn(ir.source.originalIds, id) ? ir.source.originalIds[id]! : id);
+  const colour = (level: WaitLevel): Pick<SvgTint, 'fill' | 'stroke'> => ({ fill: WAIT_LEVEL_COLOURS[level], stroke: WAIT_LEVEL_COLOURS[level] });
+  // No prototype: a BPMN id may be `__proto__`.
+  const tint: Record<string, SvgTint> = Object.create(null) as Record<string, SvgTint>;
+  const cut = bottleneckCut(result);
+  if (overlay === 'bottlenecks') {
+    for (const entry of cut) {
+      tint[fileId(entry.elementId)] = { ...colour(entry.level), badge: `${shortWait(entry.resourceWaitMean)} · ${Math.round(entry.utilization * 100)}%` };
+    }
+    return tint;
+  }
+  const tasks = Object.keys(ir.nodes).filter((id) => ir.nodes[id]!.type === 'task');
+  for (const [id, entry] of Object.entries(heatMap(result, tasks))) {
+    tint[fileId(id)] = { ...colour(entry.level), badge: C.exportOverlayWait(shortWait(entry.resourceWaitMean)) };
+  }
+  // The ranking's cut is painted over the map with its own level, its badge marked (as in Results).
+  for (const entry of cut) {
+    tint[fileId(entry.elementId)] = {
+      ...colour(entry.level),
+      badge: `${C.exportOverlayBottleneck()} ${C.exportOverlayWait(shortWait(entry.resourceWaitMean))}`,
+    };
+  }
+  return tint;
 }
 
 function isCurrent(lila: LilaProcess, run: StoredRun): boolean {
@@ -200,16 +277,60 @@ export async function exportDocument(
 
 export interface ResultsExport {
   readonly format: 'xlsx' | 'csv';
-  /** `.xlsx` bytes, or the CSV files by name (`elements.csv`, `flows.csv`, `resources.csv`, `process.csv`). */
+  /**
+   * `.xlsx` bytes, or the CSV files by name (`elements.csv`, `flows.csv`, `resources.csv`,
+   * `process.csv`, and `percentiles.csv` when `percentiles.included`).
+   */
   readonly data: Uint8Array | Readonly<Record<string, string>>;
   readonly file: string;
   readonly process: string;
   readonly run: ExportedRun;
+  /** #666: whether the `Percentiles` sheet / `percentiles.csv` is there; `note`, in `locale`, says why not. */
+  readonly percentiles: { readonly included: boolean; readonly note?: string };
+}
+
+/** JSON with the keys of every object sorted, so two results compare by value, not key order. */
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, inner: unknown) =>
+    inner !== null && typeof inner === 'object' && !Array.isArray(inner)
+      ? Object.fromEntries(Object.entries(inner).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : inner);
+}
+
+/**
+ * #666: the resource-wait sample per element of a stored run, which keeps no event log, from
+ * simulating its own inputs again (same seed); the rows stream into the sampler and none is kept.
+ * The sample counts only when the re-run gives the stored `process` and `elements` metrics back
+ * exactly (compared as JSON, as they were stored); otherwise a note says why it is left out. A different engine version
+ * or platform can change the last digit, so a mismatch is expected there, not an error.
+ */
+function rerunSamples(
+  ir: ProcessIR,
+  scenario: ResolvedScenario,
+  stored: RunResult,
+  locale: Locale,
+): { samples: Map<string, number[]> } | { note: string } {
+  const C = messages(locale).cli;
+  // A cancelled run, or one with another number of replications, cannot come back: skip the cost.
+  if (stored.cancelled === true || (stored.replications?.count ?? 1) !== (scenario.run.replications ?? 1)) {
+    return { note: C.exportPercentilesNotReproduced() };
+  }
+  const sampler = elementSampler(scenario.run.warmup, RESOURCE_WAIT, { replicationsInOrder: true });
+  let again: RunResult;
+  try {
+    again = simulate(ir, scenario, { locale, onEvent: (row) => sampler.add(row) });
+  } catch (error) {
+    return { note: C.exportPercentilesFailed(error instanceof Error ? error.message : String(error)) };
+  }
+  const same = (result: RunResult): string => canonicalJson({ process: result.process, elements: result.elements });
+  if (same(again) !== same(stored)) return { note: C.exportPercentilesNotReproduced() };
+  return { samples: sampler.samples() };
 }
 
 /**
  * The results of a stored run, like `lila run --xlsx`/`--csv` (no `log.csv`: a stored run keeps no
- * event log). Read against the model that run saw, so an older run exports too.
+ * event log), plus the resource-wait percentiles per element when a re-run reproduces it
+ * (`rerunSamples`, #666). Read against the model that run saw, so an older run exports too.
  */
 export async function exportResults(
   source: ExportSource & RunSelection & { readonly format: 'xlsx' | 'csv' },
@@ -222,13 +343,19 @@ export async function exportResults(
   const scenario = scenarioOfRun(lila, run, locale);
   const result = run.result as RunResult;
   const names = resourceNamesOf(scenario);
+  const rerun = rerunSamples(ir, scenario, result, locale);
+  const samples = 'samples' in rerun ? rerun.samples : undefined;
   const data = source.format === 'xlsx'
-    ? scenarioWorkbook(ir, scenario, result, names, locale)
+    ? workbook([
+        ...scenarioSheets(ir, scenario, result, names, locale),
+        ...(samples === undefined ? [] : [percentilesSheet(ir, result, samples, locale)]),
+      ])
     : {
         'elements.csv': elementsCsv(ir, result),
         'flows.csv': flowsCsv(ir, result),
         'resources.csv': resourcesCsv(result, names),
         'process.csv': processCsv(result),
+        ...(samples === undefined ? {} : { 'percentiles.csv': percentilesCsv(ir, result, samples) }),
       };
   return {
     format: source.format,
@@ -236,6 +363,7 @@ export async function exportResults(
     file: lila.file,
     process: lila.process.slug,
     run: { id: run.id, scenario: run.scenarioName, current: isCurrent(lila, run) },
+    percentiles: 'samples' in rerun ? { included: true } : { included: false, note: rerun.note },
   };
 }
 

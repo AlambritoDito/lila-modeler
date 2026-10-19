@@ -121,7 +121,12 @@ usa la app:
 
 - `lila export diagram <modelo.bpmn|proyecto.lila>` dibuja el diagrama con el renderizador SVG
   propio del motor (la geometría del DI de BPMN, colores de Lila Light sobre blanco). Sin `--out`
-  imprime el SVG por stdout.
+  imprime el SVG por stdout. Con `--overlay bottlenecks|heatmap` (#669) colorea el diagrama con una
+  corrida guardada del `.lila`, con la escala de la app y los colores `sim.bottleneck` de Lila
+  Light: `bottlenecks` tiñe el corte de cuellos del lienzo, cada uno con su espera media y su
+  utilización; `heatmap` tiñe cada tarea medida como el mapa de calor de Resultados, con su espera,
+  y marca el corte. La corrida se dibuja sobre el modelo con el que corrió. Una capa sobre un
+  `.bpmn`, o sin corrida guardada, es un error; también `--run` o `--scenario` sin `--overlay`.
 - `lila export doc <proyecto.lila> --out archivo.docx|archivo.html` escribe el documento del
   proceso, como «Exportar documento» de la app: diagrama, descripciones en orden de flujo, el
   escenario y los resultados de una corrida guardada. El HTML incrusta el diagrama SVG. El Word va
@@ -131,7 +136,10 @@ usa la app:
   corrida guardada: un `.xlsx` (Resumen, Elementos, Flujos, Recursos, Parámetros) o, con
   `--format csv`, `elements.csv`, `flows.csv`, `resources.csv` y `process.csv` en el directorio,
   los mismos archivos que escribe `lila run` (una corrida guardada no conserva el log de eventos,
-  así que no hay `log.csv`).
+  así que no hay `log.csv`). Añade los p50/p90/p95 de la espera por recurso por elemento, una hoja
+  `Percentiles` o `percentiles.csv`, volviendo a simular las entradas guardadas de la corrida;
+  cuando esa nueva corrida no reproduce los KPI guardados (otra versión del motor u otra
+  plataforma), quedan fuera y una nota por stderr dice por qué (`docs/es/RESULTS_FORMAT.md` § 12).
 
 `--format` sale por defecto de la extensión de `--out` (`.docx`, `.html`, `.xlsx`). `--process`
 elige el proceso de un repositorio, como en el resto. Las **corridas** son las que la app guardó en
@@ -303,6 +311,61 @@ Código de salida: `0`.
 npx lila scenario show examples/pedido.lila to-be-3-cajeros --resolved
 ```
 Código de salida: `0`.
+
+## `scenario patch` y `project create` (#635)
+
+El lado CLI de las tools MCP `patch_scenario` (para un `.lila`) y `create_project`
+([`docs/es/MCP.md`](MCP.md#mcp-y-cli-lado-a-lado)), sobre las mismas funciones del motor:
+
+- `lila scenario patch <proyecto.lila> <escenario> --patch <ops.json>` aplica un
+  [JSON Patch](https://www.rfc-editor.org/rfc/rfc6902) (`add`, `replace`, `remove` y `test`; sin
+  `move` ni `copy`) a un escenario del `.lila`, valida el resultado contra el modelo del proceso y
+  solo lo escribe si valida. Sin `--save-to` parchea el escenario en sitio: el patch se aplica al
+  escenario resuelto, que se escribe entero, sin `extends`. Con `--save-to nombre` crea (o
+  reemplaza) el escenario `nombre`, que hereda (`extends`) del escenario dado (o de
+  `--extends-from nombre`) y solo trae las claves que tocó el patch. `--name` y `--description`
+  fijan los del resultado. Un patch inválido, o un resultado que no valida, sale con `1` y no
+  escribe nada. Un patch que no cambia nada no escribe nada y lo dice: el escenario conserva su
+  revisión y sus corridas guardadas siguen vigentes. `--dry-run` valida todo y no escribe nada;
+  `--json` imprime `{ scenario, file, process, entry, written, dryRun, notes }`. Parchear un
+  escenario `.json` suelto es solo de MCP: desde la CLI, se edita el archivo.
+- `lila project create <ruta.lila> --name nombre --bpmn <archivo.bpmn>` crea un `.lila` nuevo con un
+  proceso. Un modelo con errores de validación sale con `1`, salvo con `--allow-unsimulatable`:
+  entonces se guarda como un diagrama que no simula y sus errores se imprimen como notas.
+  `--scenario nombre=archivo.json` (repetible) añade un escenario que se guarda como
+  `nombre.scenario.json`; uno que todavía no puede correr se guarda como borrador y se lista con lo
+  que le falta. Un modelo sin diagrama recibe uno. El archivo se escribe entero o nada, y un
+  archivo que ya existe sale con `1` salvo con `--force`. `--json` imprime
+  `{ file, name, processId, laidOut, warnings, notes, scenarios }`.
+
+```bash
+npx lila scenario patch examples/pedido.lila as-is --patch examples/outline/pedido-patch.json --save-to to-be-4-cocineros --dry-run --lang es
+```
+Código de salida: `0`.
+
+```text
+Simulacro: el resultado valida y se escribiría en to-be-4-cocineros.scenario.json; no se escribió nada.
+aviso W-ELEMENTO-SIN-PARAMETROS: el elemento existe en el modelo y no tiene parámetros; toma sus valores por defecto (elements.Task_Empacar).
+```
+
+El archivo ya existe, así que `project create` lo rechaza sin `--force`:
+
+```bash
+npx lila project create examples/pedido.lila --name Pedidos --bpmn examples/pedido/model.bpmn --lang es
+```
+Código de salida: `1`.
+
+```text
+lila project create: /…/examples/pedido.lila ya existe; no se escribió nada. Pasa --force (`overwrite` en MCP) para reemplazarlo.
+```
+
+Un recorrido completo, en una carpeta tuya: crear un proyecto, derivar un escenario y comparar los dos.
+
+```text
+npx lila project create pedidos.lila --name Pedidos --bpmn examples/pedido/model.bpmn --scenario as-is=examples/pedido/as-is.scenario.json
+npx lila scenario patch pedidos.lila as-is --patch examples/outline/pedido-patch.json --save-to to-be-4-cocineros
+npx lila compare pedidos.lila as-is to-be-4-cocineros
+```
 
 ## `process export-bpmn` y `process import` (#632)
 
@@ -488,7 +551,7 @@ Código de salida: `0`.
 
 `process edit` aplica una lista de operaciones a un proceso, todas o ninguna: el arreglo JSON que la
 tool MCP `edit_process` recibe como `operations` (`add`, `connect`, `remove`, `rename`, `setType`,
-`moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`, `annotate`, `addDataObject`…; formato y reglas en
+`moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`, `annotate`, `addDataObject`, `setCalledProcess`…; formato y reglas en
 [`docs/es/MCP.md`](MCP.md#editar-un-proceso)). Se
 comprueba cada operación, se valida el resultado y el `.lila` se escribe solo si todo está bien; si
 no, sale con `1`, no escribe nada y lista cada problema con el índice de su operación. El proceso se

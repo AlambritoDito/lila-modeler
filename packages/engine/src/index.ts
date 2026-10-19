@@ -3,6 +3,16 @@ export { compare } from './core/compare.js';
 export type { CompareResult, CompareRow, CompareScope } from './core/compare.js';
 export { simulate } from './core/run.js';
 export type { SimulateOptions, SimulationProgress } from './core/run.js';
+export {
+  RESOURCE_WAIT,
+  WAIT,
+  elementPercentiles,
+  elementSampler,
+  elementSamples,
+  percentile,
+  samplePercentiles,
+} from './element-percentiles.js';
+export type { ElementSampler, InstanceMeasure } from './element-percentiles.js';
 export type {
   BottleneckEntry,
   ElementMetrics,

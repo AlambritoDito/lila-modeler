@@ -21,12 +21,12 @@ flujo de abajo con una entrevista ([`MCP.md`](MCP.md#recursos-y-prompt)).
 
 | Paso | Tool | CLI |
 | --- | --- | --- |
-| 0. El archivo ya existe: leer lo que tiene, o traer un BPMN | `get_project`, `get_scenario`, `put_process_bpmn`, `get_process_bpmn` | `lila project show`, `lila scenario show`, `lila process import`, `lila process export-bpmn` |
+| 0. El archivo ya existe: leer lo que tiene, o traer un BPMN; o empezar uno desde un BPMN | `get_project`, `get_scenario`, `put_process_bpmn`, `get_process_bpmn`, `create_project` | `lila project show`, `lila scenario show`, `lila process import`, `lila process export-bpmn`, `lila project create` |
 | 1. Leer la entrevista, escribir un esquema | (el agente) | |
 | 2. Crear el proceso | `create_process` | `lila process create` |
 | 3. Corregirlo | `edit_process`, `get_process_outline` | `lila process edit`, `lila process show` |
 | 4. Documentarlo (opcional) | `annotate_element`, `get_raci_matrix` | `lila process annotate`, `lila process raci` |
-| 5. Llenar el escenario | `patch_scenario`, o `export_scenario_template` + `import_scenario_sheet` | `lila scenario template`, `lila scenario import` |
+| 5. Llenar el escenario | `patch_scenario`, o `export_scenario_template` + `import_scenario_sheet` | `lila scenario patch`, o `lila scenario template` + `lila scenario import` |
 | 6. Simular y guardar la corrida | `run_simulation` con `saveRun: true` | `lila run … --save` |
 | 7. Entregar | `export_document`, `export_results`, `export_diagram` | `lila export doc|results|diagram` |
 | 8. Mostrarlo | abrir el `.lila` en la app; se recarga con cada escritura posterior | `open -a "Lila Modeler" archivo.lila` (macOS) |
@@ -102,8 +102,10 @@ atorados, como una unión paralela que espera ramas de una misma división exclu
 
 Para cambiar un proceso no lo crees otra vez: `edit_process` aplica una lista de operaciones
 (`add`, `connect`, `remove`, `rename`, `setType`, `moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`,
-`annotate`, `addDataObject`…) todas o ninguna, conserva
+`annotate`, `addDataObject`, `setCalledProcess`…) todas o ninguna, conserva
 cada id y todo lo que las operaciones no tocan (documentación, RACI, atributos, otros procesos).
+`setCalledProcess` apunta una actividad de llamada a otro proceso del mismo `.lila` por su slug
+(`process: null` lo quita).
 Mándala primero con `dryRun: true` y muéstrale los `changes` a la persona cuando la edición no sea
 trivial.
 
@@ -197,7 +199,7 @@ progreso por replicación y se puede cancelar.
 - `export_document` escribe el documento del proceso como `docx` o `html`: proceso, carriles, pasos
   con su descripción y RACI, compuertas con sus probabilidades y los resultados de la corrida
   vigente. El HTML lleva el diagrama en SVG.
-- `export_results` escribe las tablas de la corrida como `.xlsx` (o cuatro CSV).
+- `export_results` escribe las tablas de la corrida como `.xlsx` (o CSV), con los percentiles de espera por elemento.
 - `export_diagram` devuelve o escribe el diagrama en SVG.
 
 Ninguna sobrescribe un archivo sin `overwrite: true`, y ninguna escribe nunca sobre el proyecto.

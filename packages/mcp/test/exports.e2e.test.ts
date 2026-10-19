@@ -62,6 +62,31 @@ test('export_diagram returns the SVG, or writes it, and never overwrites without
   expect((await call('export_diagram', {})).text).toBe('export_diagram: pass `project` or `path`.');
 }, 120_000);
 
+test('export_diagram with an overlay (#669): the run it used, the token colours; clear errors', async () => {
+  const plain = JSON.parse((await call('export_diagram', { project: 'pedido.lila' })).text) as { run?: unknown; svg: string };
+  expect(plain.run).toBeUndefined();
+  for (const overlay of ['bottlenecks', 'heatmap'] as const) {
+    const answer = await call('export_diagram', { project: 'pedido.lila', overlay });
+    expect(answer.isError, overlay).toBe(false);
+    const { run, svg } = JSON.parse(answer.text) as { run: unknown; svg: string };
+    expect(run).toEqual({ id: 'run-1', scenario: 'as-is.scenario.json', current: true });
+    expect(svg).not.toBe(plain.svg);
+    expect(svg).toMatch(/fill="#(E8B84B|E07A22|C42152)" stroke="#\1"/);
+    expect(JSON.parse((await call('export_diagram', { project: 'pedido.lila', overlay })).text).svg).toBe(svg);
+  }
+  const saved = await call('export_diagram', { project: 'pedido.lila', overlay: 'heatmap', run: 'run-1', saveTo: 'heat.svg' });
+  expect(JSON.parse(saved.text)).toEqual({ process: 'pedido', run: { id: 'run-1', scenario: 'as-is.scenario.json', current: true }, file: `${temp}/heat.svg`.replaceAll('\\', '/') });
+  expect(readFileSync(join(temp, 'heat.svg'), 'utf8')).toContain('>BOTTLENECK Wait ');
+
+  writeFileSync(join(temp, 'm.bpmn'), 'x');
+  const bpmn = await call('export_diagram', { path: 'm.bpmn', overlay: 'heatmap', locale: 'es' });
+  expect(bpmn.isError).toBe(true);
+  expect(bpmn.text).toMatch(/^export_diagram: .*m\.bpmn no es un proyecto \.lila: una capa colorea/);
+  const runOnly = await call('export_diagram', { project: 'pedido.lila', run: 'run-1' });
+  expect(runOnly.text).toMatch(/^export_diagram: a run .* only applies to the diagram with an overlay/);
+  expect((await call('export_diagram', { project: 'pedido.lila', overlay: 'utilization' })).isError).toBe(true);
+}, 120_000);
+
 test('export_document: HTML with the SVG and the run; Word that unzips, with notes', async () => {
   const html = await call('export_document', { project: 'pedido.lila', format: 'html', saveTo: 'doc.html' });
   expect(html.isError).toBe(false);
@@ -87,6 +112,12 @@ test('export_results: an xlsx readWorkbook opens, CSV files, and a clear error w
   const csv = await call('export_results', { project: 'pedido.lila', format: 'csv', saveTo: 'csv' });
   expect(JSON.parse(csv.text).files).toHaveLength(4);
   expect(readdirSync(join(temp, 'csv')).sort()).toEqual(['elements.csv', 'flows.csv', 'process.csv', 'resources.csv']);
+  // #666: the fixture stores the scenario as written (30 replications) though one ran, so the run
+  // cannot be reproduced: no percentiles, and the answer says why.
+  expect(JSON.parse(csv.text).percentiles).toEqual({
+    included: false,
+    note: expect.stringMatching(/^The per-element wait percentiles are left out: the run's stored inputs do not reproduce its stored results/) as unknown as string,
+  });
 
   const empty = join(temp, 'empty.lila');
   await pedidoWithRuns(empty, []);
@@ -115,6 +146,17 @@ test('run_simulation with saveRun stores the run; export_document then has the r
   const after = await call('export_document', { project: 'fresh.lila', format: 'html', saveTo: 'after.html' });
   expect(JSON.parse(after.text).run).toEqual({ id: savedRun.id, scenario: 'as-is.scenario.json', current: true });
   expect(readFileSync(join(temp, 'after.html'), 'utf8')).toContain('<h2>Results</h2>');
+
+  // #666: a run saved by `run_simulation` reproduces, so its results carry the wait percentiles.
+  const xlsx = await call('export_results', { project: 'fresh.lila', format: 'xlsx', saveTo: 'fresh.xlsx' });
+  expect(JSON.parse(xlsx.text).percentiles).toEqual({ included: true });
+  const percentiles = readWorkbook(readFileSync(join(temp, 'fresh.xlsx'))).at(-1)!;
+  expect(percentiles.name).toBe('Percentiles');
+  expect(percentiles.rows[0]).toEqual(['Id', 'Name', 'n', 'p50', 'p90', 'p95']);
+  expect(percentiles.rows.length).toBeGreaterThan(1);
+  const csv = await call('export_results', { project: 'fresh.lila', format: 'csv', saveTo: 'fresh-csv' });
+  expect(JSON.parse(csv.text).percentiles).toEqual({ included: true });
+  expect(readdirSync(join(temp, 'fresh-csv')).sort()).toEqual(['elements.csv', 'flows.csv', 'percentiles.csv', 'process.csv', 'resources.csv']);
 
   // Without a .lila, or with an inline scenario, there is nowhere to store it.
   const bpmn = await call('run_simulation', { model: join(repo, 'examples/pedido/model.bpmn'), scenario: join(repo, 'examples/pedido/as-is.scenario.json'), saveRun: true });

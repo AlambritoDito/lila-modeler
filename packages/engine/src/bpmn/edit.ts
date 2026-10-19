@@ -186,6 +186,17 @@ export const EditOperationSchema = z.discriminatedUnion('op', [
       on: Id.optional().describe('Only its connection to this activity; without it, every connection.'),
     })
     .describe('Disconnects a data object (from one activity, or from all); the object goes when nothing uses it any more.'),
+  z
+    .strictObject({
+      op: z.literal('setCalledProcess'),
+      id: Id.describe('Id of a call activity of the edited process.'),
+      process: z
+        .string()
+        .min(1)
+        .nullable()
+        .describe('Slug of another process of the .lila, whose BPMN process id becomes the calledElement; null removes it.'),
+    })
+    .describe('Sets the process a call activity calls (its calledElement), by the slug of another process of the .lila; only in a .lila.'),
 ]);
 export const EditOperationsSchema = z.array(EditOperationSchema).min(1);
 
@@ -230,6 +241,29 @@ export interface EditBpmnOptions {
   processId?: string | undefined;
   /** #546: the process's scenarios, so the before/after validation checks the process that runs. */
   scenarios?: ParseBpmnOptions['scenarios'];
+  /**
+   * #664: the processes of the `.lila` a call activity can call, slug → its BPMN process id and its
+   * name (`editLilaProcess` passes every process of the project). Without it, `setCalledProcess`
+   * is refused: a bare model has no other process to name.
+   */
+  callTargets?: ReadonlyMap<string, CallTarget> | undefined;
+}
+
+/** A process `setCalledProcess` can name (#664). */
+export interface CallTarget {
+  /**
+   * The BPMN process id the call activity's `calledElement` gets; `undefined` when none of the ids
+   * its model declares can be told to be the process (the operation is then refused).
+   */
+  readonly processId: string | undefined;
+  /** The process's name, for messages. */
+  readonly name: string;
+  /** `true` for the process being edited: a call activity does not call its own process. */
+  readonly self?: boolean | undefined;
+  /** The other processes of the project whose model declares `processId` too: the call would be ambiguous. */
+  readonly sharedWith?: readonly string[] | undefined;
+  /** The BPMN process ids its model declares, for messages. */
+  readonly declared?: readonly string[] | undefined;
 }
 
 export interface BpmnEdit {
@@ -298,6 +332,8 @@ class Editor {
   op = 0;
   /** Incremental layout (`layout: false`): the operations keep the DI up to date as they go. */
   incremental = true;
+  /** What `setCalledProcess` can name (#664); `undefined` outside a `.lila`. */
+  callTargets: ReadonlyMap<string, CallTarget> | undefined;
   /** The pool's bounds before the edit. */
   readonly pool: { x: number; y: number; width: number; height: number } | undefined;
 
@@ -740,6 +776,8 @@ class Editor {
         return this.addDataObject(op);
       case 'removeDataObject':
         return this.removeDataObject(op, before);
+      case 'setCalledProcess':
+        return this.setCalledProcess(op);
     }
   }
 
@@ -1429,6 +1467,34 @@ class Editor {
     this.change(this.C.editDataRemoved(op.name, op.on, gone.join(', ')));
   }
 
+  /** #664: writes (or, with `process: null`, removes) the `calledElement` of a call activity. */
+  setCalledProcess(op: Extract<Op, { op: 'setCalledProcess' }>): void {
+    const node = this.node(op.id, 'id');
+    if (node === undefined) return;
+    if (node.$type !== 'bpmn:CallActivity') return this.issue('id', this.C.editNotACallActivity(op.id, typeName(node)));
+    const targets = this.callTargets;
+    if (targets === undefined) return this.issue('process', this.C.editCallNeedsLila());
+    if (op.process === null) {
+      delete node['calledElement'];
+      this.touch(node);
+      return this.change(this.C.editCallCleared(op.id));
+    }
+    const target = targets.get(op.process);
+    if (target === undefined) {
+      const others = [...targets].filter(([, t]) => t.self !== true).map(([slug]) => slug);
+      return this.issue('process', this.C.editCallUnknownProcess(op.process, others.join(', ')));
+    }
+    if (target.self === true) return this.issue('process', this.C.editCallSelf(op.process, this.process.id));
+    if (target.processId === undefined) return this.issue('process', this.C.editCallUnresolved(op.process, (target.declared ?? []).join(', ')));
+    // Another process declaring the same id: the app would open the first one, and delete_process guard both.
+    const shared = target.sharedWith ?? [];
+    if (shared.length > 0) return this.issue('process', this.C.editCallShared(op.process, target.processId, shared.map((s) => `"${s}"`).join(', '), shared.length));
+    if (target.processId === this.process.id) return this.issue('process', this.C.editCallSelf(op.process, target.processId));
+    node['calledElement'] = target.processId;
+    this.touch(node);
+    this.change(this.C.editCalled(op.id, target.name, op.process));
+  }
+
   /**
    * The annotations and data objects without a shape (new ones, #638) get one beside their node,
    * and associations without an edge get one, on the plane of each container.
@@ -1566,6 +1632,7 @@ const OP_KEYS: Readonly<Record<Op['op'], readonly string[]>> = {
   removeAnnotation: ['op', 'on', 'text'],
   addDataObject: ['op', 'name', 'on', 'direction'],
   removeDataObject: ['op', 'name', 'on'],
+  setCalledProcess: ['op', 'id', 'process'],
 };
 const STEP_KEYS = new Set(['id', 'name', 'lane', 'type', 'duration', 'resources', 'selection']);
 
@@ -1708,6 +1775,11 @@ function readOperations(input: unknown, C: CliMessages, issues: EditIssue[]): (O
       case 'removeDataObject':
         op = { ...op, name: text('name', true), on: text('on', false) };
         break;
+      case 'setCalledProcess': {
+        const target = value['process'];
+        op = { ...op, id: text('id', true), process: target === null || isText(target) ? target : bad('process', C.editBadCalledProcess()) };
+        break;
+      }
     }
     if (issues.length > before) return undefined;
     for (const key of Object.keys(op)) if (op[key] === undefined) delete op[key];
@@ -1765,6 +1837,7 @@ export async function editBpmn(xml: string, operations: unknown, options: EditBp
 
   const editor = new Editor(moddle, definitions, process, C, options.scenario, options.scenarioName ?? 'as-is.scenario.json');
   editor.incremental = options.layout === false;
+  editor.callTargets = options.callTargets;
   editor.noteSeated();
   editor.issues.push(...shapeIssues);
   for (const [index, op] of ops.entries()) {

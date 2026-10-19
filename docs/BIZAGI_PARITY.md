@@ -50,6 +50,7 @@ cite it; it does not imply a public promise that Lila matches Bizagi Modeler.
 | **Extras Bizagi does not offer** | | | | |
 | p50/p90/p95 of cycle time and wait | ✗ | ✓ | M2 | Implemented (LILA-028) |
 | Mean/max queue length per activity | ✗ | ✓ | M2 | Implemented (LILA-036) |
+| p50/p90/p95 of resource wait per activity | ✗ | ✓ in the Simulate dock and quick view (p95), and in `lila export results` / `export_results` (`Percentiles` sheet, `percentiles.csv`) | M5 | Implemented (#396, #666) |
 | Throughput per hour, cost per case | ✗ | ✓ | M2 | Implemented (LILA-028) |
 | Bottleneck ranking | ✗ | ✓ | M2 | Implemented (LILA-036) |
 | Event log per case (CSV; XES later) | ✗ | ✓ | M2 | Implemented (LILA-037) |

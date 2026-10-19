@@ -197,7 +197,7 @@ describe('CLI', () => {
     expect(JSON.parse(out.join('\n'))).toEqual(await lilaProjectInventory({ file }));
     out = [];
     expect(await main(['project', 'list', file])).toBe(1);
-    expect(out[0]).toBe('lila project: unknown subcommand "list"; use show.');
+    expect(out[0]).toBe('lila project: unknown subcommand "list"; use show, create.');
     expect(readFileSync(file).equals(bytes)).toBe(true);
   });
 

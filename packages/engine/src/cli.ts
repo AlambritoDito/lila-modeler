@@ -46,7 +46,7 @@ import {
 } from './csv.js';
 import { compare, type CompareResult, type CompareScope } from './core/compare.js';
 import { compareWorkbook, resourceNamesOf, scenarioWorkbook } from './xlsx-report.js';
-import { exportDiagram, exportDocument, exportResults, writeExportDirectory, writeExportFile } from './project-fs/exports.js';
+import { DIAGRAM_OVERLAYS, exportDiagram, exportDocument, exportResults, writeExportDirectory, writeExportFile, type DiagramOverlay } from './project-fs/exports.js';
 import { saveSimulationRun } from './project-fs/save-run.js';
 import { simulate } from './core/run.js';
 import type { EventLogRow, RunResult } from './core/result.js';
@@ -953,6 +953,7 @@ async function dispatchExport(argv: readonly string[], locale: Locale): Promise<
       format: { type: 'string' },
       run: { type: 'string' },
       scenario: { type: 'string' },
+      overlay: { type: 'string' },
       force: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
     },
@@ -971,7 +972,12 @@ async function dispatchExport(argv: readonly string[], locale: Locale): Promise<
   const source = { file, process: values.process, locale };
   const write = { overwrite: values.force === true, locale };
   if (kind === 'diagram') {
-    const { svg, file: from } = await exportDiagram(source);
+    const overlay = values.overlay as DiagramOverlay | undefined;
+    if (overlay !== undefined && !DIAGRAM_OVERLAYS.includes(overlay)) {
+      console.error(C.commandError('export', C.exportInvalidOverlay(overlay)));
+      return 1;
+    }
+    const { svg, file: from } = await exportDiagram({ ...source, run: values.run, scenario: values.scenario, overlay });
     if (values.out === undefined) process.stdout.write(`${svg}\n`);
     else console.log(`SVG: ${writeExportFile(values.out, svg, { ...write, source: from })}`);
     return 0;
@@ -999,6 +1005,7 @@ async function dispatchExport(argv: readonly string[], locale: Locale): Promise<
   } else {
     for (const path of writeExportDirectory(values.out, results.data, { ...write, source: results.file })) console.log(`CSV: ${path}`);
   }
+  if (results.percentiles.note !== undefined) console.error(results.percentiles.note);
   return 0;
 }
 

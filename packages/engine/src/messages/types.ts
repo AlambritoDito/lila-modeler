@@ -183,6 +183,8 @@ export interface CliMessages {
   xlsxSheetFlows: () => string;
   xlsxSheetResources: () => string;
   xlsxSheetParameters: () => string;
+  /** The resource-wait percentiles sheet of `exportResults` (#666). */
+  xlsxSheetPercentiles: () => string;
   xlsxSheetComparison: () => string;
   xlsxColumnSection: () => string;
   xlsxColumnParameter: () => string;
@@ -311,6 +313,10 @@ export interface CliMessages {
   exportDocxNoDiagram: () => string;
   exportDocumentNoRun: () => string;
   exportNoCharts: () => string;
+  /** #666: a stored run cannot be reproduced from its inputs (re-run mismatch, cancelled, other replications). */
+  exportPercentilesNotReproduced: () => string;
+  /** #666: the re-simulation of a stored run failed; `reason` is the engine's message. */
+  exportPercentilesFailed: (reason: string) => string;
   exportTargetExists: (target: string) => string;
   exportNotDirectory: (path: string) => string;
   exportUnknownKind: (kind: string) => string;
@@ -321,6 +327,15 @@ export interface CliMessages {
   exportTargetIsSource: (target: string) => string;
   exportFileNeeded: (path: string) => string;
   exportRunAndScenario: () => string;
+  /* --- the run overlay of `lila export diagram` / `export_diagram` (#669) -- */
+  exportOverlayNeedsLila: (file: string) => string;
+  exportOverlayNoRun: (overlay: string, detail: string) => string;
+  exportRunNeedsOverlay: () => string;
+  exportInvalidOverlay: (value: string) => string;
+  /** The heat map's badge: the task's mean resource wait, `wait` with its short unit. */
+  exportOverlayWait: (wait: string) => string;
+  /** The mark of the bottleneck ranking's tasks in the heat map. */
+  exportOverlayBottleneck: () => string;
   /* --- saving a run into a `.lila` (#538): `lila run --save`, `run_simulation` `saveRun` -- */
   saveRunNeedsLila: () => string;
   saveRunNeedsArchiveScenario: (scenario: string) => string;
@@ -479,6 +494,16 @@ export interface CliMessages {
   editBadBetween: () => string;
   editDuplicateLane: (lane: string) => string;
   editLayoutFailed: (detail: string) => string;
+  /* `setCalledProcess` (#664) */
+  editNotACallActivity: (id: string, type: string) => string;
+  editCallNeedsLila: () => string;
+  editCallUnknownProcess: (slug: string, slugs: string) => string;
+  editCallSelf: (slug: string, processId: string) => string;
+  editCallShared: (slug: string, processId: string, others: string, count: number) => string;
+  editCallUnresolved: (slug: string, declared: string) => string;
+  editBadCalledProcess: () => string;
+  editCalled: (id: string, name: string, slug: string) => string;
+  editCallCleared: (id: string) => string;
 }
 
 /**

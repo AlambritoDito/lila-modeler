@@ -38,6 +38,7 @@ const EN_USAGE = `Usage: lila validate <file.bpmn|project.lila> [--process slug]
        lila compare <model.bpmn|project.lila> <a> <b> [...] [--process slug] [--seed n]
                     [--replications n] [--json result.json] [--xlsx book.xlsx] [--all]
        lila export diagram <model.bpmn|project.lila> [--process slug] [--out file.svg] [--force]
+                           [--overlay bottlenecks|heatmap] [--run id|latest] [--scenario name]
        lila export doc <project.lila> --out file.docx|file.html [--format docx|html]
                        [--process slug] [--run id|latest] [--scenario name] [--force]
        lila export results <project.lila> --out book.xlsx|directory [--format xlsx|csv]
@@ -66,9 +67,14 @@ const EN_USAGE = `Usage: lila validate <file.bpmn|project.lila> [--process slug]
                             [--dry-run] [--json]
        lila scenario template <project.lila> <scenario> --out sheet.xlsx [--process slug] [--force]
        lila scenario show <project.lila> <scenario> [--process slug] [--resolved] [--json]
+       lila scenario patch <project.lila> <scenario> --patch <ops.json> [--process slug]
+                           [--save-to name] [--extends-from name] [--name n] [--description d]
+                           [--dry-run] [--json]
        lila scenario rename <project.lila> <scenario> --name name [--process slug] [--dry-run] [--json]
        lila scenario delete <project.lila> <scenario> [--process slug] [--dry-run] [--json]
        lila project show <project.lila> [--json]
+       lila project create <path.lila> --name name --bpmn <file.bpmn> [--scenario name=file.json ...]
+                           [--force] [--allow-unsimulatable] [--json]
        lila mcp
 
 Commands:
@@ -90,9 +96,12 @@ Commands:
   scenario   import: applies a scenario sheet (.xlsx/.csv) to a scenario of the .lila, like the
              app's Import Excel/CSV. template: writes that sheet, filled in, for a person.
              show: prints a scenario as stored (or --resolved) with the validator's notes.
+             patch: applies a JSON Patch to a scenario, in place or as a new scenario that
+             extends it (--save-to); written only if the result validates.
              rename: renames a scenario (its file stays). delete: deletes a scenario with its
              saved runs.
   project    show: lists the processes of a .lila, their scenarios and saved runs. Read only.
+             create: makes a new .lila from a .bpmn and optional scenarios.
   mcp        Starts the MCP server over stdio (for Claude Code / Desktop). See docs/MCP.md.
 
 A model can be a .bpmn or a .lila project. With a .lila, a scenario is a .json path or, when no
@@ -134,6 +143,8 @@ export options:
                     the document only takes a current run and goes without results when there is
                     none.
   --scenario name   With latest, the run of that scenario (needed when several have one).
+  --overlay o       diagram: colours it with a stored run of the .lila, as the app does:
+                    bottlenecks (the canvas's bottleneck cut) or heatmap (Results' heat map).
   --force           Replaces existing files; without it nothing existing is overwritten.
   The Word document has no diagram and no document has the run's charts: the engine has no
   rasteriser. The HTML document has the diagram.
@@ -177,6 +188,23 @@ process attribute define options:
 
 scenario import options:
   --dry-run         Shows the planned changes and the rows not applied without writing.
+
+scenario patch options:
+  --patch file      The JSON list of operations (RFC 6902 add/replace/remove/test).
+  --save-to name    Creates this scenario with extends and only the keys the patch touched,
+                    instead of patching the scenario in place.
+  --extends-from n  With --save-to: the parent of extends (default: the patched scenario).
+  --name, --description  Of the resulting scenario.
+  --dry-run         Validates everything and writes nothing.
+
+project create options:
+  --name name       Name of the project.
+  --bpmn file       The model; a model with validation errors is refused.
+  --scenario n=f    A scenario JSON saved as n.scenario.json; repeatable. Drafts are kept
+                    and listed with what they lack.
+  --force           Replaces an existing file.
+  --allow-unsimulatable  Keeps a model with validation errors, as a diagram that does not
+                    simulate; the errors are printed as notes.
 
 mcp options:
   None. It speaks MCP over stdin/stdout; the paths of the tools resolve against the
@@ -365,6 +393,7 @@ export const en: Catalog = {
     xlsxSheetFlows: () => 'Flows',
     xlsxSheetResources: () => 'Resources',
     xlsxSheetParameters: () => 'Parameters',
+    xlsxSheetPercentiles: () => 'Percentiles',
     xlsxSheetComparison: () => 'Comparison',
     xlsxColumnSection: () => 'Section',
     xlsxColumnParameter: () => 'Parameter',
@@ -504,6 +533,10 @@ export const en: Catalog = {
       'The Word document has no diagram: Word needs a PNG and the engine has no rasteriser. The HTML document has it.',
     exportDocumentNoRun: () => 'No current run: the document has the model and no results.',
     exportNoCharts: () => 'The charts of the run are left out: the engine has no rasteriser.',
+    exportPercentilesNotReproduced: () =>
+      'The per-element wait percentiles are left out: the run\'s stored inputs do not reproduce its stored results (a cancelled run, or another engine version or platform, which can change the last digit).',
+    exportPercentilesFailed: (reason) =>
+      `The per-element wait percentiles are left out: simulating the run's stored inputs again failed: ${reason}`,
     exportTargetExists: (target) => `${target} already exists; nothing was written. Pass --force (\`overwrite\` in MCP) to replace it.`,
     exportNotDirectory: (path) => `cannot write into ${path}: it is a file, not a directory.`,
     exportUnknownKind: (kind) => `unknown export "${kind}": expected diagram, doc or results.`,
@@ -516,6 +549,14 @@ export const en: Catalog = {
     exportFileNeeded: (path) => `"${path}" ends with a slash; name the file to write.`,
     exportRunAndScenario: () =>
       'a run id already says which scenario: pass --run <id> or --scenario (`run` or `scenario` in MCP), not both.',
+    exportOverlayNeedsLila: (file) =>
+      `${file} is not a .lila project: an overlay colours the diagram with a stored run, and runs are stored in a .lila.`,
+    exportOverlayNoRun: (overlay, detail) => `overlay "${overlay}" needs a stored run: ${detail}`,
+    exportRunNeedsOverlay: () =>
+      'a run (--run or --scenario, `run` or `scenario` in MCP) only applies to the diagram with an overlay: pass --overlay bottlenecks|heatmap.',
+    exportInvalidOverlay: (value) => `--overlay only accepts: bottlenecks, heatmap; got "${value}".`,
+    exportOverlayWait: (wait) => `Wait ${wait}`,
+    exportOverlayBottleneck: () => 'BOTTLENECK',
     saveRunNeedsLila: () => 'saving the run (--save, `saveRun` in MCP) needs a .lila model.',
     saveRunNeedsArchiveScenario: (scenario) =>
       `saving the run needs a scenario of the .lila, and "${scenario}" is not one: name a scenario of the process.`,
@@ -696,6 +737,22 @@ export const en: Catalog = {
     editBadBetween: () => 'must be two step ids: [from, to].',
     editDuplicateLane: (lane) => `there is already a lane named "${lane}"; choose another name.`,
     editLayoutFailed: (detail) => `the automatic layout failed on the edited process (${detail}); nothing was changed. Try again with layout: false (--no-layout).`,
+    editNotACallActivity: (id, type) => `"${id}" is a ${type}, not a call activity (callActivity); only a call activity calls a process.`,
+    editCallNeedsLila: () =>
+      'setCalledProcess needs a .lila: the called process is named by its slug among the processes of the project (edit_process, lila process edit).',
+    editCallUnknownProcess: (slug, slugs) =>
+      slugs === '' ? `the project has no process "${slug}", and no other process to call.` : `the project has no process "${slug}"; the processes a call activity can call are: ${slugs}.`,
+    editCallSelf: (slug, processId) =>
+      `"${slug}" has the BPMN process id ${processId}, that of the process being edited: a call activity cannot call its own process.`,
+    editCallShared: (slug, processId, others, count) =>
+      `"${slug}" has the BPMN process id ${processId}, which ${others} ${count === 1 ? 'declares' : 'declare'} too: a call activity cannot tell them apart; give one of them another id (put_process_bpmn with mode "replace").`,
+    editCallUnresolved: (slug, declared) =>
+      declared === ''
+        ? `the model of "${slug}" declares no BPMN process, so a call activity cannot name it.`
+        : `cannot tell which BPMN process of "${slug}" to call: its model declares ${declared}, and none of them is its model id or the process it simulates.`,
+    editBadCalledProcess: () => 'must be the slug of a process of the project, or null to remove the called process.',
+    editCalled: (id, name, slug) => `"${id}" now calls ${name} (${slug})`,
+    editCallCleared: (id) => `"${id}" no longer calls a process`,
   },
   mcp: {
     nodeType: (type) => NODE_TYPES[type] ?? type,

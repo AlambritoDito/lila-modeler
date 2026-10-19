@@ -117,7 +117,12 @@ the app uses:
 
 - `lila export diagram <model.bpmn|project.lila>` draws the diagram with the engine's own SVG
   renderer (the BPMN DI geometry, Lila Light colours on white). Without `--out` it prints the SVG
-  on stdout.
+  on stdout. With `--overlay bottlenecks|heatmap` (#669) it colours the diagram with a stored run
+  of the `.lila` on the app's scale and Lila Light's `sim.bottleneck` colours: `bottlenecks` tints
+  the canvas's bottleneck cut, each with its mean wait and utilization; `heatmap` tints every
+  measured task as the Results heat map does, with its wait, and marks the cut. The run is drawn
+  on the model it ran on. An overlay on a `.bpmn`, or with no stored run, is an error; so is
+  `--run` or `--scenario` without `--overlay`.
 - `lila export doc <project.lila> --out file.docx|file.html` writes the process document, as the
   app's «Export document»: diagram, descriptions in flow order, the scenario and the results of
   a stored run. The HTML embeds the SVG diagram. The Word file has **no diagram**, and neither
@@ -126,7 +131,11 @@ the app uses:
 - `lila export results <project.lila> --out book.xlsx|directory` writes the results of a stored
   run: one `.xlsx` (Summary, Elements, Flows, Resources, Parameters), or with `--format csv`
   `elements.csv`, `flows.csv`, `resources.csv` and `process.csv` in the directory, the same files
-  `lila run` writes (a stored run keeps no event log, so there is no `log.csv`).
+  `lila run` writes (a stored run keeps no event log, so there is no `log.csv`). It adds the
+  resource-wait p50/p90/p95 per element, a `Percentiles` sheet or `percentiles.csv`, from
+  simulating the run's stored inputs again; when that re-run does not reproduce the stored KPIs
+  (another engine version or platform), they are left out and a note on stderr says why
+  (`docs/RESULTS_FORMAT.md` § 12).
 
 `--format` defaults to the extension of `--out` (`.docx`, `.html`, `.xlsx`). `--process` picks
 the process of a repository, as elsewhere. **Runs** are the ones the app saved in the `.lila`:
@@ -294,6 +303,60 @@ Exit code: `0`.
 npx lila scenario show examples/pedido.lila to-be-3-cajeros --resolved
 ```
 Exit code: `0`.
+
+## `scenario patch` and `project create` (#635)
+
+The CLI side of the MCP tools `patch_scenario` (for a `.lila`) and `create_project`
+([`docs/MCP.md`](MCP.md#mcp-and-cli-side-by-side)), over the same engine functions:
+
+- `lila scenario patch <project.lila> <scenario> --patch <ops.json>` applies a
+  [JSON Patch](https://www.rfc-editor.org/rfc/rfc6902) (`add`, `replace`, `remove` and `test`;
+  no `move` or `copy`) to a scenario of the `.lila`, validates the result against the process
+  model and writes it only when it validates. Without `--save-to` it patches the scenario in
+  place: the patch applies to the resolved scenario, which is written whole, without `extends`.
+  With `--save-to name` it creates (or replaces) the scenario `name`, which `extends` the scenario
+  given (or `--extends-from name`) and holds only the keys the patch touched. `--name` and
+  `--description` set those of the result. An invalid patch, or a result that does not validate,
+  exits `1` and writes nothing. A patch that changes nothing writes nothing and says so: the
+  scenario keeps its revision and its saved runs stay current. `--dry-run` validates everything
+  and writes nothing; `--json` prints `{ scenario, file, process, entry, written, dryRun, notes }`.
+  Patching a loose `.json` scenario is MCP only: from the CLI, edit the file.
+- `lila project create <path.lila> --name name --bpmn <file.bpmn>` creates a new `.lila` with one
+  process. A model with validation errors exits `1`, unless `--allow-unsimulatable`: then it is
+  kept as a diagram that does not simulate, its errors printed as notes. `--scenario name=file.json`
+  (repeatable) adds a scenario saved as `name.scenario.json`; a scenario that cannot run yet is
+  kept as a draft and listed with what it lacks. A model without a diagram gets one. The file is
+  written whole or not at all, and an existing file exits `1` unless `--force`. `--json` prints
+  `{ file, name, processId, laidOut, warnings, notes, scenarios }`.
+
+```bash
+npx lila scenario patch examples/pedido.lila as-is --patch examples/outline/pedido-patch.json --save-to to-be-4-cocineros --dry-run
+```
+Exit code: `0`.
+
+```text
+Dry run: the result validates and would be written to to-be-4-cocineros.scenario.json; nothing was written.
+warning W-ELEMENTO-SIN-PARAMETROS: the element exists in the model and has no parameters; it takes its default values (elements.Task_Empacar).
+```
+
+The file already exists, so `project create` refuses it without `--force`:
+
+```bash
+npx lila project create examples/pedido.lila --name Orders --bpmn examples/pedido/model.bpmn
+```
+Exit code: `1`.
+
+```text
+lila project create: /…/examples/pedido.lila already exists; nothing was written. Pass --force (`overwrite` in MCP) to replace it.
+```
+
+A full round trip, in a folder of your own: create a project, derive a scenario, compare the two.
+
+```text
+npx lila project create orders.lila --name Orders --bpmn examples/pedido/model.bpmn --scenario as-is=examples/pedido/as-is.scenario.json
+npx lila scenario patch orders.lila as-is --patch examples/outline/pedido-patch.json --save-to to-be-4-cocineros
+npx lila compare orders.lila as-is to-be-4-cocineros
+```
 
 ## `process export-bpmn` and `process import` (#632)
 
@@ -489,7 +552,7 @@ Process "Restaurant" (pedido)
 
 `process edit` applies a list of operations to one process, all or none: the JSON array the MCP
 tool `edit_process` takes as `operations` (`add`, `connect`, `remove`, `rename`, `setType`,
-`moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`, `annotate`, `addDataObject`…; format and rules in
+`moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`, `annotate`, `addDataObject`, `setCalledProcess`…; format and rules in
 [`docs/MCP.md`](MCP.md#editing-a-process)). Every
 operation is checked, the result is validated, and the `.lila` is written only if all of it is fine;
 otherwise it exits `1`, writes nothing and lists every problem with the index of its operation. The

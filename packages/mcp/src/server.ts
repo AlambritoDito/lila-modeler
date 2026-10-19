@@ -13,7 +13,6 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { posix } from 'node:path';
-import { isDeepStrictEqual } from 'node:util';
 
 import { validateBpmnXml, type TargetingScenario, type ValidateBpmnReport, type ValidationResult } from '@lila-modeler/engine/bpmn';
 import {
@@ -38,30 +37,30 @@ import {
   type ValidatedModel,
 } from '@lila-modeler/engine/cli-shared';
 import {
+  applyJsonPatch,
+  buildPatchDelta,
   createLilaProcess,
   editLilaProcess,
-  findLilaScenario,
   isLilaPath,
-  lilaScenarioEntryName,
-  lilaScenarioPath,
-  lilaScenarioReader,
-  lilaWritten,
   openLilaProcess,
+  patchLilaScenario,
   readLilaOutline,
-  writeLilaScenario,
+  sameScenario,
+  validatePatchedScenario,
+  withoutPhantomFile,
+  withRelativeModel,
   exportDiagram,
   exportDocument,
   exportResults,
   saveSimulationRun,
   writeExportDirectory,
   writeExportFile,
+  type JsonPatchOp,
   type LilaProcess,
 } from '@lila-modeler/engine/project-fs';
-import type { ProjectDocument } from '@lila-modeler/engine/project';
 import { runResultSchema } from '@lila-modeler/engine/result-schema';
 import {
   resolveExtends,
-  schemaIssueLines,
   scenarioErrors,
   parseScenario,
   validateScenario,
@@ -71,14 +70,13 @@ import {
 } from '@lila-modeler/engine/schema';
 import { compare, type CompareResult, type RunResult } from '@lila-modeler/engine';
 import { compareWorkbook } from '@lila-modeler/engine/xlsx-report';
-import { messages, resolveLocale, type Locale } from '@lila-modeler/engine/messages';
+import { agentToolMessages, messages, resolveLocale, type Locale } from '@lila-modeler/engine/messages';
 import { McpServer } from '@modelcontextprotocol/server';
 import type { CallToolResult, ServerContext } from '@modelcontextprotocol/server';
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { z } from 'zod';
 
 import { registerAgentTools } from './agent-tools.js';
-import { applyJsonPatch, buildPatchDelta, type JsonPatchOp } from './json-patch.js';
 import { resolveScenarioInput, type ScenarioInput } from './scenario-input.js';
 import { detailSchema, runSummarySchema, summarizeComparison, summarizeRun, type Detail } from './result-summary.js';
 import { registerResourcesAndPrompts } from './resources.js';
@@ -560,102 +558,6 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/**
- * Esquema + modelo + `validateScenario`, en una sola pasada: la misma comprobación sirve
- * para el modo (a) sobre el escenario ya parcheado, y para el modo (b) sobre el candidato que
- * realmente se va a escribir (que puede no coincidir con el parcheado si `extendsFrom` no es el
- * mismo archivo que `scenario`). Solo si esto no devuelve error se escribe algo a disco.
- * El esquema se pasa por `parseScenario` (LILA-202), no por `ScenarioSchema.safeParse`: los
- * defectos del escenario parcheado salen en español, igual que en la CLI y en `run_simulation`.
- */
-async function validatePatchedScenario(
-  raw: unknown,
-  locale: Locale,
-  lila?: LilaProcess | undefined,
-): Promise<{ ok: true; scenario: ResolvedScenario; notes: string[] } | { ok: false; error: string }> {
-  const M = messages(locale).mcp;
-  const parsed = parseScenario(raw, { locale });
-  if (!parsed.success) {
-    // `schemaIssueLines` es la que pone los códigos de § 17 (`E-CLAVE-DESCONOCIDA`) que la CLI ya
-    // emite (LILA-198); formatear los defectos aquí a mano los perdía.
-    const detail = schemaIssueLines(parsed.error.issues, { locale }).join('; ');
-    return { ok: false, error: `${M.invalidAfterPatchLabel()} ${detail}` };
-  }
-  // `ScenarioSchema` tiene `model` y `run` opcionales (un archivo con `extends` los hereda), así
-  // que un patch puede borrarlos y aun así pasar el esquema. `loadResolvedScenario` los exige y es
-  // lo que hace el modo (b); sin este par de guardas el modo (a) escribía un escenario que la
-  // propia `run_simulation` rechaza después — y el `remove /model` filtraba el TypeError de
-  // `node:path` en vez de un mensaje del dominio.
-  if (parsed.data.model === undefined) return { ok: false, error: M.patchedMissingModel() };
-  if (parsed.data.run === undefined) return { ok: false, error: M.patchedMissingRun() };
-  const scenario = parsed.data as ResolvedScenario;
-
-  let ir: ParsedIr;
-  let modelValidation: ValidationResult;
-  let elsewhere: ValidatedModel['elsewhere'];
-  // In a `.lila` the model is the process's own `model.bpmn` (#466): a patch that points `model`
-  // elsewhere is refused, like `run_simulation` refuses a scenario of another model.
-  if (lila !== undefined && comparablePath(scenario.model) !== comparablePath(lila.modelPath)) {
-    return { ok: false, error: M.modelMismatch(lila.modelPath, scenario.model) };
-  }
-  try {
-    ({ ir, validation: modelValidation, elsewhere } =
-      lila === undefined
-        ? await loadValidatedModel(scenario.model, locale, { scenarios: [scenario] })
-        : await validatedModelOf({ path: lila.modelPath, xml: lila.process.model.xml, lila }, locale, [scenario]));
-  } catch (error) {
-    return { ok: false, error: message(error) };
-  }
-  if (modelValidation.errors.length > 0) {
-    return { ok: false, error: M.modelInvalid(JSON.stringify(modelValidation.errors)) };
-  }
-
-  const problems = validateScenario(scenario, ir, { locale, elsewhere });
-  const issues = scenarioErrors(problems);
-  if (issues.length > 0) {
-    return { ok: false, error: `${M.invalidAfterPatchLabel()} ${JSON.stringify(issues)}` };
-  }
-
-  const notes = problems.filter((p) => p.severity === 'warning').map((p) => `${p.code}: ${p.message}`);
-  return { ok: true, scenario, notes };
-}
-
-/**
- * `loadResolvedScenario` prefija sus errores con la ruta del archivo. En el modo (b) esa ruta es
- * la de `saveTo`: un archivo que todavía no existe y que, si el escenario no valida, no se va a
- * escribir. Citarlo manda al agente a abrir una ruta fantasma — el mismo problema que el escenario
- * inline de LILA-054. Se le quita el prefijo y se alinea el texto con el del modo (a).
- */
-function withoutPhantomFile(error: unknown, phantom: string, locale: Locale): string {
-  const catalog = messages(locale);
-  const raw = message(error).replaceAll('\n', ' ');
-  return raw.startsWith(`${phantom}: `)
-    ? raw
-        .slice(phantom.length + 2)
-        .replace(catalog.cli.invalidScenarioLabel(), catalog.mcp.invalidAfterPatchLabel())
-    : raw;
-}
-
-/**
- * El escenario resuelto trae `model` como ruta absoluta: `resolveExtends` la ancla al archivo que
- * la declara. Escribirla tal cual en el modo (a) vuelve el archivo dependiente de la máquina que
- * corrió la tool (`/Users/quien-sea/...`), y deja de resolver en cualquier otro checkout. Se
- * reescribe relativa al propio escenario, que es como la declaran los del repo y la misma regla
- * que el modo (b) aplica a `extends`.
- */
-function withRelativeModel(scenario: ResolvedScenario, file: string): ResolvedScenario {
-  return { ...scenario, model: posix.relative(posix.dirname(file), scenario.model) };
-}
-
-/**
- * Whether two scenarios say the same, as JSON (#627): key order and `undefined` keys do not count.
- * A patch whose result is the scenario it read (`test` only, or a `replace` with the same value)
- * writes nothing, so the scenario keeps its revision and its runs stay current.
- */
-function sameScenario(a: unknown, b: unknown): boolean {
-  return isDeepStrictEqual(JSON.parse(JSON.stringify(a ?? null)), JSON.parse(JSON.stringify(b ?? null)));
-}
-
 /** The JSON at `file`, or `undefined` when there is none or it cannot be read (it is then written over). */
 function existingJson(file: string, locale: Locale): unknown {
   try {
@@ -674,6 +576,7 @@ interface PatchScenarioInput {
   extendsFrom?: string | undefined;
   name?: string | undefined;
   description?: string | undefined;
+  dryRun?: boolean | undefined;
   locale?: Locale | undefined;
 }
 
@@ -683,21 +586,23 @@ interface PatchScenarioInput {
  * archivo nuevo que declara `extends: extendsFrom` (por defecto, el propio `scenario`) y contiene
  * solo el delta del patch — como `to-be-3-cajeros.scenario.json`. En ambos casos, solo se escribe
  * si el escenario resultante valida contra el modelo; nunca dos veces (primero se valida, después
- * se escribe una única vez).
+ * se escribe una única vez). With `project`, the engine's `patchLilaScenario` does it inside the
+ * `.lila` (#635: the same function as `lila scenario patch`). `dryRun` validates and writes nothing.
  */
 async function patchScenario(input: PatchScenarioInput, locale: Locale): Promise<CallToolResult> {
-  if (input.project !== undefined) {
-    if (!isLilaPath(input.project)) {
-      return errorResult(toolMessage('patch_scenario', messages(locale).mcp.projectNotLila(input.project)));
-    }
-    return patchLilaScenario(input, input.project, locale);
-  }
-  if (input.process !== undefined) {
-    return errorResult(toolMessage('patch_scenario', messages(locale).cli.processOnlyForLila()));
-  }
-  const { scenario, patch, saveTo, extendsFrom, name, description } = input;
-  const M = messages(locale).mcp;
   const fail = (body: string): CallToolResult => errorResult(toolMessage('patch_scenario', body));
+  if (input.project !== undefined) {
+    if (!isLilaPath(input.project)) return fail(messages(locale).mcp.projectNotLila(input.project));
+    try {
+      return textResult(await patchLilaScenario({ ...input, file: input.project, locale }));
+    } catch (error) {
+      return fail(message(error));
+    }
+  }
+  if (input.process !== undefined) return fail(messages(locale).cli.processOnlyForLila());
+  const { scenario, patch, saveTo, extendsFrom, name, description } = input;
+  const dryRun = input.dryRun === true;
+  const M = messages(locale).mcp;
   const scenarioPath = absolutePath(scenario);
   let base: ResolvedScenario;
   try {
@@ -722,7 +627,10 @@ async function patchScenario(input: PatchScenarioInput, locale: Locale): Promise
     const outcome = await validatePatchedScenario(patchedRaw, locale);
     if (!outcome.ok) return fail(outcome.error);
     if (sameScenario(outcome.scenario, base)) {
-      return textResult({ scenario: outcome.scenario, file: scenarioPath, written: false, notes: [M.patchNoChange(), ...outcome.notes] });
+      return textResult({ scenario: outcome.scenario, file: scenarioPath, written: false, dryRun, notes: [M.patchNoChange(), ...outcome.notes] });
+    }
+    if (dryRun) {
+      return textResult({ scenario: outcome.scenario, file: scenarioPath, written: false, dryRun, notes: [agentToolMessages(locale).patchDryRun(scenarioPath), ...outcome.notes] });
     }
     try {
       const file = writeJsonAtomic(
@@ -730,7 +638,7 @@ async function patchScenario(input: PatchScenarioInput, locale: Locale): Promise
         withRelativeModel(outcome.scenario, scenarioPath),
         locale,
       );
-      return textResult({ scenario: outcome.scenario, file, written: true, notes: outcome.notes });
+      return textResult({ scenario: outcome.scenario, file, written: true, dryRun, notes: outcome.notes });
     } catch (error) {
       return fail(message(error));
     }
@@ -762,118 +670,15 @@ async function patchScenario(input: PatchScenarioInput, locale: Locale): Promise
   const outcome = await validatePatchedScenario(resolvedCandidate, locale);
   if (!outcome.ok) return fail(outcome.error);
   if (sameScenario(existingJson(saveToPath, locale), candidate)) {
-    return textResult({ scenario: outcome.scenario, file: saveToPath, written: false, notes: [M.patchSameTarget(saveToPath), ...outcome.notes] });
+    return textResult({ scenario: outcome.scenario, file: saveToPath, written: false, dryRun, notes: [M.patchSameTarget(saveToPath), ...outcome.notes] });
+  }
+  if (dryRun) {
+    return textResult({ scenario: outcome.scenario, file: saveToPath, written: false, dryRun, notes: [agentToolMessages(locale).patchDryRun(saveToPath), ...outcome.notes] });
   }
 
   try {
     const file = writeJsonAtomic(saveToPath, candidate, locale);
-    return textResult({ scenario: outcome.scenario, file, written: true, notes: outcome.notes });
-  } catch (error) {
-    return fail(message(error));
-  }
-}
-
-/**
- * `patch_scenario` on a scenario inside a `.lila` (#466). The same two modes as on disk, with every
- * name inside the archive: `scenario` and `extendsFrom` name scenarios of the process
- * (`findLilaScenario`), and `saveTo` is the name of the new entry. Validation runs against the
- * process's own model, and only a scenario that validates is written — through `writeLilaScenario`,
- * which saves the whole archive atomically and carries every other process through unchanged.
- */
-async function patchLilaScenario(
-  { scenario, process, patch, saveTo, extendsFrom, name, description }: PatchScenarioInput,
-  project: string,
-  locale: Locale,
-): Promise<CallToolResult> {
-  const M = messages(locale).mcp;
-  const fail = (body: string): CallToolResult => errorResult(toolMessage('patch_scenario', body));
-
-  let lila: LilaProcess;
-  let entry: string;
-  let base: ResolvedScenario;
-  try {
-    lila = await openLilaProcess(project, { process, locale });
-    entry = findLilaScenario(lila, scenario, locale);
-    base = loadResolvedScenario(
-      lilaScenarioPath(lila, entry),
-      lilaScenarioReader(lila, (file) => readJsonFile(file, locale), locale),
-      locale,
-    );
-  } catch (error) {
-    return fail(message(error));
-  }
-  const read = lilaScenarioReader(lila, (file) => readJsonFile(file, locale), locale);
-  const written = (target: string, resolvedScenario: ResolvedScenario, notes: string[], document: ProjectDocument): CallToolResult => {
-    // Where the process is in the file now (#613): a one-process version 2 archive is version 1 after
-    // the write, so its slug and the folder its `model` resolves under change with it.
-    const { slug, root } = lilaWritten(lila, document);
-    const model = resolvedScenario.model.startsWith(lila.root) ? `${root}${resolvedScenario.model.slice(lila.root.length)}` : resolvedScenario.model;
-    return textResult({ scenario: { ...resolvedScenario, model }, file: lila.file, process: slug, entry: target, written: true, notes });
-  };
-  // #627: nothing changes, nothing is written; the process is where it was.
-  const unchanged = (target: string, resolvedScenario: ResolvedScenario, notes: string[]): CallToolResult =>
-    textResult({ scenario: resolvedScenario, file: lila.file, process: lila.process.slug, entry: target, written: false, notes });
-
-  let patchedRaw: unknown;
-  try {
-    patchedRaw = applyJsonPatch(base, patch);
-  } catch (error) {
-    return fail(message(error));
-  }
-
-  if (saveTo === undefined) {
-    if (isPlainObject(patchedRaw)) {
-      if (name !== undefined) patchedRaw.name = name;
-      if (description !== undefined) patchedRaw.description = description;
-    }
-    const outcome = await validatePatchedScenario(patchedRaw, locale, lila);
-    if (!outcome.ok) return fail(outcome.error);
-    if (sameScenario(outcome.scenario, base)) return unchanged(entry, outcome.scenario, [M.patchNoChange(), ...outcome.notes]);
-    try {
-      const path = lilaScenarioPath(lila, entry);
-      const document = await writeLilaScenario(lila, entry, withRelativeModel(outcome.scenario, path), locale);
-      return written(entry, outcome.scenario, outcome.notes, document);
-    } catch (error) {
-      return fail(message(error));
-    }
-  }
-
-  if (!isPlainObject(patchedRaw)) return fail(M.patchNotAnObject());
-  let target: string;
-  let parent: string;
-  try {
-    target = lilaScenarioEntryName(saveTo, locale);
-    parent = extendsFrom === undefined ? entry : findLilaScenario(lila, extendsFrom, locale);
-  } catch (error) {
-    return fail(message(error));
-  }
-  const delta = buildPatchDelta(patch, patchedRaw);
-  // Both entries live in the same folder of the archive, so `extends` is the parent's entry name.
-  const candidate: Record<string, unknown> = { version: base.version, extends: parent, ...delta };
-  candidate['name'] = name ?? (typeof delta['name'] === 'string' ? delta['name'] : M.patchedName(base.name));
-  if (description !== undefined) candidate['description'] = description;
-
-  const targetPath = lilaScenarioPath(lila, target);
-  let resolvedCandidate: ResolvedScenario;
-  try {
-    resolvedCandidate = loadResolvedScenario(
-      targetPath,
-      (file) => (file === targetPath ? candidate : read(file)),
-      locale,
-    );
-  } catch (error) {
-    return fail(withoutPhantomFile(error, targetPath, locale));
-  }
-
-  const outcome = await validatePatchedScenario(resolvedCandidate, locale, lila);
-  if (!outcome.ok) return fail(outcome.error);
-  if (Object.hasOwn(lila.process.scenarios, target) && sameScenario(lila.process.scenarios[target], candidate)) {
-    return unchanged(target, outcome.scenario, [M.patchSameTarget(target), ...outcome.notes]);
-  }
-
-  try {
-    const document = await writeLilaScenario(lila, target, candidate, locale);
-    return written(target, outcome.scenario, outcome.notes, document);
+    return textResult({ scenario: outcome.scenario, file, written: true, dryRun, notes: outcome.notes });
   } catch (error) {
     return fail(message(error));
   }
@@ -1095,7 +900,8 @@ export function createServer(options: ServerOptions = {}): McpServer {
         'outside `[0,1]`, `capacity` < 1, a `ref` that does not exist in `resources`, …) is rejected ' +
         'without writing anything. With `project` (a .lila), `scenario`, `extendsFrom` and `saveTo` ' +
         'are scenario names inside that process, and the archive is rewritten atomically with every ' +
-        'other process unchanged.',
+        'other process unchanged. `dryRun: true` validates and writes nothing. Like `lila scenario ' +
+        'patch` (for a .lila).',
       inputSchema: z.object({
         scenario: z
           .string()
@@ -1128,6 +934,7 @@ export function createServer(options: ServerOptions = {}): McpServer {
           .describe('Parent of the `extends` of the new file (only with `saveTo`). Defaults to `scenario`.'),
         name: z.string().optional().describe('Name of the resulting scenario; defaults to a generated one.'),
         description: z.string().optional().describe('Description of the resulting scenario.'),
+        dryRun: z.boolean().optional().describe('Validate everything and write nothing (`written: false`). Default false.'),
         locale: localeSchema,
       }),
     },
@@ -1156,27 +963,39 @@ export function createServer(options: ServerOptions = {}): McpServer {
       description:
         'Draws the diagram of a .bpmn, or of one process of a .lila, as SVG with the engine\'s own ' +
         'renderer (no app, no browser): the BPMN DI geometry in the Lila Light colours on white. ' +
+        'With `overlay`, coloured with a stored run of the .lila (`run`/`scenario` select it as in ' +
+        '`export_document`) on the app\'s scale: "bottlenecks" tints the canvas\'s bottleneck cut, ' +
+        '"heatmap" every measured task as the Results heat map does; `run` in the answer says which. ' +
         'Without `saveTo` the SVG comes back in `svg`; with it, it is written atomically and `file` ' +
         'is the absolute path. Like `lila export diagram`.',
       inputSchema: z.object({
         project: z.string().optional().describe('Path to a .lila, relative to the cwd of the server process.'),
         path: z.string().optional().describe('Path to a .bpmn (or .lila), instead of `project`.'),
         process: processSchema,
+        overlay: z
+          .enum(['bottlenecks', 'heatmap'])
+          .optional()
+          .describe('Colour the diagram with a stored run (needs a .lila with one): the bottleneck cut or the heat map.'),
+        run: runSchema,
+        scenario: scenarioSchema,
         saveTo: z.string().optional().describe('Path of the .svg to write.'),
         overwrite: overwriteSchema,
         locale: localeSchema,
       }),
     },
-    async ({ project, path, process, saveTo, overwrite, locale }): Promise<CallToolResult> => {
+    async ({ project, path, process, overlay, run, scenario, saveTo, overwrite, locale }): Promise<CallToolResult> => {
       const language = localeOf(locale);
       const M = messages(language).mcp;
       if (project !== undefined && path !== undefined) return errorResult(toolMessage('export_diagram', M.bothProjectAndPath()));
       const file = project ?? path;
       if (file === undefined) return errorResult(toolMessage('export_diagram', M.projectOrPath()));
       try {
-        const { svg, process: slug, file: source } = await exportDiagram({ file, process, locale: language });
-        if (saveTo === undefined) return textResult({ process: slug ?? null, svg });
-        return textResult({ process: slug ?? null, file: writeExportFile(saveTo, svg, { overwrite, source, locale: language }) });
+        const exported = await exportDiagram({ file, process, overlay, run, scenario, locale: language });
+        const { svg, process: slug, file: source } = exported;
+        // `run` only with an overlay, so the answer without one is as before.
+        const used = exported.run === undefined ? {} : { run: exported.run };
+        if (saveTo === undefined) return textResult({ process: slug ?? null, ...used, svg });
+        return textResult({ process: slug ?? null, ...used, file: writeExportFile(saveTo, svg, { overwrite, source, locale: language }) });
       } catch (error) {
         return errorResult(toolMessage('export_diagram', message(error)));
       }
@@ -1285,9 +1104,12 @@ export function createServer(options: ServerOptions = {}): McpServer {
       title: 'Export results',
       description:
         'Writes the results of a run stored in a .lila, like `lila run --xlsx`/`--csv`: `xlsx` is ' +
-        'one workbook (Summary, Elements, Flows, Resources, Parameters) at `saveTo`; `csv` writes ' +
-        'elements, flows, resources and process .csv into the directory `saveTo` (a stored run ' +
-        'keeps no event log). `run` "latest" (default) is the run of the current model and ' +
+        'one workbook (Summary, Elements, Flows, Resources, Parameters, Percentiles) at `saveTo`; ' +
+        '`csv` writes elements, flows, resources, process and percentiles .csv into the directory ' +
+        '`saveTo`. Percentiles are the p50/p90/p95 resource wait per element in seconds, over all ' +
+        'replications, from simulating the run\'s stored inputs again (a stored run keeps no event ' +
+        'log); `percentiles.included` is false, with a `note`, when that re-run does not reproduce ' +
+        'the stored process KPIs. `run` "latest" (default) is the run of the current model and ' +
         'scenario; an older run is exported by id against the model it ran on. An error says so ' +
         'when the process has no run. Like `lila export results`.',
       inputSchema: z.object({
@@ -1308,7 +1130,7 @@ export function createServer(options: ServerOptions = {}): McpServer {
         const files = results.data instanceof Uint8Array
           ? [writeExportFile(saveTo, results.data, { overwrite, source: results.file, locale: language })]
           : writeExportDirectory(saveTo, results.data, { overwrite, source: results.file, locale: language });
-        return textResult({ files, format, project: results.file, process: results.process, run: results.run });
+        return textResult({ files, format, project: results.file, process: results.process, run: results.run, percentiles: results.percentiles });
       } catch (error) {
         return errorResult(toolMessage('export_results', message(error)));
       }
@@ -1362,8 +1184,10 @@ export function createServer(options: ServerOptions = {}): McpServer {
         '`setType` (also `end` ↔ `terminate` on an end event), `moveToLane` (with the step\'s boundary ' +
         'events), `addLane`, `removeLane` (its nodes to `moveStepsTo`), `moveLane` (among its ' +
         'siblings), `addBoundary` (a boundary timer, as in an outline), `annotate`/`removeAnnotation` ' +
-        '(a text annotation on a step) and `addDataObject`/`removeDataObject` (by name; an object goes ' +
-        'when nothing uses it). Start events are neither added nor retyped. Ids never change, so renamed ' +
+        '(a text annotation on a step), `addDataObject`/`removeDataObject` (by name; an object goes ' +
+        'when nothing uses it) and `setCalledProcess` (the process a call activity calls, by the slug of ' +
+        'another process of the .lila: its `calledElement` becomes that process\'s BPMN process id, ' +
+        'refused when another process declares the same id; `process: null` removes it). Start events are neither added nor retyped. Ids never change, so renamed ' +
         'or retyped steps keep their scenario entries; durations, resources and probabilities given ' +
         'go into the base scenario `as-is.scenario.json`. The result is validated; any problem ' +
         'refuses the whole edit, writes nothing and lists every issue with the index of its ' +
@@ -1393,7 +1217,8 @@ export function createServer(options: ServerOptions = {}): McpServer {
             '{op:"removeLane", lane, moveStepsTo?}; {op:"moveLane", lane, before | after}; ' +
             '{op:"addBoundary", on, boundary:{id, type:"timer", name?, label?, duration?, interrupting?, to | end}}; ' +
             '{op:"annotate", on, text}; {op:"removeAnnotation", on, text}; ' +
-            '{op:"addDataObject", name, on, direction: "in" | "out"}; {op:"removeDataObject", name, on?}. ' +
+            '{op:"addDataObject", name, on, direction: "in" | "out"}; {op:"removeDataObject", name, on?}; ' +
+            '{op:"setCalledProcess", id: a call activity, process: slug of another process | null}. ' +
             'E.g. [{"op":"add","step":{"id":"verify","name":"Verify ID","duration":"5m"},"after":"receive"}, ' +
             '{"op":"connect","from":"ok","to":"verify","label":"Retry","probability":0.1}, {"op":"remove","id":"check"}, ' +
             '{"op":"rename","id":"issue","name":"Issue card"}, {"op":"setType","id":"check","type":"serviceTask"}, ' +
