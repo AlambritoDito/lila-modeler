@@ -87,12 +87,11 @@ export async function exportDiagram(
   if (isLilaPath(source.file)) {
     const lila = await openLilaProcess(source.file, { process: source.process, locale });
     if (source.overlay === undefined) return { svg: await renderSvg(lila.process.model.xml), file: lila.file, process: lila.process.slug };
-    let run: StoredRun;
-    try {
-      run = selectRun(lila, source, false, locale)!;
-    } catch (error) {
-      throw new Error(C.exportOverlayNoRun(source.overlay, (error as Error).message));
+    // No run at all says what the overlay needs; any other selection error speaks for itself.
+    if (lila.process.runs.length === 0) {
+      throw new Error(C.exportOverlayNoRun(source.overlay, C.exportNoRun(lila.file, lila.process.slug, '')));
     }
+    const run = selectRun(lila, source, false, locale)!;
     const tint = await overlayTint(lila, run, source.overlay, locale);
     return {
       svg: await renderSvg(run.inputs.xml, { tint }),
@@ -126,7 +125,7 @@ async function overlayTint(lila: LilaProcess, run: StoredRun, overlay: DiagramOv
   const { ir } = await parseBpmn(run.inputs.xml, { scenarios: [run.inputs.scenario, ...Object.values(lila.process.scenarios)] });
   const result = run.result as RunResult;
   // Result keys are IR ids; the drawing is keyed by the ids written in the file.
-  const fileId = (id: string): string => ir.source.originalIds[id] ?? id;
+  const fileId = (id: string): string => (Object.hasOwn(ir.source.originalIds, id) ? ir.source.originalIds[id]! : id);
   const colour = (level: WaitLevel): Pick<SvgTint, 'fill' | 'stroke'> => ({ fill: WAIT_LEVEL_COLOURS[level], stroke: WAIT_LEVEL_COLOURS[level] });
   // No prototype: a BPMN id may be `__proto__`.
   const tint: Record<string, SvgTint> = Object.create(null) as Record<string, SvgTint>;

@@ -254,6 +254,8 @@ describe('renderSvg', () => {
     // Same input, same bytes; no badge, no tag.
     expect(await renderSvg(MINI('Review'), { tint: { T: { fill: '#C42152', stroke: '#C42152', badge: '2.1 d · <34%>' } } })).toBe(tinted);
     expect(await renderSvg(MINI('Review'), { tint: { T: { fill: '#E8B84B', stroke: '#E8B84B' } } })).not.toContain('translate(204 134)');
+    // Only colours: nothing an SVG viewer would fetch.
+    await expect(renderSvg(MINI('Review'), { tint: { T: { fill: 'url(https://x/y)', stroke: '#E8B84B' } } })).rejects.toThrow(/tint of "T" must be colours/);
   });
 
   test('tint keys are the ids as written in the file, and an id such as `constructor` is not a key', async () => {

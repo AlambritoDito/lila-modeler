@@ -143,7 +143,9 @@ describe('lila export diagram --overlay (#669)', () => {
   test('runs are selected as for the document; an older run by id is drawn, marked not current', async () => {
     const file = join(dir, 'p.lila');
     await pedidoWithRuns(file, ['as-is.scenario.json', 'to-be-3-cajeros.scenario.json']);
-    await expect(exportDiagram({ file, overlay: 'heatmap' })).rejects.toThrow(/current runs of several scenarios/);
+    await expect(exportDiagram({ file, overlay: 'heatmap' })).rejects.toThrow(/^process "pedido" of .* has current runs of several scenarios/);
+    // A selection error is the selection's own message, not "needs a stored run".
+    await expect(exportDiagram({ file, overlay: 'heatmap', run: 'run-1', scenario: 'as-is' })).rejects.toThrow(/^a run id already says which scenario/);
     expect((await exportDiagram({ file, overlay: 'heatmap', scenario: 'to-be-3-cajeros' })).run?.id).toBe('run-2');
     expect((await exportDiagram({ file, overlay: 'heatmap', run: 'run-1' })).run?.id).toBe('run-1');
     await expect(exportDiagram({ file, overlay: 'heatmap', run: 'nope' })).rejects.toThrow(/has no run "nope"/);

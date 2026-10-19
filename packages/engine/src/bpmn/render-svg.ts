@@ -32,8 +32,8 @@ export interface RenderSvgOptions {
   /** Blank space around the drawing, in diagram units (default 20). */
   readonly margin?: number;
   /**
-   * Colours that replace an element's fill and stroke, by BPMN id as written in the file (#669:
-   * a run's overlay). Its label keeps its colour. A shape's `badge` is drawn as a tag just outside
+   * Colours (hex, `rgb()` or a CSS name) that replace an element's fill and stroke, by BPMN id
+   * as written in the file (#669: a run's overlay). Its label keeps its colour. A shape's `badge` is drawn as a tag just outside
    * its bottom-right corner, where the app puts its overlay label.
    */
   readonly tint?: Readonly<Record<string, SvgTint>>;
@@ -86,13 +86,18 @@ const CSS_COLOUR_NAMES = new Set(
   ('aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen').split(' '),
 );
 
-/** A DI colour, kept only when it is a hex, `rgb()`/`rgba()` or CSS colour name (nothing to escape). */
+/** A hex, `rgb()`/`rgba()` or CSS colour name: nothing to escape and nothing to fetch. */
+function isColour(value: string): boolean {
+  return /^(#[0-9a-f]{3}|#[0-9a-f]{4}|#[0-9a-f]{6}|#[0-9a-f]{8}|rgba?\([\d\s.,%]+\))$/i.test(value) || CSS_COLOUR_NAMES.has(value.toLowerCase());
+}
+
+/** A DI colour, kept only when it is one (`isColour`). */
 function diColour(di: ModdleElement | undefined, names: readonly string[]): string | undefined {
   for (const name of names) {
     const raw = di?.get?.(name) ?? di?.$attrs?.[name];
     if (typeof raw !== 'string') continue;
     const value = raw.trim();
-    if (/^(#[0-9a-f]{3}|#[0-9a-f]{4}|#[0-9a-f]{6}|#[0-9a-f]{8}|rgba?\([\d\s.,%]+\))$/i.test(value) || CSS_COLOUR_NAMES.has(value.toLowerCase())) return value;
+    if (isColour(value)) return value;
   }
   return undefined;
 }
@@ -595,6 +600,9 @@ export async function renderSvg(xmlIn: string, options: RenderSvgOptions = {}): 
   }
   const margin = options.margin ?? 20;
   if (!Number.isFinite(margin) || margin < 0) throw new RangeError(`The margin must be a finite number ≥ 0, not ${margin}.`);
+  for (const [id, tint] of Object.entries(options.tint ?? {})) {
+    if (!isColour(tint.fill) || !isColour(tint.stroke)) throw new RangeError(`The tint of "${id}" must be colours (hex, rgb() or a CSS name).`);
+  }
   const drawn = (diagram.plane?.planeElement ?? [])
     .filter(drawable);
   // A sub-process is expanded when its DI says so or its children are drawn on this plane
