@@ -360,6 +360,8 @@ guardó el archivo; `summary` dice en una línea lo que pasó.
 | `delete_scenario` | `lila scenario delete <proyecto.lila> <escenario>` | `process` es `--process` |
 | `dryRun` | `--dry-run` | Todas las de arriba |
 | (la respuesta JSON) | `--json` | Sin él, la CLI imprime `summary` y `notes` |
+| `run_simulation` | `lila run` | `saveRun` es `--save`, `saveTo` es `--json <archivo>`, `logTo` es el `log.csv` de `--csv <directorio>` (#665). Los cuatro CSV de resultados de `--csv` salen de una corrida guardada con `export_results`. |
+| `compare_scenarios` | `lila compare` | `saveTo` es `--json <archivo>`, o `--xlsx <archivo>` con `format: "xlsx"`; `all: true` (o `detail: "full"`) es `--all` (#665). |
 
 ## Exportar sin la app
 
@@ -778,18 +780,6 @@ mismo desde una terminal.
   cambió en disco desde que se leyó (otro agente, la app), la llamada se rechaza y no se pierde nada.
   La revisión del modelo sube, así que la app ve sus corridas viejas como desactualizadas. Todos los
   demás procesos quedan byte a byte. Con `dryRun`, se comprueba y devuelve todo y no se escribe nada.
-
-## MCP y CLI lado a lado
-
-Cada tool corre el mismo código del motor que su comando de la CLI, así que un agente que solo
-tiene una terminal obtiene las mismas respuestas. El `--json` de los comandos project, process y
-scenario imprime lo que devuelve la tool; `lila run|compare --json <archivo>` escriben el resultado
-completo en un archivo, como `saveTo` (las tools responden con un resumen salvo con `detail: "full"`).
-
-| Tool o campo MCP | CLI | Nota |
-| --- | --- | --- |
-| `run_simulation` | `lila run --json` | `saveRun` es `--save`, `saveTo` es `--json <archivo>`, `logTo` es el `log.csv` de `--csv`. Los cuatro CSV de resultados de `--csv` salen de una corrida guardada con `export_results`. |
-| `compare_scenarios` | `lila compare --json` | `saveTo` con `format: "xlsx"` es `--xlsx <archivo>`; `all: true` (o `detail: "full"`) es `--all`. |
 
 ## Resumen o resultado completo
 

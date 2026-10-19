@@ -329,6 +329,8 @@ the file was saved; `summary` says what happened in one line.
 | `delete_scenario` | `lila scenario delete <project.lila> <scenario>` | `process` is `--process` |
 | `dryRun` | `--dry-run` | Every tool above |
 | (the JSON answer) | `--json` | Without it, the CLI prints `summary` and `notes` |
+| `run_simulation` | `lila run` | `saveRun` is `--save`, `saveTo` is `--json <file>`, `logTo` is the `log.csv` of `--csv <directory>` (#665). The four result CSVs of `--csv` come from a stored run with `export_results`. |
+| `compare_scenarios` | `lila compare` | `saveTo` is `--json <file>`, or `--xlsx <file>` with `format: "xlsx"`; `all: true` (or `detail: "full"`) is `--all` (#665). |
 
 ## App-free exports
 
@@ -753,18 +755,6 @@ terminal.
   "scenarioRemovals": [], "notes": [ "gateway \"ok\": the probabilities of its outgoing flows in as-is.scenario.json now add up to 1.1; adjust them with patch_scenario, one {\"op\": \"replace\", \"path\": \"/elements/<flow>/probability\", \"value\": …} per flow of Flow_ok_issue, Flow_ok_reject, Flow_ok_verify." ],
   "warnings": [], "outline": { … } }
 ```
-
-## MCP and CLI side by side
-
-Every tool runs the same engine code as its CLI command, so an agent that only has a shell gets
-the same answers. The `--json` of the project, process and scenario commands prints what the tool
-returns; `lila run|compare --json <file>` write the full result to a file, like `saveTo` (the tools
-answer with a summary unless `detail: "full"`).
-
-| MCP tool or field | CLI | Note |
-| --- | --- | --- |
-| `run_simulation` | `lila run --json` | `saveRun` is `--save`, `saveTo` is `--json <file>`, `logTo` is the `log.csv` of `--csv`. The four result CSVs of `--csv` come from a stored run with `export_results`. |
-| `compare_scenarios` | `lila compare --json` | `saveTo` with `format: "xlsx"` is `--xlsx <file>`; `all: true` (or `detail: "full"`) is `--all`. |
 
 ## Summary or full results
 
