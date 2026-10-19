@@ -681,6 +681,31 @@ Number formats are presentation only — the cell keeps the full double:
 `Utilization (%)` is not a percentage cell: its value is already multiplied by 100 and the column
 name says so, like the CSV's and the console's.
 
+### `lila export results` / `export_results`: the `Percentiles` sheet *(#666)*
+
+A stored run keeps no event log, so the app-free results export (`docs/CLI.md`, `docs/MCP.md`)
+rebuilds the per-element percentiles by **simulating the run's own stored inputs again** (its
+model and resolved scenario, same seed, every replication). The rows stream into the sampler and
+none is kept. The resulting sample counts only when the re-run gives back the stored `process`
+KPIs exactly; the stored run itself is never changed.
+
+| Sheet / file | Columns | Content |
+|---|---|---|
+| `Percentiles` (sixth sheet, after `Parameters`) / `percentiles.csv` | Id, Name, n, p50, p90, p95 | one row per element with a measured instance, in the order of `Elements`: `n` instances and the p50/p90/p95 of their **resource wait** (`resourceWait`), in **seconds** |
+
+The population is the app's Simulate dock and quick view rule, from the same engine function
+(`elementPercentiles` in `packages/engine/src/element-percentiles.ts`): one sample per completed
+activity instance of the measured cohort (cases that started at or after `run.warmup`), with linear
+interpolation like `process.*.p50/p90/p95`. Unlike the dock, which reads replication 0 of the
+in-memory log sample, the export covers **all replications**. The column names are Lila extras with
+no Bizagi equivalent; they go through `columnLabel('elements', 'resourceWait.p50')` and so on.
+
+When the re-run does not reproduce the run, the sheet and the file are left out and the answer
+carries a note (`percentiles: { included: false, note }` in MCP, the note on stderr in the CLI).
+The engine's floating-point results can differ in the last digit between arm64 and x64, so a run
+saved by the app on one platform and exported on another may land here. That is the designed
+behaviour, not an error. The five sheets and the four CSV files are byte-identical either way.
+
 ### `compare --xlsx`: one sheet per scenario plus `Comparison`
 
 Each scenario gets its own `Summary` sheet, named after the scenario (sanitized, clipped to 31

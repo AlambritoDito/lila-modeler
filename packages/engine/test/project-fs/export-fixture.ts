@@ -16,12 +16,15 @@ export const EXAMPLE_LILA = fileURLToPath(new URL('../../../../examples/pedido.l
 
 /**
  * Writes pedido at `path` with one run per entry of `scenarios` (ids `run-1`, `run-2`, …); with
- * `stale`, the model was saved again after the runs (they are of an older revision).
+ * `stale`, the model was saved again after the runs (they are of an older revision). Each run is
+ * simulated with seed 42 and one replication; only with `reproducible` does the stored scenario
+ * say so too (as the app and `lila run --save` store it), so that simulating the stored inputs again
+ * gives the stored result back (#666). Without it the stored scenario is the entry as written.
  */
 export async function pedidoWithRuns(
   path: string,
   scenarios: readonly string[],
-  options: { stale?: boolean } = {},
+  options: { stale?: boolean; reproducible?: boolean } = {},
 ): Promise<readonly StoredRun[]> {
   writeFileSync(path, readFileSync(EXAMPLE_LILA));
   const lila = await openLilaProcess(path);
@@ -29,7 +32,8 @@ export async function pedidoWithRuns(
   const { ir } = await parseBpmn(doc.model.xml);
   const runs = scenarios.map((entry, index): StoredRun => {
     const { scenario } = resolveScenarioArgument(entry, lila);
-    const result = simulate(ir, withRunOverrides(scenario, { seed: 42, replications: 1 }), { log: false });
+    const ran = withRunOverrides(scenario, { seed: 42, replications: 1 });
+    const result = simulate(ir, ran, { log: false });
     return {
       id: `run-${index + 1}`,
       scenarioName: entry,
@@ -39,7 +43,7 @@ export async function pedidoWithRuns(
         scenarioRevision: doc.scenarioRevisions[entry] ?? 0,
         xml: doc.model.xml,
         // A run keeps the scenario it ran, resolved (`runProblem` refuses one without model and run).
-        scenario: scenario as unknown as StoredRun['inputs']['scenario'],
+        scenario: (options.reproducible === true ? ran : scenario) as unknown as StoredRun['inputs']['scenario'],
       },
     };
   });

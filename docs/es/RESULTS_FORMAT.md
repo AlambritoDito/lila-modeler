@@ -657,6 +657,34 @@ Los formatos de número son solo presentación —la celda conserva el doble com
 `Utilization (%)` no es una celda de porcentaje: su valor ya viene multiplicado por 100 y el nombre
 de la columna lo dice, igual que en el CSV y en la consola.
 
+### `lila export results` / `export_results`: la hoja `Percentiles` *(#666)*
+
+Una corrida guardada no conserva el log de eventos, así que la exportación de resultados sin la app
+(`docs/es/CLI.md`, `docs/es/MCP.md`) reconstruye los percentiles por elemento **volviendo a simular
+las entradas guardadas de la propia corrida** (su modelo y su escenario resuelto, la misma semilla,
+todas las replicaciones). Las filas pasan al muestreador una a una y ninguna se conserva. La
+muestra solo cuenta cuando la nueva corrida devuelve exactamente los KPI de `process` guardados; la
+corrida guardada nunca cambia.
+
+| Hoja / archivo | Columnas | Contenido |
+|---|---|---|
+| `Percentiles` (sexta hoja, tras `Parámetros`) / `percentiles.csv` | Id, Name, n, p50, p90, p95 | una fila por elemento con alguna instancia medida, en el orden de `Elementos`: `n` instancias y los p50/p90/p95 de su **espera por recurso** (`resourceWait`), en **segundos** |
+
+La población es la regla del dock de Simular y de la vista rápida de la app, con la misma función
+del motor (`elementPercentiles` en `packages/engine/src/element-percentiles.ts`): una muestra por
+instancia de actividad completada de la cohorte medida (casos que empezaron en o después de
+`run.warmup`), con interpolación lineal como `process.*.p50/p90/p95`. A diferencia del dock, que lee
+la replicación 0 de la muestra del log en memoria, la exportación cubre **todas las replicaciones**.
+Los nombres de columna son extras de Lila sin equivalente en Bizagi; pasan por
+`columnLabel('elements', 'resourceWait.p50')` y los demás.
+
+Cuando la nueva corrida no reproduce la guardada, la hoja y el archivo quedan fuera y la respuesta
+lleva una nota (`percentiles: { included: false, note }` en MCP, la nota por stderr en la CLI). Los
+resultados de punto flotante del motor pueden diferir en el último dígito entre arm64 y x64, así
+que una corrida guardada por la app en una plataforma y exportada en otra puede caer aquí. Es el
+comportamiento previsto, no un error. Las cinco hojas y los cuatro CSV son idénticos byte a byte en
+los dos casos.
+
 ### `compare --xlsx`: una hoja por escenario más `Comparación`
 
 Cada escenario tiene su propia hoja `Resumen`, con el nombre del escenario (saneado, recortado a 31

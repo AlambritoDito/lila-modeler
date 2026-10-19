@@ -129,7 +129,10 @@ usa la app:
   corrida guardada: un `.xlsx` (Resumen, Elementos, Flujos, Recursos, Parámetros) o, con
   `--format csv`, `elements.csv`, `flows.csv`, `resources.csv` y `process.csv` en el directorio,
   los mismos archivos que escribe `lila run` (una corrida guardada no conserva el log de eventos,
-  así que no hay `log.csv`).
+  así que no hay `log.csv`). Añade los p50/p90/p95 de la espera por recurso por elemento, una hoja
+  `Percentiles` o `percentiles.csv`, volviendo a simular las entradas guardadas de la corrida;
+  cuando esa nueva corrida no reproduce los KPI guardados (otra versión del motor u otra
+  plataforma), quedan fuera y una nota por stderr dice por qué (`docs/es/RESULTS_FORMAT.md` § 12).
 
 `--format` sale por defecto de la extensión de `--out` (`.docx`, `.html`, `.xlsx`). `--process`
 elige el proceso de un repositorio, como en el resto. Las **corridas** son las que la app guardó en

@@ -25,7 +25,7 @@ import {
 import type { CompareResult } from './core/compare.js';
 import type { ProcessIR } from './core/ir.js';
 import type { RunResult } from './core/result.js';
-import { PROCESS_COLUMNS, elementsRows, flowsRows, processRows, resourcesRows } from './csv.js';
+import { PROCESS_COLUMNS, elementsRows, flowsRows, percentilesRows, processRows, resourcesRows } from './csv.js';
 import { columnHeader, columnLabel } from './format.js';
 import { messages, type Locale } from './messages/index.js';
 import type { Distribution, ResolvedScenario } from './scenario.js';
@@ -386,6 +386,21 @@ export function scenarioSheets(
     { formats: numericAfter(resources.headers, 2), headers: resources.headers, name: C.xlsxSheetResources(), rows: resources.rows },
     parametersSheet(ir, scenario, locale),
   ];
+}
+
+/**
+ * `Percentiles` (#666): the rows of `percentiles.csv` (`percentilesRows`), resource wait per
+ * element in seconds. Not one of the five sheets of a run: only `exportResults` adds it, after
+ * them, when it could rebuild the sample.
+ */
+export function percentilesSheet(
+  ir: ProcessIR,
+  result: RunResult,
+  samples: ReadonlyMap<string, readonly number[]>,
+  locale: Locale = 'en',
+): SheetSpec {
+  const table = percentilesRows(ir, result, samples);
+  return { formats: numericAfter(table.headers, 2), headers: table.headers, name: messages(locale).cli.xlsxSheetPercentiles(), rows: table.rows };
 }
 
 /**

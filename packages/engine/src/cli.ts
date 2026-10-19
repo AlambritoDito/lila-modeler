@@ -1068,6 +1068,7 @@ async function dispatchExport(argv: readonly string[], locale: Locale): Promise<
   } else {
     for (const path of writeExportDirectory(values.out, results.data, { ...write, source: results.file })) console.log(`CSV: ${path}`);
   }
+  if (results.percentiles.note !== undefined) console.error(results.percentiles.note);
   return 0;
 }
 
