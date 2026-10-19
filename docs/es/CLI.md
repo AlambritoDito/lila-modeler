@@ -127,9 +127,11 @@ usa la app:
   `.bpmn`, o sin corrida guardada, es un error; también `--run` o `--scenario` sin `--overlay`.
 - `lila export doc <proyecto.lila> --out archivo.docx|archivo.html` escribe el documento del
   proceso, como «Exportar documento» de la app: diagrama, descripciones en orden de flujo, el
-  escenario y los resultados de una corrida guardada. El HTML incrusta el diagrama SVG. El Word va
-  **sin diagrama** y ninguno de los dos lleva las gráficas de la corrida: Word necesita un PNG y el
-  motor no rasteriza. Una nota por stderr dice qué quedó fuera.
+  escenario y los resultados de una corrida guardada. El HTML incrusta el diagrama SVG y las
+  gráficas de la corrida en SVG, las mismas de Resultados en la app, salvo el histograma del tiempo
+  de ciclo (una corrida guardada no conserva los tiempos por caso). El Word va **sin diagrama y sin
+  gráficas**: Word necesita un PNG y el motor no rasteriza. Una nota por stderr dice qué quedó
+  fuera.
 - `lila export results <proyecto.lila> --out libro.xlsx|directorio` escribe los resultados de una
   corrida guardada: un `.xlsx` (Resumen, Elementos, Flujos, Recursos, Parámetros) o, con
   `--format csv`, `elements.csv`, `flows.csv`, `resources.csv` y `process.csv` en el directorio,

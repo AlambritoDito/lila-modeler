@@ -249,6 +249,22 @@ export interface CliMessages {
   docResults: () => string;
   docDiagramAlt: () => string;
 
+  /* --- `chartsSvg()` (charts.ts, #636): the app's Results charts --- */
+  chartUtilization: () => string;
+  chartInstances: () => string;
+  chartPercentiles: (unit: string) => string;
+  chartCycle: () => string;
+  chartWait: () => string;
+  chartHistogram: (unit: string) => string;
+  chartHistogramSub: (cases: number, replications: number) => string;
+  /** A chart's description and alt text: every value, since the table is the source. */
+  chartValue: (label: string, text: string) => string;
+  chartNoValue: () => string;
+  chartCases: (n: number) => string;
+  chartCasesAxis: () => string;
+  /** Short name of a time unit (`s`, `min`, `h`, `day`), for a duration that also reads in hours. */
+  chartUnit: (unit: 's' | 'min' | 'h' | 'day') => string;
+
   /* --- `compareWarnings()` (cli-shared.ts) -------------------------- */
   mixedTimeUnit: (unit: string, others: string) => string;
   differentSeeds: (seeds: string) => string;
@@ -312,7 +328,8 @@ export interface CliMessages {
   exportNoDiagram: () => string;
   exportDocxNoDiagram: () => string;
   exportDocumentNoRun: () => string;
-  exportNoCharts: () => string;
+  exportDocxNoCharts: () => string;
+  exportNoHistogram: () => string;
   /** #666: a stored run cannot be reproduced from its inputs (re-run mismatch, cancelled, other replications). */
   exportPercentilesNotReproduced: () => string;
   /** #666: the re-simulation of a stored run failed; `reason` is the engine's message. */

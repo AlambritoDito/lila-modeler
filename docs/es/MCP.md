@@ -351,9 +351,10 @@ guardó el archivo; `summary` dice en una línea lo que pasó.
 (`docs/es/CLI.md`) como tools. No necesitan la app ni un navegador:
 
 - **El diagrama** sale del renderizador SVG del motor: la geometría del DI de BPMN con los colores
-  de Lila Light sobre blanco. El documento HTML lo incrusta. El Word va **sin diagrama** y ninguno
-  de los dos lleva las gráficas de la corrida: Word necesita un PNG y el motor no rasteriza.
-  `notes` dice qué quedó fuera.
+  de Lila Light sobre blanco. El documento HTML lo incrusta, junto con las gráficas de la corrida
+  en SVG, las mismas de Resultados en la app. El histograma del tiempo de ciclo queda fuera,
+  porque una corrida guardada no conserva los tiempos por caso. El Word va **sin diagrama y sin
+  gráficas**: Word necesita un PNG y el motor no rasteriza. `notes` dice qué quedó fuera.
 - **Las corridas** son las que la app guardó en el `.lila`. `run: "latest"` (por defecto) es la
   corrida del modelo y escenario actuales. `scenario` la acota a un escenario, y hace falta cuando
   varios tienen una corrida actual. `run: "<id>"` elige una, y un id desconocido lista los ids; `run` y `scenario` juntos son un error. El

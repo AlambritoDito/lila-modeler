@@ -18,6 +18,8 @@ import { decodeLila, encodeLila } from '../../src/project/index.js';
 import { bottleneckCut, heatMap, WAIT_LEVEL_COLOURS } from '../../src/bottleneck-levels.js';
 import type { RunResult } from '../../src/core/result.js';
 import { exportDiagram, exportDocument, exportResults } from '../../src/project-fs/index.js';
+import { chartsSvg } from '../../src/charts.js';
+import { parseScenario, type ResolvedScenario } from '../../src/scenario.js';
 import { readWorkbook } from '../../src/xlsx-read.js';
 import { resourceNamesOf, scenarioWorkbook } from '../../src/xlsx-report.js';
 import { EXAMPLE_LILA, pedidoWithRuns } from './export-fixture.js';
@@ -170,7 +172,41 @@ describe('lila export doc', () => {
     const svg = await renderSvg(XML);
     expect(html).toContain(`<img src="data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}"`);
     expect(html).toContain('<h2>Results</h2>');
-    expect(err).toEqual(['The charts of the run are left out: the engine has no rasteriser.']);
+    expect(err).toEqual(['The cycle time histogram is left out: a stored run keeps no per-case times.']);
+  });
+
+  test('HTML with the charts of the run as SVG, the same as chartsSvg, same bytes twice (#636)', async () => {
+    const file = join(dir, 'p.lila');
+    await pedidoWithRuns(file, ['as-is.scenario.json']);
+    const doc = await exportDocument({ file, format: 'html', date: '2026-10-19' });
+    const html = doc.data as string;
+    expect(doc.notes).toEqual(['The cycle time histogram is left out: a stored run keeps no per-case times.']);
+    // The charts of the stored run, drawn by the engine from the run's own scenario and model.
+    const lila = decodeLila(readFileSync(file));
+    const run = lila.runs[0]!;
+    const { ir } = await parseBpmn(lila.model.xml, { scenarios: [run.inputs.scenario] });
+    const scenario = parseScenario(run.inputs.scenario).data as ResolvedScenario;
+    const charts = chartsSvg({ ir, scenario, result: run.result as RunResult });
+    expect(charts.map((c) => c.alt.split('. ')[0])).toEqual([
+      'Utilization by resource (%)',
+      'Cycle and wait time percentiles (min)',
+      'Instances started by task',
+    ]);
+    // One SVG image per chart after the diagram, each with its alt text, in that order.
+    const images = [...html.matchAll(/<img src="data:image\/svg\+xml;base64,([^"]+)" alt="([^"]*)">/g)];
+    expect(images).toHaveLength(1 + charts.length);
+    images.slice(1).forEach((image, i) => {
+      expect(Buffer.from(image[1]!, 'base64').toString('utf8')).toBe(charts[i]!.svg);
+      expect(image[2]).toBe(charts[i]!.alt.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'));
+    });
+    // The charts sit at the top of the results.
+    expect(html.indexOf('<h2>Results</h2>')).toBeLessThan(html.indexOf(images[1]![0]));
+    // Same input, same bytes.
+    expect((await exportDocument({ file, format: 'html', date: '2026-10-19' })).data).toBe(html);
+    // Spanish titles from the engine catalog.
+    const es = (await exportDocument({ file, format: 'html', date: '2026-10-19', locale: 'es' })).data as string;
+    expect(es).toContain('alt="Utilización por recurso (%).');
+    expect(es).toContain('alt="Instancias iniciadas por tarea.');
   });
 
   test('Word: a .docx that unzips, with the results and without the diagram, in Spanish', async () => {
@@ -183,7 +219,12 @@ describe('lila export doc', () => {
     const body = strFromU8(parts['word/document.xml']!);
     expect(body).toContain('Resultados');
     expect(body).not.toContain('<w:drawing>');
-    expect(err).toContain('El documento Word va sin diagrama: Word necesita un PNG y el motor no rasteriza. El documento HTML sí lo lleva.');
+    expect(err).toEqual([
+      'El documento Word va sin diagrama: Word necesita un PNG y el motor no rasteriza. El documento HTML sí lo lleva.',
+      'El documento Word va sin gráficas: Word necesita un PNG y el motor no rasteriza. El documento HTML sí las lleva.',
+    ]);
+    // The SVG-only charts are skipped: no chart parts, no drawings.
+    expect(Object.keys(parts).filter((name) => name.startsWith('word/media/'))).toEqual([]);
   });
 
   test('without a current run the document goes without results; an older run by id is refused', async () => {

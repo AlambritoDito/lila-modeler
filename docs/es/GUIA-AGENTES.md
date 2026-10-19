@@ -357,9 +357,10 @@ Haz una escritura a la vez por archivo y espera su respuesta; escribir en parale
 
 ## Límites conocidos
 
-- **El documento Word va sin diagrama**, y ninguno de los dos documentos lleva las gráficas de la
-  corrida: Word necesita un PNG y el motor no rasteriza. El documento HTML sí lleva el diagrama
-  (SVG). `notes` en la respuesta dice qué quedó fuera. Para dar una imagen, manda el HTML o usa
+- **El documento Word va sin diagrama y sin gráficas**: Word necesita un PNG y el motor no
+  rasteriza. El documento HTML sí lleva el diagrama y las gráficas de la corrida (SVG), salvo el
+  histograma del tiempo de ciclo, porque una corrida guardada no conserva los tiempos por caso.
+  `notes` en la respuesta dice qué quedó fuera. Para dar una imagen, manda el HTML o usa
   `export_diagram`.
 - **Acomodo.** `create_process` y `edit_process` (por defecto) acomodan el proceso con
   `bpmn-auto-layout` 1.3 más el ajuste de carriles de Lila. Se lee bien, pero no es bonito: los

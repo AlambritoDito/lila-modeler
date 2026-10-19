@@ -322,9 +322,10 @@ the file was saved; `summary` says what happened in one line.
 (`docs/CLI.md`) as tools. They need no app and no browser:
 
 - **The diagram** is the engine's SVG renderer: the BPMN DI geometry in the Lila Light colours
-  on white. The HTML document embeds it. The Word document has **no diagram**, and neither
-  document has the run's charts: Word needs a PNG and the engine has no rasteriser. `notes`
-  says what was left out.
+  on white. The HTML document embeds it, and the run's charts as SVG, the same as the app's
+  Results charts. The cycle time histogram is left out, as a stored run keeps no per-case times.
+  The Word document has **no diagram and no charts**: Word needs a PNG and the engine has no
+  rasteriser. `notes` says what was left out.
 - **Runs** are the ones the app saved in the `.lila`. `run: "latest"` (the default) is the run
   of the current model and scenario. `scenario` narrows it to one scenario, which is needed when
   several have a current run. `run: "<id>"` picks one, and an unknown id lists the ids; `run` and
