@@ -86,3 +86,14 @@ export type { PatchLilaScenarioRequest, PatchLilaScenarioResult } from './patch-
 export { applyJsonPatch, buildPatchDelta } from '../json-patch.js';
 export type { JsonPatchOp } from '../json-patch.js';
 export type { LilaProcessBpmn, PutLilaProcessBpmnRequest, PutLilaProcessBpmnResult } from './process-bpmn.js';
+export { deleteLilaProcess, deleteLilaScenario, renameLilaProcess, renameLilaScenario } from './manage.js';
+export type {
+  DeleteLilaProcessRequest,
+  DeleteLilaProcessResult,
+  DeleteLilaScenarioRequest,
+  DeleteLilaScenarioResult,
+  RenameLilaProcessRequest,
+  RenameLilaProcessResult,
+  RenameLilaScenarioRequest,
+  RenameLilaScenarioResult,
+} from './manage.js';

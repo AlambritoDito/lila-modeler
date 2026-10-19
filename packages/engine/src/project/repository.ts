@@ -92,3 +92,13 @@ export function withProcesses(
   if (rest.length > 0) return { ...top, process, processes: rest };
   return options.repository === true ? { ...top, process } : top;
 }
+
+/**
+ * The BPMN process ids a model declares — what a call activity's `calledElement` names (#461).
+ * A pattern over the XML and not a parse: the app runs it on a double-click, over every process of
+ * the project, and it only has to find `<bpmn:process id="…">` (any prefix, or none). Shared by the
+ * app and `deleteLilaProcess` (#634).
+ */
+export function processIds(xml: string): string[] {
+  return [...xml.matchAll(/<(?:[\w.-]+:)?process\b[^>]*?\sid=(["'])(.+?)\1/g)].map((m) => m[2]!);
+}

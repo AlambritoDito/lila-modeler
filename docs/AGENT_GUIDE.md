@@ -29,6 +29,7 @@ interview ([`MCP.md`](MCP.md#resources-and-prompt)).
 | 6. Simulate and keep the run | `run_simulation` with `saveRun: true` | `lila run … --save` |
 | 7. Hand over | `export_document`, `export_results`, `export_diagram` | `lila export doc|results|diagram` |
 | 8. Show it | open the `.lila` in the app; it reloads on every later write | `open -a "Lila Modeler" file.lila` (macOS) |
+| Any time: tidy up | `rename_process`, `delete_process`, `rename_scenario`, `delete_scenario` | `lila process rename\|delete`, `lila scenario rename\|delete` |
 
 Two rules shape the flow:
 
@@ -65,6 +66,12 @@ process, and `mode: "replace"` takes it back (see [Raw BPMN of a process](MCP.md
 ```json
 { "name": "put_process_bpmn", "arguments": { "project": "card.lila", "mode": "add", "bpmn": "bizagi-export.bpmn", "name": "Card dispute" } }
 ```
+
+To tidy the file up, `rename_process` and `rename_scenario` change a name (never a slug or a file
+name), and `delete_process` and `delete_scenario` remove a process or a scenario with its saved
+runs. The deletes refuse what would break the project, writing nothing: the last process or
+scenario, a process another one calls, a scenario others extend. Try them with `dryRun: true`
+first (see [Renaming and deleting](MCP.md#renaming-and-deleting)).
 
 ### 1. From the interview to an outline
 

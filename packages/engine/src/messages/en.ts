@@ -60,6 +60,8 @@ const EN_USAGE = `Usage: lila validate <file.bpmn|project.lila> [--process slug]
                                      [--process slug] [--dry-run] [--json]
        lila process attribute define <project.lila> --remove --id id|--name name --applies-to type
        lila process attribute list <project.lila> [--process slug] [--json]
+       lila process rename <project.lila> <slug> --name name [--dry-run] [--json]
+       lila process delete <project.lila> <slug> [--dry-run] [--json]
        lila scenario import <project.lila> <scenario> <sheet.xlsx|sheet.csv> [--process slug]
                             [--dry-run] [--json]
        lila scenario template <project.lila> <scenario> --out sheet.xlsx [--process slug] [--force]
@@ -67,6 +69,8 @@ const EN_USAGE = `Usage: lila validate <file.bpmn|project.lila> [--process slug]
        lila scenario patch <project.lila> <scenario> --patch <ops.json> [--process slug]
                            [--save-to name] [--extends-from name] [--name n] [--description d]
                            [--dry-run] [--json]
+       lila scenario rename <project.lila> <scenario> --name name [--process slug] [--dry-run] [--json]
+       lila scenario delete <project.lila> <scenario> [--process slug] [--dry-run] [--json]
        lila project show <project.lila> [--json]
        lila project create <path.lila> --name name --bpmn <file.bpmn> [--scenario name=file.json ...]
                            [--force] [--allow-unsimulatable] [--json]
@@ -86,11 +90,15 @@ Commands:
              export-bpmn: prints or writes the BPMN of a process. import: adds a .bpmn as a new
              process of a .lila, or --replace the model of one.
              attribute: defines (or removes) an extended attribute, or lists them.
+             rename: renames a process (its slug stays). delete: deletes a process with its
+             scenarios and saved runs.
   scenario   import: applies a scenario sheet (.xlsx/.csv) to a scenario of the .lila, like the
              app's Import Excel/CSV. template: writes that sheet, filled in, for a person.
              show: prints a scenario as stored (or --resolved) with the validator's notes.
              patch: applies a JSON Patch to a scenario, in place or as a new scenario that
              extends it (--save-to); written only if the result validates.
+             rename: renames a scenario (its file stays). delete: deletes a scenario with its
+             saved runs.
   project    show: lists the processes of a .lila, their scenarios and saved runs. Read only.
              create: makes a new .lila from a .bpmn and optional scenarios.
   mcp        Starts the MCP server over stdio (for Claude Code / Desktop). See docs/MCP.md.

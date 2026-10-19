@@ -1,11 +1,13 @@
 /**
  * `lila process annotate|raci` (#99), `lila scenario import|template` (#514), the read-only
- * `lila project show` and `lila scenario show` (#628), `lila process export-bpmn|import` (#632) and
- * `lila process attribute define|list` (#633), `lila scenario patch` and `lila project create` (#635):
- * the CLI side of the MCP tools `annotate_element`, `get_raci_matrix`, `import_scenario_sheet`,
- * `export_scenario_template`, `get_project`, `get_scenario`, `get_process_bpmn`, `put_process_bpmn`,
- * `define_attribute`, `patch_scenario` (for a `.lila`) and `create_project`, over the same
- * `@lila-modeler/engine/project-fs` functions. Kept out of `cli.ts` so that file only dispatches here.
+ * `lila project show` and `lila scenario show` (#628), `lila process export-bpmn|import` (#632),
+ * `lila process attribute define|list` (#633), `lila process|scenario rename|delete` (#634),
+ * `lila scenario patch` and `lila project create` (#635): the CLI side of the MCP tools
+ * `annotate_element`, `get_raci_matrix`, `import_scenario_sheet`, `export_scenario_template`,
+ * `get_project`, `get_scenario`, `get_process_bpmn`, `put_process_bpmn`, `define_attribute`,
+ * `rename_process`, `delete_process`, `rename_scenario`, `delete_scenario`, `patch_scenario` (for a
+ * `.lila`) and `create_project`, over the same `@lila-modeler/engine/project-fs` functions. Kept out
+ * of `cli.ts` so that file only dispatches here.
  */
 import { existsSync, lstatSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -18,6 +20,8 @@ import {
   annotateLilaElement,
   createLilaProject,
   defineLilaAttribute,
+  deleteLilaProcess,
+  deleteLilaScenario,
   importLilaScenarioSheet,
   isLilaPath,
   lilaAttributeList,
@@ -29,6 +33,8 @@ import {
   putLilaProcessBpmn,
   raciCsv,
   readLilaProcessBpmn,
+  renameLilaProcess,
+  renameLilaScenario,
   writeExportFile,
   type JsonPatchOp,
   type LilaProjectInventory,
@@ -36,7 +42,7 @@ import {
 } from './project-fs/index.js';
 
 /** The `process` subcommands this file answers. */
-export const PROCESS_TOOL_SUBCOMMANDS = ['annotate', 'raci', 'export-bpmn', 'import', 'attribute'] as const;
+export const PROCESS_TOOL_SUBCOMMANDS = ['annotate', 'raci', 'export-bpmn', 'import', 'attribute', 'rename', 'delete'] as const;
 
 /** Options of `lila process` (any subcommand) that take a value, so their value is not a subcommand. */
 const PROCESS_VALUE_OPTIONS = new Set([
@@ -320,7 +326,37 @@ async function attributeCommand(argv: readonly string[], locale: Locale): Promis
   return 0;
 }
 
-/** `lila process annotate|raci|export-bpmn|import|attribute`. */
+/** What `lila process|scenario rename|delete` print without `--json`: the summary, then each note. */
+function printManaged(result: { readonly summary: string; readonly notes: readonly string[] }): void {
+  console.log(result.summary);
+  for (const note of result.notes) console.log(`  ${note}`);
+}
+
+/** `lila process rename|delete` (#634): rename a process by its name, or delete it with its scenarios and runs. */
+async function manageProcessCommand(sub: 'rename' | 'delete', argv: readonly string[], locale: Locale): Promise<number> {
+  const C = messages(locale).cli;
+  const { values, positionals } = parseArgs({
+    args: [...argv],
+    // `--name` only for a rename: `parseArgs` refuses it on a delete.
+    options: { ...(sub === 'rename' ? { name: { type: 'string' as const } } : {}), 'dry-run': { type: 'boolean' }, json: { type: 'boolean' } },
+    allowPositionals: true,
+  });
+  if (positionals.length !== 2) return usageError(`process ${sub}`, C.expectedPositionals('<project.lila> <slug>'), locale);
+  const [file, slug] = positionals as [string, string];
+  const dryRun = values['dry-run'] === true;
+  let result: Parameters<typeof printManaged>[0];
+  if (sub === 'rename') {
+    if (typeof values.name !== 'string') return usageError('process rename', C.processMissingOption('--name <name>'), locale);
+    result = await renameLilaProcess({ file, process: slug, name: values.name, dryRun, locale });
+  } else {
+    result = await deleteLilaProcess({ file, process: slug, dryRun, locale });
+  }
+  if (values.json === true) console.log(JSON.stringify(result, null, 2));
+  else printManaged(result);
+  return 0;
+}
+
+/** `lila process annotate|raci|export-bpmn|import|attribute|rename|delete`. */
 export async function dispatchProcessTools(argv: readonly string[], locale: Locale): Promise<number> {
   if (wantsHelp(argv)) return help(locale);
   const index = subcommandIndex(argv);
@@ -331,6 +367,7 @@ export async function dispatchProcessTools(argv: readonly string[], locale: Loca
   if (sub === 'export-bpmn') return exportBpmnCommand(rest, locale);
   if (sub === 'import') return importBpmnCommand(rest, locale);
   if (sub === 'attribute') return attributeCommand(rest, locale);
+  if (sub === 'rename' || sub === 'delete') return manageProcessCommand(sub, rest, locale);
   return usageError('process', agentToolMessages(locale).processToolUnknown(sub ?? '', PROCESS_TOOL_SUBCOMMANDS.join(', ')), locale);
 }
 
@@ -468,7 +505,31 @@ async function scenarioPatchCommand(argv: readonly string[], locale: Locale): Pr
   return 0;
 }
 
-/** `lila scenario import|template|show|patch`. */
+/** `lila scenario rename|delete` (#634): rename a scenario by its `"name"`, or delete it with its runs. */
+async function manageScenarioCommand(sub: 'rename' | 'delete', argv: readonly string[], locale: Locale): Promise<number> {
+  const C = messages(locale).cli;
+  const { values, positionals } = parseArgs({
+    args: [...argv],
+    // `--name` only for a rename: `parseArgs` refuses it on a delete.
+    options: { ...(sub === 'rename' ? { name: { type: 'string' as const } } : {}), process: { type: 'string' }, 'dry-run': { type: 'boolean' }, json: { type: 'boolean' } },
+    allowPositionals: true,
+  });
+  if (positionals.length !== 2) return usageError(`scenario ${sub}`, C.expectedPositionals('<project.lila> <scenario>'), locale);
+  const [file, scenario] = positionals as [string, string];
+  const dryRun = values['dry-run'] === true;
+  let result: Parameters<typeof printManaged>[0];
+  if (sub === 'rename') {
+    if (typeof values.name !== 'string') return usageError('scenario rename', C.processMissingOption('--name <name>'), locale);
+    result = await renameLilaScenario({ file, process: values.process, scenario, name: values.name, dryRun, locale });
+  } else {
+    result = await deleteLilaScenario({ file, process: values.process, scenario, dryRun, locale });
+  }
+  if (values.json === true) console.log(JSON.stringify(result, null, 2));
+  else printManaged(result);
+  return 0;
+}
+
+/** `lila scenario import|template|show|patch|rename|delete`. */
 export async function dispatchScenarioTools(argv: readonly string[], locale: Locale): Promise<number> {
   if (wantsHelp(argv)) return help(locale);
   const [sub, ...rest] = argv;
@@ -476,7 +537,8 @@ export async function dispatchScenarioTools(argv: readonly string[], locale: Loc
   if (sub === 'template') return templateCommand(rest, locale);
   if (sub === 'show') return scenarioShowCommand(rest, locale);
   if (sub === 'patch') return scenarioPatchCommand(rest, locale);
-  return usageError('scenario', agentToolMessages(locale).scenarioUnknown(sub ?? '', 'import, template, show, patch'), locale);
+  if (sub === 'rename' || sub === 'delete') return manageScenarioCommand(sub, rest, locale);
+  return usageError('scenario', agentToolMessages(locale).scenarioUnknown(sub ?? '', 'import, template, show, patch, rename, delete'), locale);
 }
 
 /** The inventory as text: one block per process, its scenarios and its saved runs. */

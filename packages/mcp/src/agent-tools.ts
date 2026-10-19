@@ -1,8 +1,10 @@
 /**
  * The modelling tools of #99, #403, #514 and #633: `annotate_element`, `define_attribute`,
  * `get_raci_matrix`, `import_scenario_sheet`, `export_scenario_template` and `create_project`, the
- * read-only inventory of #628: `get_project` and `get_scenario`, and the raw BPMN of a process
- * (#632): `get_process_bpmn` and `put_process_bpmn`. Thin layers over
+ * read-only inventory of #628: `get_project` and `get_scenario`, the raw BPMN of a process
+ * (#632): `get_process_bpmn` and `put_process_bpmn`, and renaming and deleting processes and
+ * scenarios (#634): `rename_process`, `delete_process`, `rename_scenario` and `delete_scenario`.
+ * Thin layers over
  * `@lila-modeler/engine/project-fs`, like `lila process annotate|raci` and
  * `lila scenario import|template`; registered by `createServer` (`server.ts`).
  *
@@ -15,6 +17,8 @@ import {
   annotateLilaElement,
   createLilaProject,
   defineLilaAttribute,
+  deleteLilaProcess,
+  deleteLilaScenario,
   importLilaScenarioSheet,
   lilaProjectInventory,
   lilaRaciMatrix,
@@ -22,6 +26,8 @@ import {
   lilaScenarioView,
   putLilaProcessBpmn,
   readLilaProcessBpmn,
+  renameLilaProcess,
+  renameLilaScenario,
   writeExportFile,
 } from '@lila-modeler/engine/project-fs';
 import type { CallToolResult, McpServer } from '@modelcontextprotocol/server';
@@ -385,6 +391,120 @@ export function registerAgentTools(
         );
       } catch (error) {
         return failure('put_process_bpmn', error);
+      }
+    },
+  );
+
+  // #634: one tool per operation, so the deletes carry `destructiveHint` and each schema is exact.
+  const slugSchema = z.string().describe('Slug of the process, as `get_project` lists it.');
+  const scenarioSchema = z.string().describe('A scenario of the process: its file name (with or without .scenario.json) or its "name".');
+
+  server.registerTool(
+    'rename_process',
+    {
+      title: 'Rename process',
+      description:
+        'Renames one process of a .lila: sets its `name`, the one its canvas tab shows; its slug never ' +
+        'changes. Refused in a project with a single process, whose name is the project\'s. The same ' +
+        'name writes nothing (`written: false`). Atomic and locked like every write; `dryRun` writes ' +
+        'nothing. Returns `{ file, dryRun, written, process, before, after, summary, notes }`. Like ' +
+        '`lila process rename`.',
+      inputSchema: z.object({
+        project: projectSchema,
+        process: slugSchema,
+        name: z.string().describe('The new name.'),
+        dryRun: dryRunSchema,
+        locale: localeSchema,
+      }),
+      annotations: { destructiveHint: false, idempotentHint: true },
+    },
+    async ({ project, process, name, dryRun, locale }): Promise<CallToolResult> => {
+      try {
+        return textResult(await renameLilaProcess({ file: project, process, name, dryRun, locale: localeOf(locale) }));
+      } catch (error) {
+        return failure('rename_process', error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'delete_process',
+    {
+      title: 'Delete process',
+      description:
+        'Deletes one process of a .lila with its scenarios and saved runs, listed in ' +
+        '`removedScenarios` and `removedRuns`. Refused for the last process, and for a process that a ' +
+        'call activity of another process names in its `calledElement` (the refusal lists them as ' +
+        '`slug/elementId (name)`). Down to one process, the project is written as a version 1 archive ' +
+        'and its process takes the project\'s name (`notes` says so; `slugs` lists what is left). ' +
+        'Atomic and locked like every write; `dryRun` writes nothing. Like `lila process delete`.',
+      inputSchema: z.object({ project: projectSchema, process: slugSchema, dryRun: dryRunSchema, locale: localeSchema }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ project, process, dryRun, locale }): Promise<CallToolResult> => {
+      try {
+        return textResult(await deleteLilaProcess({ file: project, process, dryRun, locale: localeOf(locale) }));
+      } catch (error) {
+        return failure('delete_process', error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'rename_scenario',
+    {
+      title: 'Rename scenario',
+      description:
+        'Renames one scenario of a process of a .lila: sets its "name"; its entry (file name) stays. ' +
+        'Its revision goes up, and so do those of the scenarios that extend it, as in the app, so their ' +
+        'saved runs go stale. Refused when another scenario of the process already answers to that ' +
+        'name (by its "name" or its file name). The same name writes nothing (`written: false`). ' +
+        'Atomic and locked like every write; `dryRun` writes nothing. Returns `{ file, dryRun, ' +
+        'written, process, entry, before, after, revision, summary, notes }`. Like `lila scenario rename`.',
+      inputSchema: z.object({
+        project: projectSchema,
+        process: processSchema,
+        scenario: scenarioSchema,
+        name: z.string().describe('The new name.'),
+        dryRun: dryRunSchema,
+        locale: localeSchema,
+      }),
+      annotations: { destructiveHint: false, idempotentHint: true },
+    },
+    async ({ project, process, scenario, name, dryRun, locale }): Promise<CallToolResult> => {
+      try {
+        return textResult(await renameLilaScenario({ file: project, process, scenario, name, dryRun, locale: localeOf(locale) }));
+      } catch (error) {
+        return failure('rename_scenario', error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'delete_scenario',
+    {
+      title: 'Delete scenario',
+      description:
+        'Deletes one scenario of a process of a .lila with its saved runs, listed in `removedRuns`. ' +
+        'Refused for the last scenario of the process, and for one that other scenarios extend (the ' +
+        'refusal lists them). Deleting `as-is.scenario.json` leaves `edit_process` nowhere to store ' +
+        'durations; `notes` says so. Atomic and locked like every write; `dryRun` writes nothing. ' +
+        'Returns `{ file, dryRun, written, process, entry, removedRuns, summary, notes }`. Like ' +
+        '`lila scenario delete`.',
+      inputSchema: z.object({
+        project: projectSchema,
+        process: processSchema,
+        scenario: scenarioSchema,
+        dryRun: dryRunSchema,
+        locale: localeSchema,
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ project, process, scenario, dryRun, locale }): Promise<CallToolResult> => {
+      try {
+        return textResult(await deleteLilaScenario({ file: project, process, scenario, dryRun, locale: localeOf(locale) }));
+      } catch (error) {
+        return failure('delete_scenario', error);
       }
     },
   );

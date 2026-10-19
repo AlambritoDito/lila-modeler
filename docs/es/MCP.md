@@ -3,7 +3,7 @@
 > Leer en: [English](../MCP.md)
 
 `packages/mcp` (`@lila-modeler/mcp`) es un servidor [MCP](https://modelcontextprotocol.io) por stdio sobre
-`@lila-modeler/engine`, sin lógica propia: veintiuna tools, sobre el mismo pipeline de validación y
+`@lila-modeler/engine`, sin lógica propia: veinticinco tools, sobre el mismo pipeline de validación y
 simulación que la CLI — ver [`docs/es/CLI.md`](CLI.md) para ese mismo pipeline manejado desde una
 terminal en vez de un cliente MCP.
 
@@ -139,11 +139,24 @@ mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
   (#632) — añade un BPMN como proceso nuevo de un `.lila` que ya existe (`mode: "add"`) o
   reemplaza el modelo de uno (`mode: "replace"`). Devuelve `{ file, mode, slug, name, processId,
   revision, dryRun, laidOut, summary, scenarioRemovals, notes, warnings, slugs }`.
+- **`rename_process({ project, process, name, dryRun?, locale? })`** (#634) — renombra un proceso de
+  un `.lila`; su slug no cambia. Devuelve `{ file, dryRun, written, process, before, after,
+  summary, notes }`.
+- **`delete_process({ project, process, dryRun?, locale? })`** (#634) — borra un proceso con sus
+  escenarios y sus corridas guardadas. Devuelve `{ file, dryRun, written, process, name,
+  removedScenarios, removedRuns, slugs, summary, notes }`.
+- **`rename_scenario({ project, process?, scenario, name, dryRun?, locale? })`** (#634) — renombra un
+  escenario; su archivo no cambia. Devuelve `{ file, dryRun, written, process, entry, before,
+  after, revision, summary, notes }`.
+- **`delete_scenario({ project, process?, scenario, dryRun?, locale? })`** (#634) — borra un
+  escenario con sus corridas guardadas. Devuelve `{ file, dryRun, written, process, entry,
+  removedRuns, summary, notes }`.
 
 Las tres de exportación se explican en [Exportar sin la app](#exportar-sin-la-app); las seis
 siguientes en [Herramientas de modelado para agentes](#herramientas-de-modelado-para-agentes);
-`get_project` y `get_scenario` en [Leer un proyecto](#leer-un-proyecto); las dos últimas en
-[El BPMN de un proceso](#el-bpmn-de-un-proceso).
+`get_project` y `get_scenario` en [Leer un proyecto](#leer-un-proyecto); `get_process_bpmn` y
+`put_process_bpmn` en [El BPMN de un proceso](#el-bpmn-de-un-proceso); las cuatro últimas en
+[Renombrar y borrar](#renombrar-y-borrar).
 
 Toda tool que recibe un modelo acepta también un proyecto `.lila`: ver
 [Un `.lila` como entrada](#un-lila-como-entrada).
@@ -278,6 +291,54 @@ export-bpmn` y `lila process import` (`docs/es/CLI.md`) hacen lo mismo desde una
 ```json
 { "name": "put_process_bpmn", "arguments": { "project": "credito.lila", "process": "miwg-a-1-0", "mode": "replace",
   "bpmn": "miwg-editado.bpmn", "allowUnsimulatable": true, "dryRun": true } }
+```
+
+## Renombrar y borrar
+
+`rename_process`, `delete_process`, `rename_scenario` y `delete_scenario` (#634) ordenan un `.lila`
+Los renombres siguen a la app; los borrados rechazan lo que dejaría al proyecto con una referencia
+colgante. Hay una tool por operación, así que los dos borrados se anuncian como
+destructivos (`destructiveHint: true`) y los dos renombres no. Cada rechazo explica por qué, en el
+idioma de la llamada, y no escribe nada. Cada escritura es la escritura atómica y con candado de
+`patch_scenario` (`E-CAMBIO-EXTERNO` si el archivo cambió en disco desde que se leyó), los demás
+procesos quedan como estaban y `dryRun` comprueba todo y no escribe nada. `written` dice si se
+guardó el archivo; `summary` dice en una línea lo que pasó.
+
+- **`rename_process`** cambia el `name` del proceso, el que muestra su pestaña del lienzo. El slug
+  (su carpeta `processes/<slug>/`) nunca cambia. Un proyecto con un solo proceso se escribe como un
+  archivo de versión 1, cuyo proceso se llama como el proyecto, así que renombrar ese proceso se
+  rechaza. El mismo nombre no escribe nada.
+- **`delete_process`** quita un proceso con sus escenarios y sus corridas guardadas, que se listan
+  en `removedScenarios` y `removedRuns`. El último proceso no se puede borrar. Tampoco uno que una
+  actividad de llamada de otro proceso nombra en su `calledElement` (con o sin prefijo, como
+  `tns:Process_B`): el rechazo lista esas actividades como `slug/idElemento (nombre)`. Si queda un
+  solo proceso, el proyecto se escribe como un archivo de versión 1, donde ese proceso toma el
+  nombre y el slug del proyecto: `notes` lo dice y `slugs` lista lo que queda.
+- **`rename_scenario`** cambia el `"name"` del escenario; su entrada (`<nombre>.scenario.json`) no
+  cambia. Su revisión sube, y también las de los escenarios que heredan de él, como en la app, así
+  que sus corridas guardadas quedan obsoletas. Un nombre por el que ya se encuentra otro escenario
+  del proceso (su `"name"`, o su nombre de archivo con o sin `.scenario.json`) se rechaza:
+  `scenario` dejaría de encontrar un solo escenario con él. El mismo nombre no escribe nada.
+- **`delete_scenario`** quita un escenario con su revisión y sus corridas guardadas, que se listan
+  en `removedRuns`; `get_project` deja de listarlas. El último escenario de un proceso no se puede
+  borrar, y tampoco uno del que heredan otros escenarios: el rechazo los lista. Borrar
+  `as-is.scenario.json` se permite, pero `edit_process` guarda ahí las duraciones, los recursos y
+  las probabilidades de rama que recibe, así que `notes` avisa que ya no podrá.
+
+```json
+{ "name": "rename_process", "arguments": { "project": "credito.lila", "process": "miwg-a-1-0", "name": "Disputa de tarjeta", "locale": "es" } }
+```
+
+```json
+{ "name": "delete_process", "arguments": { "project": "credito.lila", "process": "miwg-a-1-0", "dryRun": true } }
+```
+
+```json
+{ "name": "rename_scenario", "arguments": { "project": "examples/pedido.lila", "scenario": "to-be-3-cajeros", "name": "TO-BE", "dryRun": true } }
+```
+
+```json
+{ "name": "delete_scenario", "arguments": { "project": "examples/pedido.lila", "scenario": "to-be-3-cajeros", "dryRun": true } }
 ```
 
 ## Exportar sin la app
@@ -729,6 +790,10 @@ completo en un archivo, como `saveTo` (las tools responden con un resumen salvo 
 | `get_scenario` | `lila scenario show` | |
 | `get_process_bpmn` | `lila process export-bpmn` | |
 | `put_process_bpmn` | `lila process import` | `mode: "replace"` es `--replace`. |
+| `rename_process` | `lila process rename` | `dryRun` es `--dry-run`. |
+| `delete_process` | `lila process delete` | `dryRun` es `--dry-run`. |
+| `rename_scenario` | `lila scenario rename` | `dryRun` es `--dry-run`. |
+| `delete_scenario` | `lila scenario delete` | `dryRun` es `--dry-run`. |
 | Los resources y el prompt | ninguno | Son parte del protocolo; la CLI tiene `--help` y `docs/`. |
 
 ## Resumen o resultado completo

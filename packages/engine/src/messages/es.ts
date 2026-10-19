@@ -64,6 +64,8 @@ const ES_USAGE = `Uso: lila validate <archivo.bpmn|proyecto.lila> [--process slu
                                    [--process slug] [--dry-run] [--json]
      lila process attribute define <proyecto.lila> --remove --id id|--name nombre --applies-to tipo
      lila process attribute list <proyecto.lila> [--process slug] [--json]
+     lila process rename <proyecto.lila> <slug> --name nombre [--dry-run] [--json]
+     lila process delete <proyecto.lila> <slug> [--dry-run] [--json]
      lila scenario import <proyecto.lila> <escenario> <hoja.xlsx|hoja.csv> [--process slug]
                           [--dry-run] [--json]
      lila scenario template <proyecto.lila> <escenario> --out hoja.xlsx [--process slug] [--force]
@@ -71,6 +73,8 @@ const ES_USAGE = `Uso: lila validate <archivo.bpmn|proyecto.lila> [--process slu
      lila scenario patch <proyecto.lila> <escenario> --patch <ops.json> [--process slug]
                          [--save-to nombre] [--extends-from nombre] [--name n] [--description d]
                          [--dry-run] [--json]
+     lila scenario rename <proyecto.lila> <escenario> --name nombre [--process slug] [--dry-run] [--json]
+     lila scenario delete <proyecto.lila> <escenario> [--process slug] [--dry-run] [--json]
      lila project show <proyecto.lila> [--json]
      lila project create <ruta.lila> --name nombre --bpmn <archivo.bpmn>
                          [--scenario nombre=archivo.json ...] [--force] [--allow-unsimulatable] [--json]
@@ -90,11 +94,15 @@ Comandos:
              export-bpmn: imprime o escribe el BPMN de un proceso. import: añade un .bpmn como
              proceso nuevo de un .lila, o con --replace reemplaza el modelo de uno.
              attribute: define (o quita) un atributo extendido, o los lista.
+             rename: renombra un proceso (su slug no cambia). delete: borra un proceso con sus
+             escenarios y sus corridas guardadas.
   scenario   import: aplica una hoja de escenario (.xlsx/.csv) a un escenario del .lila, como
              Importar Excel/CSV de la app. template: escribe esa hoja, rellenada, para una persona.
              show: imprime un escenario como está guardado (o --resolved) con las notas del validador.
              patch: aplica un JSON Patch a un escenario, en sitio o como un escenario nuevo que
              hereda de él (--save-to); solo se escribe si el resultado valida.
+             rename: renombra un escenario (su archivo no cambia). delete: borra un escenario con
+             sus corridas guardadas.
   project    show: lista los procesos de un .lila, sus escenarios y sus corridas guardadas. Solo lee.
              create: crea un .lila nuevo a partir de un .bpmn y escenarios opcionales.
   mcp        Arranca el servidor MCP por stdio (para Claude Code / Desktop). Ver docs/MCP.md.
