@@ -208,6 +208,8 @@ function porEtiqueta(etiqueta: string): HTMLButtonElement {
 async function esperarReparse(): Promise<void> {
   await act(async () => {
     await new Promise((listo) => { setTimeout(listo, 200); });
+    // #645: under load the 150 ms timer can still be pending at 200 ms; wait until the parse started.
+    await vi.waitFor(() => { expect(mocks.reparses.length).toBeGreaterThan(0); }, { timeout: 5000 });
     await Promise.allSettled(mocks.reparses);
     await new Promise((listo) => { setTimeout(listo, 0); });
   });
@@ -216,6 +218,9 @@ async function esperarReparse(): Promise<void> {
 async function ejecutarTrasReparse(): Promise<void> {
   await esperarReparse();
   await click(T.app.ejecutar);
+  // #645: the run is stored asynchronously (export → gate → worker); wait until it reaches the
+  // canvas instead of relying on the click's act to cover the whole chain.
+  await vi.waitFor(() => { expect(ultimoOverlay()?.[0]).toBeTruthy(); }, { timeout: 5000 });
 }
 async function click(label: string) {
   await act(async () => {

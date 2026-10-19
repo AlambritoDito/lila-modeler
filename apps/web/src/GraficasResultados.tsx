@@ -31,6 +31,7 @@ import {
 } from './GraficasSvg';
 import { formatDisplay, formatDisplayDuration } from './formatDisplay';
 import { strings, useStrings } from './i18n';
+import { nombreRecurso } from './recursosModelo';
 
 /** The event log sample the shell keeps for the run (`App.tsx`, `logs`). */
 export interface LogDeCorrida {
@@ -278,7 +279,7 @@ export function graficasDelDocumento(entrada: {
 }): { svg: string; alt: string }[] {
   const { ir, scenario, result } = entrada;
   const unit = (scenario.run.baseTimeUnit ?? 's') as BaseTimeUnit;
-  const nombres = Object.fromEntries(Object.entries(scenario.resources ?? {}).map(([id, r]) => [id, r.name ?? id]));
+  const nombres = Object.fromEntries(Object.entries(scenario.resources ?? {}).map(([id, r]) => [id, nombreRecurso(id, r)]));
   const papel = { paleta: PALETA_PAPEL, ancho: ANCHO_PAPEL };
   const medido = !sinVentana(result, scenario.run.warmup);
   // Each chart on its own: one that fails is left out, and the document still exports.

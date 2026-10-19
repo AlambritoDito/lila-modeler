@@ -535,3 +535,26 @@ it('the top bar stacks over the Simulate/Results sub-bar, so File and View drop 
 it('the viewer canvas takes the fingers from the browser, or a pinch zooms the page (#653)', () => {
   expect(bloqueDeLinea('.visor-lienzo')).toContain('touch-action: none');
 });
+
+it('the resize handles of a selected lane, pool or activity use the theme\'s selection colour (#596, #645)', () => {
+  // bpmn-js paints them in a fixed blue; the override lives in the bpmn-js variables block.
+  expect(appCss).toMatch(/^\s*--resizer-fill-color:\s*var\(--diagram-selected\);/m);
+  expect(appCss).toMatch(/^\s*--resizer-stroke-color:\s*var\(--bg-base\);/m);
+});
+
+it('the lane controls are hidden outside Model and while «Validate paths» animates (#596, #645)', () => {
+  // One rule hides the canvas «+»/⠿ overlays and the Properties lane list, so the selectors are
+  // checked together with the declaration they share.
+  const regla = /([^{}]+)\{\s*display:\s*none\s*!important;\s*\}/g;
+  const ocultos = [...appCss.matchAll(regla)]
+    .flatMap((m) => m[1]!.replace(/\/\*[\s\S]*?\*\//g, '').split(',').map((s) => s.trim()));
+  for (const selector of [
+    '.app.modo-simular .lienzo .djs-overlay-lila-carril',
+    '.app.modo-resultados .lienzo .djs-overlay-lila-carril',
+    '.lienzo .bjs-container.simulation .djs-overlay-lila-carril',
+    '.app.modo-simular .panel .carriles-modelar',
+    '.app.modo-resultados .panel .carriles-modelar',
+  ]) expect(ocultos, selector).toContain(selector);
+  // Model itself does not hide them.
+  expect(ocultos.filter((s) => s.includes('modo-modelar') && s.includes('lila-carril'))).toEqual([]);
+});

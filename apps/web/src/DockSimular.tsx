@@ -20,6 +20,7 @@ import { getLocale, useStrings } from './i18n';
 import { agruparAvisos, AvisoAgrupado, type GrupoAvisos } from './avisos';
 import { p95Fiable } from './percentilesPorElemento';
 import { numerosLegibles } from './escenarioModelo';
+import { nombreRecurso } from './recursosModelo';
 import './DockSimular.css';
 
 export const PESTANAS_DOCK = ['tareas', 'detalle', 'log', 'avisos'] as const;
@@ -115,7 +116,7 @@ export function filasTareas(ir: ProcessIR, result: RunResult, scenario: Resolved
       return {
         id,
         nombre: nodo.name || id,
-        recursos: usos.map((u) => scenario.resources?.[u.ref]?.name ?? u.ref),
+        recursos: usos.map((u) => nombreRecurso(u.ref, scenario.resources?.[u.ref])),
         casos: m.completed,
         proceso: m.processing.mean,
         espera: m.resourceWait.mean,
@@ -294,7 +295,7 @@ function Log({ ir, scenario, log }: { ir: ProcessIR; scenario: ResolvedScenario;
             <tr key={i}>
               <td style={tdStyle}>{f.caseId}</td>
               <td style={tdStyle}>{ir.nodes[f.elementId]?.name || f.elementId}</td>
-              <td style={tdStyle}>{f.resourceId === null ? '—' : scenario.resources?.[f.resourceId]?.name ?? f.resourceId}</td>
+              <td style={tdStyle}>{f.resourceId === null ? '—' : nombreRecurso(f.resourceId, scenario.resources?.[f.resourceId])}</td>
               <td style={numero()} title={exacto(f.enabledAt)}>{tiempo(f.enabledAt)}</td>
               <td style={numero()} title={exacto(f.startedAt)}>{tiempo(f.startedAt)}</td>
               <td style={numero()} title={exacto(f.endedAt)}>{tiempo(f.endedAt)}</td>
