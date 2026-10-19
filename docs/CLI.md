@@ -342,6 +342,57 @@ npx lila process import -p examples/pedido.lila --bpmn examples/bizagi-exports/b
 ```
 Exit code: `1`.
 
+## `process rename|delete` and `scenario rename|delete` (#634)
+
+Tidying up a `.lila` — the MCP tools `rename_process`, `delete_process`, `rename_scenario` and
+`delete_scenario` ([`docs/MCP.md`](MCP.md#renaming-and-deleting)), with the same rules:
+
+- `lila process rename <project.lila> <slug> --name <name>` renames a process; its slug stays. A
+  project with a single process (named after the project) exits `1`.
+- `lila process delete <project.lila> <slug>` deletes a process with its scenarios and saved runs.
+  The last process, or one a call activity of another process names in its `calledElement`, exits
+  `1` (the refusal lists those call activities). Down to one process, the project is written as a
+  version 1 archive.
+- `lila scenario rename <project.lila> <scenario> --name <name>` renames a scenario; its file stays,
+  its revision and those of the scenarios that extend it go up. A name another scenario of the
+  process already answers to exits `1`.
+- `lila scenario delete <project.lila> <scenario>` deletes a scenario with its saved runs. The last
+  scenario of the process, or one other scenarios extend, exits `1`.
+
+`<scenario>` is a scenario of the process (its file name, with or without `.scenario.json`, or its
+`"name"`); `--process slug` picks the process of a `.lila` with several. A refusal writes nothing.
+The write is the `.lila`'s atomic, locked write (see [A `.lila` as input](#a-lila-as-input-466)),
+every other process unchanged; `--dry-run` writes nothing; `--json` prints the result object of the
+MCP tool, and without it the CLI prints its `summary` and `notes`.
+
+```bash
+npx lila scenario rename examples/pedido.lila to-be-3-cajeros --name TO-BE --dry-run
+```
+Exit code: `0`.
+
+```text
+Dry run: would rename scenario to-be-3-cajeros.scenario.json of process pedido to "TO-BE" in /…/examples/pedido.lila. Nothing was written.
+```
+
+The AS-IS cannot go while the TO-BE extends it:
+
+```bash
+npx lila scenario delete examples/pedido.lila as-is --dry-run
+```
+Exit code: `1`.
+
+```bash
+npx lila scenario delete examples/pedido.lila to-be-3-cajeros --dry-run --json
+```
+Exit code: `0`.
+
+pedido is a one-process project, so its process can neither be renamed nor deleted:
+
+```bash
+npx lila process delete examples/pedido.lila pedido --dry-run
+```
+Exit code: `1`.
+
 ## `mcp`
 
 Starts the MCP server (`@lila-modeler/mcp`) over stdio, for an MCP client to launch — not something you

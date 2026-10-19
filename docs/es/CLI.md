@@ -349,6 +349,58 @@ npx lila process import -p examples/pedido.lila --bpmn examples/bizagi-exports/b
 ```
 Código de salida: `1`.
 
+## `process rename|delete` y `scenario rename|delete` (#634)
+
+Ordenar un `.lila` — las tools MCP `rename_process`, `delete_process`, `rename_scenario` y
+`delete_scenario` ([`docs/es/MCP.md`](MCP.md#renombrar-y-borrar)), con las mismas reglas:
+
+- `lila process rename <proyecto.lila> <slug> --name <nombre>` renombra un proceso; su slug no
+  cambia. Un proyecto con un solo proceso (que se llama como el proyecto) sale con `1`.
+- `lila process delete <proyecto.lila> <slug>` borra un proceso con sus escenarios y sus corridas
+  guardadas. El último proceso, o uno que una actividad de llamada de otro proceso nombra en su
+  `calledElement`, sale con `1` (el rechazo lista esas actividades). Si queda un solo proceso, el
+  proyecto se escribe como un archivo de versión 1.
+- `lila scenario rename <proyecto.lila> <escenario> --name <nombre>` renombra un escenario; su
+  archivo no cambia, y sube su revisión y la de los escenarios que heredan de él. Un nombre por el
+  que ya se encuentra otro escenario del proceso sale con `1`.
+- `lila scenario delete <proyecto.lila> <escenario>` borra un escenario con sus corridas guardadas.
+  El último escenario del proceso, o uno del que heredan otros, sale con `1`.
+
+`<escenario>` es un escenario del proceso (su nombre de archivo, con o sin `.scenario.json`, o su
+`"name"`); `--process slug` elige el proceso de un `.lila` con varios. Un rechazo no escribe nada.
+La escritura es la escritura atómica y con candado del `.lila` (ver
+[Un `.lila` como entrada](#un-lila-como-entrada-466)), con los demás procesos intactos; `--dry-run`
+no escribe nada; `--json` imprime el objeto de resultado de la tool MCP, y sin él la CLI imprime su
+`summary` y sus `notes`.
+
+```bash
+npx lila --lang es scenario rename examples/pedido.lila to-be-3-cajeros --name TO-BE --dry-run
+```
+Código de salida: `0`.
+
+```text
+Simulacro: se renombraría el escenario to-be-3-cajeros.scenario.json del proceso pedido a "TO-BE" en /…/examples/pedido.lila. No se escribió nada.
+```
+
+El AS-IS no se puede borrar mientras el TO-BE herede de él:
+
+```bash
+npx lila --lang es scenario delete examples/pedido.lila as-is --dry-run
+```
+Código de salida: `1`.
+
+```bash
+npx lila --lang es scenario delete examples/pedido.lila to-be-3-cajeros --dry-run --json
+```
+Código de salida: `0`.
+
+pedido es un proyecto de un solo proceso, así que su proceso no se puede renombrar ni borrar:
+
+```bash
+npx lila --lang es process delete examples/pedido.lila pedido --dry-run
+```
+Código de salida: `1`.
+
 ## `mcp`
 
 Arranca el servidor MCP (`@lila-modeler/mcp`) por stdio, para que lo lance un cliente MCP, no algo que se
