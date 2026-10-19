@@ -169,8 +169,10 @@ export async function openLilaProcess(
 
 /**
  * Every process of `file`, opened as `openLilaProcess` opens one, from a single read (#628): the
- * inventory of a project. `formatVersion` is the layout on disk: 3 for a repository with a
- * catalog (RM-01), 2 for a repository (`processes/<slug>/`), 1 otherwise.
+ * inventory of a project. `formatVersion` is the layout the next write gives the file — the one on
+ * disk, except for a version 1 or 2 archive holding catalog files added by hand, which reports 3
+ * (RM-01 § 1.3): 3 for a repository with a catalog, 2 for a repository (`processes/<slug>/`), 1
+ * otherwise.
  */
 export async function openLilaProject(
   file: string,

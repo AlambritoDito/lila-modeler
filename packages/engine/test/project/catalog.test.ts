@@ -21,6 +21,7 @@ import {
   newProcessId,
   processesOf,
   ProjectFormatError,
+  readLilaPreserved,
   readProjectDocument,
   upgradesToVersion3,
   withCatalog,
@@ -100,11 +101,23 @@ describe('catalog objects (RM-01 § 2.1, § 2.2)', () => {
     expect(catalogObjectProblem({ type: 'document', id: 'd-1', name: 'Form', revision: 1, url: 'javascript:alert(1)' })).toMatch(/url/);
     expect(catalogObjectProblem({ type: 'risk', id: 'risk-1', name: 'Late', revision: 1, url: 7, unitRef: [] })).toBeNull();
     expect(catalogObjectProblem(receptionist, { type: 'unit', id: receptionist.id })).toMatch(/entry path/);
+    expect(catalogObjectProblem({ type: 'system', id: 's-1', name: 'CRM', revision: 1, url: 'https://:80' })).toMatch(/url/);
   });
 
   test('a writer puts the known fields first and keeps the others in their order', () => {
     const object = { vendor: 'x', revision: 1, url: 'https://example.org', name: 'CRM', zeta: 1, id: 'sys-crm', type: 'system' } as CatalogObject;
     expect(Object.keys(canonicalCatalogObject(object))).toEqual(['type', 'id', 'name', 'revision', 'url', 'vendor', 'zeta']);
+  });
+
+  test('fields named like members of Object.prototype are fields like any other', () => {
+    const parsed = JSON.parse('{"type":"risk","id":"risk-1","name":"Late","revision":1,"constructor":"c","toString":"t","__proto__":{"x":1}}') as CatalogObject;
+    const canonical = canonicalCatalogObject(parsed);
+    expect(Object.keys(canonical)).toEqual(['type', 'id', 'name', 'revision', 'constructor', 'toString', '__proto__']);
+    // Written without the bytes it was read with (a browser reload): every field is still there.
+    const v3 = withCatalog(v1, [parsed]);
+    const written = strFromU8(unzipSync(encodeLila(v3))['catalog/risk/risk-1.json']!);
+    expect(written).toContain('"constructor": "c"');
+    expect(written).toContain('"__proto__"');
   });
 });
 
@@ -305,6 +318,72 @@ describe('the upgrade to version 3 (RM-01 § 1.3)', () => {
     const names = [...lilaEntryNames(encodeLila(withProcesses(document, [frontDesk!]), preserved))];
     expect(names.filter((n) => n.startsWith('processes/billing/'))).toEqual([]);
     expect(names).toContain('processes/front-desk/process.json');
+  });
+});
+
+describe('kept entries and process folders', () => {
+  test('readLilaPreserved finds what decodeLilaArchive keeps, without decoding the document', () => {
+    for (const notes of [false, true]) {
+      const fixture = v3Fixture({ notes });
+      const quick = readLilaPreserved(fixture);
+      const full = decodeLilaArchive(fixture);
+      expect(quick.id).toBe(full.document.id);
+      expect(Object.keys(quick.preserved.entries)).toEqual(Object.keys(full.preserved.entries));
+      expect(Object.keys(quick.preserved.objects)).toEqual(Object.keys(full.preserved.objects));
+      expect(quick.preserved.slugs).toEqual(full.preserved.slugs);
+      expect(Buffer.from(encodeLila(full.document, quick.preserved)).equals(Buffer.from(fixture))).toBe(true);
+    }
+    const entries = unzipSync(encodeLila(v1));
+    entries['notes.md'] = strToU8('n');
+    expect(Object.keys(readLilaPreserved(zipSync(entries)).preserved.entries)).toEqual(['notes.md']);
+    entries['lila-project.json'] = strToU8(JSON.stringify({ version: 4, id: 'x' }));
+    expect(() => readLilaPreserved(zipSync(entries))).toThrow(/version 4/);
+  });
+
+  test('a new process never takes over the model or scenarios of an orphaned folder with its slug', () => {
+    const entries = unzipSync(v3Fixture());
+    entries['processes/orphan/old.scenario.json'] = strToU8('{}');
+    entries['processes/orphan/notes.md'] = strToU8('orphan notes');
+    const { document, preserved } = decodeLilaArchive(zipSync(entries));
+    expect(document.problems?.map((p) => p.file)).toEqual(
+      expect.arrayContaining(['processes/orphan/old.scenario.json', 'processes/orphan/notes.md']),
+    );
+    // Kept as an orphaned folder while no process has its slug.
+    expect([...lilaEntryNames(encodeLila(document, preserved))]).toContain('processes/orphan/old.scenario.json');
+    const [first] = processesOf(document);
+    const taken = withProcesses(document, [...processesOf(document), { ...first!, id: newProcessId(), slug: 'orphan', name: 'Orphan' }]);
+    expect(() => encodeLila(taken, preserved)).toThrow(/processes\/orphan\/.*not listed/);
+    // An entry that is not part of the layout would not be misread: it just stays in the folder.
+    const onlyNotes = { ...preserved, entries: Object.fromEntries(Object.entries(preserved.entries).filter(([n]) => n !== 'processes/orphan/old.scenario.json')) };
+    expect([...lilaEntryNames(encodeLila(taken, onlyNotes))]).toContain('processes/orphan/notes.md');
+  });
+
+  test('deleting down to one process (version 2 → 1) keeps the kept entries of the old folders, as the folder form does', () => {
+    const two = withProcesses(v1, [
+      { slug: 'reception', name: 'Reception', model: v1.model, scenarios: v1.scenarios, scenarioRevisions: v1.scenarioRevisions, runs: [] },
+      { slug: 'billing', name: 'Billing', model: v1.model, scenarios: {}, scenarioRevisions: {}, runs: [] },
+    ]);
+    const entries = unzipSync(encodeLila(two));
+    entries['processes/billing/notes.md'] = strToU8('billing notes');
+    const { document, preserved } = decodeLilaArchive(zipSync(entries));
+    // Still version 2: both processes listed, the billing notes leave with billing.
+    const [reception] = processesOf(document);
+    const second = processesOf(document)[1]!;
+    const renamedOnly = encodeLila(withProcesses(document, [reception!, { ...second, slug: 'invoicing' }]), preserved);
+    expect([...lilaEntryNames(renamedOnly)]).not.toContain('processes/billing/notes.md');
+    // Down to one process the archive is version 1, whose process lives at the root: the old
+    // `processes/` entries it kept stay, as the folder keeps an old `processes/` folder.
+    const single = encodeLila(withProcesses(document, [reception!]), preserved);
+    expect(manifestOf(single).version).toBe(1);
+    expect([...lilaEntryNames(single)]).toContain('processes/billing/notes.md');
+  });
+
+  test('a kept entry named like a member of Object.prototype is kept', () => {
+    const entries = unzipSync(encodeLila(v1));
+    entries['constructor'] = strToU8('c');
+    const { document, preserved } = decodeLilaArchive(zipSync(entries));
+    expect(Object.keys(preserved.entries)).toEqual(['constructor']);
+    expect([...lilaEntryNames(encodeLila(document, preserved))]).toContain('constructor');
   });
 });
 

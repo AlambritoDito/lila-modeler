@@ -1040,8 +1040,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     setSuelto(doc.loose === true);
     setCambioExterno(false); // A notice about the project being left, or the one just reloaded.
     // #92: a `.lila` read with entries this version does not interpret says, once, that the
-    // browser's automatic recovery will not carry them (owner decision 4 of #127).
-    const avisos = [...(doc.problems ?? []).map((p) => S.app.problemaDeArchivo(p.file, p.message)), ...[tomarAvisoRecuperacion(doc.id)].filter((a) => a !== null)];
+    // browser's automatic recovery will not carry them (owner decision 4 of #127). Not on the
+    // desktop (`window.lila`), whose recovery copy is a `.lila` of its own.
+    const avisos = [...(doc.problems ?? []).map((p) => S.app.problemaDeArchivo(p.file, p.message)), ...[window.lila === undefined ? tomarAvisoRecuperacion(doc.id) : null].filter((a) => a !== null)];
     if (avisos.length) setIoError(avisos.join(' · '));
     setProjectId(doc.id); setProjectName(doc.name); setProcesoId(doc.model.id); setArchivo(doc.model.name);
     // Una carpeta sin `*.scenario.json` —un `.bpmn` suelto abierto por doble clic (LILA-072), o

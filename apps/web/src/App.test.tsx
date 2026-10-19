@@ -3358,6 +3358,23 @@ it('a version 3 project keeps its catalog, its version and its process id throug
   expect(lilaEntryNames(encodeLila(guardado))).toContain(`processes/${v3.process!.slug}/model.bpmn`);
 });
 
+it('a process added to a version 3 project gets one id, the same in every save (#92)', async () => {
+  const v3 = withCatalog(proyecto('p25', 'Recepción') as ProjectDocument, [RECEPCIONISTA]);
+  vi.mocked(session.openProject).mockResolvedValueOnce(readLila(encodeLila(v3)));
+  await click(T.app.abrir);
+  if (container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open === true) await click(T.app.descartar);
+  await nuevoProcesoConNombre('Cobro');
+  await click(T.app.guardar);
+  const primero = vi.mocked(session.saveProject).mock.calls.at(-1)![0];
+  await click(T.app.guardar);
+  const segundo = vi.mocked(session.saveProject).mock.calls.at(-1)![0];
+  expect(primero.processes).toHaveLength(1);
+  expect(primero.process?.id).toBe(v3.process!.id);
+  expect(primero.processes![0]!.id).toMatch(/^process-[0-9a-z]{12}$/);
+  expect(segundo.processes![0]!.id).toBe(primero.processes![0]!.id);
+  expect(segundo.catalog).toEqual([RECEPCIONISTA]);
+});
+
 it('the desktop autosave of a version 3 project carries its catalog (#92)', async () => {
   const v3 = withCatalog(proyecto('p24', 'Recepción') as ProjectDocument, [RECEPCIONISTA]);
   const puente = puenteRecuperacion(encodeLila(v3));

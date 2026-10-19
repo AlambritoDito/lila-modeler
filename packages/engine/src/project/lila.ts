@@ -175,7 +175,8 @@ interface Extras {
 }
 
 function newExtras(slugs: readonly string[]): Extras {
-  return { problems: [], catalog: [], entries: {}, objects: {}, slugs, version3: false };
+  // Without a prototype: an entry may be called `__proto__` or `constructor`, and is kept like any other.
+  return { problems: [], catalog: [], entries: Object.create(null), objects: Object.create(null), slugs, version3: false };
 }
 
 /**
@@ -364,6 +365,20 @@ export function encodeLila(document: ProjectDocument, preserved: LilaPreserved |
 
   if (preserved !== null) {
     const gone = new Set(version === 1 ? [] : preserved.slugs.filter((slug) => !slugs.includes(slug)));
+    // A kept entry of an orphaned folder (a `processes/<slug>/` the manifest did not list) whose
+    // slug is now a process: one that looks like the layout would be read back as that process's
+    // model, scenario or run. Refused instead of merged; any other kept entry just stays there.
+    for (const name of Object.keys(preserved.entries)) {
+      const orphan = name.startsWith(`${PROCESSES_DIR}/`) ? name.slice(PROCESSES_DIR.length + 1).split('/')[0] ?? '' : '';
+      const rest = name.slice(PROCESSES_DIR.length + 2 + orphan.length);
+      if (orphan === '' || preserved.slugs.includes(orphan) || !slugs.includes(orphan)) continue;
+      if (rest === MODEL_FILE || isScenarioEntry(rest) || isRunEntry(rest)) {
+        throw new ProjectFormatError(
+          'LILA-ENTRY-PATH',
+          `the folder "${PROCESSES_DIR}/${orphan}/" already holds files of a process that is not listed (${JSON.stringify(name)}); choose another slug.`,
+        );
+      }
+    }
     const names = Object.keys(preserved.entries)
       .filter((name) => !Object.hasOwn(files, name))
       .filter((name) => ![...gone].some((slug) => name.startsWith(`${PROCESSES_DIR}/${slug}/`)))
@@ -543,6 +558,56 @@ export function decodeLilaArchive(bytes: Uint8Array): DecodedLila {
   // is loaded, and makes the document version 3 (RM-01 § 1.3): its next save writes it as one.
   const read = extras.version3 ? asVersion3({ ...document, catalog }) : document;
   return { document: readProjectDocument(read), preserved: preservedOf(extras) };
+}
+
+/**
+ * The project id of a `.lila` and the entries it keeps beside its document (`LilaPreserved`), without
+ * decoding the document: only the manifest and the entries outside the layout are inflated, so a
+ * writer can carry them through (`writeLilaFile`) without parsing and validating every run again.
+ * Throws a `ProjectFormatError` where `decodeLilaArchive` would on the container and the manifest.
+ */
+export function readLilaPreserved(bytes: Uint8Array): { readonly id: string; readonly preserved: LilaPreserved } {
+  const unzipOnly = (keep: (name: string) => boolean): Record<string, Uint8Array> => {
+    try {
+      return unzipSync(bytes, {
+        filter: (file) => {
+          assertSafeEntryName(file.name);
+          return keep(file.name);
+        },
+      });
+    } catch (error) {
+      if (error instanceof ProjectFormatError) throw error;
+      throw new ProjectFormatError('LILA-ZIP', `the file is not a readable .lila archive: ${(error as Error).message}`);
+    }
+  };
+  const manifestRaw = unzipOnly((name) => name === MANIFEST_FILE)[MANIFEST_FILE];
+  if (manifestRaw === undefined) {
+    throw new ProjectFormatError('LILA-NO-MANIFEST', `the archive has no "${MANIFEST_FILE}": it is not a .lila project.`);
+  }
+  const parsed = peekManifest(manifestRaw);
+  if (!isPlainObject(parsed) || typeof parsed.id !== 'string') {
+    throw new ProjectFormatError('LILA-MANIFEST', `"${MANIFEST_FILE}" does not describe a Lila project.`);
+  }
+  if (typeof parsed.version === 'number' && parsed.version > 3) {
+    throw new ProjectFormatError(
+      'LILA-MANIFEST',
+      `"${MANIFEST_FILE}" declares version ${parsed.version}; this reader understands versions 1, 2 and 3.`,
+    );
+  }
+  const repository = parsed.version === 2 || parsed.version === 3;
+  const slugs = repository ? readRepositoryManifest(parsed).map((m) => m.slug) : [];
+  const inLayout = (name: string): boolean => {
+    if (name === MANIFEST_FILE || name.endsWith('/')) return true;
+    if (!repository) return name === MODEL_FILE || isScenarioEntry(name) || isRunEntry(name);
+    const slug = slugs.find((s) => name.startsWith(`${PROCESSES_DIR}/${s}/`));
+    if (slug === undefined) return false;
+    const rest = name.slice(PROCESSES_DIR.length + slug.length + 2);
+    return rest === MODEL_FILE || isScenarioEntry(rest) || isRunEntry(rest);
+  };
+  const others = unzipOnly((name) => !inLayout(name));
+  const extras = newExtras(slugs);
+  for (const name of Object.keys(others).sort()) readOtherEntry(name, others[name] as Uint8Array, extras);
+  return { id: parsed.id, preserved: preservedOf(extras) };
 }
 
 function preservedOf(extras: Extras): LilaPreserved {

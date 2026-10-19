@@ -163,9 +163,11 @@ catalog/<tipo>/<id>.json       un archivo por objeto de catálogo
   y `document` (`ownerRef`, `url`); una `url` es una dirección `http`/`https` que se muestra como
   enlace y nunca se descarga. Los adjuntos no forman parte de esta versión. Los campos que esta
   versión no conoce se conservan, en su orden. Los objetos de un tipo que no conoce (`risk`,
-  `control`, `kpi`…) se leen solo con su sobre, como objetos de solo lectura, y sus archivos se
-  vuelven a escribir tal como estaban. Un archivo se escribe con sangría de dos espacios y un salto
-  de línea final; un objeto que nadie cambió conserva los bytes con los que se leyó.
+  `control`, `kpi`…) se leen comprobando su sobre y conservando todos sus campos, como objetos de
+  solo lectura. Un archivo se escribe con sangría de dos espacios y un salto de línea final; un
+  objeto que nadie cambió conserva los bytes con los que se leyó allí donde esos bytes viajan (todo
+  guardado del motor, la CLI, el servidor MCP y el escritorio, y la app web hasta que se recarga), y
+  si no se reescribe con los mismos campos.
 - **Ids.** El id de un objeto nuevo es `<tipo>-<12 caracteres de [0-9a-z]>`, aleatorio; todo id
   cumple `^[a-z0-9][a-z0-9-]{0,63}$`, nunca cambia y nunca sale del nombre. Una referencia escrita a
   mano antes de que existiera el catálogo (`rol-1`) puede convertirse en un objeto con ese mismo id
@@ -235,7 +237,9 @@ Abrir es tolerante donde el formato es flexible y estricto donde no lo es:
 - Las entradas conservadas de un proceso borrado en la sesión se van con él, salvo cuando el
   proyecto vuelve a la versión 1, que las conserva como la carpeta conserva una carpeta `processes/`
   vieja. Las entradas bajo un `processes/<slug>/` que el manifiesto no lista son una carpeta
-  huérfana, y se conservan.
+  huérfana, y se conservan; un guardado que daría su slug a un proceso mientras la carpeta tiene un
+  `model.bpmn`, un escenario o una corrida se rechaza (`LILA-ENTRY-PATH`) en vez de leerlos después
+  como de ese proceso.
 
 Se conservan **junto al** documento, nunca dentro: el documento es lo que cruza la frontera IPC del
 escritorio (`structuredClone`) y va a la copia en `localStorage` del navegador (`JSON.stringify`), y

@@ -159,9 +159,10 @@ catalog/<type>/<id>.json       one file per catalog object
   and `document` (`ownerRef`, `url`); a `url` is an `http`/`https` address that is shown as a link
   and never fetched. Attachments are not part of this version. Fields this version does not know
   are kept, in their order. Objects of a type it does not know (`risk`, `control`, `kpi`…) are read
-  with their envelope only, as read-only objects, and their files are written back as they were.
-  A file is written with two-space indentation and a final newline; an object nobody changed keeps
-  the bytes it was read with.
+  with their envelope checked and every field kept, as read-only objects. A file is written with
+  two-space indentation and a final newline; an object nobody changed keeps the bytes it was read
+  with wherever those bytes travel (every save of the engine, the CLI, the MCP server and the
+  desktop, and the web app until a reload), and is otherwise rewritten with the same fields.
 - **Ids.** A new object's id is `<type>-<12 characters of [0-9a-z]>`, random; every id matches
   `^[a-z0-9][a-z0-9-]{0,63}$`, never changes and never comes from the name. A reference typed by
   hand before the catalog existed (`rol-1`) can become an object with that very id when it matches
@@ -229,7 +230,9 @@ contract](REPOSITORY_CONTRACT.md) § 1.4):
   (`*.tmp-*`, `*.prev-*`, `*.lock`) are dropped without a report.
 - The kept entries of a process deleted in the session leave with it, except when the project goes
   back to version 1, which keeps them as the folder keeps an old `processes/` folder. Entries under
-  a `processes/<slug>/` the manifest does not list are an orphaned folder, and are kept.
+  a `processes/<slug>/` the manifest does not list are an orphaned folder, and are kept; a save that
+  would give its slug to a process while it holds a `model.bpmn`, a scenario or a run is refused
+  (`LILA-ENTRY-PATH`) rather than reading them back as that process's.
 
 They are kept **beside** the document, never inside it: the document is what crosses the desktop
 IPC boundary (`structuredClone`) and goes into the browser's `localStorage` mirror

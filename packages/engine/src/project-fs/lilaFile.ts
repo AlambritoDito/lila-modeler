@@ -10,7 +10,7 @@
  */
 import { link, open, readFile, rename, stat, unlink, utimes, writeFile } from 'node:fs/promises';
 import { basename } from 'node:path';
-import { decodeLila, decodeLilaArchive, encodeLila, ProjectFormatError } from '../project/index.js';
+import { decodeLila, encodeLila, ProjectFormatError, readLilaPreserved } from '../project/index.js';
 import type { LilaPreserved, ProjectDocument, ProjectErrorCode, ProjectProblem } from '../project/index.js';
 import {
   assertNotAnotherProject,
@@ -92,13 +92,13 @@ export async function readLilaFile(
 /**
  * The project that is ALREADY in `file`: its `id` and the entries it keeps beside the document
  * (`LilaPreserved`, RM-01 § 1.4), or `null` when there is no file, it cannot be read, or it is not
- * a `.lila` this build can interpret. Same criterion as `readManifest` with a broken manifest:
+ * a `.lila` this build can interpret. Only the manifest and the entries outside the layout are
+ * inflated (`readLilaPreserved`): every save runs this, and the runs need no second validation. Same criterion as `readManifest` with a broken manifest:
  * without a way to know whose it is, the save is not blocked by a false positive.
  */
 async function existingProject(file: string): Promise<{ id: string; preserved: LilaPreserved } | null> {
   try {
-    const { document, preserved } = decodeLilaArchive(new Uint8Array(await readFile(file)));
-    return { id: document.id, preserved };
+    return readLilaPreserved(new Uint8Array(await readFile(file)));
   } catch {
     return null;
   }

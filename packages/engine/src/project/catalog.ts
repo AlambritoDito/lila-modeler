@@ -5,7 +5,9 @@
  * container: `lila.ts` reads and writes the files, `repository.ts` folds processes.
  *
  * Objects of a type this build does not know (`risk`, `control`, `kpi`…, RM-01 § 2.4) are loaded
- * with the envelope only and are read-only; their files are written back as they were read.
+ * with the envelope checked and every field kept, and are read-only. When the bytes they were read
+ * with travel too (`LilaPreserved.objects`), an unchanged object is written back with them;
+ * otherwise (a browser reload) it is written canonically, with the same fields.
  */
 import { RESERVED } from './repository.js';
 
@@ -113,7 +115,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * fetched). A pattern and not `new URL`, so it does not depend on the global the host provides.
  */
 function isHttpUrl(value: unknown): boolean {
-  return typeof value === 'string' && /^https?:\/\/[^\s/?#@]+(?:[/?#]\S*)?$/i.test(value);
+  return typeof value === 'string' && /^https?:\/\/[a-z0-9[][^\s/?#@]*(?:[/?#]\S*)?$/i.test(value);
 }
 
 /**
@@ -143,7 +145,7 @@ export function catalogObjectProblem(value: unknown, path?: { readonly type: str
   if (!isKnownCatalogType(value.type)) return null;
   for (const field of ['unitRef', 'parentRef', 'ownerRef'] as const) {
     if (TYPE_FIELDS[value.type].includes(field) && value[field] !== undefined && typeof value[field] !== 'string') {
-      return `"${field}" must be an object id.`;
+      return `"${field}" must be text: the id of an object.`;
     }
   }
   if (TYPE_FIELDS[value.type].includes('url') && value.url !== undefined && !isHttpUrl(value.url)) {
@@ -159,8 +161,13 @@ export function catalogObjectProblem(value: unknown, path?: { readonly type: str
 export function canonicalCatalogObject(object: CatalogObject): CatalogObject {
   const known = [...ENVELOPE, ...(isKnownCatalogType(object.type) ? TYPE_FIELDS[object.type] : [])];
   const out: Record<string, unknown> = {};
-  for (const field of known) if (object[field] !== undefined) out[field] = object[field];
-  for (const [field, value] of Object.entries(object)) if (!(field in out) && value !== undefined) out[field] = value;
+  // `defineProperty` and `Object.hasOwn`, not `out[field] =` and `in`: a field named like a member of
+  // `Object.prototype` (`constructor`, `__proto__`) is a field like any other and must survive.
+  const put = (field: string, value: unknown): void => {
+    Object.defineProperty(out, field, { value, enumerable: true, writable: true, configurable: true });
+  };
+  for (const field of known) if (Object.hasOwn(object, field) && object[field] !== undefined) put(field, object[field]);
+  for (const [field, value] of Object.entries(object)) if (!Object.hasOwn(out, field) && value !== undefined) put(field, value);
   return out as CatalogObject;
 }
 
