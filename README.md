@@ -56,7 +56,7 @@ stable.
 - **Themes** — `eva-01` (dark, default), `papel` (light), `tieso` (light, ITESO blues), `akira` (dark, Neo-Tokyo) and `montana` (purple, bubblegum pink and gold, inspired by Hannah Montana Linux), plain JSON files.
 - **English and Spanish** in the app, the CLI and the MCP server.
 - **Desktop welcome screen** with recent projects (Electron only).
-- **MCP server** with twenty-one tools, so an agent can read a project, create a process from a step list, edit and annotate it, validate, describe, run, compare, patch and export.
+- **MCP server** with twenty-five tools, so an agent can read a project, create a process from a step list, edit and annotate it, validate, describe, run, compare, patch and export.
 
 ## Quick start
 
@@ -175,11 +175,12 @@ section: [`docs/CLI.md`](docs/CLI.md).
 
 ### MCP
 
-`@lila-modeler/mcp` is an MCP server over stdio with twenty-one tools on the same engine: `validate_bpmn`,
+`@lila-modeler/mcp` is an MCP server over stdio with twenty-five tools on the same engine: `validate_bpmn`,
 `describe_process`, `run_simulation`, `compare_scenarios`, `patch_scenario`, `create_process`,
 `get_process_outline`, `edit_process`, `export_diagram`, `export_document`, `export_results`,
 `annotate_element`, `define_attribute`, `get_raci_matrix`, `import_scenario_sheet`, `export_scenario_template`,
-`create_project`, `get_project`, `get_scenario`, `get_process_bpmn`, `put_process_bpmn`.
+`create_project`, `get_project`, `get_scenario`, `get_process_bpmn`, `put_process_bpmn`, `rename_process`,
+`delete_process`, `rename_scenario`, `delete_scenario`.
 
 ```bash
 claude mcp add lila -- npx -y @lila-modeler/mcp
@@ -250,7 +251,7 @@ English is the base language; Spanish versions live under `docs/es/`.
 - [`AGENT_GUIDE.md`](docs/AGENT_GUIDE.md) — the agent flow from an interview to a document, end to end.
 - [`CLI.md`](docs/CLI.md) — the `lila` command line: every subcommand, exit codes, and a
   "for agents" section.
-- [`MCP.md`](docs/MCP.md) — the MCP server and its twenty-one tools.
+- [`MCP.md`](docs/MCP.md) — the MCP server and its twenty-five tools.
 - [`THEMES.md`](docs/THEMES.md) — the theme format.
 - [`DECISIONS.md`](docs/DECISIONS.md) — architecture decision records (ADR-001 … ADR-032).
 - [`ROADMAP.md`](docs/ROADMAP.md) — the organizational roadmap: planned repository, catalog,

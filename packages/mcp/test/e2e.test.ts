@@ -54,6 +54,8 @@ test('`lila mcp` sirve sus tools por stdio', async () => {
     'create_process',
     'create_project',
     'define_attribute',
+    'delete_process',
+    'delete_scenario',
     'describe_process',
     'edit_process',
     'export_diagram',
@@ -68,6 +70,8 @@ test('`lila mcp` sirve sus tools por stdio', async () => {
     'import_scenario_sheet',
     'patch_scenario',
     'put_process_bpmn',
+    'rename_process',
+    'rename_scenario',
     'run_simulation',
     'validate_bpmn',
   ]);
