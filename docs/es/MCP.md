@@ -87,9 +87,11 @@ Las tres tools de LILA-054/055 reutilizan `@lila-modeler/engine/cli-shared`, ext
 LILA-054 sin cambiar su salida: `runCommand`/`compareCommand` y las tools corren exactamente el
 mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
 
-- **`export_diagram({ project | path, process?, saveTo?, overwrite?, locale? })`** — dibuja el
-  diagrama de un proceso de un `.lila` (`project`) o de un `.bpmn` (`path`) como SVG, con el
-  renderizador propio del motor. Devuelve `{ process, svg }` o, con `saveTo`, `{ process, file }`.
+- **`export_diagram({ project | path, process?, overlay?, run?, scenario?, saveTo?, overwrite?, locale? })`** —
+  dibuja el diagrama de un proceso de un `.lila` (`project`) o de un `.bpmn` (`path`) como SVG, con
+  el renderizador propio del motor. Devuelve `{ process, svg }` o, con `saveTo`, `{ process, file }`.
+  Con `overlay` (`"bottlenecks"` | `"heatmap"`, #669) colorea el diagrama con una corrida guardada,
+  como `lila export diagram --overlay` (`docs/es/CLI.md`), y la respuesta añade el `run` usado.
 - **`export_document({ project, process?, run?, scenario?, format, saveTo, overwrite?, locale? })`** —
   escribe el documento del proceso (`format`: `docx` o `html`) con los resultados de una corrida
   guardada. Devuelve `{ file, format, project, process, run, notes }`.

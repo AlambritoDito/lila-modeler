@@ -119,7 +119,12 @@ usa la app:
 
 - `lila export diagram <modelo.bpmn|proyecto.lila>` dibuja el diagrama con el renderizador SVG
   propio del motor (la geometría del DI de BPMN, colores de Lila Light sobre blanco). Sin `--out`
-  imprime el SVG por stdout.
+  imprime el SVG por stdout. Con `--overlay bottlenecks|heatmap` (#669) colorea el diagrama con una
+  corrida guardada del `.lila`, con la escala de la app y los colores `sim.bottleneck` de Lila
+  Light: `bottlenecks` tiñe el corte de cuellos del lienzo, cada uno con su espera media y su
+  utilización; `heatmap` tiñe cada tarea medida como el mapa de calor de Resultados, con su espera,
+  y marca el corte. La corrida se dibuja sobre el modelo con el que corrió. Una capa sobre un
+  `.bpmn`, o sin corrida guardada, es un error; también `--run` o `--scenario` sin `--overlay`.
 - `lila export doc <proyecto.lila> --out archivo.docx|archivo.html` escribe el documento del
   proceso, como «Exportar documento» de la app: diagrama, descripciones en orden de flujo, el
   escenario y los resultados de una corrida guardada. El HTML incrusta el diagrama SVG. El Word va

@@ -46,9 +46,11 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
   revision, so its saved runs stay current (#627). `dryRun: true` validates the same way and
   writes nothing (`written: false`, with a note). For a `.lila` it is `lila scenario patch`.
 
-- **`export_diagram({ project | path, process?, saveTo?, overwrite?, locale? })`** draws the
-  diagram of a `.lila` process (`project`) or a `.bpmn` (`path`) as SVG with the engine's own
-  renderer. Returns `{ process, svg }`, or with `saveTo` `{ process, file }`.
+- **`export_diagram({ project | path, process?, overlay?, run?, scenario?, saveTo?, overwrite?, locale? })`**
+  draws the diagram of a `.lila` process (`project`) or a `.bpmn` (`path`) as SVG with the engine's
+  own renderer. Returns `{ process, svg }`, or with `saveTo` `{ process, file }`. With `overlay`
+  (`"bottlenecks"` | `"heatmap"`, #669) it colours the diagram with a stored run, as `lila export
+  diagram --overlay` does (`docs/CLI.md`), and the answer adds the `run` it used.
 - **`export_document({ project, process?, run?, scenario?, format, saveTo, overwrite?, locale? })`**
   writes the process document (`format`: `docx` or `html`) with the results of a stored run.
   Returns `{ file, format, project, process, run, notes }`.

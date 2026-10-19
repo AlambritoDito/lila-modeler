@@ -232,6 +232,38 @@ describe('renderSvg', () => {
     expect(await renderSvg(MINI('x', 'bioc:fill="javascript"'))).not.toContain('javascript');
   });
 
+  test('tint (#669): replaces fill and stroke by the file\'s id, keeps the label, adds an escaped badge', async () => {
+    const plain = await renderSvg(MINI('Review'));
+    const tinted = await renderSvg(MINI('Review'), { tint: { T: { fill: '#C42152', stroke: '#C42152', badge: '2.1 d · <34%>' } } });
+    const task = groups(tinted).get('T')!.inner;
+    expect(task).toMatch(/^<rect x="0" y="0" width="100" height="80" rx="10" ry="10" fill="#C42152" stroke="#C42152"/);
+    // The label keeps the theme's colour, as on the canvas.
+    expect(task).toContain('fill="#280838" text-anchor="middle"');
+    // The other elements are drawn as without a tint.
+    const own = (svg: string, id: string): string => groups(svg).get(id)!.inner.split('</g>')[0]!;
+    expect(own(tinted, 'S')).toBe(own(plain, 'S'));
+    expect(own(tinted, 'F')).toBe(own(plain, 'F'));
+    // The badge sits 4 units right of and below the task's corner (200, 130) and the viewBox holds it.
+    expect(tinted).toContain('<g transform="translate(204 134)"><rect x="0" y="0"');
+    expect(tinted).toContain('>2.1 d · &lt;34%&gt;</tspan>');
+    expect(tinted).not.toContain('<34%>');
+    const [, , vbWidth, vbHeight] = tinted.match(/viewBox="([^"]*)"/)![1]!.split(' ').map(Number) as [number, number, number, number];
+    const [, , width, height] = plain.match(/viewBox="([^"]*)"/)![1]!.split(' ').map(Number) as [number, number, number, number];
+    expect(vbWidth).toBeGreaterThan(width);
+    expect(vbHeight).toBeGreaterThan(height);
+    // Same input, same bytes; no badge, no tag.
+    expect(await renderSvg(MINI('Review'), { tint: { T: { fill: '#C42152', stroke: '#C42152', badge: '2.1 d · <34%>' } } })).toBe(tinted);
+    expect(await renderSvg(MINI('Review'), { tint: { T: { fill: '#E8B84B', stroke: '#E8B84B' } } })).not.toContain('translate(204 134)');
+  });
+
+  test('tint keys are the ids as written in the file, and an id such as `constructor` is not a key', async () => {
+    const odd = MINI('x').replaceAll('"T"', '"9T"');
+    const svg = await renderSvg(odd, { tint: { '9T': { fill: '#E07A22', stroke: '#E07A22' } } });
+    expect(groups(svg).get('9T')!.inner).toMatch(/^<rect [^>]*fill="#E07A22" stroke="#E07A22"/);
+    const named = MINI('x').replaceAll('"T"', '"constructor"');
+    expect(await renderSvg(named, { tint: {} })).toBe(await renderSvg(named));
+  });
+
   test('a file with no diagram, or an unknown diagram id, is an error', async () => {
     await expect(renderSvg(MINI('x').replace(/<bpmndi:BPMNDiagram[\s\S]*<\/bpmndi:BPMNDiagram>/, ''))).rejects.toThrow(/no diagram/);
     await expect(renderSvg(MINI('x'), { diagram: 'nope' })).rejects.toThrow(/nope/);

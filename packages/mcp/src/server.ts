@@ -917,27 +917,39 @@ export function createServer(options: ServerOptions = {}): McpServer {
       description:
         'Draws the diagram of a .bpmn, or of one process of a .lila, as SVG with the engine\'s own ' +
         'renderer (no app, no browser): the BPMN DI geometry in the Lila Light colours on white. ' +
+        'With `overlay`, coloured with a stored run of the .lila (`run`/`scenario` select it as in ' +
+        '`export_document`) on the app\'s scale: "bottlenecks" tints the canvas\'s bottleneck cut, ' +
+        '"heatmap" every measured task as the Results heat map does; `run` in the answer says which. ' +
         'Without `saveTo` the SVG comes back in `svg`; with it, it is written atomically and `file` ' +
         'is the absolute path. Like `lila export diagram`.',
       inputSchema: z.object({
         project: z.string().optional().describe('Path to a .lila, relative to the cwd of the server process.'),
         path: z.string().optional().describe('Path to a .bpmn (or .lila), instead of `project`.'),
         process: processSchema,
+        overlay: z
+          .enum(['bottlenecks', 'heatmap'])
+          .optional()
+          .describe('Colour the diagram with a stored run (needs a .lila with one): the bottleneck cut or the heat map.'),
+        run: runSchema,
+        scenario: scenarioSchema,
         saveTo: z.string().optional().describe('Path of the .svg to write.'),
         overwrite: overwriteSchema,
         locale: localeSchema,
       }),
     },
-    async ({ project, path, process, saveTo, overwrite, locale }): Promise<CallToolResult> => {
+    async ({ project, path, process, overlay, run, scenario, saveTo, overwrite, locale }): Promise<CallToolResult> => {
       const language = localeOf(locale);
       const M = messages(language).mcp;
       if (project !== undefined && path !== undefined) return errorResult(toolMessage('export_diagram', M.bothProjectAndPath()));
       const file = project ?? path;
       if (file === undefined) return errorResult(toolMessage('export_diagram', M.projectOrPath()));
       try {
-        const { svg, process: slug, file: source } = await exportDiagram({ file, process, locale: language });
-        if (saveTo === undefined) return textResult({ process: slug ?? null, svg });
-        return textResult({ process: slug ?? null, file: writeExportFile(saveTo, svg, { overwrite, source, locale: language }) });
+        const exported = await exportDiagram({ file, process, overlay, run, scenario, locale: language });
+        const { svg, process: slug, file: source } = exported;
+        // `run` only with an overlay, so the answer without one is as before.
+        const used = exported.run === undefined ? {} : { run: exported.run };
+        if (saveTo === undefined) return textResult({ process: slug ?? null, ...used, svg });
+        return textResult({ process: slug ?? null, ...used, file: writeExportFile(saveTo, svg, { overwrite, source, locale: language }) });
       } catch (error) {
         return errorResult(toolMessage('export_diagram', message(error)));
       }

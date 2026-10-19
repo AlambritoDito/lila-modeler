@@ -62,6 +62,31 @@ test('export_diagram returns the SVG, or writes it, and never overwrites without
   expect((await call('export_diagram', {})).text).toBe('export_diagram: pass `project` or `path`.');
 }, 120_000);
 
+test('export_diagram with an overlay (#669): the run it used, the token colours; clear errors', async () => {
+  const plain = JSON.parse((await call('export_diagram', { project: 'pedido.lila' })).text) as { run?: unknown; svg: string };
+  expect(plain.run).toBeUndefined();
+  for (const overlay of ['bottlenecks', 'heatmap'] as const) {
+    const answer = await call('export_diagram', { project: 'pedido.lila', overlay });
+    expect(answer.isError, overlay).toBe(false);
+    const { run, svg } = JSON.parse(answer.text) as { run: unknown; svg: string };
+    expect(run).toEqual({ id: 'run-1', scenario: 'as-is.scenario.json', current: true });
+    expect(svg).not.toBe(plain.svg);
+    expect(svg).toMatch(/fill="#(E8B84B|E07A22|C42152)" stroke="#\1"/);
+    expect(JSON.parse((await call('export_diagram', { project: 'pedido.lila', overlay })).text).svg).toBe(svg);
+  }
+  const saved = await call('export_diagram', { project: 'pedido.lila', overlay: 'heatmap', run: 'run-1', saveTo: 'heat.svg' });
+  expect(JSON.parse(saved.text)).toEqual({ process: 'pedido', run: { id: 'run-1', scenario: 'as-is.scenario.json', current: true }, file: `${temp}/heat.svg`.replaceAll('\\', '/') });
+  expect(readFileSync(join(temp, 'heat.svg'), 'utf8')).toContain('>BOTTLENECK Wait ');
+
+  writeFileSync(join(temp, 'm.bpmn'), 'x');
+  const bpmn = await call('export_diagram', { path: 'm.bpmn', overlay: 'heatmap', locale: 'es' });
+  expect(bpmn.isError).toBe(true);
+  expect(bpmn.text).toMatch(/^export_diagram: .*m\.bpmn no es un proyecto \.lila: una capa colorea/);
+  const runOnly = await call('export_diagram', { project: 'pedido.lila', run: 'run-1' });
+  expect(runOnly.text).toMatch(/^export_diagram: a run .* only applies to the diagram with an overlay/);
+  expect((await call('export_diagram', { project: 'pedido.lila', overlay: 'utilization' })).isError).toBe(true);
+}, 120_000);
+
 test('export_document: HTML with the SVG and the run; Word that unzips, with notes', async () => {
   const html = await call('export_document', { project: 'pedido.lila', format: 'html', saveTo: 'doc.html' });
   expect(html.isError).toBe(false);

@@ -61,6 +61,20 @@ describe('lo que se publica', () => {
     expect(manifest.files).not.toContain('test');
   });
 
+  test('the bottleneck-levels subpath (#669) resolves by its package name and is pure', async () => {
+    expect(manifest.exports['./bottleneck-levels']).toEqual({
+      types: './dist/bottleneck-levels.d.ts',
+      default: './dist/bottleneck-levels.js',
+    });
+    const levels = await import('@lila-modeler/engine/bottleneck-levels');
+    expect(typeof levels.waitLevel).toBe('function');
+    expect(typeof levels.bottleneckCut).toBe('function');
+    expect(typeof levels.heatMap).toBe('function');
+    // The app's Vite build bundles it: no `node:*` and nothing but the result's types.
+    const built = readFileSync(join(PACKAGE_ROOT, 'dist/bottleneck-levels.js'), 'utf8');
+    expect(built).not.toMatch(/from ['"]/);
+  });
+
   test('el bin es ejecutable y tiene shebang', () => {
     const bin = join(PACKAGE_ROOT, manifest.bin['lila'] ?? '');
     expect(readFileSync(bin, 'utf8').startsWith('#!/usr/bin/env node')).toBe(true);

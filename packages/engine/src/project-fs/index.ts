@@ -35,13 +35,14 @@ export {
 } from './input.js';
 export type { LilaProcess, LilaSnapshot } from './input.js';
 export {
+  DIAGRAM_OVERLAYS,
   exportDiagram,
   exportDocument,
   exportResults,
   writeExportDirectory,
   writeExportFile,
 } from './exports.js';
-export type { DocumentExport, ExportedRun, ExportSource, ResultsExport, RunSelection, WriteExportOptions } from './exports.js';
+export type { DiagramOverlay, DocumentExport, ExportedRun, ExportSource, ResultsExport, RunSelection, WriteExportOptions } from './exports.js';
 export { saveLilaRun, saveSimulationRun } from './save-run.js';
 export type { SavedRun } from './save-run.js';
 export { BASE_SCENARIO, createLilaProcess, readLilaOutline } from './outline.js';

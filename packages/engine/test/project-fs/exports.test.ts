@@ -14,7 +14,9 @@ import { parseBpmn, renderSvg } from '../../src/bpmn/index.js';
 import { main } from '../../src/cli.js';
 import { elementsCsv } from '../../src/csv.js';
 import { decodeLila } from '../../src/project/index.js';
-import { exportDocument, exportResults } from '../../src/project-fs/index.js';
+import { bottleneckCut, heatMap, WAIT_LEVEL_COLOURS } from '../../src/bottleneck-levels.js';
+import type { RunResult } from '../../src/core/result.js';
+import { exportDiagram, exportDocument, exportResults } from '../../src/project-fs/index.js';
 import { readWorkbook } from '../../src/xlsx-read.js';
 import { EXAMPLE_LILA, pedidoWithRuns } from './export-fixture.js';
 
@@ -64,6 +66,92 @@ describe('lila export diagram', () => {
     expect(await main(['export', 'diagram', bpmn, '--out', join(dir, 'm.svg')])).toBe(0);
     expect(readFileSync(join(dir, 'm.svg'), 'utf8')).toBe(await renderSvg(XML));
     expect(await main(['export', 'diagram', bpmn, '--process', 'x'])).toBe(1);
+  });
+});
+
+/** `id → fill` of every element the overlay tinted (its first child takes a level colour). */
+function tinted(svg: string): Record<string, string> {
+  const colours = new Set(Object.values(WAIT_LEVEL_COLOURS));
+  const out: Record<string, string> = {};
+  for (const m of svg.matchAll(/<g data-element-id="([^"]*)"[^>]*><[a-z]+ [^>]*?fill="([^"]*)" stroke="([^"]*)"/g)) {
+    if (colours.has(m[2]!)) {
+      expect(m[3]).toBe(m[2]);
+      out[m[1]!] = m[2]!;
+    }
+  }
+  return out;
+}
+
+describe('lila export diagram --overlay (#669)', () => {
+  test('bottlenecks tints exactly the cut, heatmap every measured task, with the token colours; same bytes', async () => {
+    const file = join(dir, 'p.lila');
+    const [run] = await pedidoWithRuns(file, ['as-is.scenario.json']);
+    const result = run!.result as RunResult;
+    const { ir } = await parseBpmn(XML);
+    const cut = bottleneckCut(result);
+    expect(cut.length).toBeGreaterThan(0);
+
+    const bottlenecks = await exportDiagram({ file, overlay: 'bottlenecks' });
+    expect(bottlenecks.run).toEqual({ id: 'run-1', scenario: 'as-is.scenario.json', current: true });
+    const fileId = (id: string): string => ir.source.originalIds[id] ?? id;
+    expect(tinted(bottlenecks.svg)).toEqual(Object.fromEntries(cut.map((e) => [fileId(e.elementId), WAIT_LEVEL_COLOURS[e.level]])));
+    // One badge per tinted task: its mean wait and its resource's utilization.
+    expect(bottlenecks.svg.match(/<tspan x="4" /g)!.length).toBe(cut.length);
+    expect(bottlenecks.svg).toContain(`· ${Math.round(cut[0]!.utilization * 100)}%</tspan>`);
+
+    const heat = await exportDiagram({ file, overlay: 'heatmap' });
+    const tasks = Object.keys(ir.nodes).filter((id) => ir.nodes[id]!.type === 'task');
+    const map = heatMap(result, tasks);
+    const expected = Object.fromEntries(Object.entries(map).map(([id, e]) => [fileId(id), WAIT_LEVEL_COLOURS[e.level]]));
+    for (const e of cut) expected[fileId(e.elementId)] = WAIT_LEVEL_COLOURS[e.level];
+    expect(tinted(heat.svg)).toEqual(expected);
+    expect(Object.keys(expected).length).toBeGreaterThan(cut.length);
+    expect(heat.svg).toContain('>BOTTLENECK Wait ');
+    expect((await exportDiagram({ file, overlay: 'heatmap', locale: 'es' })).svg).toContain('>CUELLO Espera ');
+
+    // Same input, same bytes; without an overlay, the plain drawing.
+    expect((await exportDiagram({ file, overlay: 'bottlenecks' })).svg).toBe(bottlenecks.svg);
+    expect((await exportDiagram({ file, overlay: 'heatmap' })).svg).toBe(heat.svg);
+    expect((await exportDiagram({ file })).svg).toBe(await renderSvg(XML));
+
+    // The CLI writes the same SVG.
+    const target = join(dir, 'b.svg');
+    expect(await main(['export', 'diagram', file, '--overlay', 'bottlenecks', '--out', target])).toBe(0);
+    expect(readFileSync(target, 'utf8')).toBe(bottlenecks.svg);
+  });
+
+  test('an overlay without a run fails clearly (en/es); a run without an overlay, or another overlay, too', async () => {
+    const file = join(dir, 'p.lila');
+    await pedidoWithRuns(file, []);
+    await expect(exportDiagram({ file, overlay: 'bottlenecks' })).rejects.toThrow(/^overlay "bottlenecks" needs a stored run: process "pedido" of .* has no stored run/);
+    await expect(exportDiagram({ file, overlay: 'heatmap', locale: 'es' })).rejects.toThrow(/^la capa "heatmap" necesita una corrida guardada: .*no tiene corridas guardadas/);
+    expect(await main(['export', 'diagram', file, '--overlay', 'heatmap'])).toBe(1);
+    expect(err.join('\n')).toMatch(/overlay "heatmap" needs a stored run/);
+
+    const bpmn = join(dir, 'm.bpmn');
+    writeFileSync(bpmn, XML);
+    await expect(exportDiagram({ file: bpmn, overlay: 'heatmap' })).rejects.toThrow(/m\.bpmn is not a \.lila project: an overlay colours the diagram with a stored run/);
+    await expect(exportDiagram({ file: bpmn, overlay: 'heatmap', locale: 'es' })).rejects.toThrow(/no es un proyecto \.lila: una capa colorea/);
+
+    await pedidoWithRuns(file, ['as-is.scenario.json']);
+    await expect(exportDiagram({ file, run: 'run-1' })).rejects.toThrow(/only applies to the diagram with an overlay/);
+    await expect(exportDiagram({ file, scenario: 'as-is' })).rejects.toThrow(/only applies to the diagram with an overlay/);
+    expect(await main(['export', 'diagram', file, '--overlay', 'utilization'])).toBe(1);
+    expect(err.join('\n')).toMatch(/--overlay only accepts: bottlenecks, heatmap; got "utilization"/);
+  });
+
+  test('runs are selected as for the document; an older run by id is drawn, marked not current', async () => {
+    const file = join(dir, 'p.lila');
+    await pedidoWithRuns(file, ['as-is.scenario.json', 'to-be-3-cajeros.scenario.json']);
+    await expect(exportDiagram({ file, overlay: 'heatmap' })).rejects.toThrow(/current runs of several scenarios/);
+    expect((await exportDiagram({ file, overlay: 'heatmap', scenario: 'to-be-3-cajeros' })).run?.id).toBe('run-2');
+    expect((await exportDiagram({ file, overlay: 'heatmap', run: 'run-1' })).run?.id).toBe('run-1');
+    await expect(exportDiagram({ file, overlay: 'heatmap', run: 'nope' })).rejects.toThrow(/has no run "nope"/);
+
+    await pedidoWithRuns(file, ['as-is.scenario.json'], { stale: true });
+    await expect(exportDiagram({ file, overlay: 'bottlenecks' })).rejects.toThrow(/older runs: run-1/);
+    const old = await exportDiagram({ file, overlay: 'bottlenecks', run: 'run-1' });
+    expect(old.run).toEqual({ id: 'run-1', scenario: 'as-is.scenario.json', current: false });
   });
 });
 

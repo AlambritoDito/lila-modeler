@@ -20,9 +20,11 @@
 import { closeSync, existsSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 
-import { parseBpmn, readAnnotations, renderSvg } from '../bpmn/index.js';
+import { parseBpmn, readAnnotations, renderSvg, type SvgTint } from '../bpmn/index.js';
+import { bottleneckCut, heatMap, WAIT_LEVEL_COLOURS, type WaitLevel } from '../bottleneck-levels.js';
 import type { RunResult } from '../core/result.js';
 import { elementsCsv, flowsCsv, processCsv, resourcesCsv } from '../csv.js';
+import { formatDuration, SECONDS_PER_UNIT, type BaseTimeUnit } from '../format.js';
 import { messages, type Locale } from '../messages/index.js';
 import { buildProcessDocument, toDocx, toHtml } from '../process-document.js';
 import { isCurrentRun, type StoredRun } from '../project/index.js';
@@ -64,17 +66,89 @@ async function openLila(source: ExportSource): Promise<LilaProcess> {
   return openLilaProcess(source.file, { process: source.process, locale });
 }
 
-/** The diagram of a `.bpmn`, or of one process of a `.lila`, as SVG (`renderSvg`). */
-export async function exportDiagram(source: ExportSource): Promise<{ svg: string; file: string; process?: string }> {
+/** A stored run drawn over the diagram (#669), with the app's scale (`bottleneck-levels.ts`). */
+export type DiagramOverlay = 'bottlenecks' | 'heatmap';
+
+export const DIAGRAM_OVERLAYS: readonly DiagramOverlay[] = ['bottlenecks', 'heatmap'];
+
+/**
+ * The diagram of a `.bpmn`, or of one process of a `.lila`, as SVG (`renderSvg`). With `overlay`,
+ * coloured with a stored run of the `.lila` (selected as for the document, see the header), as the
+ * app colours it: `'bottlenecks'` tints the canvas's bottleneck cut, `'heatmap'` every measured task
+ * as the Results heat map does, with the cut marked. The run is drawn on the model it ran on.
+ */
+export async function exportDiagram(
+  source: ExportSource & RunSelection & { readonly overlay?: DiagramOverlay | undefined },
+): Promise<{ svg: string; file: string; process?: string; run?: ExportedRun }> {
   const locale = source.locale ?? 'en';
+  const C = messages(locale).cli;
+  if (source.overlay !== undefined && !DIAGRAM_OVERLAYS.includes(source.overlay)) throw new Error(C.exportInvalidOverlay(String(source.overlay)));
+  if (source.overlay === undefined && (source.run !== undefined || source.scenario !== undefined)) throw new Error(C.exportRunNeedsOverlay());
   if (isLilaPath(source.file)) {
     const lila = await openLilaProcess(source.file, { process: source.process, locale });
-    return { svg: await renderSvg(lila.process.model.xml), file: lila.file, process: lila.process.slug };
+    if (source.overlay === undefined) return { svg: await renderSvg(lila.process.model.xml), file: lila.file, process: lila.process.slug };
+    let run: StoredRun;
+    try {
+      run = selectRun(lila, source, false, locale)!;
+    } catch (error) {
+      throw new Error(C.exportOverlayNoRun(source.overlay, (error as Error).message));
+    }
+    const tint = await overlayTint(lila, run, source.overlay, locale);
+    return {
+      svg: await renderSvg(run.inputs.xml, { tint }),
+      file: lila.file,
+      process: lila.process.slug,
+      run: { id: run.id, scenario: run.scenarioName, current: isCurrent(lila, run) },
+    };
   }
-  if (source.process !== undefined) throw new Error(messages(locale).cli.processOnlyForLila());
+  if (source.process !== undefined) throw new Error(C.processOnlyForLila());
   const file = absolute(source.file);
+  if (source.overlay !== undefined) throw new Error(C.exportOverlayNeedsLila(file));
   if (!existsSync(file)) throw new Error(messages(locale).mcp.fileMissing(file));
   return { svg: await renderSvg(readFileSync(file, 'utf8')), file };
+}
+
+/** From the coarsest unit to the finest: the first one in which the wait is 1 or more wins. */
+const SHORT_UNITS: readonly BaseTimeUnit[] = ['day', 'h', 'min', 's'];
+const SHORT_UNIT_LABELS: Readonly<Record<BaseTimeUnit, string>> = { day: 'd', h: 'h', min: 'min', s: 's' };
+
+/** A wait as the app's canvas label writes it: its coarsest unit, at most one decimal. */
+function shortWait(seconds: number): string {
+  const unit = SHORT_UNITS.find((u) => seconds >= SECONDS_PER_UNIT[u]) ?? 's';
+  const step = SECONDS_PER_UNIT[unit] / 10;
+  return `${formatDuration(Math.round(seconds / step) * step, unit)} ${SHORT_UNIT_LABELS[unit]}`;
+}
+
+/** `renderSvg`'s `tint` for `overlay` of `run`, keyed by the ids of the file the run saw. */
+async function overlayTint(lila: LilaProcess, run: StoredRun, overlay: DiagramOverlay, locale: Locale): Promise<Record<string, SvgTint>> {
+  const C = messages(locale).cli;
+  // #546: the process that run simulated, chosen as the app chose it.
+  const { ir } = await parseBpmn(run.inputs.xml, { scenarios: [run.inputs.scenario, ...Object.values(lila.process.scenarios)] });
+  const result = run.result as RunResult;
+  // Result keys are IR ids; the drawing is keyed by the ids written in the file.
+  const fileId = (id: string): string => ir.source.originalIds[id] ?? id;
+  const colour = (level: WaitLevel): Pick<SvgTint, 'fill' | 'stroke'> => ({ fill: WAIT_LEVEL_COLOURS[level], stroke: WAIT_LEVEL_COLOURS[level] });
+  // No prototype: a BPMN id may be `__proto__`.
+  const tint: Record<string, SvgTint> = Object.create(null) as Record<string, SvgTint>;
+  const cut = bottleneckCut(result);
+  if (overlay === 'bottlenecks') {
+    for (const entry of cut) {
+      tint[fileId(entry.elementId)] = { ...colour(entry.level), badge: `${shortWait(entry.resourceWaitMean)} · ${Math.round(entry.utilization * 100)}%` };
+    }
+    return tint;
+  }
+  const tasks = Object.keys(ir.nodes).filter((id) => ir.nodes[id]!.type === 'task');
+  for (const [id, entry] of Object.entries(heatMap(result, tasks))) {
+    tint[fileId(id)] = { ...colour(entry.level), badge: C.exportOverlayWait(shortWait(entry.resourceWaitMean)) };
+  }
+  // The ranking's cut is painted over the map with its own level, its badge marked (as in Results).
+  for (const entry of cut) {
+    tint[fileId(entry.elementId)] = {
+      ...colour(entry.level),
+      badge: `${C.exportOverlayBottleneck()} ${C.exportOverlayWait(shortWait(entry.resourceWaitMean))}`,
+    };
+  }
+  return tint;
 }
 
 function isCurrent(lila: LilaProcess, run: StoredRun): boolean {

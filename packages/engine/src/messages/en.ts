@@ -38,6 +38,7 @@ const EN_USAGE = `Usage: lila validate <file.bpmn|project.lila> [--process slug]
        lila compare <model.bpmn|project.lila> <a> <b> [...] [--process slug] [--seed n]
                     [--replications n] [--json result.json] [--xlsx book.xlsx] [--all]
        lila export diagram <model.bpmn|project.lila> [--process slug] [--out file.svg] [--force]
+                           [--overlay bottlenecks|heatmap] [--run id|latest] [--scenario name]
        lila export doc <project.lila> --out file.docx|file.html [--format docx|html]
                        [--process slug] [--run id|latest] [--scenario name] [--force]
        lila export results <project.lila> --out book.xlsx|directory [--format xlsx|csv]
@@ -142,6 +143,8 @@ export options:
                     the document only takes a current run and goes without results when there is
                     none.
   --scenario name   With latest, the run of that scenario (needed when several have one).
+  --overlay o       diagram: colours it with a stored run of the .lila, as the app does:
+                    bottlenecks (the canvas's bottleneck cut) or heatmap (Results' heat map).
   --force           Replaces existing files; without it nothing existing is overwritten.
   The Word document has no diagram and no document has the run's charts: the engine has no
   rasteriser. The HTML document has the diagram.
@@ -541,6 +544,14 @@ export const en: Catalog = {
     exportFileNeeded: (path) => `"${path}" ends with a slash; name the file to write.`,
     exportRunAndScenario: () =>
       'a run id already says which scenario: pass --run <id> or --scenario (`run` or `scenario` in MCP), not both.',
+    exportOverlayNeedsLila: (file) =>
+      `${file} is not a .lila project: an overlay colours the diagram with a stored run, and runs are stored in a .lila.`,
+    exportOverlayNoRun: (overlay, detail) => `overlay "${overlay}" needs a stored run: ${detail}`,
+    exportRunNeedsOverlay: () =>
+      'a run (--run or --scenario, `run` or `scenario` in MCP) only applies to the diagram with an overlay: pass --overlay bottlenecks|heatmap.',
+    exportInvalidOverlay: (value) => `--overlay only accepts: bottlenecks, heatmap; got "${value}".`,
+    exportOverlayWait: (wait) => `Wait ${wait}`,
+    exportOverlayBottleneck: () => 'BOTTLENECK',
     saveRunNeedsLila: () => 'saving the run (--save, `saveRun` in MCP) needs a .lila model.',
     saveRunNeedsArchiveScenario: (scenario) =>
       `saving the run needs a scenario of the .lila, and "${scenario}" is not one: name a scenario of the process.`,
