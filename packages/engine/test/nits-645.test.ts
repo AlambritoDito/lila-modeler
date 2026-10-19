@@ -103,7 +103,7 @@ describe('annotate and associations', () => {
     for (const on of ['StartEvent', 'EndEvent_issue', 'cut']) {
       const error = await refusal(timed.xml, [{ op: 'annotate', on, text: 'Note' }]);
       expect(error.issues[0]).toMatchObject({ op: 0, path: 'on' });
-      expect(error.issues[0]!.message).toContain(`"${on}" is a`);
+      expect(error.issues[0]!.message).toMatch(new RegExp(`^"${on}" is an? \\w+; a text annotation goes on a step`));
       expect(error.issues[0]!.message).toContain('a text annotation goes on a step');
     }
     // A gateway is a step: its note reads back.
@@ -227,6 +227,11 @@ describe('a model whose simulated process is not drawn', () => {
     for (const id of ['a_start', 'a_task', 'a_end', 'b_start', 'b_end']) expect(shapes.has(id), id).toBe(true);
     // Drawn whole now: nothing more to do.
     expect(await drawMissingDiagram(drawn.xml!, { processId: ir.id })).toEqual({});
+    // The new pool goes below the one already drawn, not on top of it (QA).
+    const { rootElement } = await BpmnModdle().fromXML(drawn.xml!);
+    const bounds = (id: string) => (rootElement as any).diagrams[0].plane.planeElement.find((d: any) => d.bpmnElement?.id === id).bounds;
+    expect(bounds('Pool_A').y).toBeGreaterThanOrEqual(bounds('Pool_B').y + bounds('Pool_B').height);
+    expect(bounds('a_start').y).toBeGreaterThan(bounds('Pool_B').y + bounds('Pool_B').height);
   });
 
   test('partly drawn: kept as given, and the gap names the nodes without a shape', async () => {
@@ -269,7 +274,7 @@ describe('a model whose simulated process is not drawn', () => {
     await expect(exportDiagram({ file: bpmn, locale: 'es' })).rejects.toThrow(/^el modelo no tiene diagrama \(BPMN DI\) que dibujar, y no se le puede maquetar uno/);
     const plain = join(scratch, 'plain.bpmn');
     writeFileSync(plain, withoutDiagram(bizagi('A.1.0')));
-    await expect(exportDiagram({ file: plain })).rejects.toThrow(/^the model has no diagram \(BPMN DI\) to draw\. put_process_bpmn and create_project/);
+    await expect(exportDiagram({ file: plain })).rejects.toThrow(/^the model has no diagram \(BPMN DI\) to draw\. Lay it out with edit_process/);
   });
 });
 

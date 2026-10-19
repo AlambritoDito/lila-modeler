@@ -1419,9 +1419,9 @@ class Editor {
   annotate(op: Extract<Op, { op: 'annotate' }>): void {
     const node = this.node(op.on, 'on');
     if (node === undefined) return;
-    // The outline reads notes back only from steps: a note on a start, end or boundary event would
-    // come back as a loss warning (#645).
-    if (['bpmn:StartEvent', 'bpmn:EndEvent', 'bpmn:BoundaryEvent'].some((type) => is(node, type))) {
+    // The outline reads notes back only from steps: a note on a start, end or boundary event (or on
+    // anything else the outline has no step type for) would come back as a loss warning (#645).
+    if (!Object.hasOwn(BPMN_TYPE, typeName(node))) {
       return this.issue('on', this.C.editNoteNotStep(op.on, typeName(node)));
     }
     if (notesOf(node, this.associations()).some((n) => n.annotation['text'] === op.text)) return this.change(this.C.editNoteExists(op.on, op.text));

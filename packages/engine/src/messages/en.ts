@@ -545,7 +545,7 @@ export const en: Catalog = {
       'mix today\'s model with old results. Export its results instead, or simulate again.',
     exportNoDiagram: () => 'The model has no diagram (BPMN DI): the document goes without one.',
     exportDiagramNone: () =>
-      'the model has no diagram (BPMN DI) to draw. put_process_bpmn and create_project (lila process import, lila project create) lay out a model without one; otherwise draw it in a BPMN editor.',
+      'the model has no diagram (BPMN DI) to draw. Lay it out with edit_process (layout: true, lila process edit), or draw it in a BPMN editor; put_process_bpmn and create_project lay out a model they receive without one.',
     exportDiagramUnreadable: (detail) =>
       `the model has no diagram (BPMN DI) to draw, and none can be laid out for it: bpmn-moddle cannot read the model whole (${detail}), so laying it out would lose that content. Add the diagram in a BPMN editor.`,
     exportDocxNoDiagram: () =>
@@ -742,7 +742,7 @@ export const en: Catalog = {
     editNoteAdded: (step, text, id) => `annotated "${step}": "${text}" (${id})`,
     editNoteExists: (step, text) => `"${step}" already has the text annotation "${text}"; nothing changed`,
     editNoteNotStep: (id, type) =>
-      `"${id}" is a ${type}; a text annotation goes on a step (a task, gateway, timer, message or sub-process), the only place the outline reads it back as \`notes\`.`,
+      `"${id}" is a${/^[aeiou]/i.test(type) ? 'n' : ''} ${type}; a text annotation goes on a step (a task, gateway, timer, message or sub-process), the only place the outline reads it back as \`notes\`.`,
     editNoteRemoved: (step, text, ids) => `removed the text annotation "${text}" from "${step}" (${ids})`,
     editDataAdded: (name, step, direction, id, created) =>
       `"${step}" ${direction === 'in' ? 'reads' : 'writes'} data object "${name}" (${id}${created ? ', new' : ''})`,

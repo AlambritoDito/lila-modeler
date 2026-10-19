@@ -552,7 +552,7 @@ export const es: Catalog = {
       'mezclaría el modelo de hoy con resultados viejos. Exporta sus resultados o vuelve a simular.',
     exportNoDiagram: () => 'El modelo no tiene diagrama (BPMN DI): el documento va sin él.',
     exportDiagramNone: () =>
-      'el modelo no tiene diagrama (BPMN DI) que dibujar. put_process_bpmn y create_project (lila process import, lila project create) maquetan un modelo sin él; si no, dibújalo en un editor BPMN.',
+      'el modelo no tiene diagrama (BPMN DI) que dibujar. Maquétalo con edit_process (layout: true, lila process edit) o dibújalo en un editor BPMN; put_process_bpmn y create_project maquetan un modelo que reciben sin él.',
     exportDiagramUnreadable: (detail) =>
       `el modelo no tiene diagrama (BPMN DI) que dibujar, y no se le puede maquetar uno: bpmn-moddle no puede leer el modelo entero (${detail}), así que maquetarlo perdería ese contenido. Añade el diagrama en un editor BPMN.`,
     exportDocxNoDiagram: () =>
