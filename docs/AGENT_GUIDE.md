@@ -20,12 +20,12 @@ interview ([`MCP.md`](MCP.md#resources-and-prompt)).
 
 | Step | Tool | CLI |
 | --- | --- | --- |
-| 0. The file exists: read what it holds, or bring in a BPMN | `get_project`, `get_scenario`, `put_process_bpmn`, `get_process_bpmn` | `lila project show`, `lila scenario show`, `lila process import`, `lila process export-bpmn` |
+| 0. The file exists: read what it holds, or bring in a BPMN; or start one from a BPMN | `get_project`, `get_scenario`, `put_process_bpmn`, `get_process_bpmn`, `create_project` | `lila project show`, `lila scenario show`, `lila process import`, `lila process export-bpmn`, `lila project create` |
 | 1. Read the interview, write an outline | (the agent) | |
 | 2. Create the process | `create_process` | `lila process create` |
 | 3. Fix it | `edit_process`, `get_process_outline` | `lila process edit`, `lila process show` |
 | 4. Document it (optional) | `annotate_element`, `get_raci_matrix` | `lila process annotate`, `lila process raci` |
-| 5. Fill the scenario | `patch_scenario`, or `export_scenario_template` + `import_scenario_sheet` | `lila scenario template`, `lila scenario import` |
+| 5. Fill the scenario | `patch_scenario`, or `export_scenario_template` + `import_scenario_sheet` | `lila scenario patch`, or `lila scenario template` + `lila scenario import` |
 | 6. Simulate and keep the run | `run_simulation` with `saveRun: true` | `lila run … --save` |
 | 7. Hand over | `export_document`, `export_results`, `export_diagram` | `lila export doc|results|diagram` |
 | 8. Show it | open the `.lila` in the app; it reloads on every later write | `open -a "Lila Modeler" file.lila` (macOS) |

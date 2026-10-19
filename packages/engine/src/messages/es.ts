@@ -70,9 +70,14 @@ const ES_USAGE = `Uso: lila validate <archivo.bpmn|proyecto.lila> [--process slu
                           [--dry-run] [--json]
      lila scenario template <proyecto.lila> <escenario> --out hoja.xlsx [--process slug] [--force]
      lila scenario show <proyecto.lila> <escenario> [--process slug] [--resolved] [--json]
+     lila scenario patch <proyecto.lila> <escenario> --patch <ops.json> [--process slug]
+                         [--save-to nombre] [--extends-from nombre] [--name n] [--description d]
+                         [--dry-run] [--json]
      lila scenario rename <proyecto.lila> <escenario> --name nombre [--process slug] [--dry-run] [--json]
      lila scenario delete <proyecto.lila> <escenario> [--process slug] [--dry-run] [--json]
      lila project show <proyecto.lila> [--json]
+     lila project create <ruta.lila> --name nombre --bpmn <archivo.bpmn>
+                         [--scenario nombre=archivo.json ...] [--force] [--allow-unsimulatable] [--json]
      lila mcp
 
 Comandos:
@@ -94,9 +99,12 @@ Comandos:
   scenario   import: aplica una hoja de escenario (.xlsx/.csv) a un escenario del .lila, como
              Importar Excel/CSV de la app. template: escribe esa hoja, rellenada, para una persona.
              show: imprime un escenario como está guardado (o --resolved) con las notas del validador.
+             patch: aplica un JSON Patch a un escenario, en sitio o como un escenario nuevo que
+             hereda de él (--save-to); solo se escribe si el resultado valida.
              rename: renombra un escenario (su archivo no cambia). delete: borra un escenario con
              sus corridas guardadas.
   project    show: lista los procesos de un .lila, sus escenarios y sus corridas guardadas. Solo lee.
+             create: crea un .lila nuevo a partir de un .bpmn y escenarios opcionales.
   mcp        Arranca el servidor MCP por stdio (para Claude Code / Desktop). Ver docs/MCP.md.
 
 Un modelo puede ser un .bpmn o un proyecto .lila. Con un .lila, un escenario es una ruta .json o,
@@ -180,6 +188,23 @@ Opciones de process attribute define:
 
 Opciones de scenario import:
   --dry-run         Muestra los cambios previstos y las filas no aplicadas sin escribir.
+
+Opciones de scenario patch:
+  --patch archivo   La lista JSON de operaciones (RFC 6902 add/replace/remove/test).
+  --save-to nombre  Crea este escenario con extends y solo las claves que tocó el patch, en
+                    vez de parchear el escenario en sitio.
+  --extends-from n  Con --save-to: el padre de extends (por defecto, el escenario parcheado).
+  --name, --description  Del escenario resultante.
+  --dry-run         Valida todo y no escribe nada.
+
+Opciones de project create:
+  --name nombre     Nombre del proyecto.
+  --bpmn archivo    El modelo; un modelo con errores de validación se rechaza.
+  --scenario n=a    Un JSON de escenario que se guarda como n.scenario.json; repetible. Los
+                    borradores se guardan y se listan con lo que les falta.
+  --force           Reemplaza un archivo que ya existe.
+  --allow-unsimulatable  Guarda un modelo con errores de validación, como un diagrama que no
+                    simula; los errores se imprimen como notas.
 
 Opciones de mcp:
   Ninguna. Habla MCP por stdin/stdout; las rutas de las tools se resuelven contra el

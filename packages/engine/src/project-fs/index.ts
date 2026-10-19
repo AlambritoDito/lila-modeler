@@ -74,6 +74,17 @@ export { lilaProjectInventory, lilaScenarioView } from './inventory.js';
 export type { LilaProcessSummary, LilaProjectInventory, LilaRunSummary, LilaScenarioSummary, LilaScenarioView } from './inventory.js';
 export type { EditedLilaProcess, EditLilaProcessOptions } from './edit.js';
 export { putLilaProcessBpmn, readLilaProcessBpmn } from './process-bpmn.js';
+export {
+  patchLilaScenario,
+  sameScenario,
+  validatePatchedScenario,
+  withoutPhantomFile,
+  withRelativeModel,
+} from './patch-scenario.js';
+export type { PatchLilaScenarioRequest, PatchLilaScenarioResult } from './patch-scenario.js';
+// The JSON Patch of `patch_scenario` (#635: moved from `packages/mcp` so the CLI shares it).
+export { applyJsonPatch, buildPatchDelta } from '../json-patch.js';
+export type { JsonPatchOp } from '../json-patch.js';
 export type { LilaProcessBpmn, PutLilaProcessBpmnRequest, PutLilaProcessBpmnResult } from './process-bpmn.js';
 export { deleteLilaProcess, deleteLilaScenario, renameLilaProcess, renameLilaScenario } from './manage.js';
 export type {

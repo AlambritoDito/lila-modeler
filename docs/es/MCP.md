@@ -48,15 +48,16 @@ Schema del escenario como recursos, y el flujo de la guía como el prompt `inter
   insuficientes para IC95). `scenarios` acepta rutas y objetos inline mezclados. Todo escenario se
   resuelve y valida contra el modelo antes de simular ninguno. Por defecto `comparison` conserva
   las filas del proceso y de los recursos y las significativas; `detail: "full"` devuelve todas.
-- **`patch_scenario({ scenario, project?, process?, patch, saveTo?, extendsFrom?, name?, description?, locale? })`**
+- **`patch_scenario({ scenario, project?, process?, patch, saveTo?, extendsFrom?, name?, description?, dryRun?, locale? })`**
   (LILA-055) — aplica un [JSON Patch](https://www.rfc-editor.org/rfc/rfc6902) a `scenario`, valida
   el resultado contra su modelo (mismas reglas que `validateScenario`, `docs/SCENARIO_FORMAT.md`
   § 5) y **solo si valida** lo escribe a disco de forma atómica; nunca dos veces. Devuelve
-  `{ scenario, file, written, notes }`: el escenario resultante ya resuelto, la ruta absoluta escrita,
+  `{ scenario, file, written, dryRun, notes }`: el escenario resultante ya resuelto, la ruta absoluta escrita,
   si se escribió y los avisos de lint (`W-…`) como `notes`. Un patch que no cambia nada (solo `test`,
   o un `saveTo` cuyo destino ya tiene el resultado) no escribe nada: `written` es `false`, `notes`
   lo dice primero y el escenario conserva su revisión, así que sus corridas guardadas siguen
-  vigentes (#627). Dos modos:
+  vigentes (#627). Con `dryRun: true` valida igual y no escribe nada (`written: false`, con una
+  nota; la respuesta trae `dryRun`). Para un `.lila` es `lila scenario patch`. Dos modos:
   - **Sin `saveTo`** (modo a) — parchea `scenario` en sitio: el patch se aplica sobre el escenario
     ya resuelto (con `extends` fusionado) y se sobrescribe el mismo archivo con el resultado
     completo, sin `extends` propio. Es un "aplanar y parchear": si `scenario` tenía su propio
@@ -78,7 +79,7 @@ Schema del escenario como recursos, y el flujo de la guía como el prompt `inter
   El patch soporta `add`/`replace`/`remove`/`test` (RFC 6902) con punteros RFC 6901
   (`/resources/cajero/capacity`); **no** soporta `move` ni `copy` — son las dos operaciones que
   leen de una ubicación distinta a la que escriben, y ningún caso de uso de esta tool las necesita
-  (`packages/mcp/src/json-patch.ts`). Un patch que deja el escenario inválido — `probability` fuera
+  (`packages/engine/src/json-patch.ts`). Un patch que deja el escenario inválido — `probability` fuera
   de `[0, 1]`, `capacity < 1`, una `ref` que no existe en `resources`, un `id` que no existe en el
   modelo, … — es `isError: true` y **no escribe nada**, en ninguno de los dos modos.
 
@@ -340,17 +341,6 @@ guardó el archivo; `summary` dice en una línea lo que pasó.
 { "name": "delete_scenario", "arguments": { "project": "examples/pedido.lila", "scenario": "to-be-3-cajeros", "dryRun": true } }
 ```
 
-## MCP y CLI lado a lado
-
-| Tool o campo MCP | CLI | Nota |
-| --- | --- | --- |
-| `rename_process` | `lila process rename <proyecto.lila> <slug> --name <nombre>` | |
-| `delete_process` | `lila process delete <proyecto.lila> <slug>` | |
-| `rename_scenario` | `lila scenario rename <proyecto.lila> <escenario> --name <nombre>` | `process` es `--process` |
-| `delete_scenario` | `lila scenario delete <proyecto.lila> <escenario>` | `process` es `--process` |
-| `dryRun` | `--dry-run` | Todas las de arriba |
-| (la respuesta JSON) | `--json` | Sin él, la CLI imprime `summary` y `notes` |
-
 ## Exportar sin la app
 
 `export_diagram`, `export_document` y `export_results` (#538) son `lila export diagram|doc|results`
@@ -588,8 +578,8 @@ el fin del camino que terminó al último, así que un siniestro escalado y lueg
 
 `annotate_element`, `define_attribute`, `get_raci_matrix`, `import_scenario_sheet`,
 `export_scenario_template` y `create_project` (#99, #633, #403, #514) dejan que un agente construya
-y documente un proyecto sin la app. La CLI tiene las cinco primeras como
-`lila process annotate|attribute|raci` y `lila scenario import|template` (`docs/es/CLI.md`). Toda escritura pasa por el mismo guardado
+y documente un proyecto sin la app. La CLI las tiene como
+`lila process annotate|attribute|raci`, `lila scenario import|template` y `lila project create` (`docs/es/CLI.md`). Toda escritura pasa por el mismo guardado
 atómico y con candado del `.lila` que `patch_scenario` (ver
 [Un `.lila` como entrada](#un-lila-como-entrada)): solo cambia el proceso tocado, los demás pasan
 byte a byte, y una entrada inválida es `isError` sin escribir nada. `dryRun: true` responde qué
@@ -768,6 +758,43 @@ mismo desde una terminal.
   cambió en disco desde que se leyó (otro agente, la app), la llamada se rechaza y no se pierde nada.
   La revisión del modelo sube, así que la app ve sus corridas viejas como desactualizadas. Todos los
   demás procesos quedan byte a byte. Con `dryRun`, se comprueba y devuelve todo y no se escribe nada.
+
+## MCP y CLI lado a lado
+
+Cada tool corre el mismo código del motor que su comando de la CLI, así que un agente que solo
+tiene una terminal obtiene las mismas respuestas. El `--json` de los comandos project, process y
+scenario imprime lo que devuelve la tool; `lila run|compare --json <archivo>` escriben el resultado
+completo en un archivo, como `saveTo` (las tools responden con un resumen salvo con `detail: "full"`).
+
+| Tool o campo MCP | CLI | Nota |
+| --- | --- | --- |
+| `validate_bpmn` | `lila validate --json` | |
+| `describe_process` | `lila validate` | La CLI imprime el IR y los problemas; el `resumen` legible está escrito para un agente y es solo de MCP. |
+| `run_simulation` | `lila run --json` | `saveRun` es `--save`, `saveTo` es `--json <archivo>`. El event log de `--csv` (`log.csv`) todavía no tiene campo MCP: #665. Los cuatro CSV de resultados de `--csv` salen de una corrida guardada con `export_results`. |
+| `compare_scenarios` | `lila compare --json` | `--xlsx` y `--all` todavía no tienen campo MCP: #665. |
+| `patch_scenario` con `project` | `lila scenario patch` | `dryRun` es `--dry-run`. |
+| `patch_scenario` sin `project` | ninguno | Parchear un escenario `.json` suelto es solo de MCP; desde la CLI, se edita el archivo. |
+| `export_diagram` | `lila export diagram` | |
+| `export_document` | `lila export doc` | |
+| `export_results` | `lila export results` | Percentiles de espera por elemento: #666. |
+| `create_process` | `lila process create` | |
+| `get_process_outline` | `lila process show` | |
+| `edit_process` | `lila process edit` | |
+| `annotate_element` | `lila process annotate` | |
+| `define_attribute` | `lila process attribute define` | `lila process attribute list` los lista; en MCP lo hace `get_project`. |
+| `get_raci_matrix` | `lila process raci` | `--csv` es solo de la CLI: un agente arma el CSV con `rows`. |
+| `import_scenario_sheet` | `lila scenario import` | |
+| `export_scenario_template` | `lila scenario template` | |
+| `create_project` | `lila project create` | `overwrite` es `--force`; `scenarios` son `--scenario nombre=archivo.json`. |
+| `get_project` | `lila project show` | |
+| `get_scenario` | `lila scenario show` | |
+| `get_process_bpmn` | `lila process export-bpmn` | |
+| `put_process_bpmn` | `lila process import` | `mode: "replace"` es `--replace`. |
+| `rename_process` | `lila process rename` | `dryRun` es `--dry-run`. |
+| `delete_process` | `lila process delete` | `dryRun` es `--dry-run`. |
+| `rename_scenario` | `lila scenario rename` | `dryRun` es `--dry-run`. |
+| `delete_scenario` | `lila scenario delete` | `dryRun` es `--dry-run`. |
+| Los resources y el prompt | ninguno | Son parte del protocolo; la CLI tiene `--help` y `docs/`. |
 
 ## Resumen o resultado completo
 
