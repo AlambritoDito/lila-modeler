@@ -26,12 +26,15 @@ import {
   readJsonFile,
   resultWithBoundaryWarnings,
   scenarioSource,
+  stageTarget,
   targetScenarios,
   validatedModelOf,
   withRunOverrides,
+  writeBytesAtomic,
   writeJsonAtomic,
   type LoadedScenarioResult,
   type ParsedIr,
+  type StagedFile,
   type ValidatedModel,
 } from '@lila-modeler/engine/cli-shared';
 import {
@@ -67,6 +70,7 @@ import {
   type ScenarioProblem,
 } from '@lila-modeler/engine/schema';
 import { compare, type CompareResult, type RunResult } from '@lila-modeler/engine';
+import { compareWorkbook } from '@lila-modeler/engine/xlsx-report';
 import { messages, resolveLocale, type Locale } from '@lila-modeler/engine/messages';
 import { McpServer } from '@modelcontextprotocol/server';
 import type { CallToolResult, ServerContext } from '@modelcontextprotocol/server';
@@ -306,18 +310,20 @@ interface RunSimulationInput {
   replications?: number | undefined;
   saveTo?: string | undefined;
   saveRun?: boolean | undefined;
+  logTo?: string | undefined;
   detail?: Detail | undefined;
   locale?: Locale | undefined;
 }
 
 /**
  * Igual pipeline que `runCommand` de `cli.ts` (compartida en `@lila-modeler/engine/cli-shared`): valida
- * modelo y escenario, aplica overrides y simula con `log: false`. Ningún campo de nivel 2/3 se
+ * modelo y escenario, aplica overrides y simula con `log: false`, o con el event log en streaming
+ * cuando hay `logTo` (#665). Ningún campo de nivel 2/3 se
  * rechaza (LILA-184): `resources` y `calendars` los simula el motor desde LILA-033…036 y LILA-041.
  * El `RunResult` devuelto es el mismo objeto que produce `lila run --json`.
  */
 async function runSimulation(
-  { model, process, scenario, seed, replications, saveTo, saveRun, detail }: RunSimulationInput,
+  { model, process, scenario, seed, replications, saveTo, saveRun, logTo, detail }: RunSimulationInput,
   locale: Locale,
   progress: RequestProgress = requestProgress(undefined),
 ): Promise<CallToolResult> {
@@ -365,37 +371,40 @@ async function runSimulation(
   const scenarioIssues = scenarioErrors(scenarioProblems);
   if (scenarioIssues.length > 0) return fail(M.scenarioInvalid(JSON.stringify(scenarioIssues)));
 
-  let result: RunResult;
+  // #665: the log is staged here, before the run, so that whatever ends this call (an error, the
+  // client's cancellation) the temporary file is removed; it is published only after `saveTo`, as
+  // `lila run --csv` publishes `log.csv` after `--json`.
+  let log: StagedFile | undefined;
   try {
+    if (logTo !== undefined) log = stageTarget(logTo, locale);
     // #637: in a worker, with a progress notification per replication and the request's cancellation.
-    const simulated = await simulateInWorker({ ir, scenario: withOverrides, locale }, { signal: progress.signal, onReplication: progress.report });
-    result = resultWithBoundaryWarnings(simulated, modelValidation, scenarioProblems);
+    const simulated = await simulateInWorker(
+      { ir, scenario: withOverrides, locale, logDescriptor: log?.descriptor },
+      { signal: progress.signal, onReplication: progress.report },
+    );
+    const result = resultWithBoundaryWarnings(simulated, modelValidation, scenarioProblems);
+
+    if (saveTo !== undefined) writeJsonAtomic(saveTo, result, locale);
+    log?.commit();
+
+    // #629: the answer is a summary unless `detail: "full"`; what is saved above is always the full result.
+    const answer = detail === 'full' ? result : summarizeRun(result, ir, withOverrides);
+    const content: CallToolResult['content'] = [{ type: 'text', text: JSON.stringify(answer, null, 2) }];
+    // The `RunResult` stays the structured content (its `outputSchema`); where the log and the run
+    // went is a second text block.
+    const written: { log?: string; savedRun?: Awaited<ReturnType<typeof saveSimulationRun>> } = {};
+    if (log !== undefined) written.log = log.target;
+    if (saveRun === true) {
+      written.savedRun = await saveSimulationRun(lila!, scenario as string, withOverrides, result, locale);
+    }
+    if (Object.keys(written).length > 0) content.push({ type: 'text', text: JSON.stringify(written, null, 2) });
+    return { content, isError: false, structuredContent: answer };
   } catch (error) {
     return fail(message(error));
+  } finally {
+    // Removes the temporary file unless `commit` already published it.
+    log?.abort();
   }
-
-  if (saveTo !== undefined) {
-    try {
-      writeJsonAtomic(saveTo, result, locale);
-    } catch (error) {
-      return fail(message(error));
-    }
-  }
-
-  // #629: the answer is a summary unless `detail: "full"`; what is saved above is always the full result.
-  const answer = detail === 'full' ? result : summarizeRun(result, ir, withOverrides);
-  const content: CallToolResult['content'] = [{ type: 'text', text: JSON.stringify(answer, null, 2) }];
-  if (saveRun === true) {
-    try {
-      // The `RunResult` stays the structured content (its `outputSchema`); where the run went is a
-      // second text block.
-      const savedRun = await saveSimulationRun(lila!, scenario as string, withOverrides, result, locale);
-      content.push({ type: 'text', text: JSON.stringify({ savedRun }, null, 2) });
-    } catch (error) {
-      return fail(message(error));
-    }
-  }
-  return { content, isError: false, structuredContent: answer };
 }
 
 interface CompareScenariosInput {
@@ -405,6 +414,8 @@ interface CompareScenariosInput {
   seed?: number | undefined;
   replications?: number | undefined;
   saveTo?: string | undefined;
+  format?: 'json' | 'xlsx' | undefined;
+  all?: boolean | undefined;
   detail?: Detail | undefined;
   locale?: Locale | undefined;
 }
@@ -420,15 +431,19 @@ function scenarioLabel(entry: ScenarioInput, index: number): string {
  * los n − 1 anteriores). El `CompareResult` devuelto es el mismo objeto que produce
  * `lila compare --json`; los avisos que la CLI imprime aparte de la tabla (semillas distintas,
  * `baseTimeUnit` distinto, réplicas insuficientes) van en `notes`, sin tocar `comparison`.
+ * `format: "xlsx"` (#665) guarda en `saveTo` el libro de `lila compare --xlsx`, y `all: true` es el
+ * nombre de `--all` para `detail: "full"`: la comparación completa ya tiene todas las filas.
  */
 async function compareScenarios(
-  { model, process, scenarios, seed, replications, saveTo, detail }: CompareScenariosInput,
+  { model, process, scenarios, seed, replications, saveTo, format, all: allRows, detail }: CompareScenariosInput,
   locale: Locale,
   progress: RequestProgress = requestProgress(undefined),
 ): Promise<CallToolResult> {
   const M = messages(locale).mcp;
   const fail = (body: string): CallToolResult => errorResult(toolMessage('compare_scenarios', body));
   if (scenarios.length < 2) return fail(M.atLeastTwoScenarios());
+  if (format === 'xlsx' && saveTo === undefined) return fail(M.xlsxNeedsSaveTo());
+  if (allRows === true && detail === 'summary') return fail(M.allWithSummary());
 
   let lila: LilaProcess | undefined;
   try {
@@ -515,13 +530,15 @@ async function compareScenarios(
 
   if (saveTo !== undefined) {
     try {
-      writeJsonAtomic(saveTo, comparison, locale);
+      if (format === 'xlsx') writeBytesAtomic(saveTo, compareWorkbook(ir, loaded, comparison, locale), locale);
+      else writeJsonAtomic(saveTo, comparison, locale);
     } catch (error) {
       return fail(message(error));
     }
   }
 
-  const payload = { comparison: detail === 'full' ? comparison : summarizeComparison(comparison), notes };
+  const full = detail === 'full' || allRows === true;
+  const payload = { comparison: full ? comparison : summarizeComparison(comparison), notes };
   return { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }], isError: false, structuredContent: payload };
 }
 
@@ -960,13 +977,15 @@ export function createServer(options: ServerOptions = {}): McpServer {
     {
       title: 'Run simulation',
       description:
-        'Validates model and scenario, simulates with `log: false` and returns the same `RunResult` ' +
+        'Validates model and scenario, simulates and returns the same `RunResult` ' +
         'as `lila run --json` (elements, flows, resources, process, bottlenecks and warnings). ' +
         '`scenario` accepts a .json path (resolves `extends`) or the already resolved scenario as an ' +
         'inline object. `model` may be a .lila project: `scenario` is then also the name of a ' +
         'scenario of that process (a .json path that exists wins), and `process` picks the process ' +
         'when there are several. `saveTo` writes the same JSON atomically, like `lila run --json <path>`; ' +
-        '`saveRun` stores the run in the .lila, like `lila run --save`. ' +
+        '`saveRun` stores the run in the .lila, like `lila run --save`. `logTo` streams the event log ' +
+        'to a CSV file, the same bytes as the `log.csv` of `lila run --csv`, published only after a ' +
+        'complete run. A second content block returns where the log and the run went. ' +
         'By default the answer is a summary (`detail: "summary"`: process, bottlenecks, per-resource ' +
         'utilization/wait/cost, `topWaits`, grouped warnings); `detail: "full"` returns the whole ' +
         '`RunResult`. `saveTo` and `saveRun` always store the full result. ' +
@@ -989,6 +1008,13 @@ export function createServer(options: ServerOptions = {}): McpServer {
               '(it opens as the current run; export_document/export_results use it). A second content ' +
               'block returns { savedRun: { id, file, process, scenario } }.',
           ),
+        logTo: z
+          .string()
+          .optional()
+          .describe(
+            'Path of a CSV file for the event log, as the log.csv of `lila run --csv`. Written only after ' +
+              'a complete run; the second content block returns { log: <absolute path> }.',
+          ),
         detail: detailSchema,
         locale: localeSchema,
       }),
@@ -1007,9 +1033,11 @@ export function createServer(options: ServerOptions = {}): McpServer {
         'warnings the CLI prints beside the table (different seeds, different `baseTimeUnit`, too ' +
         'few replications for a 95% CI). `scenarios` accepts .json paths and inline objects, mixed; ' +
         'with a .lila `model`, also scenario names of that process (`process` picks it). ' +
-        '`saveTo` writes `comparison` as JSON, like `lila compare --json`. By default `comparison` is a ' +
+        '`saveTo` writes `comparison` as JSON, like `lila compare --json`, or with `format: "xlsx"` the ' +
+        'workbook of `lila compare --xlsx`. By default `comparison` is a ' +
         'summary (`detail: "summary"`: the process and resource rows plus every row marked significant, ' +
-        'and `omittedRows`); `detail: "full"` returns every row. `saveTo` always writes the full comparison.',
+        'and `omittedRows`); `detail: "full"` (or `all: true`, the name of `lila compare --all`) returns ' +
+        'every row. `saveTo` always writes the full comparison.',
       inputSchema: z.object({
         model: z
           .string()
@@ -1024,7 +1052,15 @@ export function createServer(options: ServerOptions = {}): McpServer {
         scenarios: z.array(scenarioInputSchema),
         seed: z.number().int().optional().describe('Overrides run.seed in every scenario.'),
         replications: z.number().int().min(1).optional().describe('Overrides run.replications in every scenario.'),
-        saveTo: z.string().optional().describe('Path to write the CompareResult as JSON.'),
+        saveTo: z.string().optional().describe('Path to write the CompareResult as JSON, or the workbook with format "xlsx".'),
+        format: z
+          .enum(['json', 'xlsx'])
+          .optional()
+          .describe('What saveTo writes: "json" (default) or "xlsx", the workbook of `lila compare --xlsx`. "xlsx" needs saveTo.'),
+        all: z
+          .boolean()
+          .optional()
+          .describe('Every row, like `lila compare --all`: the same as detail "full"; refused with detail "summary".'),
         detail: detailSchema,
         locale: localeSchema,
       }),

@@ -312,6 +312,30 @@ export function eventLogRowCsv(row: EventLogRow, startMs?: number): string {
   return csvRow(values);
 }
 
+/**
+ * Streams the event log as CSV through `write`, header first, in blocks of about 1 MiB, so a run
+ * never holds its whole log (#665: `lila run --csv` and the MCP `logTo` share it). `flush` writes
+ * what is left; call it once the run is over.
+ */
+export function eventLogCsvWriter(
+  write: (chunk: string) => void,
+  startMs?: number,
+): { onEvent(row: EventLogRow): void; flush(): void } {
+  let buffer = eventLogCsvHeader(startMs);
+  const flush = (): void => {
+    if (buffer === '') return;
+    write(buffer);
+    buffer = '';
+  };
+  return {
+    onEvent(row) {
+      buffer += eventLogRowCsv(row, startMs);
+      if (buffer.length >= 1_048_576) flush();
+    },
+    flush,
+  };
+}
+
 /** Event log completo en memoria. La CLI usa header + fila a fila para no materializarlo. */
 export function eventLogCsv(rows: readonly EventLogRow[], startMs?: number): string {
   return eventLogCsvHeader(startMs) + rows.map((row) => eventLogRowCsv(row, startMs)).join('');

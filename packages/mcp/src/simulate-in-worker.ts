@@ -32,24 +32,33 @@ export function simulateInWorker(request: SimulateRequest, { signal, onReplicati
     }
     const worker = new Worker(workerUrl, { workerData: request });
     let settled = false;
+    let cancelling = false;
     const settle = (outcome: () => void): void => {
       if (settled) return;
       settled = true;
       signal?.removeEventListener('abort', cancel);
       outcome();
     };
+    // The promise rejects only once the worker has stopped: a caller that cleans up after the run
+    // (the `logTo` file, #665) must not close a descriptor the worker may still be writing to.
     const cancel = (): void => {
-      void worker.terminate();
-      settle(() => reject(signal?.reason instanceof Error ? signal.reason : new Error('cancelled')));
+      cancelling = true;
+      const stopped = (): void => settle(() => reject(signal?.reason instanceof Error ? signal.reason : new Error('cancelled')));
+      worker.terminate().then(stopped, stopped);
     };
     signal?.addEventListener('abort', cancel, { once: true });
     worker.on('message', (message: SimulateMessage) => {
+      if (cancelling) return;
       if (message.type === 'progress') onReplication?.(message.completed, message.total);
       else if (message.type === 'result') settle(() => resolve(message.result));
       else settle(() => reject(new Error(message.message)));
     });
-    worker.on('error', (error) => settle(() => reject(error)));
-    worker.on('exit', (code) => settle(() => reject(new Error(`the simulation worker stopped (exit code ${code})`))));
+    worker.on('error', (error) => {
+      if (!cancelling) settle(() => reject(error));
+    });
+    worker.on('exit', (code) => {
+      if (!cancelling) settle(() => reject(new Error(`the simulation worker stopped (exit code ${code})`)));
+    });
   });
 }
 

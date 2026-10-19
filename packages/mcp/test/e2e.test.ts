@@ -7,14 +7,14 @@
  * "simula examples/pedido con as-is y dime el cuello de botella" y "qué pasa si agrego un cajero".
  */
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
-import { afterAll, beforeAll, expect, test } from 'vitest';
+import { afterAll, beforeAll, expect, test, vi } from 'vitest';
 
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
 const lilaBin = join(repo, 'packages/engine/bin/lila.js');
@@ -177,6 +177,113 @@ test('a 30-replication run reports its progress and can be cancelled (#637)', as
   await client.ping();
   const after = await client.callTool({ name: 'run_simulation', arguments: { scenario: asIs, seed: 4, replications: 1 } });
   expect(after.isError ?? false).toBe(false);
+}, 120_000);
+
+/** The text blocks after the answer, parsed: where `logTo` and `saveRun` went (#665). */
+function writtenOf(result: { content: unknown }): unknown[] {
+  return (result.content as { text: string }[]).slice(1).map((block) => JSON.parse(block.text));
+}
+
+test('logTo (#665): the same bytes as the log.csv of `lila run --csv`, published with saveTo', async () => {
+  const logTo = join(temp, 'log-mcp', 'run.log.csv');
+  const saveTo = join(temp, 'log-mcp', 'run.json');
+  const run = await client.callTool({
+    name: 'run_simulation',
+    arguments: { scenario: asIs, seed: 42, replications: 2, logTo, saveTo },
+  });
+  expect(run.isError ?? false).toBe(false);
+  expect(writtenOf(run)).toEqual([{ log: logTo }]);
+
+  const csv = join(temp, 'log-cli');
+  const json = join(temp, 'log-cli.json');
+  execFileSync(
+    process.execPath,
+    [lilaBin, 'run', 'examples/pedido/model.bpmn', asIs, '--seed', '42', '--replications', '2', '--csv', csv, '--json', json],
+    { cwd: repo, stdio: 'ignore' },
+  );
+  const viaCli = readFileSync(join(csv, 'log.csv'));
+  expect(viaCli.length).toBeGreaterThan(1000);
+  expect(readFileSync(logTo).equals(viaCli)).toBe(true);
+  // The run itself is the one `log: false` gave before: the same `RunResult` as the CLI's.
+  expect(readFileSync(saveTo, 'utf8')).toBe(readFileSync(json, 'utf8'));
+  expect(readdirSync(join(temp, 'log-mcp')).sort()).toEqual(['run.json', 'run.log.csv']);
+
+  // Without the new fields the answer has one block, as before.
+  const plain = await client.callTool({ name: 'run_simulation', arguments: { scenario: asIs, seed: 42 } });
+  expect((plain.content as unknown[]).length).toBe(1);
+}, 120_000);
+
+test('logTo (#665): a directory is refused and a cancelled run leaves neither the log nor a temporary', async () => {
+  const dir = join(temp, 'log-dir');
+  mkdirSync(join(dir, 'taken.csv'), { recursive: true });
+  const refused = await client.callTool({
+    name: 'run_simulation',
+    arguments: { scenario: asIs, seed: 1, logTo: join(dir, 'taken.csv') },
+  });
+  expect(refused.isError).toBe(true);
+  expect(readdirSync(dir)).toEqual(['taken.csv']);
+
+  const logTo = join(dir, 'cancelled.csv');
+  const controller = new AbortController();
+  let staged: string[] = [];
+  const cancelled = client.callTool(
+    { name: 'run_simulation', arguments: { scenario: asIs, seed: 4, replications: 30, logTo } },
+    {
+      signal: controller.signal,
+      onprogress: ({ progress: done }) => {
+        if (done !== 3) return;
+        staged = readdirSync(dir).filter((name) => name.startsWith('cancelled.csv.tmp-'));
+        controller.abort(new Error('enough'));
+      },
+    },
+  );
+  await expect(cancelled).rejects.toThrow('enough');
+  // The log was being written to its temporary file when the run was cancelled…
+  expect(staged).toHaveLength(1);
+  // …and the server removes it once the worker has stopped.
+  await vi.waitFor(() => expect(readdirSync(dir)).toEqual(['taken.csv']), { timeout: 10_000 });
+  expect(existsSync(logTo)).toBe(false);
+  const after = await client.callTool({ name: 'run_simulation', arguments: { scenario: asIs, seed: 4, replications: 1 } });
+  expect(after.isError ?? false).toBe(false);
+}, 120_000);
+
+test('compare_scenarios (#665): format "xlsx" is the workbook of `lila compare --xlsx`, all is detail "full"', async () => {
+  const toBe = 'examples/pedido/to-be-3-cajeros.scenario.json';
+  const saveTo = join(temp, 'compare-mcp.xlsx');
+  const xlsx = await client.callTool({
+    name: 'compare_scenarios',
+    arguments: { scenarios: [asIs, toBe], seed: 42, replications: 2, format: 'xlsx', saveTo },
+  });
+  expect(xlsx.isError ?? false).toBe(false);
+  const cli = join(temp, 'compare-cli.xlsx');
+  execFileSync(
+    process.execPath,
+    [lilaBin, 'compare', 'examples/pedido/model.bpmn', asIs, toBe, '--seed', '42', '--replications', '2', '--xlsx', cli],
+    { cwd: repo, stdio: 'ignore' },
+  );
+  expect(readFileSync(saveTo).equals(readFileSync(cli))).toBe(true);
+
+  const full = await client.callTool({ name: 'compare_scenarios', arguments: { scenarios: [asIs, toBe], seed: 42, replications: 2, detail: 'full' } });
+  const all = await client.callTool({ name: 'compare_scenarios', arguments: { scenarios: [asIs, toBe], seed: 42, replications: 2, all: true } });
+  const both = await client.callTool({
+    name: 'compare_scenarios',
+    arguments: { scenarios: [asIs, toBe], seed: 42, replications: 2, all: true, detail: 'full' },
+  });
+  const summary = await client.callTool({ name: 'compare_scenarios', arguments: { scenarios: [asIs, toBe], seed: 42 } });
+  expect(jsonOf(all).comparison.rows.length).toBe(jsonOf(full).comparison.rows.length);
+  expect(jsonOf(all)).toEqual(jsonOf(full));
+  expect(jsonOf(both)).toEqual(jsonOf(full));
+  expect(jsonOf(summary).comparison.rows.length).toBeLessThan(jsonOf(full).comparison.rows.length);
+
+  const conflict = await client.callTool({
+    name: 'compare_scenarios',
+    arguments: { scenarios: [asIs, toBe], all: true, detail: 'summary' },
+  });
+  expect(conflict.isError).toBe(true);
+  expect(textOf(conflict)).toContain('`all: true`');
+  const noTarget = await client.callTool({ name: 'compare_scenarios', arguments: { scenarios: [asIs, toBe], format: 'xlsx' } });
+  expect(noTarget.isError).toBe(true);
+  expect(textOf(noTarget)).toContain('saveTo');
 }, 120_000);
 
 test('el servidor sobrevive a un error de tool y sigue respondiendo', async () => {

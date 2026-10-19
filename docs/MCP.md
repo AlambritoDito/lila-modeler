@@ -22,8 +22,8 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
   `resumen`: node counts, gateway outputs, lanes, flattened subprocesses, ignored processes
   and validation status. An optional scenario path resolves `extends` and adds referenced
   resources. An unreadable scenario is reported in the summary without failing the tool.
-- **`run_simulation({ model?, process?, scenario, seed?, replications?, saveTo?, saveRun?, detail?, locale? })`** validates
-  the model and scenario, simulates with `log: false` and returns the same `RunResult` as
+- **`run_simulation({ model?, process?, scenario, seed?, replications?, saveTo?, saveRun?, logTo?, detail?, locale? })`** validates
+  the model and scenario, simulates and returns the same `RunResult` as
   `lila run --json`. It supports resources and calendars. `scenario` may be a JSON file path
   or an inline resolved scenario. `model` defaults to `scenario.model`; a supplied different
   model is rejected. The response includes text, `structuredContent` and an `outputSchema`.
@@ -31,13 +31,20 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
   [Summary or full results](#summary-or-full-results)). Long runs report progress and can be
   cancelled ([Progress and cancellation](#progress-and-cancellation)).
   With a `.lila` `model` and a scenario of it, `saveRun: true` stores the run in the project (see
-  [Saving a run](#saving-a-run)).
-- **`compare_scenarios({ model?, process?, scenarios, seed?, replications?, saveTo?, detail?, locale? })`** validates
+  [Saving a run](#saving-a-run)). `logTo` writes the event log to a CSV file: the same bytes as the
+  `log.csv` of `lila run --csv` for the same model, scenario, seed and replications. Rows are
+  streamed to a temporary file during the run and published only after it completes, so memory
+  stays bounded on long runs. When `logTo` or `saveRun` is given, a second text block says where
+  they went: `{ log, savedRun }`, each key only when asked for; `log` is the absolute path.
+- **`compare_scenarios({ model?, process?, scenarios, seed?, replications?, saveTo?, format?, all?, detail?, locale? })`** validates
   all scenarios before running any. Two or more scenarios must use the same model; the first
   is the baseline. Paths and inline objects may be mixed. Returns `{ comparison, notes }`,
   with the same `CompareResult` as `lila compare --json`. Notes cover seeds, units, insufficient
   replications for confidence intervals, and engine warnings. By default `comparison` keeps the
-  process and resource rows and the significant ones; `detail: "full"` returns every row.
+  process and resource rows and the significant ones; `detail: "full"` returns every row, and
+  `all: true` is the same request under the name of `lila compare --all` (with `detail: "summary"`
+  it is an error). `format: "xlsx"` makes `saveTo` write the workbook of `lila compare --xlsx`, the
+  same bytes, instead of the JSON; it needs `saveTo`.
 - **`patch_scenario({ scenario, project?, process?, patch, saveTo?, extendsFrom?, name?, description?, locale? })`**
   applies [JSON Patch](https://www.rfc-editor.org/rfc/rfc6902), validates the result and writes
   only when valid. It returns `{ scenario, file, written, notes }` (plus `process` and `entry` inside a
@@ -676,6 +683,18 @@ terminal.
   "warnings": [], "outline": { … } }
 ```
 
+## MCP and CLI side by side
+
+Every tool runs the same engine code as its CLI command, so an agent that only has a shell gets
+the same answers. The `--json` of the project, process and scenario commands prints what the tool
+returns; `lila run|compare --json <file>` write the full result to a file, like `saveTo` (the tools
+answer with a summary unless `detail: "full"`).
+
+| MCP tool or field | CLI | Note |
+| --- | --- | --- |
+| `run_simulation` | `lila run --json` | `saveRun` is `--save`, `saveTo` is `--json <file>`, `logTo` is the `log.csv` of `--csv`. The four result CSVs of `--csv` come from a stored run with `export_results`. |
+| `compare_scenarios` | `lila compare --json` | `saveTo` with `format: "xlsx"` is `--xlsx <file>`; `all: true` (or `detail: "full"`) is `--all`. |
+
 ## Summary or full results
 
 A full `RunResult` lists every element and flow with every statistic: about 70 KB (some 20k tokens)
@@ -740,8 +759,9 @@ carries copies of the same files in `dist/resources/` (`prepack` runs
 (a `ping`, other calls) while a run works. When the call carries `_meta.progressToken`, the server
 sends `notifications/progress` once per completed replication, with `progress` (replications done)
 and `total` (`run.replications`, or the sum over the scenarios of a comparison). A client's
-`notifications/cancelled` stops the run at once: the worker is terminated, nothing is saved, and,
-as MCP requires, no answer is sent for the cancelled request.
+`notifications/cancelled` stops the run at once: the worker is terminated, nothing is saved (the
+temporary file of a `logTo` is removed too), and, as MCP requires, no answer is sent for the
+cancelled request.
 
 ```json
 { "method": "tools/call", "params": { "name": "run_simulation", "arguments": { "scenario": "examples/pedido/as-is.scenario.json", "replications": 30 }, "_meta": { "progressToken": 1 } } }
@@ -969,7 +989,8 @@ directory and published with `rename`, preventing partial JSON reads. An existin
 replaced; an existing directory is rejected. The export tools are the exception: they never
 replace a file unless `overwrite: true` (see [App-free exports](#app-free-exports)). `run_simulation` and `compare_scenarios` save the
 full result whatever `detail` asks. `compare_scenarios` saves only `comparison`,
-without `notes`, matching CLI JSON output. For `patch_scenario`, omitting `saveTo` selects
+without `notes`, matching CLI JSON output, or with `format: "xlsx"` the comparison workbook.
+The `logTo` of `run_simulation` follows the same rules. For `patch_scenario`, omitting `saveTo` selects
 in-place editing; supplying it selects the derived-scenario mode described above.
 
 ## Paths

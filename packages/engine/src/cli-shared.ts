@@ -32,7 +32,8 @@ import { dirname, resolve } from 'node:path';
 import { parseBpmn, type TargetingScenario } from './bpmn/parse.js';
 import { validateBpmnModel, type ValidatedBpmnModel } from './bpmn/validate-report.js';
 import type { ValidationResult } from './bpmn/validate.js';
-import type { RunResult } from './core/result.js';
+import type { EventLogRow, RunResult } from './core/result.js';
+import { eventLogCsvWriter } from './csv.js';
 import type { BaseTimeUnit } from './format.js';
 import { messages, type Locale } from './messages/index.js';
 import { isLilaPath } from './project-fs/paths.js';
@@ -336,6 +337,12 @@ export function compareWarnings(
 
 export interface StagedFile {
   readonly target: string;
+  /**
+   * The open descriptor of the temporary file, `undefined` once closed. The MCP `logTo` (#665)
+   * hands it to the simulation worker, which shares the process's descriptors and streams the log
+   * into it, while the server keeps the file to commit or abort.
+   */
+  readonly descriptor: number | undefined;
   /** Texto (CSV, JSON) o bytes crudos: `lila run --xlsx` publica un zip por esta misma vía. */
   write(contents: string | Uint8Array): void;
   close(): void;
@@ -372,6 +379,9 @@ export function stageFile(target: string, locale: Locale = 'en'): StagedFile {
 
   return {
     target,
+    get descriptor() {
+      return descriptor;
+    },
     write(contents) {
       if (descriptor === undefined) {
         throw new Error(messages(locale).cli.temporaryFileClosed(temporary));
@@ -425,4 +435,80 @@ export function writeJsonAtomic(file: string, data: unknown, locale: Locale = 'e
     throw error;
   }
   return target;
+}
+
+/**
+ * Publica bytes crudos (un `.xlsx`) con la misma técnica atómica que el CSV y el JSON: temporal +
+ * `rename`, y nada se escribe encima de un archivo que ya existía sin pasar por
+ * `assertReplaceableFile`. Devuelve la ruta absoluta escrita. Usado por `lila run|compare --xlsx` y
+ * por `compare_scenarios` con `format: "xlsx"` (#665): mismos bytes, misma publicación.
+ */
+export function writeBytesAtomic(file: string, bytes: Uint8Array, locale: Locale = 'en'): string {
+  const target = absolutePath(file);
+  assertReplaceableFile(target, locale);
+  mkdirSync(dirname(target), { recursive: true });
+  const staged = stageFile(target, locale);
+  try {
+    staged.write(bytes);
+    staged.commit();
+  } catch (error) {
+    staged.abort();
+    throw error;
+  }
+  return target;
+}
+
+export interface EventLogSink {
+  onEvent(row: EventLogRow): void;
+  close(): void;
+  commit(): void;
+  abort(): void;
+}
+
+/**
+ * Escribe el log en `file` por bloques mientras corre `simulate`, sin retener todas las
+ * replicaciones. El archivo temporal solo se publica después de una corrida completa (`commit`).
+ * Movido de `cli.ts` (#665); `lila run --csv` lo abre sobre `<dir>/log.csv`.
+ *
+ * ponytail: buffer de 1 MiB + `writeFileSync(fd, ...)` en vez de un `WriteStream`. `simulate` es
+ * síncrona y no admite pausa, así que un stream asíncrono no podría aplicar backpressure: se
+ * limitaría a acumular en memoria justo lo que este ticket quiere evitar. La escritura bloqueante
+ * sí acota el pico al tamaño del buffer, y el `rename` del temporal conserva la publicación
+ * atómica de LILA-046. Si algún día `simulate` se vuelve reanudable, aquí entra `once(s,'drain')`.
+ */
+export function openEventLogSink(file: string, startMs: number, locale: Locale = 'en'): EventLogSink {
+  const staged = stageTarget(file, locale);
+  const writer = eventLogCsvWriter((chunk) => staged.write(chunk), startMs);
+  let closed = false;
+
+  const close = (): void => {
+    if (closed) return;
+    writer.flush();
+    staged.close();
+    closed = true;
+  };
+
+  return {
+    onEvent: (row) => writer.onEvent(row),
+    close,
+    commit() {
+      close();
+      staged.commit();
+    },
+    abort() {
+      staged.abort();
+    },
+  };
+}
+
+/**
+ * Stages `file` for a write that is committed later: its directory is created, an existing
+ * directory at `file` is refused, and nothing is published until `commit`. The MCP `logTo` (#665)
+ * stages the log this way before the run, so a failed or cancelled call can always `abort` it.
+ */
+export function stageTarget(file: string, locale: Locale = 'en'): StagedFile {
+  const target = absolutePath(file);
+  mkdirSync(dirname(target), { recursive: true });
+  assertReplaceableFile(target, locale);
+  return stageFile(target, locale);
 }
