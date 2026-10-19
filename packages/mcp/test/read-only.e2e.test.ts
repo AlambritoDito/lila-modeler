@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { readLilaFile, writeLilaFile } from '@lila-modeler/engine/project-fs';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { afterAll, beforeAll, expect, test } from 'vitest';
@@ -112,4 +113,55 @@ test('#632: get_process_bpmn reads the model as stored and writes nothing', asyn
   expect(missing.isError).toBe(true);
   expect(missing.text).toMatch(/^get_process_bpmn: .* has no process "nope"/);
   expect(readFileSync(join(cwd, 'credit.lila')).equals(bytes)).toBe(true);
+}, 120_000);
+
+test('#645: the tools that only read declare readOnlyHint, and the rest do not', async () => {
+  const { tools } = await client.listTools();
+  const readOnly = tools.filter((tool) => tool.annotations?.readOnlyHint === true).map((tool) => tool.name).sort();
+  expect(readOnly).toEqual([
+    'describe_process',
+    'get_process_bpmn',
+    'get_process_outline',
+    'get_project',
+    'get_raci_matrix',
+    'get_scenario',
+    'validate_bpmn',
+  ]);
+  // #645: compare_scenarios describes its own summary, not run_simulation's.
+  const detail = (name: string): string =>
+    ((tools.find((tool) => tool.name === name)!.inputSchema.properties as Record<string, { description?: string }>)['detail']?.description) ?? '';
+  expect(detail('compare_scenarios')).toContain('omittedRows');
+  expect(detail('compare_scenarios')).not.toContain('bottlenecks');
+  expect(detail('run_simulation')).toContain('bottlenecks');
+}, 120_000);
+
+test('#645: get_project and get_scenario refuse a folder or an empty project, in the caller\'s language', async () => {
+  for (const project of ['', '.', cwd]) {
+    const inventory = await call('get_project', { project });
+    expect(inventory.isError, project).toBe(true);
+    expect(inventory.text).toBe(`get_project: \`project\` must be a .lila file; got ${project}.`);
+    const scenario = await call('get_scenario', { project, scenario: 'as-is', locale: 'es' });
+    expect(scenario.isError, project).toBe(true);
+    expect(scenario.text).toBe(`get_scenario: \`project\` tiene que ser un archivo .lila; se recibió ${project}.`);
+  }
+}, 120_000);
+
+test('#645: get_scenario of a process whose model.bpmn does not parse is runnable: false, the error in notes', async () => {
+  const { document } = await readLilaFile(join(cwd, 'credit.lila'));
+  const broken = join(cwd, 'broken.lila');
+  await writeLilaFile(broken, { ...document, model: { ...document.model, xml: '<bpmn:definitions' } } as typeof document);
+  const bytes = readFileSync(broken);
+  for (const resolved of [false, true]) {
+    const view = await answer<{ entry: string; scenario: unknown; runnable: boolean; notes: string[] }>('get_scenario', {
+      project: 'broken.lila',
+      scenario: 'as-is',
+      resolved,
+    });
+    expect(view).toMatchObject({ entry: 'as-is.scenario.json', resolved, runnable: false });
+    expect(view.notes).toHaveLength(1);
+    expect(view.notes[0]).toMatch(/^the model does not pass validation: /);
+    if (resolved) expect(view.scenario).toBeNull();
+    else expect(view.scenario).toMatchObject({ name: 'AS-IS' });
+  }
+  expect(readFileSync(broken).equals(bytes)).toBe(true);
 }, 120_000);

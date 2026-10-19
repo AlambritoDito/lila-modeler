@@ -71,15 +71,18 @@ describe('resolveExtends', () => {
       'b.scenario.json': { version: 1, name: 'B', extends: 'a.scenario.json' },
     });
 
-    expect(() => resolveExtends('a.scenario.json', read)).toThrow(/ciclo/);
     expect(() => resolveExtends('a.scenario.json', read)).toThrow(
-      'a.scenario.json -> b.scenario.json -> a.scenario.json',
+      'extends: cycle in the inheritance chain: a.scenario.json -> b.scenario.json -> a.scenario.json',
+    );
+    // #645: in the caller's language, from the catalog.
+    expect(() => resolveExtends('a.scenario.json', read, 'es')).toThrow(
+      'extends: ciclo en la cadena de herencia: a.scenario.json -> b.scenario.json -> a.scenario.json',
     );
   });
 
   test('un archivo que se hereda a sí mismo también es ciclo', () => {
     const read = reader({ 'a.scenario.json': { version: 1, name: 'A', extends: 'a.scenario.json' } });
-    expect(() => resolveExtends('a.scenario.json', read)).toThrow(/ciclo/);
+    expect(() => resolveExtends('a.scenario.json', read)).toThrow(/cycle/);
   });
 
   test('cadenas de herencia: se resuelve de la raíz hacia abajo', () => {

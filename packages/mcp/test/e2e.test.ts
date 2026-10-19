@@ -16,6 +16,8 @@ import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { afterAll, beforeAll, expect, test, vi } from 'vitest';
 
+import { absoluteLinks } from '../src/resources.js';
+
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
 const lilaBin = join(repo, 'packages/engine/bin/lila.js');
 const asIs = 'examples/pedido/as-is.scenario.json';
@@ -145,8 +147,8 @@ test('resources (#637): the guide and the formats, read over stdio', async () =>
   ]);
   const guide = await client.readResource({ uri: 'lila://guide' });
   expect(guide.contents[0]).toMatchObject({ uri: 'lila://guide', mimeType: 'text/markdown' });
-  // The server's language is English here (`lila mcp` without --lang): docs/AGENT_GUIDE.md as is.
-  expect((guide.contents[0] as { text: string }).text).toBe(readFileSync(join(repo, 'docs/AGENT_GUIDE.md'), 'utf8'));
+  // The server's language is English here (`lila mcp` without --lang): docs/AGENT_GUIDE.md, its links absolute (#645).
+  expect((guide.contents[0] as { text: string }).text).toBe(absoluteLinks(readFileSync(join(repo, 'docs/AGENT_GUIDE.md'), 'utf8'), 'AGENT_GUIDE.md'));
 
   const { prompts } = await client.listPrompts();
   expect(prompts.map((prompt) => prompt.name)).toEqual(['interview-to-process']);

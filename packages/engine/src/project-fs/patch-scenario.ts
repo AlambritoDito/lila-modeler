@@ -207,7 +207,7 @@ export async function patchLilaScenario(request: PatchLilaScenarioRequest): Prom
     return written(target, resolvedScenario, notes, document);
   };
 
-  const patchedRaw = applyJsonPatch(base, patch);
+  const patchedRaw = applyJsonPatch(base, patch, locale);
 
   if (saveTo === undefined) {
     if (isPlainObject(patchedRaw)) {
@@ -224,7 +224,7 @@ export async function patchLilaScenario(request: PatchLilaScenarioRequest): Prom
   if (!isPlainObject(patchedRaw)) throw new Error(M.patchNotAnObject());
   const target = lilaScenarioEntryName(saveTo, locale);
   const parent = extendsFrom === undefined ? entry : findLilaScenario(lila, extendsFrom, locale);
-  const delta = buildPatchDelta(patch, patchedRaw);
+  const delta = buildPatchDelta(patch, patchedRaw, locale);
   // Both entries live in the same folder of the archive, so `extends` is the parent's entry name.
   const candidate: Record<string, unknown> = { version: base.version, extends: parent, ...delta };
   candidate['name'] = name ?? (typeof delta['name'] === 'string' ? delta['name'] : M.patchedName(base.name));

@@ -54,7 +54,7 @@ import { abrirVentanaFlotante, geometriaDe, geometriaValida, VentanaFlotante, ty
 import { Bienvenida } from './Bienvenida';
 import { proyectoDeEjemplo, type EjemploId } from './ejemplos';
 import type { Recent } from '../../desktop/src/bridge.js';
-import { LOCALES, PREFERENCIAS, setLocale, strings, useLocale, useStrings, type Locale, type Preferencia } from './i18n';
+import { LOCALES, PREFERENCIAS, getLocale, setLocale, strings, useLocale, useStrings, type Locale, type Preferencia } from './i18n';
 import { ATAJOS, atajoPorId, coincide, etiqueta, MAC, tooltip, type AtajoId, type AtajoPropio } from './atajos';
 import { aPng, descargar, imprimirSvg, nombreArchivo } from './exportarDiagrama';
 import { DENSIDAD_IDS, MODO_IDS, PASO_IDS, PESTANA_IDS, type Densidad, type ModoId, type PasoId, type PestanaId, type VerboPerdida } from './ids';
@@ -445,7 +445,7 @@ function escenarioResuelto(archivo: string, escenarios: Escenarios): { resuelto:
       const encontrado = escenarios[ruta];
       if (encontrado === undefined) throw new Error(S.app.errorEscenarioDesconocido(ruta));
       return encontrado;
-    }) };
+    }, getLocale()) };
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e), resuelto: escenarios[archivo] ?? {} };
   }

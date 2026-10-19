@@ -130,7 +130,7 @@ export function scenarioErrors(input: LilaProcess, process: ProcessDocument, ir:
   for (const name of Object.keys(process.scenarios)) {
     let resolved: Record<string, unknown>;
     try {
-      resolved = resolveExtends(lilaScenarioPath(view, name), read);
+      resolved = resolveExtends(lilaScenarioPath(view, name), read, locale);
     } catch {
       continue; // a scenario that cannot be read is not this edit's doing
     }

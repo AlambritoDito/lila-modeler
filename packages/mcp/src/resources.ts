@@ -7,6 +7,7 @@
  * run by `prepack`).
  */
 import { existsSync, readFileSync } from 'node:fs';
+import { posix } from 'node:path';
 
 import type { Locale } from '@lila-modeler/engine/messages';
 import type { McpServer } from '@modelcontextprotocol/server';
@@ -29,8 +30,33 @@ type DocFile = (typeof BUNDLED_DOCS)[number];
 const inCheckout = existsSync(new URL('../../../packages/mcp/package.json', import.meta.url));
 const docsRoot = inCheckout ? new URL('../../../docs/', import.meta.url) : new URL('./resources/', import.meta.url);
 
+/** Where a doc's relative links point once they leave the repository (#645). */
+export const DOCS_URL = 'https://github.com/AlambritoDito/lila-modeler/blob/main/docs/';
+
+/**
+ * `markdown` (the doc `file`) with its relative inline links made absolute GitHub links (#645): a
+ * client that only has MCP cannot follow `SCENARIO_FORMAT.md` or `#saving-a-run`. Links with a
+ * scheme (`https:`, `lila:`) and fenced code blocks stay as they are; links with a title and
+ * reference-style links are not rewritten (the served docs have none).
+ */
+export function absoluteLinks(markdown: string, file: string): string {
+  return markdown
+    .split(/(^```[\s\S]*?^```)/m)
+    .map((part, index) =>
+      index % 2 === 1
+        ? part
+        : part.replace(/\]\(([^()\s]+)\)/g, (link, target: string) => {
+            if (/^[a-z][a-z0-9+.-]*:/i.test(target)) return link;
+            const resolved = target.startsWith('#') ? `${file}${target}` : posix.normalize(posix.join(posix.dirname(file), target));
+            return `](${new URL(resolved, DOCS_URL).href})`;
+          }),
+    )
+    .join('');
+}
+
 function readDoc(file: DocFile): string {
-  return readFileSync(new URL(file, docsRoot), 'utf8');
+  const text = readFileSync(new URL(file, docsRoot), 'utf8');
+  return file.endsWith('.md') ? absoluteLinks(text, file) : text;
 }
 
 /** The section that starts at the line `heading`, up to the next heading of the same level or higher. */

@@ -229,7 +229,7 @@ function scenarioOfRun(lila: LilaProcess, run: StoredRun, locale: Locale): Resol
   const C = messages(locale).cli;
   const path = lilaScenarioPath(lila, run.scenarioName);
   const project = lilaScenarioReader(lila, (file) => JSON.parse(readFileSync(file, 'utf8')) as unknown, locale);
-  const raw = resolveExtends(path, (file) => (file === path ? run.inputs.scenario : project(file)));
+  const raw = resolveExtends(path, (file) => (file === path ? run.inputs.scenario : project(file)), locale);
   const parsed = parseScenario(raw, { locale });
   if (!parsed.success) {
     throw new Error(`${run.id} (${run.scenarioName}): ${C.invalidScenarioLabel()}\n${schemaIssueLines(parsed.error.issues, { locale }).join('\n')}`);

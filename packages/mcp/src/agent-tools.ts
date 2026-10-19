@@ -12,7 +12,7 @@
  * answer in English only (a RACI type, a scenario that is not an object): the engine refuses those
  * in the caller's language, with nothing written.
  */
-import type { Locale } from '@lila-modeler/engine/messages';
+import { messages, type Locale } from '@lila-modeler/engine/messages';
 import {
   annotateLilaElement,
   createLilaProject,
@@ -20,6 +20,7 @@ import {
   deleteLilaProcess,
   deleteLilaScenario,
   importLilaScenarioSheet,
+  isLilaPath,
   lilaProjectInventory,
   lilaRaciMatrix,
   lilaScenarioTemplate,
@@ -172,6 +173,7 @@ export function registerAgentTools(
         '(id, name, lane, the raw `responsibilities` and `cells`: role -> "R", "A, C"…). Like ' +
         '`lila process raci --json`.',
       inputSchema: z.object({ project: projectSchema, process: processSchema, locale: localeSchema }),
+      annotations: { readOnlyHint: true },
     },
     async ({ project, process, locale }): Promise<CallToolResult> => {
       try {
@@ -293,13 +295,17 @@ export function registerAgentTools(
         'repository of several processes, 1 otherwise) and its `processes`, each with `slug`, ' +
         '`name`, `processId`, `modelRevision`, `elements` (flow nodes), its `scenarios` (entry, ' +
         'name, revision, extends), its stored `runs` (id, scenario, start, replications and ' +
-        '`current`: false when the model or the scenario changed after the run) and its extended ' +
+        '`current`: false when the model or the scenario it ran changed after the run; a change in ' +
+        'only an `extends` parent does not count) and its extended ' +
         '`attributes` (the definitions `annotate_element` can fill in, with `appliesTo` and ' +
         '`options`; null when the model cannot be read back whole). Call it first on an existing ' +
         'file. Like `lila project show --json`.',
       inputSchema: z.object({ project: projectSchema, locale: localeSchema }),
+      annotations: { readOnlyHint: true },
     },
     async ({ project, locale }): Promise<CallToolResult> => {
+      // #645: a folder or an empty path is not a `.lila`; refused as `patch_scenario` refuses it.
+      if (!isLilaPath(project)) return failure('get_project', new Error(messages(localeOf(locale)).mcp.projectNotLila(project)));
       try {
         return textResult(await lilaProjectInventory({ file: project, locale: localeOf(locale) }));
       } catch (error) {
@@ -325,8 +331,10 @@ export function registerAgentTools(
         resolved: z.boolean().optional().describe('true: resolved through `extends`, with defaults. Default false: as stored.'),
         locale: localeSchema,
       }),
+      annotations: { readOnlyHint: true },
     },
     async ({ project, process, scenario, resolved, locale }): Promise<CallToolResult> => {
+      if (!isLilaPath(project)) return failure('get_scenario', new Error(messages(localeOf(locale)).mcp.projectNotLila(project)));
       try {
         return textResult(await lilaScenarioView({ file: project, process, scenario, resolved, locale: localeOf(locale) }));
       } catch (error) {

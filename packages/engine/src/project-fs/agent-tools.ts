@@ -415,8 +415,8 @@ async function openScenario(target: LilaTarget & { readonly scenario: string }):
   const path = lilaScenarioPath(lila, entry);
   const read = lilaScenarioReader(lila, (file) => JSON.parse(readFileSync(file, 'utf8')) as unknown, locale);
   const delta = lila.process.scenarios[entry] as Record<string, unknown>;
-  const resolved = resolveExtends(path, read);
-  const parent = typeof delta['extends'] === 'string' ? resolveExtends(resolveScenarioPath(path, delta['extends']), read) : null;
+  const resolved = resolveExtends(path, read, locale);
+  const parent = typeof delta['extends'] === 'string' ? resolveExtends(resolveScenarioPath(path, delta['extends']), read, locale) : null;
   const { ir } = await parseBpmn(lila.process.model.xml, { scenarios: Object.values(lila.process.scenarios) });
   return { lila, entry, delta, resolved, parent, ir };
 }
@@ -666,7 +666,7 @@ export function checkScenario(
   const { locale } = options;
   let merged: Record<string, unknown>;
   try {
-    merged = resolveExtends(path, read);
+    merged = resolveExtends(path, read, locale);
   } catch (error) {
     return { errors: [error instanceof Error ? error.message : String(error)], warnings: [] };
   }

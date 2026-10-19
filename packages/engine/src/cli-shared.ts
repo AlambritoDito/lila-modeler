@@ -101,7 +101,7 @@ export function loadResolvedScenario(
   locale: Locale = 'en',
 ): ResolvedScenario {
   const C = messages(locale).cli;
-  const raw = resolveExtends(file, read ?? ((path) => readJsonFile(path, locale)));
+  const raw = resolveExtends(file, read ?? ((path) => readJsonFile(path, locale)), locale);
   const parsed = parseScenario(raw, { locale });
   if (!parsed.success) {
     const lines = schemaIssueLines(parsed.error.issues, { locale }).join('\n');

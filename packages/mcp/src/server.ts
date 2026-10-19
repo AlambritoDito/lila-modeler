@@ -78,7 +78,7 @@ import { z } from 'zod';
 
 import { registerAgentTools } from './agent-tools.js';
 import { resolveScenarioInput, type ScenarioInput } from './scenario-input.js';
-import { detailSchema, runSummarySchema, summarizeComparison, summarizeRun, type Detail } from './result-summary.js';
+import { compareDetailSchema, detailSchema, runSummarySchema, summarizeComparison, summarizeRun, type Detail } from './result-summary.js';
 import { registerResourcesAndPrompts } from './resources.js';
 import { requestProgress, simulateInWorker, type RequestProgress } from './simulate-in-worker.js';
 
@@ -278,7 +278,7 @@ function scenarioResources(
 ): { resources: string[]; scenario: TargetingScenario } | { error: string } {
   try {
     const source = scenarioSource(file, lila, locale);
-    const raw = resolveExtends(source.path, source.read);
+    const raw = resolveExtends(source.path, source.read, locale);
     const parsed = parseScenario(raw, { locale });
     if (parsed.success) return { resources: resourceLines(parsed.data), scenario: parsed.data };
     // `$` para la raíz, igual que `schemaIssueLines` del motor: no es texto traducible.
@@ -394,8 +394,9 @@ async function runSimulation(
       { signal: progress.signal, onReplication: progress.report },
     );
     const result = resultWithBoundaryWarnings(simulated, modelValidation, scenarioProblems);
-    // A cancellation that arrives once the worker is done still saves nothing (docs/MCP.md). This is
-    // the only cut-off: past it, `saveTo`, `saveRun` and the log are written together.
+    // A cancellation that arrives once the worker is done, before this check, still saves nothing.
+    // This is the only cut-off: past it, `saveTo`, `saveRun` and the log are written together even
+    // if a cancellation arrives meanwhile (docs/MCP.md, «Progress and cancellation»).
     progress.signal?.throwIfAborted();
 
     if (saveTo !== undefined) writeJsonAtomic(saveTo, result, locale);
@@ -619,7 +620,7 @@ async function patchScenario(input: PatchScenarioInput, locale: Locale): Promise
 
   let patchedRaw: unknown;
   try {
-    patchedRaw = applyJsonPatch(base, patch);
+    patchedRaw = applyJsonPatch(base, patch, locale);
   } catch (error) {
     return fail(message(error));
   }
@@ -655,7 +656,7 @@ async function patchScenario(input: PatchScenarioInput, locale: Locale): Promise
   const saveToPath = absolutePath(saveTo);
   const extendsFromPath = absolutePath(extendsFrom ?? scenario);
   const relExtends = posix.relative(posix.dirname(saveToPath), extendsFromPath);
-  const delta = buildPatchDelta(patch, patchedRaw);
+  const delta = buildPatchDelta(patch, patchedRaw, locale);
 
   const candidate: Record<string, unknown> = { version: base.version, extends: relExtends, ...delta };
   candidate['name'] =
@@ -725,6 +726,7 @@ export function createServer(options: ServerOptions = {}): McpServer {
           .describe('Slug of the process when the .lila holds several; implicit when it holds one.'),
         locale: localeSchema,
       }),
+      annotations: { readOnlyHint: true },
     },
     async ({ path, xml, process, locale }): Promise<CallToolResult> => {
       const language = localeOf(locale);
@@ -768,6 +770,7 @@ export function createServer(options: ServerOptions = {}): McpServer {
           .describe('Path to a .json scenario, relative to the cwd; with a .lila, or a scenario name in it.'),
         locale: localeSchema,
       }),
+      annotations: { readOnlyHint: true },
     },
     async ({ path, xml, process, scenario, locale }): Promise<CallToolResult> => {
       const language = localeOf(locale);
@@ -882,7 +885,7 @@ export function createServer(options: ServerOptions = {}): McpServer {
           .boolean()
           .optional()
           .describe('Every row, like `lila compare --all`: the same as detail "full"; refused with detail "summary".'),
-        detail: detailSchema,
+        detail: compareDetailSchema,
         locale: localeSchema,
       }),
     },
@@ -1165,6 +1168,7 @@ export function createServer(options: ServerOptions = {}): McpServer {
           .describe('Slug of the process when the .lila holds several; implicit when it holds one.'),
         locale: localeSchema,
       }),
+      annotations: { readOnlyHint: true },
     },
     async ({ project, process, locale }): Promise<CallToolResult> => {
       const language = localeOf(locale);
