@@ -151,7 +151,7 @@ export async function shortRun(
     elements: { ...raw.elements, StartEvent_Pedido: { ...raw.elements.StartEvent_Pedido, triggerCount: 40 } },
   });
   const { ir } = await parseBpmn(xml);
-  const result = simulate(ir, { ...parsed, model: parsed.model as string, run: parsed.run! }, { log: false });
+  const result = simulate(ir, { ...parsed, run: parsed.run! }, { log: false });
   return storedRun({
     id,
     scenarioName,

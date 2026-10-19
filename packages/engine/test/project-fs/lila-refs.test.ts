@@ -73,8 +73,8 @@ afterEach(async () => {
 const OTHER = 'Task_Empacar';
 
 const DOCUMENTS = [
-  ['version 1 project', () => v1],
-  ['version 2 repository', () => v2],
+  ['version 1 project', () => v1, 1],
+  ['version 2 repository', () => v2, 2],
 ] as const;
 
 /** `slug`'s process of `document`. */
@@ -94,10 +94,12 @@ async function expectProcessUnchanged(after: ProcessDocument, before: ProcessDoc
 
 /**
  * The targeted process, rewritten by bpmn-moddle: every element but `OTHER` keeps its `lila:` as it
- * was (inventory) and its references in the same order (`readAnnotations`).
+ * was and in the same document order (the unsorted inventory), and its references read back the same
+ * (`readAnnotations`).
  */
 async function expectUntouchedElements(after: ProcessDocument, before: ProcessDocument): Promise<void> {
-  expect(untouched(lilaInventory(after.model.xml), OTHER)).toEqual(untouched(lilaInventory(before.model.xml), OTHER));
+  const inOrder = (xml: string): string[] => untouched(lilaInventory(xml, { sorted: false }), OTHER);
+  expect(inOrder(after.model.xml)).toEqual(inOrder(before.model.xml));
   const { [OTHER]: _other, ...rest } = await orderedReferences(after.model.xml);
   expect(rest).toEqual(EXPECTED_ORDERED);
   // The runs keep the model they ran on.
@@ -109,6 +111,12 @@ async function lilaOnDisk(document: ProjectDocument): Promise<string> {
   const file = join(dir, 'refs.lila');
   await writeLilaFile(file, document);
   return file;
+}
+
+/** The `version` of the manifest inside the `.lila` at `file`, read without the engine's decoder. */
+async function manifestVersion(file: string): Promise<unknown> {
+  const entries = unzipSync(new Uint8Array(await readFile(file)));
+  return (JSON.parse(strFromU8(entries['lila-project.json']!)) as { version?: unknown }).version;
 }
 
 async function reopen(file: string): Promise<ProjectDocument> {
@@ -135,10 +143,11 @@ function modelFolders(document: ProjectDocument): Record<string, string> {
   return Object.fromEntries(processes.map((p) => [`processes/${p.slug}`, p.model.xml]));
 }
 
-describe.each(DOCUMENTS)('path 2, folder: writeProjectFolder → readProjectFolder (%s)', (_label, document) => {
+describe.each(DOCUMENTS)('path 2, folder: writeProjectFolder → readProjectFolder (%s)', (_label, document, version) => {
   test('every model and run comes back with the same references, and the files on disk carry them', async () => {
     const original = document();
     await writeProjectFolder(dir, original);
+    expect((JSON.parse(await readFile(join(dir, 'lila-project.json'), 'utf8')) as { version: number }).version).toBe(version);
 
     // The files themselves: one `model.bpmn` per process, the XML as it was.
     const files = await modelFiles(dir);
@@ -156,17 +165,18 @@ describe.each(DOCUMENTS)('path 2, folder: writeProjectFolder → readProjectFold
   });
 });
 
-describe.each(DOCUMENTS)('path 3, archive on disk: writeLilaFile → readLilaFile (%s)', (_label, document) => {
+describe.each(DOCUMENTS)('path 3, archive on disk: writeLilaFile → readLilaFile (%s)', (_label, document, version) => {
   test('every model and run comes back with the same references, and the archive carries them', async () => {
     const original = document();
     const file = await lilaOnDisk(original);
 
     // The archive itself, read without the engine's decoder.
     const entries = unzipSync(new Uint8Array(await readFile(file)));
+    expect((JSON.parse(strFromU8(entries['lila-project.json']!)) as { version: number }).version).toBe(version);
     const models = Object.fromEntries(
       Object.entries(entries)
         .filter(([name]) => name === 'model.bpmn' || name.endsWith('/model.bpmn'))
-        .map(([name, bytes]) => [name.slice(0, -'/model.bpmn'.length).replace(/^model\.bpmn$/, ''), strFromU8(bytes)]),
+        .map(([name, bytes]) => [name === 'model.bpmn' ? '' : name.slice(0, -'/model.bpmn'.length), strFromU8(bytes)]),
     );
     expect(models).toEqual(modelFolders(original));
 
@@ -181,7 +191,7 @@ describe.each(DOCUMENTS)('path 3, archive on disk: writeLilaFile → readLilaFil
   });
 });
 
-describe.each(DOCUMENTS)('path 4, agent writes that do not target the annotated elements (%s)', (label, document) => {
+describe.each(DOCUMENTS)('path 4, agent writes that do not target the annotated elements (%s)', (label, document, version) => {
   /** The process the writes below target: the second one in the repository, the only one otherwise. */
   const target = (): string => (label === 'version 2 repository' ? SECOND_SLUG : 'pedido');
   const slugOption = (): { process?: string } => (label === 'version 2 repository' ? { process: SECOND_SLUG } : {});
@@ -208,6 +218,7 @@ describe.each(DOCUMENTS)('path 4, agent writes that do not target the annotated 
     expect(result).toMatchObject({ changed: true, written: true, process: target() });
 
     const reopened = await reopen(file);
+    expect(await manifestVersion(file)).toBe(version);
     await expectOnlyTargetChanged(reopened, original);
     // The write did land, on the element it named.
     expect((await orderedReferences(processOf(reopened, target()).model.xml))[OTHER]).toEqual({
@@ -224,6 +235,7 @@ describe.each(DOCUMENTS)('path 4, agent writes that do not target the annotated 
     await writeLilaScenario(lila, TO_BE, scenario);
 
     const reopened = await reopen(file);
+    expect(await manifestVersion(file)).toBe(version);
     expect(processOf(reopened, target()).scenarios[TO_BE]).toEqual(scenario);
     expect(inventories(reopened)).toEqual(inventories(original));
     for (const process of processesOf(original)) await expectProcessUnchanged(processOf(reopened, process.slug), process);
@@ -241,14 +253,22 @@ describe.each(DOCUMENTS)('path 4, agent writes that do not target the annotated 
     await saveLilaRun(lila, run);
 
     const reopened = await reopen(file);
-    const saved = processOf(reopened, target()).runs.map((r) => r.id);
-    expect(saved).toContain('run-saved');
+    expect(await manifestVersion(file)).toBe(version);
     // Every model and run that was there is unchanged, and the new run carries the references too.
     expect(inventories(reopened)).toEqual({ ...inventories(original), [`${target()}/runs/run-saved`]: lilaInventory(model.xml) });
     for (const process of processesOf(original)) {
       const after = processOf(reopened, process.slug);
+      if (process.slug !== target()) {
+        await expectProcessUnchanged(after, process);
+        continue;
+      }
       expect(after.model.xml).toBe(process.model.xml);
       expect(await orderedReferences(after.model.xml)).toEqual(EXPECTED_ORDERED);
+      // The runs that were there keep their model text; the new one is the model it ran on.
+      const earlier = after.runs.filter((r) => r.id !== 'run-saved').map((r) => [r.id, r.inputs.xml]);
+      expect(earlier).toEqual(process.runs.map((r) => [r.id, r.inputs.xml]));
+      expect(after.runs.map((r) => r.id)).toEqual([...process.runs.map((r) => r.id), 'run-saved']);
+      expect(after.runs.at(-1)!.inputs.xml).toBe(model.xml);
     }
   });
 
@@ -259,8 +279,12 @@ describe.each(DOCUMENTS)('path 4, agent writes that do not target the annotated 
     expect(edited).toMatchObject({ dryRun: false, slug: target() });
 
     const reopened = await reopen(file);
+    expect(await manifestVersion(file)).toBe(version);
     expect(processOf(reopened, target()).model.xml).toContain('Pack the order');
     await expectOnlyTargetChanged(reopened, original);
+    // A rename adds no reference to the element it renames.
+    expect((await orderedReferences(processOf(reopened, target()).model.xml))[OTHER]).toBeUndefined();
+    expect(lilaInventory(processOf(reopened, target()).model.xml).filter((line) => line.startsWith(`${OTHER} `))).toEqual([]);
   });
 
   test('putLilaProcessBpmn adds a process: the existing ones are unchanged', async () => {
@@ -271,6 +295,7 @@ describe.each(DOCUMENTS)('path 4, agent writes that do not target the annotated 
     expect(added).toMatchObject({ mode: 'add', slug: 'credit' });
 
     const reopened = await reopen(file);
+    expect(await manifestVersion(file)).toBe(2);
     // A version 1 project is a repository after this write (ADR-029); its process moved, unchanged.
     expect(processesOf(reopened).map((p) => p.slug)).toEqual([...processesOf(original).map((p) => p.slug), 'credit']);
     for (const process of processesOf(original)) await expectProcessUnchanged(processOf(reopened, process.slug), process);
@@ -290,6 +315,7 @@ describe('path 4, agent writes that do not target the annotated elements (versio
     expect(replaced).toMatchObject({ mode: 'replace', slug: SECOND_SLUG });
 
     const reopened = await reopen(file);
+    expect(await manifestVersion(file)).toBe(2);
     const [first, second] = processesOf(original);
     await expectProcessUnchanged(processOf(reopened, first!.slug), first!);
     await expectUntouchedElements(processOf(reopened, SECOND_SLUG), second!);

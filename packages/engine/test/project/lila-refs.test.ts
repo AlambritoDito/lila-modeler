@@ -4,6 +4,7 @@
  * and a second encode gives the same bytes. The folder, the archive on disk and the agent writes
  * are in `test/project-fs/lila-refs.test.ts`.
  */
+import { strFromU8, unzipSync } from 'fflate';
 import { beforeAll, describe, expect, test } from 'vitest';
 
 import { decodeLila, encodeLila, lilaEntryNames, processesOf } from '../../src/project/index.js';
@@ -48,13 +49,16 @@ describe('the fixture', () => {
 });
 
 describe.each([
-  ['version 1 project', () => v1, ['lila-project.json', 'model.bpmn']],
-  ['version 2 repository', () => v2, ['lila-project.json', 'processes/pedido/model.bpmn', `processes/${SECOND_SLUG}/model.bpmn`]],
-] as const)('decodeLila(encodeLila(…)): %s', (_label, document, entries) => {
+  ['version 1 project', () => v1, 1, ['lila-project.json', 'model.bpmn']],
+  ['version 2 repository', () => v2, 2, ['lila-project.json', 'processes/pedido/model.bpmn', `processes/${SECOND_SLUG}/model.bpmn`]],
+] as const)('decodeLila(encodeLila(…)): %s', (_label, document, version, entries) => {
   test('every model and every run keeps the same references, byte for byte', async () => {
     const original = document();
     const bytes = encodeLila(original);
-    for (const entry of entries) expect(lilaEntryNames(bytes)).toContain(entry);
+    // Exactly the layout of that version: its manifest, and one model per process where it belongs.
+    const manifest = JSON.parse(strFromU8(unzipSync(bytes)['lila-project.json']!)) as { version: number };
+    expect(manifest.version).toBe(version);
+    expect(lilaEntryNames(bytes).filter((name) => name === 'lila-project.json' || name.endsWith('model.bpmn'))).toEqual(entries);
     const reopened = decodeLila(bytes);
 
     expect(reopened.problems).toBeUndefined();
