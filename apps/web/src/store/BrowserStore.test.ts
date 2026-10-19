@@ -12,7 +12,7 @@
  * full quota leaves the store working in memory.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { decodeLila, encodeLila } from '@lila-modeler/engine/project';
+import { decodeLila, decodeLilaArchive, encodeLila, lilaEntryNames, withCatalog } from '@lila-modeler/engine/project';
 import { es } from '../strings.es';
 import { getPreferencia, setLocale } from '../i18n';
 import { BrowserStore } from './BrowserStore';
@@ -267,6 +267,41 @@ describe('BrowserStore', () => {
       } finally {
         setLocale(previa);
       }
+    });
+
+    it('a version 3 .lila (#92): opened, saved and recovered keeps every catalog object; the file keeps notes.md', async () => {
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+      // In catalog order (type, then id), which is how a `.lila` is read back.
+      const catalog = [
+        { type: 'document', id: 'document-x9d2k7m4q1wa', name: 'Check-in form', revision: 1, url: 'https://example.org/check-in' },
+        { type: 'risk', id: 'risk-c5n2v8b1x7qa', name: 'No-show', revision: 1 },
+        { type: 'role', id: 'role-7k2m9q4x1pzd', name: 'Receptionist', revision: 1, unitRef: 'unit-b3r8w1c6k0qe' },
+        { type: 'system', id: 'system-m4q8w2k6z1rd', name: 'Booking system', revision: 1 },
+        { type: 'unit', id: 'unit-b3r8w1c6k0qe', name: 'Front office', revision: 1 },
+      ];
+      const v3 = withCatalog(DOC, catalog);
+      const notas = new TextEncoder().encode('# Notes\n');
+      const bytes = encodeLila(v3, { entries: { 'notes.md': notas }, objects: {}, slugs: [] });
+
+      const store = new BrowserStore();
+      const promesa = store.openProject();
+      elegirArchivo(new File([bytes], 'Hotel.lila'));
+      const abierto = (await promesa)!;
+      expect(abierto.formatVersion).toBe(3);
+      expect(abierto.catalog).toEqual(catalog);
+
+      await store.saveProject(abierto);
+      const blob = (URL.createObjectURL as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as Blob;
+      const guardado = new Uint8Array(await blob.arrayBuffer());
+      // Saving to a file writes back what this version does not interpret, byte for byte.
+      expect([...decodeLilaArchive(guardado).preserved.entries['notes.md']!]).toEqual([...notas]);
+      expect(lilaEntryNames(guardado).filter((n) => n.startsWith('catalog/'))).toHaveLength(5);
+      // The `localStorage` mirror carries the catalog, never the bytes of notes.md.
+      expect(localStorage.getItem('lila.project.v1')).not.toContain('# Notes');
+      const recuperado = new BrowserStore().restoreSession();
+      expect(recuperado?.catalog).toEqual(catalog);
+      expect(recuperado?.formatVersion).toBe(3);
+      expect(recuperado?.process?.id).toBe(v3.process?.id);
     });
 
     it('openProject sigue abriendo el .lila.json de antes de ADR-027', async () => {

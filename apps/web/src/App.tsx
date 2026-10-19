@@ -16,8 +16,8 @@ import { resolveExtends, resolveScenarioPath, type ResolvedScenario } from '@lil
 import { compare } from '@lila-modeler/engine';
 import { CompareView } from './CompareView';
 import { runMetaFrom } from './compareWarnings';
-import { changeToken, defaultElement, defaultScenarios, documentToken, escenariosDelProyecto, MODELO_PROYECTO, newModelXml, nextScenarioRevisions, procesoDelProyecto, projectStore, proyectoDeSuelto, readLila, readProject, repositoryToken, tokenPart } from './project';
-import { encodeLila, isCurrentRun, processesOf, processIds, processSlug, storedRun, withProcesses, type ProcessDocument } from '@lila-modeler/engine/project';
+import { changeToken, defaultElement, defaultScenarios, documentToken, encodeProject, escenariosDelProyecto, MODELO_PROYECTO, newModelXml, nextScenarioRevisions, procesoDelProyecto, projectStore, proyectoDeSuelto, readLila, readProject, repositoryToken, tokenPart, tomarAvisoRecuperacion } from './project';
+import { isCurrentRun, newProcessId, processesOf, processIds, processSlug, storedRun, withProcesses, type ProcessDocument } from '@lila-modeler/engine/project';
 import { PestanasProcesos } from './PestanasProcesos';
 import type { ProcessIR, SimulationProgress } from '@lila-modeler/engine';
 import { Lienzo, type Alineacion, type EstadoLienzo, type EventoLienzo, type Modelador, type Servicios } from './Modeler';
@@ -562,6 +562,17 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const slugsOcupados = (): string[] => [...(adapter?.occupiedSlugs?.() ?? []), ...slugsBorrados.current];
   /** The slugs the project lists on disk, as last opened or saved: `processes/<slug>/` of its own (#517). */
   const slugsEnDisco = useRef(new Set<string>());
+  /**
+   * #92: what the opened document holds beyond its processes — the version 3 mark, the catalog and
+   * the manifest's `limits` — carried unchanged into every snapshot, so a save, the autosave and
+   * the browser mirror keep them. There is no catalog editor yet (#674).
+   */
+  const extrasDelRepositorio = useRef<Pick<ProjectDocument, 'formatVersion' | 'catalog' | 'limits'>>({});
+  /**
+   * #92: the process id of each slug of a version 3 document, for the processes added in this
+   * session: chosen once, so two saves (or a save and an autosave) write the same id.
+   */
+  const idsDeProceso = useRef(new Map<string, string>());
   /** #461: the slug of the process a call activity was opened from, for «Back to …». */
   const [origen, setOrigen] = useState<string | null>(null);
   /** #461: a double-click on a call activity that calls nothing here; a notice, not an error. */
@@ -914,7 +925,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     // folder) the day it grows it takes a free one, never the folder of a process deleted before
     // (QA of #511).
     const propio = yo !== undefined && (procesos.length > 1 || slugsEnDisco.current.has(yo.slug) || !slugsOcupados().includes(yo.slug));
-    return { slug: propio ? yo.slug : processSlug(yo?.name ?? projectName, slugsOcupados()), name: yo?.name ?? projectName,
+    return { ...(yo?.id !== undefined ? { id: yo.id } : {}), slug: propio ? yo.slug : processSlug(yo?.name ?? projectName, slugsOcupados()), name: yo?.name ?? projectName,
       model: { id: parsed.ir.id, name: archivo, xml, revision: atRevision },
       scenarios: escenarios, scenarioRevisions, runs };
   }
@@ -929,10 +940,20 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     const actual = await procesoActual();
     const doc: ProjectDocument = { version: 1, id: projectId, name: projectName,
       model: actual.model, scenarios: actual.scenarios, scenarioRevisions: actual.scenarioRevisions, runs: actual.runs,
+      ...extrasDelRepositorio.current,
       ...(projectProblems.length ? { problems: projectProblems } : {}) };
-    // #498: every process of the repository, the canvas one read back live.
+    // #498: every process of the repository, the canvas one read back live. A version 3 document
+    // (#92) keeps its process list, and its process ids, even with a single process.
+    const v3 = extrasDelRepositorio.current.formatVersion === 3;
+    const conId = (p: ProcessDocument): ProcessDocument => {
+      if (!v3 || p.id !== undefined) return p;
+      const id = idsDeProceso.current.get(p.slug) ?? newProcessId();
+      idsDeProceso.current.set(p.slug, id);
+      return { ...p, id };
+    };
+    const lista = procesos.length > 0 ? procesos.map((p, i) => (i === activo ? actual : p)) : [actual];
     return {
-      doc: procesos.length > 1 ? withProcesses(doc, procesos.map((p, i) => (i === activo ? actual : p))) : doc,
+      doc: procesos.length > 1 || v3 ? withProcesses(doc, lista.map(conId)) : doc,
       revision: actual.model.revision,
     };
   }
@@ -965,7 +986,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // «Guardado» y la guardia de cierre dejaba salir sin escribirlo (LILA-208, hallazgo 2 del QA).
       // A loose diagram that grew a second process (#498) is saved whole, as a new destination
       // (`DesktopStore`): it is no longer a diagram-only save.
-      const repositorio = (leido.processes?.length ?? 0) > 0;
+      const repositorio = (leido.processes?.length ?? 0) > 0 || leido.formatVersion === 3;
       // #613: saved as a project, a loose diagram becomes its `model.bpmn` (`proyectoDeSuelto`).
       const deSuelto = suelto && (saveAs || repositorio);
       const doc = deSuelto ? proyectoDeSuelto(leido) : leido;
@@ -1010,9 +1031,18 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     setProcesos(lista); setActivo(0); setOrigen(null); setAvisoLlamada(null);
     slugsBorrados.current.clear();
     setProjectProblems(doc.problems ?? []);
+    extrasDelRepositorio.current = {
+      ...(doc.formatVersion !== undefined ? { formatVersion: doc.formatVersion } : {}),
+      ...(doc.catalog !== undefined ? { catalog: doc.catalog } : {}),
+      ...(doc.limits !== undefined ? { limits: doc.limits } : {}),
+    };
+    idsDeProceso.current.clear();
     setSuelto(doc.loose === true);
     setCambioExterno(false); // A notice about the project being left, or the one just reloaded.
-    if (doc.problems?.length) setIoError(doc.problems.map((p) => S.app.problemaDeArchivo(p.file, p.message)).join(' · '));
+    // #92: a `.lila` read with entries this version does not interpret says, once, that the
+    // browser's automatic recovery will not carry them (owner decision 4 of #127).
+    const avisos = [...(doc.problems ?? []).map((p) => S.app.problemaDeArchivo(p.file, p.message)), ...[tomarAvisoRecuperacion(doc.id)].filter((a) => a !== null)];
+    if (avisos.length) setIoError(avisos.join(' · '));
     setProjectId(doc.id); setProjectName(doc.name); setProcesoId(doc.model.id); setArchivo(doc.model.name);
     // Una carpeta sin `*.scenario.json` —un `.bpmn` suelto abierto por doble clic (LILA-072), o
     // una carpeta con el modelo puesto a mano— arranca con el AS-IS por defecto, el mismo de
@@ -1168,7 +1198,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // #511, nit 8): wait for it instead of copying process B's diagram into process A's slot.
       if (ioLock.current) { autoguardado.current = setTimeout(copiar, 500); return; }
       autoguardado.current = null;
-      void snapshotRef.current().then((doc) => window.lila?.writeRecovery?.(encodeLila(doc))).catch(() => {});
+      void snapshotRef.current().then((doc) => window.lila?.writeRecovery?.(encodeProject(doc))).catch(() => {});
     };
     autoguardado.current = setTimeout(copiar, AUTOGUARDADO_MS);
   }, [currentToken, dirty, modelador]);

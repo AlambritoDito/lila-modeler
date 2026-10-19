@@ -288,6 +288,12 @@ export const en = {
       `The recovery copy of the last session could not be opened and was discarded: ${mensaje}`,
     errorEscenarioDesconocido: (ruta: string): string => `unknown scenario: ${ruta}`,
     problemaDeArchivo: (archivo: string, mensaje: string): string => `${archivo}: ${mensaje}`,
+    /**
+     * #92 (owner decision 4 of #127): a `.lila` opened in the browser kept entries this version does
+     * not interpret. Saving to a file writes them back; the `localStorage` recovery copy cannot.
+     */
+    avisoEntradasSinRecuperacion: (archivos: string): string =>
+      `This file holds entries Lila does not interpret (${archivos}). They are kept when you save to a file, but this browser\u2019s automatic recovery will not include them.`,
   },
 
   /* ------------------------------------------------------------------ *

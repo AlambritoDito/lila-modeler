@@ -16,10 +16,11 @@ somebody: one file to attach, download or double-click.
 
 A project can hold **several processes** (ADR-029, #498). With one, it is the version 1 layout
 below, unchanged; with two or more, it is a version 2 *repository* where each process keeps that
-same layout under `processes/<slug>/` (see [Version 2](#version-2-the-repository)). The rest of
-ADR-029 — catalog objects, maps, attachments, a per-object store — is not part of the format yet;
-the [organizational roadmap](ROADMAP.md) says in what order it is planned, and [the repository
-contract](REPOSITORY_CONTRACT.md) defines version 3.
+same layout under `processes/<slug>/` (see [Version 2](#version-2-the-repository)). A repository
+with catalog objects — roles, units, systems and documents — is version 3 (see
+[Version 3](#version-3-the-catalog)), as [the repository contract](REPOSITORY_CONTRACT.md) defines
+it. The rest of ADR-029 — maps, attachments, a per-object store — is not part of the format yet; the
+[organizational roadmap](ROADMAP.md) says in what order it is planned.
 
 ## Layout
 
@@ -111,15 +112,92 @@ processes/<slug>/runs/<id>.result.json
 - **Scenarios and runs are per process.** The simulation runs one process at a time — the one on
   the canvas — and a call activity is still a task with a time of its own; double-clicking one opens
   the process whose BPMN process id is its `calledElement`.
-- **In the `.lila`**, anything outside the listed `processes/<slug>/` folders is reported and
-  dropped, exactly like a stray file in a version 1 archive; a listed process without its
-  `model.bpmn` is fatal (`LILA-NO-MODEL`).
+- **In the `.lila`**, anything outside the listed `processes/<slug>/` folders is reported and kept,
+  exactly like a stray file in a version 1 archive (see [What is tolerated](#what-is-tolerated-and-what-is-not));
+  a listed process without its `model.bpmn` is fatal (`LILA-NO-MODEL`).
+
+## Version 3: the catalog
+
+A repository with catalog objects is written as version 3 ([the repository
+contract](REPOSITORY_CONTRACT.md) § 1–2, ADR-032). It is the version 2 layout plus one JSON file per
+object, and an id for each process in the manifest:
+
+```
+lila-project.json              manifest, "version": 3
+processes/<slug>/…             as in version 2
+catalog/<type>/<id>.json       one file per catalog object
+```
+
+```json
+{
+  "version": 3,
+  "id": "e2a1…",
+  "name": "Hotel",
+  "processes": [
+    { "id": "process-4k9w2m7q1z8c", "slug": "front-desk", "name": "Front desk",
+      "model": { "id": "Process_FrontDesk", "name": "model.bpmn", "revision": 2 },
+      "scenarioRevisions": { "as-is.scenario.json": 1 } }
+  ],
+  "engine": "1.0.0"
+}
+```
+
+```json
+{
+  "type": "role",
+  "id": "role-7k2m9q4x1pzd",
+  "name": "Receptionist",
+  "description": "Welcomes guests.",
+  "revision": 2,
+  "unitRef": "unit-b3r8w1c6k0qe"
+}
+```
+
+- **Objects.** Every object has `type`, `id`, `name` (not empty), `revision` (an integer, at least 1)
+  and optionally `description` and `attributes` (a list of `{ "name", "value" }` text pairs). The
+  types of this version are `role` (`unitRef`), `unit` (`parentRef`), `system` (`ownerRef`, `url`)
+  and `document` (`ownerRef`, `url`); a `url` is an `http`/`https` address that is shown as a link
+  and never fetched. Attachments are not part of this version. Fields this version does not know
+  are kept, in their order. Objects of a type it does not know (`risk`, `control`, `kpi`…) are read
+  with their envelope only, as read-only objects, and their files are written back as they were.
+  A file is written with two-space indentation and a final newline; an object nobody changed keeps
+  the bytes it was read with.
+- **Ids.** A new object's id is `<type>-<12 characters of [0-9a-z]>`, random; every id matches
+  `^[a-z0-9][a-z0-9-]{0,63}$`, never changes and never comes from the name. A reference typed by
+  hand before the catalog existed (`rol-1`) can become an object with that very id when it matches
+  the grammar and is not a name Windows refuses (`con`, `nul`…). Ids are unique across the whole
+  catalog; the same id under two types (a hand edit, a merge) loads both and is reported.
+- **Process ids.** Each process of a version 3 manifest has an `id`, `process-<12 characters of
+  [0-9a-z]>`: its storage identity in the repository. A version 1 or 2 project gets fresh ones when
+  it becomes version 3; they are written only in a version 3 manifest. `--process` (`process` in the
+  MCP tools) still takes the slug.
+- **Version 3 is written when it is needed, and then it stays.** The first catalog object makes the
+  project version 3; removing the last one keeps it version 3, with its process ids. A version 3
+  project with a single process stays in `processes/<slug>/` instead of going back to version 1, so
+  its slug never changes under an agent. A catalog object or a reserved name (below) found in a
+  version 1 or 2 archive — added by hand or by another tool — is read, and the next save writes
+  version 3.
+- **A broken object** — not JSON, a required field missing, or a `type`/`id` that disagrees with
+  its path — is excluded and explained in `problems`, and kept byte for byte: other objects may
+  point at it, and fixing it by hand must not cost it.
+- **`limits`**, the manifest's optional attachment limits, are written back as found; an invalid
+  member is reported in `problems`.
+- **Older builds refuse it cleanly**: 1.0.0-beta.15 up to beta.28 with `LILA-MANIFEST` («declares
+  version 3»), and the builds that only read version 1 with «no model.bpmn».
+- **Only as a `.lila` for now.** The folder form of version 3 is not written yet (#671): the folder
+  reader refuses a version 3 manifest (`E-MANIFEST`) and the desktop refuses to save a version 3
+  project as a folder (`E-DOCUMENTO`) instead of dropping its catalog.
+
+Entries are written manifest, processes (as in version 2), catalog objects sorted by type and then
+id, and last the entries kept as they were (below) sorted by name, with the same fixed timestamp:
+two saves of the same repository are still the same bytes.
 
 ## Versioning
 
-`version` is `1` or `2`. Changes to this format may only **add optional fields**; anything that
+`version` is `1`, `2` or `3`. Changes to this format may only **add optional fields**; anything that
 would make a reader misread a file takes a new `version`, and the reader refuses it instead of
-guessing — the current reader refuses a version 3 with `LILA-MANIFEST` (in the folder, `E-MANIFEST`).
+guessing — the current reader refuses a version 4 with `LILA-MANIFEST`, and the folder reader still
+refuses version 3 with `E-MANIFEST` until it learns it (#671).
 There is no migration step and none is planned: the files are on the user's disk, not in a database
 anybody controls.
 
@@ -139,13 +217,37 @@ Opening is tolerant where the format is loose and strict where it is not:
 - Entries with `..` segments, absolute paths, drive letters or backslashes are **refused
   outright** — a zip that carries one is not a project that lost a file.
 
-**Anything not in the layout above is reported and dropped.** A `notes.md` or an `attachments/`
-folder inside a `.lila` shows up in `problems` when you open it and is not written back when you
-save. Preserving it would mean carrying opaque bytes through `structuredClone` (the desktop IPC
-boundary) and `JSON.stringify` (the browser's `localStorage` mirror), neither of which survives a
-`Uint8Array` honestly. In the **folder** form those files are simply left alone, because the
-writer only touches the files it owns — so the place to keep notes and attachments today is the
-folder, not the archive.
+**Anything not in the layout above is kept, not dropped**, in every version ([the repository
+contract](REPOSITORY_CONTRACT.md) § 1.4):
+
+- A `notes.md` inside a `.lila` shows up in `problems` as «not understood by this version; kept as
+  is», and every save writes it back byte for byte — the app's, the CLI's and the MCP server's.
+- The names reserved for later phases — `maps/`, `analysis/`, `dashboards/`, `records/`,
+  `attachments/` and `processes/<slug>/process.json` — are kept without a report, and make the
+  repository version 3.
+- Operating-system litter (`__MACOSX/`, `.DS_Store`, `Thumbs.db`) and the writers' own leftovers
+  (`*.tmp-*`, `*.prev-*`, `*.lock`) are dropped without a report.
+- The kept entries of a process deleted in the session leave with it, except when the project goes
+  back to version 1, which keeps them as the folder keeps an old `processes/` folder. Entries under
+  a `processes/<slug>/` the manifest does not list are an orphaned folder, and are kept.
+
+They are kept **beside** the document, never inside it: the document is what crosses the desktop
+IPC boundary (`structuredClone`) and goes into the browser's `localStorage` mirror
+(`JSON.stringify`), and neither carries bytes honestly. So:
+
+- **The engine, the CLI and the MCP server** write back the entries of the `.lila` they overwrite,
+  read inside its `.lila.lock` (`writeLilaFile`), so every agent write carries them.
+- **The desktop** does the same when it saves over the file it opened; «Save as» starts a new copy
+  without them. Its autosave copy (`recovery.lila`) does not hold them for a file the desktop opened:
+  they stay in that file.
+- **The web app** keeps them in memory for the file it opened and writes them on every save to a
+  file. The `localStorage` copy that brings the session back after a reload cannot hold them, so
+  opening such a file shows a warning that automatic recovery will not include them.
+- **The catalog** is part of the document, so it always travels: saves, autosave, recovery and every
+  agent write.
+
+In the **folder** form those files are simply left alone, as before, because the writer only touches
+the files it owns.
 
 ## MIME type and extension
 
@@ -161,10 +263,13 @@ mistake one for the other, since a Lila project starts with the ZIP magic `PK`.
 ## Where the code is
 
 `packages/engine/src/project/` — `types.ts` (the document contract), `document.ts` (structural
-validation, with stable error codes), `lila.ts` (`encodeLila`/`decodeLila` over `fflate`, and the
-version 2 manifest), `repository.ts` (`processesOf`/`withProcesses`, which fold the list of processes
+validation, with stable error codes), `lila.ts` (`encodeLila`/`decodeLila` over `fflate`, the
+version 2 and 3 manifests, and `decodeLilaArchive`, which also returns the entries kept beside the
+document), `repository.ts` (`processesOf`/`withProcesses`, which fold the list of processes
 into the document: its top-level fields are the first process, and `process`/`processes` carry the
-rest).
+rest), `catalog.ts` (catalog objects and ids: `newCatalogId`, `newProcessId`, `isCatalogId`,
+`isAdoptableId`) and `upgrade.ts` (`formatVersionOf`, `upgradesToVersion3`, `asVersion3`,
+`withCatalog`: which version a document is written as, and the one-way step to version 3).
 Published as `@lila-modeler/engine/project`, which stays browser-safe. The disk half is
 `packages/engine/src/project-fs/`, published as `@lila-modeler/engine/project-fs` (Node only, #466):
 the folder reader/writer `projectIO.ts`, the `.lila` file `lilaFile.ts`, and `input.ts`, which opens

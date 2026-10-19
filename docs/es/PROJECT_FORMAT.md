@@ -18,9 +18,11 @@ lo que se le pasa a alguien: un archivo que adjuntar, descargar o abrir con dobl
 Un proyecto puede tener **varios procesos** (ADR-029, #498). Con uno es la disposición de la
 versión 1 de abajo, sin cambios; con dos o más es un *repositorio* versión 2 en el que cada proceso
 conserva esa misma disposición dentro de `processes/<slug>/` (ver [Versión 2](#versión-2-el-repositorio)).
-El resto de la ADR-029 —objetos de catálogo, mapas, adjuntos, un almacén por objeto— todavía no
-forma parte del formato; el [roadmap organizacional](ROADMAP.md) dice en qué orden está planeado, y [el contrato del
-repositorio](REPOSITORY_CONTRACT.md) define la versión 3.
+Un repositorio con objetos de catálogo —roles, unidades, sistemas y documentos— es la versión 3 (ver
+[Versión 3](#versión-3-el-catálogo)), tal como la define [el contrato del
+repositorio](REPOSITORY_CONTRACT.md). El resto de la ADR-029 —mapas, adjuntos, un almacén por
+objeto— todavía no forma parte del formato; el [roadmap organizacional](ROADMAP.md) dice en qué orden
+está planeado.
 
 ## Disposición
 
@@ -115,15 +117,91 @@ processes/<slug>/runs/<id>.result.json
   del lienzo— y una actividad de llamada sigue siendo una tarea con su propio tiempo; hacer doble
   clic en una abre el proceso cuyo id de proceso BPMN es su `calledElement`.
 - **En el `.lila`**, lo que quede fuera de las carpetas `processes/<slug>/` listadas se avisa y se
-  descarta, igual que un archivo suelto en un archivo versión 1; un proceso listado sin su
-  `model.bpmn` es fatal (`LILA-NO-MODEL`).
+  conserva, igual que un archivo suelto en un archivo versión 1 (ver [Qué se tolera](#qué-se-tolera-y-qué-no));
+  un proceso listado sin su `model.bpmn` es fatal (`LILA-NO-MODEL`).
+
+## Versión 3: el catálogo
+
+Un repositorio con objetos de catálogo se escribe en la versión 3 ([el contrato del
+repositorio](REPOSITORY_CONTRACT.md) § 1–2, ADR-032). Es la disposición de la versión 2 más un archivo
+JSON por objeto, y un id para cada proceso del manifiesto:
+
+```
+lila-project.json              manifiesto, "version": 3
+processes/<slug>/…             como en la versión 2
+catalog/<tipo>/<id>.json       un archivo por objeto de catálogo
+```
+
+```json
+{
+  "version": 3,
+  "id": "e2a1…",
+  "name": "Hotel",
+  "processes": [
+    { "id": "process-4k9w2m7q1z8c", "slug": "front-desk", "name": "Front desk",
+      "model": { "id": "Process_FrontDesk", "name": "model.bpmn", "revision": 2 },
+      "scenarioRevisions": { "as-is.scenario.json": 1 } }
+  ],
+  "engine": "1.0.0"
+}
+```
+
+```json
+{
+  "type": "role",
+  "id": "role-7k2m9q4x1pzd",
+  "name": "Recepcionista",
+  "description": "Recibe a los huéspedes.",
+  "revision": 2,
+  "unitRef": "unit-b3r8w1c6k0qe"
+}
+```
+
+- **Objetos.** Todo objeto tiene `type`, `id`, `name` (no vacío), `revision` (un entero, al menos 1)
+  y, opcionalmente, `description` y `attributes` (una lista de pares de texto `{ "name", "value" }`).
+  Los tipos de esta versión son `role` (`unitRef`), `unit` (`parentRef`), `system` (`ownerRef`, `url`)
+  y `document` (`ownerRef`, `url`); una `url` es una dirección `http`/`https` que se muestra como
+  enlace y nunca se descarga. Los adjuntos no forman parte de esta versión. Los campos que esta
+  versión no conoce se conservan, en su orden. Los objetos de un tipo que no conoce (`risk`,
+  `control`, `kpi`…) se leen solo con su sobre, como objetos de solo lectura, y sus archivos se
+  vuelven a escribir tal como estaban. Un archivo se escribe con sangría de dos espacios y un salto
+  de línea final; un objeto que nadie cambió conserva los bytes con los que se leyó.
+- **Ids.** El id de un objeto nuevo es `<tipo>-<12 caracteres de [0-9a-z]>`, aleatorio; todo id
+  cumple `^[a-z0-9][a-z0-9-]{0,63}$`, nunca cambia y nunca sale del nombre. Una referencia escrita a
+  mano antes de que existiera el catálogo (`rol-1`) puede convertirse en un objeto con ese mismo id
+  si cumple la gramática y no es un nombre que Windows rechaza (`con`, `nul`…). Los ids son únicos en
+  todo el catálogo; el mismo id con dos tipos (una edición a mano, una fusión) carga los dos y se avisa.
+- **Ids de proceso.** Cada proceso de un manifiesto versión 3 tiene un `id`, `process-<12
+  caracteres de [0-9a-z]>`: su identidad de almacenamiento en el repositorio. Un proyecto versión 1
+  o 2 recibe ids nuevos cuando pasa a la versión 3; solo se escriben en un manifiesto versión 3.
+  `--process` (`process` en las herramientas MCP) sigue recibiendo el slug.
+- **La versión 3 se escribe cuando hace falta, y después se queda.** El primer objeto de catálogo
+  pasa el proyecto a la versión 3; quitar el último lo deja en la versión 3, con sus ids de proceso.
+  Un proyecto versión 3 con un solo proceso sigue en `processes/<slug>/` en vez de volver a la
+  versión 1, así que su slug no cambia nunca bajo un agente. Un objeto de catálogo o un nombre
+  reservado (abajo) que aparezca en un archivo versión 1 o 2 —añadido a mano o por otra
+  herramienta— se lee, y el siguiente guardado escribe la versión 3.
+- **Un objeto roto** —que no es JSON, al que le falta un campo obligatorio o cuyo `type`/`id` no
+  coincide con su ruta— se excluye y se explica en `problems`, y se conserva byte a byte: otros
+  objetos pueden apuntar a él, y arreglarlo a mano no debe costar perderlo.
+- **`limits`**, los límites opcionales de adjuntos del manifiesto, se vuelven a escribir tal como
+  estaban; un miembro inválido se avisa en `problems`.
+- **Las versiones anteriores la rechazan limpiamente**: de la 1.0.0-beta.15 a la beta.28 con
+  `LILA-MANIFEST` («declara la versión 3»), y las que solo leen la versión 1 con «falta model.bpmn».
+- **Por ahora, solo como `.lila`.** La forma de carpeta de la versión 3 todavía no se escribe
+  (#671): el lector de carpetas rechaza un manifiesto versión 3 (`E-MANIFEST`) y el escritorio se
+  niega a guardar un proyecto versión 3 como carpeta (`E-DOCUMENTO`) en vez de perder su catálogo.
+
+Las entradas se escriben manifiesto, procesos (como en la versión 2), objetos de catálogo ordenados
+por tipo y luego por id, y al final las entradas que se conservan tal como estaban (abajo) ordenadas
+por nombre, con la misma fecha fija: dos guardados del mismo repositorio siguen dando los mismos bytes.
 
 ## Versiones
 
-`version` es `1` o `2`. Los cambios a este formato solo pueden **añadir campos opcionales**; lo que
-haría que un lector interpretara mal un archivo lleva una `version` nueva, y el lector la rechaza en
-vez de adivinar: el lector actual rechaza una versión 3 con `LILA-MANIFEST` (en la carpeta,
-`E-MANIFEST`). No hay paso de migración ni está previsto: los archivos están en el disco del usuario,
+`version` es `1`, `2` o `3`. Los cambios a este formato solo pueden **añadir campos opcionales**; lo
+que haría que un lector interpretara mal un archivo lleva una `version` nueva, y el lector la rechaza
+en vez de adivinar: el lector actual rechaza una versión 4 con `LILA-MANIFEST`, y el lector de carpetas
+sigue rechazando la versión 3 con `E-MANIFEST` hasta que la aprenda (#671). No hay paso de migración ni está previsto: los archivos están en el disco del usuario,
 no en una base de datos que alguien controle.
 
 Una versión de la app que solo lee la versión 1 (hasta la 1.0.0-beta.14) rechaza limpiamente un
@@ -143,13 +221,40 @@ Abrir es tolerante donde el formato es flexible y estricto donde no lo es:
 - Las entradas con segmentos `..`, rutas absolutas, letras de unidad o barras invertidas se
   **rechazan sin más**: un zip que trae una no es un proyecto al que le falta un archivo.
 
-**Lo que no está en la disposición de arriba se avisa y se descarta.** Un `notes.md` o una carpeta
-`attachments/` dentro de un `.lila` aparecen en `problems` al abrirlo y no se vuelven a escribir al
-guardar. Conservarlos obligaría a llevar bytes opacos a través de `structuredClone` (la frontera IPC
-del escritorio) y de `JSON.stringify` (la copia en `localStorage` del navegador), y ninguno de los
-dos respeta un `Uint8Array` con honestidad. En la forma de **carpeta** esos archivos simplemente se
-dejan en paz, porque el escritor solo toca los archivos que son suyos; así que hoy el sitio para
-notas y adjuntos es la carpeta, no el archivo.
+**Lo que no está en la disposición de arriba se conserva, no se descarta**, en todas las versiones
+([el contrato del repositorio](REPOSITORY_CONTRACT.md) § 1.4):
+
+- Un `notes.md` dentro de un `.lila` aparece en `problems` como «not understood by this version;
+  kept as is» (esta versión no lo entiende y lo conserva tal cual), y todo guardado lo vuelve a
+  escribir byte a byte: el de la app, el de la CLI y el del servidor MCP.
+- Los nombres reservados para fases posteriores —`maps/`, `analysis/`, `dashboards/`, `records/`,
+  `attachments/` y `processes/<slug>/process.json`— se conservan sin avisar, y pasan el repositorio
+  a la versión 3.
+- La basura del sistema operativo (`__MACOSX/`, `.DS_Store`, `Thumbs.db`) y los restos de los propios
+  escritores (`*.tmp-*`, `*.prev-*`, `*.lock`) se descartan sin avisar.
+- Las entradas conservadas de un proceso borrado en la sesión se van con él, salvo cuando el
+  proyecto vuelve a la versión 1, que las conserva como la carpeta conserva una carpeta `processes/`
+  vieja. Las entradas bajo un `processes/<slug>/` que el manifiesto no lista son una carpeta
+  huérfana, y se conservan.
+
+Se conservan **junto al** documento, nunca dentro: el documento es lo que cruza la frontera IPC del
+escritorio (`structuredClone`) y va a la copia en `localStorage` del navegador (`JSON.stringify`), y
+ninguno de los dos lleva bytes con honestidad. Así que:
+
+- **El motor, la CLI y el servidor MCP** vuelven a escribir las entradas del `.lila` que
+  sobrescriben, leídas dentro de su `.lila.lock` (`writeLilaFile`), así que toda escritura de un
+  agente las conserva.
+- **El escritorio** hace lo mismo cuando guarda sobre el archivo que abrió; «Guardar como» empieza
+  una copia nueva sin ellas. Su copia de autoguardado (`recovery.lila`) no las tiene para un archivo
+  que abrió el escritorio: se quedan en ese archivo.
+- **La app web** las guarda en memoria para el archivo que abrió y las escribe en cada guardado a un
+  archivo. La copia en `localStorage` que recupera la sesión tras recargar no puede tenerlas, así que
+  al abrir un archivo así se muestra un aviso de que la recuperación automática no las incluirá.
+- **El catálogo** forma parte del documento, así que siempre viaja: guardados, autoguardado,
+  recuperación y toda escritura de un agente.
+
+En la forma de **carpeta** esos archivos simplemente se dejan en paz, como antes, porque el escritor
+solo toca los archivos que son suyos.
 
 ## Tipo MIME y extensión
 
@@ -165,10 +270,13 @@ puede confundir uno con otro, porque un proyecto de Lila empieza con la firma ZI
 ## Dónde está el código
 
 `packages/engine/src/project/`: `types.ts` (el contrato del documento), `document.ts` (validación
-estructural, con códigos de error estables), `lila.ts` (`encodeLila`/`decodeLila` sobre `fflate`, y
-el manifiesto de la versión 2), `repository.ts` (`processesOf`/`withProcesses`, que pliegan la lista
+estructural, con códigos de error estables), `lila.ts` (`encodeLila`/`decodeLila` sobre `fflate`, los
+manifiestos de las versiones 2 y 3, y `decodeLilaArchive`, que además devuelve las entradas que se
+conservan junto al documento), `repository.ts` (`processesOf`/`withProcesses`, que pliegan la lista
 de procesos en el documento: sus campos de primer nivel son el primer proceso, y `process`/`processes`
-llevan el resto). Se publica como `@lila-modeler/engine/project`, que sigue siendo apto para el navegador. La mitad de
+llevan el resto), `catalog.ts` (objetos de catálogo e ids: `newCatalogId`, `newProcessId`,
+`isCatalogId`, `isAdoptableId`) y `upgrade.ts` (`formatVersionOf`, `upgradesToVersion3`,
+`asVersion3`, `withCatalog`: en qué versión se escribe un documento, y el paso sin vuelta a la 3). Se publica como `@lila-modeler/engine/project`, que sigue siendo apto para el navegador. La mitad de
 disco es `packages/engine/src/project-fs/`, publicada como `@lila-modeler/engine/project-fs` (solo
 Node, #466): el lector/escritor de carpetas `projectIO.ts`, el archivo `.lila` `lilaFile.ts` e
 `input.ts`, que abre un proceso de un `.lila` para la CLI y el servidor MCP y escribe un escenario de

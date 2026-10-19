@@ -13,8 +13,8 @@ import type { ProcessDocument, ProjectDocument } from './types.js';
  */
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
-/** Names Windows refuses as a folder, whatever the extension. */
-const RESERVED = /^(con|prn|aux|nul|com\d|lpt\d)$/;
+/** Names Windows refuses as a folder, whatever the extension. Shared with `isAdoptableId` (`catalog.ts`). */
+export const RESERVED = /^(con|prn|aux|nul|com\d|lpt\d)$/;
 
 export function isProcessSlug(value: unknown): value is string {
   // Reserved Windows names (`con`, `nul`…) are accepted here on purpose: a repository written
@@ -53,6 +53,7 @@ export function processSlug(name: string, taken: Iterable<string> = []): string 
 export function processesOf(document: ProjectDocument): ProcessDocument[] {
   const rest = document.processes ?? [];
   const first: ProcessDocument = {
+    ...(document.process?.id !== undefined ? { id: document.process.id } : {}),
     slug: document.process?.slug ?? processSlug(document.name, rest.map((p) => p.slug)),
     name: document.process?.name ?? document.name,
     model: document.model,
@@ -72,6 +73,9 @@ export function processesOf(document: ProjectDocument): ProcessDocument[] {
  * that lists a single process keeps that process's slug and name in `process`, instead of being
  * read as a version 1 project whose process is named after the project. It still has no
  * `processes`, so saving it writes version 1, as any one-process project does.
+ *
+ * A version 3 document (`formatVersion: 3`, RM-01 § 1.3) never folds back: with a single process
+ * it keeps `process`, with the process id, because it is written as version 3 whatever it holds.
  */
 export function withProcesses(
   base: ProjectDocument,
@@ -88,9 +92,9 @@ export function withProcesses(
     scenarioRevisions: first.scenarioRevisions,
     runs: first.runs,
   };
-  const process = { slug: first.slug, name: first.name };
+  const process = { ...(first.id !== undefined ? { id: first.id } : {}), slug: first.slug, name: first.name };
   if (rest.length > 0) return { ...top, process, processes: rest };
-  return options.repository === true ? { ...top, process } : top;
+  return options.repository === true || base.formatVersion === 3 ? { ...top, process } : top;
 }
 
 /**

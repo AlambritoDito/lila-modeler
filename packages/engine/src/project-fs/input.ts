@@ -8,7 +8,7 @@
  * the archive's own path, mirroring the archive layout:
  *
  *   version 1:  /abs/pedido.lila/model.bpmn, /abs/pedido.lila/as-is.scenario.json
- *   version 2:  /abs/repo.lila/processes/<slug>/model.bpmn, …/<name>.scenario.json
+ *   version 2/3: /abs/repo.lila/processes/<slug>/model.bpmn, …/<name>.scenario.json
  *
  * so `"model": "model.bpmn"` and `"extends": "as-is.scenario.json"` resolve exactly as they do in
  * the project folder and in the web app, and the CLI's model-mismatch check needs no special case.
@@ -20,6 +20,7 @@ import { resolve } from 'node:path';
 import { messages, type Locale } from '../messages/index.js';
 import {
   decodeLila,
+  formatVersionOf,
   processesOf,
   processSlug,
   ProjectFormatError,
@@ -84,8 +85,9 @@ function absolute(file: string): string {
 }
 
 /**
- * `true` when the archive has the version 2 layout. A version 2 manifest that lists a single
- * process decodes with `process` and no `processes` (#517); a version 1 archive never has `process`.
+ * `true` when the archive has the version 2 or 3 layout (`processes/<slug>/`). A version 2 manifest
+ * that lists a single process decodes with `process` and no `processes` (#517), and so does a
+ * version 3 one; a version 1 archive never has `process`.
  */
 function isVersion2(document: ProjectDocument): boolean {
   return document.process !== undefined || (document.processes !== undefined && document.processes.length > 0);
@@ -96,10 +98,11 @@ function isVersion2(document: ProjectDocument): boolean {
  * project with a single process is written as version 1 (`encodeLila`, #517), whose process is
  * named after the project and lives at the archive's root, so a version 2 archive with a single
  * process gets a new slug on its first write; what a write reports has to name the process as it is
- * now. With several processes nothing moves.
+ * now. With several processes nothing moves, and nothing moves in a version 3 archive either: it
+ * never goes back to version 1 (RM-01 § 1.3).
  */
 export function lilaWritten(input: LilaProcess, written: ProjectDocument): { readonly slug: string; readonly root: string } {
-  if ((written.processes?.length ?? 0) > 0) return { slug: input.process.slug, root: `${input.file}/processes/${input.process.slug}/` };
+  if ((written.processes?.length ?? 0) > 0 || formatVersionOf(written) === 3) return { slug: input.process.slug, root: `${input.file}/processes/${input.process.slug}/` };
   return { slug: processSlug(written.name), root: `${input.file}/` };
 }
 
@@ -166,20 +169,20 @@ export async function openLilaProcess(
 
 /**
  * Every process of `file`, opened as `openLilaProcess` opens one, from a single read (#628): the
- * inventory of a project. `formatVersion` is the layout on disk: 2 for a repository
- * (`processes/<slug>/`), 1 otherwise.
+ * inventory of a project. `formatVersion` is the layout on disk: 3 for a repository with a
+ * catalog (RM-01), 2 for a repository (`processes/<slug>/`), 1 otherwise.
  */
 export async function openLilaProject(
   file: string,
   options: { locale?: Locale | undefined } = {},
-): Promise<{ readonly file: string; readonly document: ProjectDocument; readonly formatVersion: 1 | 2; readonly processes: readonly LilaProcess[] }> {
+): Promise<{ readonly file: string; readonly document: ProjectDocument; readonly formatVersion: 1 | 2 | 3; readonly processes: readonly LilaProcess[] }> {
   const read = await readLila(file, options.locale ?? 'en');
   const all = processesOf(read.document);
   const slugs = all.map((p) => p.slug);
   return {
     file: read.path,
     document: read.document,
-    formatVersion: isVersion2(read.document) ? 2 : 1,
+    formatVersion: formatVersionOf(read.document) === 3 ? 3 : isVersion2(read.document) ? 2 : 1,
     processes: all.map((p) => lilaProcessOf(read, p, slugs)),
   };
 }
@@ -333,7 +336,8 @@ export async function writeLilaProject(
  * The scenario's revision goes up by one, so the app sees the runs of the old version as stale.
  * Every other process, scenario and run is carried through unchanged; the archive is re-encoded
  * canonically (`encodeLila`), so an archive the app or the engine wrote keeps every other entry
- * byte for byte. Entries outside the project layout are dropped, as in any save of a `.lila`.
+ * byte for byte. Catalog objects and the entries this build does not interpret are written back
+ * as they are in the file (`writeLilaFile`, RM-01 § 8).
  * Returns the project as written.
  */
 export async function writeLilaScenario(

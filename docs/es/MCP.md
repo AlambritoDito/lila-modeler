@@ -199,8 +199,9 @@ de `patch_scenario`. Las reglas son las de la CLI (`docs/CLI.md`, «Un `.lila` c
   un temporal que luego se renombra sobre el `.lila`, así que un fallo nunca deja un archivo a
   medias. La revisión del escenario sube en uno, para que la app vea como desactualizadas las
   corridas de la versión anterior; un patch que no cambia nada no se escribe y deja la revisión como estaba. Los demás procesos, escenarios y corridas pasan sin cambios y,
-  en un archivo escrito por la app o el motor, byte a byte; las entradas que no son parte del
-  formato se descartan, como en cualquier guardado de un `.lila`. Si el archivo cambió en disco
+  en un archivo escrito por la app o el motor, byte a byte; los objetos de catálogo y las entradas
+  que esta versión no interpreta se vuelven a escribir tal como están en el archivo, como en
+  cualquier guardado de un `.lila` ([formato de proyecto](PROJECT_FORMAT.md#qué-se-tolera-y-qué-no)). Si el archivo cambió en disco
   mientras la tool trabajaba (otro programa, otro servidor MCP, la CLI o la app de escritorio), no se
   escribe nada y la tool falla: vuelve a llamarla. Quienes escriben el mismo `.lila` se turnan con un
   archivo de bloqueo junto a él (`<archivo>.lila.lock`, nunca dentro del archivo); si otro lo retiene más
@@ -223,8 +224,9 @@ de `patch_scenario`. Las reglas son las de la CLI (`docs/CLI.md`, «Un `.lila` c
 a byte como estaba. Llama primero a `get_project` sobre un archivo que ya existe, en vez de
 descubrir sus procesos, escenarios y corridas por los errores de otras tools.
 
-- **`get_project`** devuelve `{ file, name, formatVersion, processes }`. `formatVersion` es 2 para
-  un repositorio de varios procesos y 1 si no. Cada proceso trae `slug` (lo que recibe `process`),
+- **`get_project`** devuelve `{ file, name, formatVersion, processes }`. `formatVersion` es 3 para
+  un repositorio con catálogo ([formato de proyecto](PROJECT_FORMAT.md#versión-3-el-catálogo)), 2
+  para un repositorio de varios procesos y 1 si no. Cada proceso trae `slug` (lo que recibe `process`),
   `name`, `processId` (su `bpmn:process`), `modelRevision`, `elements` (nodos de flujo: tareas,
   eventos, compuertas; `null` si el modelo no se puede leer), `scenarios` (`entry`, `name`,
   `revision`, `extends`), `runs` (`id`, `scenario`, `start`, `replications`, `current`) y

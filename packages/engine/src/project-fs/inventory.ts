@@ -66,8 +66,8 @@ export interface LilaProcessSummary {
 export interface LilaProjectInventory {
   readonly file: string;
   readonly name: string;
-  /** The layout on disk: 2 for a repository (`processes/<slug>/`), 1 otherwise. */
-  readonly formatVersion: 1 | 2;
+  /** The layout on disk: 3 for a repository with a catalog (RM-01), 2 for a repository (`processes/<slug>/`), 1 otherwise. */
+  readonly formatVersion: 1 | 2 | 3;
   readonly processes: readonly LilaProcessSummary[];
 }
 

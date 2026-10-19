@@ -270,6 +270,8 @@ export const es: Strings = {
       `No se pudo abrir la copia de recuperación de la última sesión y se descartó: ${mensaje}`,
     errorEscenarioDesconocido: (ruta: string): string => `escenario desconocido: ${ruta}`,
     problemaDeArchivo: (archivo: string, mensaje: string): string => `${archivo}: ${mensaje}`,
+    avisoEntradasSinRecuperacion: (archivos: string): string =>
+      `Este archivo tiene entradas que Lila no interpreta (${archivos}). Se conservan al guardar en un archivo, pero la recuperación automática de este navegador no las incluirá.`,
   },
 
   /* ------------------------------------------------------------------ *

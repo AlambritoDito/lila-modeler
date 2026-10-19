@@ -10,9 +10,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Modelador } from './Modeler';
 import { parseBpmn } from '@lila-modeler/engine/bpmn';
 import { simulate } from '@lila-modeler/engine';
-import { decodeLila, encodeLila } from '@lila-modeler/engine/project';
+import { decodeLila, decodeLilaArchive, encodeLila, lilaEntryNames, withCatalog } from '@lila-modeler/engine/project';
 import { DesktopStore } from './store/DesktopStore';
-import { newModelXml, seedModelXml } from './project';
+import { encodeProject, newModelXml, readLila, seedModelXml } from './project';
 import type { ProjectDocument, ProjectSessionStore } from './store/ProjectStore';
 import { App, temaClaro } from './App';
 import { applyTheme } from './theme/applyTheme';
@@ -3299,6 +3299,81 @@ it('saving a restored copy goes through «Save as», never back to a file (#459)
   expect(container.textContent).toContain(T.app.guardado);
 });
 
+
+// ---------- repository version 3 and the entries kept beside the document (#92) ----------
+
+const RECEPCIONISTA = { type: 'role', id: 'role-7k2m9q4x1pzd', name: 'Receptionist', revision: 1 };
+/** `doc` as a `.lila` that also holds a `notes.md` this version does not interpret. */
+function conNotas(doc: ProjectDocument): Uint8Array {
+  return encodeLila(doc, { entries: { 'notes.md': new TextEncoder().encode('# Notes\n') }, objects: {}, slugs: [] });
+}
+const avisos = (texto: string): number => (container.textContent ?? '').split(texto).length - 1;
+
+it('a .lila with an entry Lila does not interpret warns once that browser recovery will not include it; saving keeps it (#92)', async () => {
+  const conEntradas = readLila(conNotas(proyecto('p20', 'Con notas') as ProjectDocument));
+  vi.mocked(session.openProject).mockResolvedValueOnce(conEntradas);
+  await click(T.app.abrir);
+  if (container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open === true) await click(T.app.descartar);
+  expect(container.textContent).toContain('Con notas');
+  expect(avisos(T.app.avisoEntradasSinRecuperacion('notes.md'))).toBe(1);
+
+  // Saving to a file is `encodeProject` of what the app hands the store: notes.md goes back as it was.
+  await click(T.app.guardar);
+  const guardado = vi.mocked(session.saveProject).mock.calls.at(-1)![0];
+  expect([...decodeLilaArchive(encodeProject(guardado)).preserved.entries['notes.md']!]).toEqual([...new TextEncoder().encode('# Notes\n')]);
+  // Saved: the banner is gone and nothing brings the warning back.
+  expect(avisos(T.app.avisoEntradasSinRecuperacion('notes.md'))).toBe(0);
+
+  // A file without such entries says nothing.
+  vi.mocked(session.openProject).mockResolvedValueOnce(readLila(encodeLila(proyecto('p21', 'Sin notas') as ProjectDocument)));
+  await click(T.app.abrir);
+  if (container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open === true) await click(T.app.descartar);
+  expect(container.textContent).toContain('Sin notas');
+  expect(container.textContent).not.toContain(T.app.avisoEntradasSinRecuperacion('notes.md'));
+});
+
+it('the recovery warning is in Spanish with the UI in Spanish (#92)', async () => {
+  Object.defineProperty(navigator, 'language', { value: 'es-MX', configurable: true });
+  try {
+    await remontar();
+    vi.mocked(session.openProject).mockResolvedValueOnce(readLila(conNotas(proyecto('p22', 'Con notas') as ProjectDocument)));
+    await click(ES.app.abrir);
+    if (container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open === true) await click(ES.app.descartar);
+    expect(avisos(ES.app.avisoEntradasSinRecuperacion('notes.md'))).toBe(1);
+    expect(container.textContent).not.toContain(T.app.avisoEntradasSinRecuperacion('notes.md'));
+  } finally {
+    delete (navigator as { language?: string }).language;
+  }
+});
+
+it('a version 3 project keeps its catalog, its version and its process id through a save (#92)', async () => {
+  const v3 = withCatalog(proyecto('p23', 'Recepción') as ProjectDocument, [RECEPCIONISTA]);
+  vi.mocked(session.openProject).mockResolvedValueOnce(readLila(encodeLila(v3)));
+  await click(T.app.abrir);
+  if (container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open === true) await click(T.app.descartar);
+  await click(T.app.guardar);
+  const guardado = vi.mocked(session.saveProject).mock.calls.at(-1)![0];
+  expect(guardado).toMatchObject({ formatVersion: 3, catalog: [RECEPCIONISTA], process: { id: v3.process!.id, slug: v3.process!.slug } });
+  expect(guardado.processes).toBeUndefined();
+  expect(lilaEntryNames(encodeLila(guardado))).toContain(`processes/${v3.process!.slug}/model.bpmn`);
+});
+
+it('the desktop autosave of a version 3 project carries its catalog (#92)', async () => {
+  const v3 = withCatalog(proyecto('p24', 'Recepción') as ProjectDocument, [RECEPCIONISTA]);
+  const puente = puenteRecuperacion(encodeLila(v3));
+  vi.useFakeTimers();
+  try {
+    await montar();
+    // The restored copy opens dirty, so the next copy follows 5 s later.
+    await act(async () => { await vi.advanceTimersByTimeAsync(5200); });
+    expect(puente.writeRecovery).toHaveBeenCalled();
+    const bytes = puente.writeRecovery.mock.calls.at(-1)![0] as Uint8Array;
+    expect(lilaEntryNames(bytes)).toContain(`catalog/role/${RECEPCIONISTA.id}.json`);
+    const copia = decodeLila(bytes);
+    expect(copia.catalog).toEqual([RECEPCIONISTA]);
+    expect(copia.process?.id).toBe(v3.process!.id);
+  } finally { vi.useRealTimers(); }
+});
 
 it('scopes Montana decoration to successfully applied built-in themes', async () => {
   const select = selectTema();

@@ -291,8 +291,8 @@ export function registerAgentTools(
     {
       title: 'Get project',
       description:
-        'What a .lila holds, read without writing anything: its name, `formatVersion` (2 for a ' +
-        'repository of several processes, 1 otherwise) and its `processes`, each with `slug`, ' +
+        'What a .lila holds, read without writing anything: its name, `formatVersion` (3 for a ' +
+        'repository with a catalog, 2 for a repository of several processes, 1 otherwise) and its `processes`, each with `slug`, ' +
         '`name`, `processId`, `modelRevision`, `elements` (flow nodes), its `scenarios` (entry, ' +
         'name, revision, extends), its stored `runs` (id, scenario, start, replications and ' +
         '`current`: false when the model or the scenario it ran changed after the run; a change in ' +
