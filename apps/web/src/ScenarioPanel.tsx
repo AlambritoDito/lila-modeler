@@ -479,11 +479,11 @@ export function ScenarioPanel({
    */
   const herencia = useMemo<{ resuelto: Record<string, unknown>; error: string | null }>(() => {
     try {
-      return { resuelto: resolveExtends(archivo, lector), error: null };
+      return { resuelto: resolveExtends(archivo, lector, locale), error: null };
     } catch (e) {
       return { resuelto: delta, error: e instanceof Error ? e.message : String(e) };
     }
-  }, [archivo, lector, delta]);
+  }, [archivo, lector, delta, locale]);
   const resuelto = herencia.resuelto;
 
   /** El padre resuelto, para saber si borrar un campo es `null` (§ 6) o quitarlo del hijo. */

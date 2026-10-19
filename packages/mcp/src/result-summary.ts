@@ -72,7 +72,7 @@ export interface RunSummary {
  */
 const LOOSE_NUMBER = /(?<![\w.-])\d+(?:[.,]\d+)?(?![\w])/g;
 
-/** `W-JOIN-BLOQUEADO: Join_1: …`: the code and the element (or pool, or flow) the warning is about. */
+/** A coded warning (`<code>: Join_1: …`): its code and the element (or pool, or flow) it is about. */
 const CODED = /^([EW]-[A-Z0-9-]+): ([^:]+?): /;
 
 /**

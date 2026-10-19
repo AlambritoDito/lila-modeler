@@ -124,7 +124,7 @@ describe('patchLilaScenario', () => {
     ['a result that does not validate', [{ op: 'replace', path: '/resources/cocinero/capacity', value: 0 }], /invalid scenario after the patch/],
     ['an unsupported operation', [{ op: 'move', path: '/resources/cocinero', from: '/resources/cajero' }], /move\/copy/],
     ['a failed test', [{ op: 'test', path: '/resources/cocinero/capacity', value: 9 }], /test/],
-    ['a path that does not exist', [{ op: 'remove', path: '/resources/nadie' }], /no existe la ruta/],
+    ['a path that does not exist', [{ op: 'remove', path: '/resources/nadie' }], /the path \/resources\/nadie does not exist/],
     ['removing run', [{ op: 'remove', path: '/run' }], /does not declare run/],
   ])('refuses %s and writes nothing', async (_label, patch, error) => {
     const bytes = readFileSync(file);
