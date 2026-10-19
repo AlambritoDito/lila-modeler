@@ -841,10 +841,10 @@ El resumen de `run_simulation` (`"detail": "summary"`):
 - `process`: tiempo de ciclo, espera, throughput, costo por caso y `byEndEvent`, como en el resultado completo;
 - `bottlenecks`, como en el resultado completo;
 - `resources`: por recurso, `utilization`, `resourceWaitTotal` (la espera por recurso, en segundos,
-  de los elementos que lo piden) y `totalCost`. Un elemento que pide dos recursos cuenta su espera
-  entera para cada uno, así que la misma espera aparece en los dos totales: en `examples/pedido`,
-  Cook y Oven muestran la misma cifra. Los totales de varios recursos no suman la espera del
-  proceso;
+  de cada elemento que lo nombra; con `selection: "or"`, de cada alternativa) y `totalCost`. Un
+  elemento que nombra dos recursos cuenta su espera entera para cada uno, así que la misma espera
+  aparece en los dos totales: en `examples/pedido` la espera de `Task_Preparar`, que necesita a Cook
+  y a Oven, está en los dos. Los totales de varios recursos no suman la espera del proceso;
 - `topWaits`: los cinco elementos que más esperan (espera por recurso más espera fuera de horario),
   con su `name`, `completed`, `resourceWaitMean`, `resourceWaitTotal`, `offHoursWaitMean` y
   `queueLengthMean`;
@@ -852,6 +852,8 @@ El resumen de `run_simulation` (`"detail": "summary"`):
   `completedReplications` como en el resultado completo;
 - `warnings` como `{ message, count }`: un aviso que cada replicación repite con otros números
   (`… (2941 veces)`, `… 1457 casos …`) sale una vez, con el primer mensaje y cuántas veces apareció.
+  Un aviso con código sale una vez por código y elemento (`W-JOIN-BLOQUEADO` de `Join_1`, haya
+  quedado un caso o varios); el resultado completo conserva todos los mensajes.
 
 El resumen de `compare_scenarios` conserva `{ comparison, notes }`: `comparison` trae `count`, las
 filas de alcance `process` y `resources`, toda otra fila marcada `significant` en algún escenario y

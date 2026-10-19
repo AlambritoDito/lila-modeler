@@ -34,16 +34,24 @@ const docsRoot = inCheckout ? new URL('../../../docs/', import.meta.url) : new U
 export const DOCS_URL = 'https://github.com/AlambritoDito/lila-modeler/blob/main/docs/';
 
 /**
- * `markdown` (the doc `file`) with its relative links made absolute GitHub links (#645): a client
- * that only has MCP cannot follow `SCENARIO_FORMAT.md` or `#saving-a-run`. Links with a scheme
- * (`https:`, `lila:`) stay as they are.
+ * `markdown` (the doc `file`) with its relative inline links made absolute GitHub links (#645): a
+ * client that only has MCP cannot follow `SCENARIO_FORMAT.md` or `#saving-a-run`. Links with a
+ * scheme (`https:`, `lila:`) and fenced code blocks stay as they are; links with a title and
+ * reference-style links are not rewritten (the served docs have none).
  */
 export function absoluteLinks(markdown: string, file: string): string {
-  return markdown.replace(/\]\(([^()\s]+)\)/g, (link, target: string) => {
-    if (/^[a-z][a-z0-9+.-]*:/i.test(target)) return link;
-    const resolved = target.startsWith('#') ? `${file}${target}` : posix.normalize(posix.join(posix.dirname(file), target));
-    return `](${new URL(resolved, DOCS_URL).href})`;
-  });
+  return markdown
+    .split(/(^```[\s\S]*?^```)/m)
+    .map((part, index) =>
+      index % 2 === 1
+        ? part
+        : part.replace(/\]\(([^()\s]+)\)/g, (link, target: string) => {
+            if (/^[a-z][a-z0-9+.-]*:/i.test(target)) return link;
+            const resolved = target.startsWith('#') ? `${file}${target}` : posix.normalize(posix.join(posix.dirname(file), target));
+            return `](${new URL(resolved, DOCS_URL).href})`;
+          }),
+    )
+    .join('');
 }
 
 function readDoc(file: DocFile): string {

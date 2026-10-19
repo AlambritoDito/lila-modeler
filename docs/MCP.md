@@ -814,10 +814,10 @@ The summary of `run_simulation` (`"detail": "summary"`):
 - `process`: cycle time, wait time, throughput, cost per case and `byEndEvent`, as in the full result;
 - `bottlenecks`, as in the full result;
 - `resources`: for each resource, `utilization`, `resourceWaitTotal` (the resource wait, in seconds,
-  of the elements that request it) and `totalCost`. An element that requests two resources counts
-  its whole wait for each of them, so the same wait shows in both totals: in `examples/pedido`,
-  Cook and Oven show the same figure. The totals of several resources do not add up to the
-  process wait;
+  of every element that lists it; with `selection: "or"`, of every alternative) and `totalCost`.
+  An element that lists two resources counts its whole wait for each of them, so the same wait
+  shows in both totals: in `examples/pedido` the wait of `Task_Preparar`, which needs Cook and
+  Oven, is in both. The totals of several resources do not add up to the process wait;
 - `topWaits`: the five elements that wait most (resource wait plus off-hours wait), with their
   `name`, `completed`, `resourceWaitMean`, `resourceWaitTotal`, `offHoursWaitMean` and
   `queueLengthMean`;
@@ -825,6 +825,8 @@ The summary of `run_simulation` (`"detail": "summary"`):
   `completedReplications` as in the full result;
 - `warnings` as `{ message, count }`: a warning that each replication repeats with other numbers
   (`… (2941 times)`, `… 1457 cases …`) comes once, with the first message and how many times it came up.
+  A coded warning comes once per code and element (`W-JOIN-BLOQUEADO` of `Join_1`, whether one case
+  or several were left); the full result keeps every message.
 
 The summary of `compare_scenarios` keeps `{ comparison, notes }`: `comparison` has `count`, the rows
 of scope `process` and `resources`, every other row marked `significant` for some scenario, and

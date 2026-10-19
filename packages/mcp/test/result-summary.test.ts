@@ -42,6 +42,14 @@ test('copies that differ only in loose numbers are one group; numbers inside an 
   ]);
 });
 
+test('a coded warning without a subject falls back to the loose-number rule', () => {
+  const seedless = (path: string): string => `W-SIN-SEED: ${messages('en').codes['W-SIN-SEED'](path)}`;
+  expect(groupWarnings([seedless('a.json'), seedless('a.json'), seedless('b.json')])).toEqual([
+    { message: seedless('a.json'), count: 2 },
+    { message: seedless('b.json'), count: 1 },
+  ]);
+});
+
 test('no warnings, no groups', () => {
   expect(groupWarnings([])).toEqual([]);
 });

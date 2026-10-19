@@ -1221,7 +1221,8 @@ function deepMerge(
  *   para que un `model` heredado de otro directorio siga apuntando al mismo `.bpmn`.
  * - Ciclos rechazados con error que cita los archivos implicados.
  * - El `extends` desaparece del resultado: ya está aplicado.
- * - Its own errors come in `locale` (#645); `read`'s are its own.
+ *
+ * Its own errors come in `locale` (#645); those of `read` are its own.
  */
 export function resolveExtends(path: string, read: ScenarioReader, locale: Locale = 'en'): Record<string, unknown> {
   const C = messages(locale).cli;

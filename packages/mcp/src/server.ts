@@ -394,8 +394,9 @@ async function runSimulation(
       { signal: progress.signal, onReplication: progress.report },
     );
     const result = resultWithBoundaryWarnings(simulated, modelValidation, scenarioProblems);
-    // A cancellation that arrives once the worker is done still saves nothing (docs/MCP.md). This is
-    // the only cut-off: past it, `saveTo`, `saveRun` and the log are written together.
+    // A cancellation that arrives once the worker is done, before this check, still saves nothing.
+    // This is the only cut-off: past it, `saveTo`, `saveRun` and the log are written together even
+    // if a cancellation arrives meanwhile (docs/MCP.md, «Progress and cancellation»).
     progress.signal?.throwIfAborted();
 
     if (saveTo !== undefined) writeJsonAtomic(saveTo, result, locale);

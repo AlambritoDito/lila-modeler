@@ -101,8 +101,9 @@ function navigate(
 }
 
 /**
- * Aplica el patch a una copia profunda de `target`; nunca muta el original. Errors come in
- * `locale` (#645).
+ * Aplica el patch a una copia profunda de `target`; nunca muta el original.
+ *
+ * Its errors come in `locale` (#645).
  */
 export function applyJsonPatch(target: unknown, patch: readonly JsonPatchOp[], locale: Locale = 'en'): unknown {
   const C = messages(locale).cli;

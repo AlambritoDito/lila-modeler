@@ -76,9 +76,11 @@ const LOOSE_NUMBER = /(?<![\w.-])\d+(?:[.,]\d+)?(?![\w])/g;
 const CODED = /^([EW]-[A-Z0-9-]+): ([^:]+?): /;
 
 /**
- * One entry per warning, in order of first appearance. A coded warning is one per code and subject
- * (#645: `1 case was` and `3 cases were` of one join are the same warning); any other, copies that
- * differ only in loose numbers count as one.
+ * One entry per warning, in order of first appearance, its first message standing for the group. A
+ * coded warning is one per code and subject (#645: `1 case was` and `3 cases were` of one join are
+ * the same warning), so two different texts of one code about one element count as one too; the
+ * full result keeps every text. Any other warning: copies that differ only in loose numbers count
+ * as one.
  */
 export function groupWarnings(warnings: readonly string[]): GroupedWarning[] {
   const groups = new Map<string, GroupedWarning>();
@@ -180,9 +182,9 @@ export const runSummarySchema = z.object({
   resources: z
     .record(z.string(), z.object({ utilization: z.number(), resourceWaitTotal: z.number(), totalCost: z.number() }))
     .describe(
-      'Per resource. resourceWaitTotal is the resource wait (seconds) of the elements that request it: an ' +
-        'element that requests two resources counts its whole wait for each, so the totals of two resources ' +
-        'can hold the same wait and do not add up to the process wait.',
+      'Per resource. resourceWaitTotal is the resource wait (seconds) of every element that lists it (with ' +
+        'selection "or", every alternative): an element that lists two resources counts its whole wait for ' +
+        'each, so the totals of two resources can hold the same wait and do not add up to the process wait.',
     ),
   topWaits: z.array(
     z.object({

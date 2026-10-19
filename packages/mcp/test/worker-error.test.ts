@@ -51,8 +51,8 @@ test('an engine error inside the worker rejects with its message', async () => {
   const error = await simulateInWorker({ ir, scenario, locale: 'en' }).catch((reason: unknown) => reason);
   expect(error).toBeInstanceOf(Error);
   // The engine's own message, posted by the worker, not the exit of a worker that died.
-  expect((error as Error).message).not.toBe('');
-  expect((error as Error).message).not.toMatch(/the simulation worker stopped/);
+  // The engine's TypeError on the missing nodes (V8: «Cannot convert undefined or null to object»).
+  expect((error as Error).message).toMatch(/undefined or null/);
 });
 
 test('run_simulation and compare_scenarios answer a worker error as isError, and the server keeps serving', async () => {

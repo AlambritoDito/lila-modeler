@@ -106,6 +106,8 @@ test('absoluteLinks() resolves relative links and anchors against the doc, and k
     `[a](${DOCS_URL}es/SCENARIO_FORMAT.md) [b](${DOCS_URL}es/MCP.md#saving-a-run) [c](${DOCS_URL}MCP.md#installation) ` +
       '[d](https://example.com/x) [e](lila://guide)',
   );
+  const fenced = '```md\n[x](MCP.md)\n```\n[y](MCP.md)';
+  expect(absoluteLinks(fenced, 'MCP.md')).toBe(`\`\`\`md\n[x](MCP.md)\n\`\`\`\n[y](${DOCS_URL}MCP.md)`);
 });
 
 test('every bundled doc exists', () => {
