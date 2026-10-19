@@ -125,9 +125,10 @@ the app uses:
   `--run` or `--scenario` without `--overlay`.
 - `lila export doc <project.lila> --out file.docx|file.html` writes the process document, as the
   app's «Export document»: diagram, descriptions in flow order, the scenario and the results of
-  a stored run. The HTML embeds the SVG diagram. The Word file has **no diagram**, and neither
-  format has the run's charts: Word needs a PNG and the engine has no rasteriser. A note on stderr
-  says what was left out.
+  a stored run. The HTML embeds the SVG diagram and the run's charts as SVG, the same as the app's
+  Results charts, except the cycle time histogram (a stored run keeps no per-case times). The
+  Word file has **no diagram and no charts**: Word needs a PNG and the engine has no rasteriser.
+  A note on stderr says what was left out.
 - `lila export results <project.lila> --out book.xlsx|directory` writes the results of a stored
   run: one `.xlsx` (Summary, Elements, Flows, Resources, Parameters), or with `--format csv`
   `elements.csv`, `flows.csv`, `resources.csv` and `process.csv` in the directory, the same files

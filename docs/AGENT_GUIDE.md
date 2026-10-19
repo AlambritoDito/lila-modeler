@@ -347,9 +347,10 @@ the same `.lila`.
 
 ## Known limits
 
-- **The Word document has no diagram** and neither document has the run's charts: Word needs a
-  PNG and the engine has no rasteriser. The HTML document has the diagram (SVG). `notes` in the
-  answer says what was left out. To give someone a picture, send the HTML or `export_diagram`.
+- **The Word document has no diagram and no charts**: Word needs a PNG and the engine has no
+  rasteriser. The HTML document has the diagram and the run's charts (SVG), except the cycle time
+  histogram, as a stored run keeps no per-case times. `notes` in the answer says what was left
+  out. To give someone a picture, send the HTML or `export_diagram`.
 - **Layout.** `create_process` and `edit_process` (by default) lay the process out with
   `bpmn-auto-layout` 1.3 plus Lila's lane fix. It is readable, not beautiful: lanes can be taller
   than needed, a gateway's name can sit on a flow leaving from below, crossings are not untangled,

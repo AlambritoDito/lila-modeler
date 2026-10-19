@@ -26,7 +26,9 @@
  * word/styles.xml               Normal, Title, heading 1/2 (outline levels 0/1), the two tables
  * word/document.xml             the blocks, A4 with 1-inch margins
  * word/media/diagram.png        the diagram, when there is one
- * word/media/chart-N.png        the charts of the run, rasterised by the host like the diagram
+ * word/media/chart-N.png        the charts of the run that come as PNG, rasterised by the host like
+ *                               the diagram; a chart given only as SVG (`chartsSvg`, #636) is in
+ *                               the HTML alone
  * ```
  *
  * ponytail: no table-of-contents field. A TOC field is empty until Word updates it, and
@@ -65,14 +67,26 @@ export interface ProcessDocument {
   readonly png?: Uint8Array;
   /** The diagram as an `<svg>` element (#538): used by `toHtml` before `png`, ignored by `toDocx`. */
   readonly svg?: string;
-  /** The charts of the run (#460), PNG only; `image` blocks point into it with `chart`. */
-  readonly charts?: readonly Uint8Array[];
+  /**
+   * The charts of the run (#460), each a PNG and/or SVG text (#636); `image` blocks point into it
+   * with `chart`. `toHtml` prefers the SVG; `toDocx` takes only the PNG and skips SVG-only charts.
+   */
+  readonly charts?: readonly DocumentChartImage[];
   readonly blocks: readonly DocBlock[];
 }
 
-/** A chart of the run the host already rasterised (#460), with the text a reader gets instead. */
-export interface DocumentChart {
-  readonly png: Uint8Array;
+/** A chart of the document: at least one of the two. */
+export interface DocumentChartImage {
+  readonly png?: Uint8Array;
+  /** A standalone `<svg>` element, e.g. from `chartsSvg` (#636). */
+  readonly svg?: string;
+}
+
+/**
+ * A chart of the run (#460), with the text a reader gets instead: a PNG the host already
+ * rasterised, or SVG text (`chartsSvg` of `charts.ts`, #636), or both.
+ */
+export interface DocumentChart extends DocumentChartImage {
   readonly alt: string;
 }
 
@@ -107,7 +121,8 @@ export interface ProcessDocumentInput {
   readonly result?: RunResult;
   /**
    * Charts of that run (#460), placed at the top of the results section in this order. Ignored
-   * without a `result`: no run, no charts. Bytes that are not a PNG are left out.
+   * without a `result`: no run, no charts. Bytes that are not a PNG are dropped, and a chart with
+   * neither a PNG nor an SVG is left out.
    */
   readonly charts?: readonly DocumentChart[];
 }
@@ -365,16 +380,18 @@ function build(input: ProcessDocumentInput, visit?: SectionVisitor): ProcessDocu
   else for (const [lane, ids] of lanes) if (lane === null || parents[lane] === undefined || !lanes.has(parents[lane])) emit(lane, ids);
 
   const { scenario, result } = input;
-  const charts: Uint8Array[] = [];
+  const charts: DocumentChartImage[] = [];
   if (scenario !== undefined) {
     blocks.push({ kind: 'heading', level: 1, text: C.docScenario(scenario.name) });
     blocks.push(tableOf(parametersSheet(ir, scenario, locale)));
     if (result !== undefined) {
       blocks.push({ kind: 'heading', level: 1, text: C.docResults() });
       for (const chart of input.charts ?? []) {
-        if (pngSize(chart.png) === null) continue;
+        const png = pngSize(chart.png) === null ? undefined : chart.png;
+        const svg = chart.svg;
+        if (png === undefined && svg === undefined) continue;
         blocks.push({ kind: 'image', alt: chart.alt, chart: charts.length });
-        charts.push(chart.png);
+        charts.push({ ...(png === undefined ? {} : { png }), ...(svg === undefined ? {} : { svg }) });
       }
       // Summary, Elements, Flows and Resources: the XLSX's own sheets (Parameters is above).
       for (const sheet of scenarioSheets(ir, scenario, result, resourceNamesOf(scenario), locale).slice(0, 4)) {
@@ -488,7 +505,7 @@ function documentXml(doc: ProcessDocument): string {
           return paragraph(`${block.label === undefined ? '' : run(`${block.label}: `, true)}${run(block.text)}`);
         case 'image': {
           if (block.chart === undefined) return size === null ? '' : imageXml(block.alt, size);
-          const chart = pngSize(doc.charts?.[block.chart]);
+          const chart = pngSize(doc.charts?.[block.chart]?.png);
           return chart === null
             ? ''
             : imageXml(block.alt, chart, { id: block.chart + 2, rid: chartRid(block.chart), file: `chart-${block.chart + 1}.png` });
@@ -567,7 +584,8 @@ export function toDocx(doc: ProcessDocument): Uint8Array {
         `<Relationship Id="rId1" Type="${R_NS}/styles" Target="styles.xml"/>` +
         (png === undefined ? '' : `<Relationship Id="rId2" Type="${R_NS}/image" Target="media/diagram.png"/>`) +
         (doc.charts ?? [])
-          .map((_, index) => `<Relationship Id="${chartRid(index)}" Type="${R_NS}/image" Target="media/chart-${index + 1}.png"/>`)
+          .map((chart, index) =>
+            pngSize(chart.png) === null ? '' : `<Relationship Id="${chartRid(index)}" Type="${R_NS}/image" Target="media/chart-${index + 1}.png"/>`)
           .join('') +
         '</Relationships>',
     ),
@@ -576,7 +594,8 @@ export function toDocx(doc: ProcessDocument): Uint8Array {
   };
   if (png !== undefined) files['word/media/diagram.png'] = png;
   (doc.charts ?? []).forEach((chart, index) => {
-    files[`word/media/chart-${index + 1}.png`] = chart;
+    if (chart.png === undefined || pngSize(chart.png) === null) return;
+    files[`word/media/chart-${index + 1}.png`] = chart.png;
   });
   return zipSync(files, { mtime: FIXED_MTIME });
 }
@@ -629,10 +648,11 @@ export function toHtml(doc: ProcessDocument): string {
         case 'paragraph':
           return `<p>${block.label === undefined ? '' : `<strong>${htmlText(block.label)}:</strong> `}${htmlText(block.text)}</p>`;
         case 'image': {
-          if (block.chart === undefined && doc.svg !== undefined) {
-            return `<img src="data:image/svg+xml;base64,${btoa(strFromU8(strToU8(doc.svg), true))}" alt="${escapeHtml(block.alt)}">`;
+          const svg = block.chart === undefined ? doc.svg : doc.charts?.[block.chart]?.svg;
+          if (svg !== undefined) {
+            return `<img src="data:image/svg+xml;base64,${btoa(strFromU8(strToU8(svg), true))}" alt="${escapeHtml(block.alt)}">`;
           }
-          const bytes = block.chart === undefined ? png : doc.charts?.[block.chart];
+          const bytes = block.chart === undefined ? png : doc.charts?.[block.chart]?.png;
           return bytes === undefined
             ? ''
             : `<img src="data:image/png;base64,${btoa(strFromU8(bytes, true))}" alt="${escapeHtml(block.alt)}">`;

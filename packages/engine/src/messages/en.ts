@@ -146,8 +146,8 @@ export options:
   --overlay o       diagram: colours it with a stored run of the .lila, as the app does:
                     bottlenecks (the canvas's bottleneck cut) or heatmap (Results' heat map).
   --force           Replaces existing files; without it nothing existing is overwritten.
-  The Word document has no diagram and no document has the run's charts: the engine has no
-  rasteriser. The HTML document has the diagram.
+  The Word document has no diagram and no charts of the run: the engine has no rasteriser. The
+  HTML document has both, except the cycle time histogram (a stored run keeps no per-case times).
 process options:
   --outline file    create: the outline JSON (lanes plus steps; docs/MCP.md).
   -p, --project f   The .lila; create makes it when it does not exist.
@@ -450,6 +450,20 @@ export const en: Catalog = {
     docResults: () => 'Results',
     docDiagramAlt: () => 'Process diagram',
 
+    chartUtilization: () => 'Utilization by resource (%)',
+    chartInstances: () => 'Instances started by task',
+    chartPercentiles: (unit) => `Cycle and wait time percentiles (${unit})`,
+    chartCycle: () => 'Cycle time',
+    chartWait: () => 'Wait time',
+    chartHistogram: (unit) => `Cycle time per case (${unit})`,
+    chartHistogramSub: (cases, replications) =>
+      replications > 1 ? `${cases} completed cases of replication 1 of ${replications}` : `${cases} completed cases`,
+    chartValue: (label, text) => `${label}: ${text}`,
+    chartNoValue: () => '-',
+    chartCases: (n) => (n === 1 ? '1 case' : `${n} cases`),
+    chartCasesAxis: () => 'Cases',
+    chartUnit: (unit) => (unit === 'day' ? 'd' : unit),
+
     mixedTimeUnit: (unit, others) =>
       `the scenarios do not share baseTimeUnit; the whole table uses ${unit}, the one of the base ` +
       `scenario. Declaring another one: ${others}.`,
@@ -532,7 +546,9 @@ export const en: Catalog = {
     exportDocxNoDiagram: () =>
       'The Word document has no diagram: Word needs a PNG and the engine has no rasteriser. The HTML document has it.',
     exportDocumentNoRun: () => 'No current run: the document has the model and no results.',
-    exportNoCharts: () => 'The charts of the run are left out: the engine has no rasteriser.',
+    exportDocxNoCharts: () =>
+      'The Word document has no charts: Word needs a PNG and the engine has no rasteriser. The HTML document has them.',
+    exportNoHistogram: () => 'The cycle time histogram is left out: a stored run keeps no per-case times.',
     exportPercentilesNotReproduced: () =>
       'The per-element wait percentiles are left out: the run\'s stored inputs do not reproduce its stored results (a cancelled run, or another engine version or platform, which can change the last digit).',
     exportPercentilesFailed: (reason) =>

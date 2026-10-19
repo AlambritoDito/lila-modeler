@@ -1079,8 +1079,9 @@ export function createServer(options: ServerOptions = {}): McpServer {
         'diagram, element descriptions in flow order, the scenario and the results of a stored run. ' +
         '`run` "latest" (default) takes the run of the current model and scenario, and the document ' +
         'goes without results when there is none; an older run is refused. `format` docx or html; ' +
-        'the HTML embeds the SVG diagram, the Word file has no diagram and neither has the run\'s ' +
-        'charts (no rasteriser): `notes` says what was left out. Like `lila export doc`.',
+        'the HTML embeds the SVG diagram and the run\'s charts as SVG (no cycle time histogram: a ' +
+        'stored run keeps no per-case times); the Word file has neither (no rasteriser). `notes` says ' +
+        'what was left out. Like `lila export doc`.',
       inputSchema: z.object({
         project: z.string().describe('Path to the .lila, relative to the cwd of the server process.'),
         process: processSchema,

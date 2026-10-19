@@ -75,6 +75,16 @@ describe('lo que se publica', () => {
     expect(built).not.toMatch(/from ['"]/);
   });
 
+  test('the charts subpath (#636) resolves by its package name and is browser-safe', async () => {
+    expect(manifest.exports['./charts']).toEqual({ types: './dist/charts.d.ts', default: './dist/charts.js' });
+    const charts = await import('@lila-modeler/engine/charts');
+    expect(typeof charts.chartsSvg).toBe('function');
+    expect(typeof charts.utilizationByResource).toBe('function');
+    // The app's Vite build bundles it: nothing from `node:*`, React or a bundled dependency.
+    const built = readFileSync(join(PACKAGE_ROOT, 'dist/charts.js'), 'utf8');
+    expect([...built.matchAll(/from ['"]([^'"]+)['"]/g)].map((m) => m[1])).toEqual(['./format.js', './messages/index.js']);
+  });
+
   test('el bin es ejecutable y tiene shebang', () => {
     const bin = join(PACKAGE_ROOT, manifest.bin['lila'] ?? '');
     expect(readFileSync(bin, 'utf8').startsWith('#!/usr/bin/env node')).toBe(true);

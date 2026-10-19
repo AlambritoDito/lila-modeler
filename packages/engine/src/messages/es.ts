@@ -149,8 +149,9 @@ Opciones de export:
   --overlay c       diagram: lo colorea con una corrida guardada del .lila, como la app:
                     bottlenecks (el corte de cuellos del lienzo) o heatmap (el mapa de calor).
   --force           Reemplaza archivos existentes; sin él no se sobrescribe nada.
-  El documento Word va sin diagrama y ningún documento lleva las gráficas de la corrida: el motor
-  no rasteriza. El documento HTML sí lleva el diagrama.
+  El documento Word va sin diagrama y sin las gráficas de la corrida: el motor no rasteriza. El
+  documento HTML lleva ambos, salvo el histograma del tiempo de ciclo (una corrida guardada no
+  conserva los tiempos por caso).
 Opciones de process:
   --outline archivo  create: el JSON del esquema (carriles y pasos; docs/MCP.md).
   -p, --project a    El .lila; create lo crea si no existe.
@@ -454,6 +455,20 @@ export const es: Catalog = {
     docResults: () => 'Resultados',
     docDiagramAlt: () => 'Diagrama del proceso',
 
+    chartUtilization: () => 'Utilización por recurso (%)',
+    chartInstances: () => 'Instancias iniciadas por tarea',
+    chartPercentiles: (unit) => `Percentiles de tiempo de ciclo y de espera (${unit})`,
+    chartCycle: () => 'Tiempo de ciclo',
+    chartWait: () => 'Tiempo de espera',
+    chartHistogram: (unit) => `Tiempo de ciclo por caso (${unit})`,
+    chartHistogramSub: (cases, replications) =>
+      replications > 1 ? `${cases} casos terminados de la réplica 1 de ${replications}` : `${cases} casos terminados`,
+    chartValue: (label, text) => `${label}: ${text}`,
+    chartNoValue: () => '-',
+    chartCases: (n) => (n === 1 ? '1 caso' : `${n} casos`),
+    chartCasesAxis: () => 'Casos',
+    chartUnit: (unit) => (unit === 'day' ? 'd' : unit),
+
     mixedTimeUnit: (unit, others) =>
       `los escenarios no comparten baseTimeUnit; toda la tabla usa ${unit}, la del escenario base. ` +
       `Declaran otra: ${others}.`,
@@ -538,7 +553,9 @@ export const es: Catalog = {
     exportDocxNoDiagram: () =>
       'El documento Word va sin diagrama: Word necesita un PNG y el motor no rasteriza. El documento HTML sí lo lleva.',
     exportDocumentNoRun: () => 'Sin corrida actual: el documento lleva el modelo y no los resultados.',
-    exportNoCharts: () => 'Las gráficas de la corrida quedan fuera: el motor no rasteriza.',
+    exportDocxNoCharts: () =>
+      'El documento Word va sin gráficas: Word necesita un PNG y el motor no rasteriza. El documento HTML sí las lleva.',
+    exportNoHistogram: () => 'El histograma del tiempo de ciclo queda fuera: una corrida guardada no conserva los tiempos por caso.',
     exportPercentilesNotReproduced: () =>
       'Los percentiles de espera por elemento quedan fuera: las entradas guardadas de la corrida no reproducen sus resultados guardados (una corrida cancelada, u otra versión del motor u otra plataforma, que puede cambiar el último dígito).',
     exportPercentilesFailed: (reason) =>

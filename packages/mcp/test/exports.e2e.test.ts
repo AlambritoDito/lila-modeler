@@ -92,14 +92,18 @@ test('export_document: HTML with the SVG and the run; Word that unzips, with not
   expect(html.isError).toBe(false);
   const answer = JSON.parse(html.text);
   expect(answer.run).toEqual({ id: 'run-1', scenario: 'as-is.scenario.json', current: true });
-  expect(answer.notes).toEqual(['The charts of the run are left out: the engine has no rasteriser.']);
+  expect(answer.notes).toEqual(['The cycle time histogram is left out: a stored run keeps no per-case times.']);
   const page = readFileSync(join(temp, 'doc.html'), 'utf8');
   expect(page).toContain('<img src="data:image/svg+xml;base64,');
+  // #636: the diagram and the run's three charts (no histogram), each with its alt text.
+  const alts = [...page.matchAll(/<img src="data:image\/svg\+xml;base64,[^"]+" alt="([^".]*)/g)].map((m) => m[1]);
+  expect(alts).toEqual(['Process diagram', 'Utilization by resource (%)', 'Cycle and wait time percentiles (min)', 'Instances started by task']);
   expect(page).toContain('<h2>Results</h2>');
 
   const docx = await call('export_document', { project: 'pedido.lila', format: 'docx', saveTo: 'doc.docx', locale: 'es' });
   expect(docx.isError).toBe(false);
   expect(JSON.parse(docx.text).notes[0]).toMatch(/^El documento Word va sin diagrama/);
+  expect(JSON.parse(docx.text).notes[1]).toMatch(/^El documento Word va sin gráficas/);
   const parts = unzipSync(readFileSync(join(temp, 'doc.docx')));
   expect(strFromU8(parts['word/document.xml']!)).toContain('Resultados');
 }, 120_000);

@@ -15,12 +15,14 @@
  * that run saw.
  *
  * ponytail: no rasteriser (see `process-document.ts`), so the Word document carries no diagram and
- * neither format carries the run's charts; every export says so in its `notes`.
+ * no charts; the HTML carries both as SVG (`chartsSvg`, #636), except the cycle time histogram, as
+ * a stored run keeps no per-case times. Every export says what it left out in its `notes`.
  */
 import { closeSync, existsSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 
 import { parseBpmn, readAnnotations, renderSvg, type SvgTint } from '../bpmn/index.js';
+import { chartsSvg } from '../charts.js';
 import { bottleneckCut, heatMap, WAIT_LEVEL_COLOURS, type WaitLevel } from '../bottleneck-levels.js';
 import type { ProcessIR } from '../core/ir.js';
 import { simulate } from '../core/run.js';
@@ -259,11 +261,16 @@ export async function exportDocument(
     ? {}
     : { scenario: scenarioOfRun(lila, run, locale), result: run.result as RunResult };
   if (run === undefined) notes.push(C.exportDocumentNoRun());
-  else notes.push(C.exportNoCharts());
+  else notes.push(source.format === 'docx' ? C.exportDocxNoCharts() : C.exportNoHistogram());
+  // Word skips SVG-only charts, so only the HTML draws them.
+  const charts = results.result === undefined || source.format === 'docx'
+    ? []
+    : chartsSvg({ ir, scenario: results.scenario, result: results.result, locale });
   const title = lila.slugs.length > 1 ? lila.process.name : lila.document.name;
   const doc = buildProcessDocument({
     ir, annotations, subprocesses, lanes, nodeLanes, laneParents, pool, poolName, types,
     title, date: source.date ?? today(), locale, ...(svg === undefined ? {} : { svg }), ...results,
+    ...(charts.length === 0 ? {} : { charts }),
   });
   return {
     format: source.format,
