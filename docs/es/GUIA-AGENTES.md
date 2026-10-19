@@ -102,8 +102,10 @@ atorados, como una unión paralela que espera ramas de una misma división exclu
 
 Para cambiar un proceso no lo crees otra vez: `edit_process` aplica una lista de operaciones
 (`add`, `connect`, `remove`, `rename`, `setType`, `moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`,
-`annotate`, `addDataObject`…) todas o ninguna, conserva
+`annotate`, `addDataObject`, `setCalledProcess`…) todas o ninguna, conserva
 cada id y todo lo que las operaciones no tocan (documentación, RACI, atributos, otros procesos).
+`setCalledProcess` apunta una actividad de llamada a otro proceso del mismo `.lila` por su slug
+(`process: null` lo quita).
 Mándala primero con `dryRun: true` y muéstrale los `changes` a la persona cuando la edición no sea
 trivial.
 

@@ -546,7 +546,7 @@ Process "Restaurant" (pedido)
 
 `process edit` applies a list of operations to one process, all or none: the JSON array the MCP
 tool `edit_process` takes as `operations` (`add`, `connect`, `remove`, `rename`, `setType`,
-`moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`, `annotate`, `addDataObject`…; format and rules in
+`moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`, `annotate`, `addDataObject`, `setCalledProcess`…; format and rules in
 [`docs/MCP.md`](MCP.md#editing-a-process)). Every
 operation is checked, the result is validated, and the `.lila` is written only if all of it is fine;
 otherwise it exits `1`, writes nothing and lists every problem with the index of its operation. The

@@ -106,8 +106,8 @@ mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
   como esquema: `{ file, slug, name, outline, warnings }`.
 - **`edit_process({ project, process?, operations, dryRun?, layout?, locale? })`** (#98) — aplica una
   lista de operaciones (add, connect, remove, rename, setType, moveToLane, addLane, removeLane,
-  moveLane, addBoundary, annotate, removeAnnotation, addDataObject, removeDataObject) a un proceso de
-  un `.lila`, todas o ninguna. Devuelve `{ file, slug, name, dryRun, summary, changes, removed,
+  moveLane, addBoundary, annotate, removeAnnotation, addDataObject, removeDataObject,
+  setCalledProcess) a un proceso de un `.lila`, todas o ninguna. Devuelve `{ file, slug, name, dryRun, summary, changes, removed,
   scenarioRemovals, notes, warnings, outline }`. Ver [Editar un proceso](#editar-un-proceso).
 
 - **`annotate_element({ project, process?, elementId, documentation?, responsibilities?, refs?, attributes?, dryRun?, locale? })`** —
@@ -312,7 +312,8 @@ guardó el archivo; `summary` dice en una línea lo que pasó.
 - **`delete_process`** quita un proceso con sus escenarios y sus corridas guardadas, que se listan
   en `removedScenarios` y `removedRuns`. El último proceso no se puede borrar. Tampoco uno que una
   actividad de llamada de otro proceso nombra en su `calledElement` (con o sin prefijo, como
-  `tns:Process_B`): el rechazo lista esas actividades como `slug/idElemento (nombre)`. Si queda un
+  `tns:Process_B`): el rechazo lista esas actividades como `slug/idElemento (nombre)`; apúntalas a
+  otro lado, o quítales el destino, con el `setCalledProcess` de `edit_process`. Si queda un
   solo proceso, el proyecto se escribe como un archivo de versión 1, donde ese proceso toma el
   nombre y el slug del proyecto: `notes` lo dice y `slugs` lista lo que queda.
 - **`rename_scenario`** cambia el `"name"` del escenario; su entrada (`<nombre>.scenario.json`) no
@@ -726,6 +727,7 @@ mismo desde una terminal.
 | `removeAnnotation` | `on`, `text` | Quita la anotación con ese texto que cuelga del paso, con su asociación (todas, en un modelo de fuera que la repite). |
 | `addDataObject` | `name`, `on`, `direction` | Conecta un objeto de datos a una actividad (una tarea, una actividad de llamada o un subproceso): `in`, la actividad lo lee; `out`, lo escribe. Si el proceso tiene un objeto con ese nombre se reutiliza; si no, se crea. |
 | `removeDataObject` | `name`, `on?` | Desconecta el objeto de datos de la actividad `on`, o de todas sin él. El objeto se va cuando ya nada lo usa. |
+| `setCalledProcess` | `id`, `process` | Fija el proceso al que llama la actividad de llamada `id`: `process` es el slug de otro proceso del mismo `.lila`, y el `calledElement` de la actividad pasa a ser un id de proceso BPMN que declara el modelo de ese proceso (su `model.id` cuando es uno de ellos; si no, su único proceso; si no, el proceso que simula), el que la app abre con un doble clic. `process: null` quita el `calledElement`. Un slug desconocido se rechaza con los slugs a los que una actividad de llamada puede llamar, y también el proceso que se edita (una actividad de llamada no llama a su propio proceso), un proceso cuyo id de proceso BPMN también declara otro proceso del `.lila` (la llamada no podría distinguirlos: dale otro id a uno de ellos con `put_process_bpmn` `mode: "replace"`), un proceso del que no se sabe cuál de sus ids es el que se llama, y un `id` que no es una actividad de llamada. Solo en un `.lila`: un modelo suelto no tiene otro proceso que nombrar. Un proceso que alguna actividad de llamada nombra no se puede borrar con `delete_process` hasta apuntarla a otro lado o quitarle el destino. |
 
 - **Los ids no cambian.** Un paso renombrado conserva sus entradas de escenario, y uno con otro tipo
   también, en lo que siga aplicando. El `duration`, los `resources` y el `selection` de un paso

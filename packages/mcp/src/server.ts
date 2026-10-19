@@ -1126,8 +1126,10 @@ export function createServer(options: ServerOptions = {}): McpServer {
         '`setType` (also `end` ↔ `terminate` on an end event), `moveToLane` (with the step\'s boundary ' +
         'events), `addLane`, `removeLane` (its nodes to `moveStepsTo`), `moveLane` (among its ' +
         'siblings), `addBoundary` (a boundary timer, as in an outline), `annotate`/`removeAnnotation` ' +
-        '(a text annotation on a step) and `addDataObject`/`removeDataObject` (by name; an object goes ' +
-        'when nothing uses it). Start events are neither added nor retyped. Ids never change, so renamed ' +
+        '(a text annotation on a step), `addDataObject`/`removeDataObject` (by name; an object goes ' +
+        'when nothing uses it) and `setCalledProcess` (the process a call activity calls, by the slug of ' +
+        'another process of the .lila: its `calledElement` becomes that process\'s BPMN process id, ' +
+        'refused when another process declares the same id; `process: null` removes it). Start events are neither added nor retyped. Ids never change, so renamed ' +
         'or retyped steps keep their scenario entries; durations, resources and probabilities given ' +
         'go into the base scenario `as-is.scenario.json`. The result is validated; any problem ' +
         'refuses the whole edit, writes nothing and lists every issue with the index of its ' +
@@ -1157,7 +1159,8 @@ export function createServer(options: ServerOptions = {}): McpServer {
             '{op:"removeLane", lane, moveStepsTo?}; {op:"moveLane", lane, before | after}; ' +
             '{op:"addBoundary", on, boundary:{id, type:"timer", name?, label?, duration?, interrupting?, to | end}}; ' +
             '{op:"annotate", on, text}; {op:"removeAnnotation", on, text}; ' +
-            '{op:"addDataObject", name, on, direction: "in" | "out"}; {op:"removeDataObject", name, on?}. ' +
+            '{op:"addDataObject", name, on, direction: "in" | "out"}; {op:"removeDataObject", name, on?}; ' +
+            '{op:"setCalledProcess", id: a call activity, process: slug of another process | null}. ' +
             'E.g. [{"op":"add","step":{"id":"verify","name":"Verify ID","duration":"5m"},"after":"receive"}, ' +
             '{"op":"connect","from":"ok","to":"verify","label":"Retry","probability":0.1}, {"op":"remove","id":"check"}, ' +
             '{"op":"rename","id":"issue","name":"Issue card"}, {"op":"setType","id":"check","type":"serviceTask"}, ' +

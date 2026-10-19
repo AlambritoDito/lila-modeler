@@ -485,6 +485,16 @@ export interface CliMessages {
   editBadBetween: () => string;
   editDuplicateLane: (lane: string) => string;
   editLayoutFailed: (detail: string) => string;
+  /* `setCalledProcess` (#664) */
+  editNotACallActivity: (id: string, type: string) => string;
+  editCallNeedsLila: () => string;
+  editCallUnknownProcess: (slug: string, slugs: string) => string;
+  editCallSelf: (slug: string, processId: string) => string;
+  editCallShared: (slug: string, processId: string, others: string, count: number) => string;
+  editCallUnresolved: (slug: string, declared: string) => string;
+  editBadCalledProcess: () => string;
+  editCalled: (id: string, name: string, slug: string) => string;
+  editCallCleared: (id: string) => string;
 }
 
 /**

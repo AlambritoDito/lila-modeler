@@ -544,7 +544,7 @@ Código de salida: `0`.
 
 `process edit` aplica una lista de operaciones a un proceso, todas o ninguna: el arreglo JSON que la
 tool MCP `edit_process` recibe como `operations` (`add`, `connect`, `remove`, `rename`, `setType`,
-`moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`, `annotate`, `addDataObject`…; formato y reglas en
+`moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`, `annotate`, `addDataObject`, `setCalledProcess`…; formato y reglas en
 [`docs/es/MCP.md`](MCP.md#editar-un-proceso)). Se
 comprueba cada operación, se valida el resultado y el `.lila` se escribe solo si todo está bien; si
 no, sale con `1`, no escribe nada y lista cada problema con el índice de su operación. El proceso se
