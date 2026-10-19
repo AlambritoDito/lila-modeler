@@ -81,7 +81,7 @@ Exit code: `0`.
 - `--csv <directory>` writes `elements.csv`, `flows.csv`, `resources.csv`, `process.csv` (RFC
   4180) and `log.csv` (the event log, streamed while the run executes, ISO timestamps from
   `run.start`). It is the only flag that writes the event log; `--json` and `--xlsx` do not
-  carry it.
+  carry it. The MCP `run_simulation` writes the same `log.csv` bytes with `logTo` (`docs/MCP.md`).
 - `--xlsx <file>` writes one workbook with the Summary, Elements, Flows, Resources and Parameters
   sheets. No event log sheet — use `--csv` for that.
 - All three create missing directories, write to a temporary path and rename atomically, and
@@ -106,7 +106,8 @@ Exit code: `0`.
 
 The default table is a curated KPI subset; `--all` prints every metric `compare()` produces for
 every element, resource, flow and outcome. `--json <file>` writes the `CompareResult`; `--xlsx
-<file>` writes one workbook with one tab per scenario plus a Comparison tab. `compare` has no
+<file>` writes one workbook with one tab per scenario plus a Comparison tab (the MCP
+`compare_scenarios` writes the same bytes with `format: "xlsx"` and `saveTo`). `compare` has no
 `--csv` — it compares finished runs, it does not replay one.
 
 ## `export` (#538)

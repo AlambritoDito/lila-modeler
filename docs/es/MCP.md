@@ -28,8 +28,8 @@ Schema del escenario como recursos, y el flujo de la guía como el prompt `inter
   del perfil y no se puede simular. Con `scenario` (ruta a un escenario `.json`, resuelve
   `extends`) agrega los recursos referenciados por elemento; si el escenario no se puede leer, el
   resumen dice por qué y la tool no falla.
-- **`run_simulation({ model?, process?, scenario, seed?, replications?, saveTo?, saveRun?, detail?, locale? })`** (LILA-054) — valida
-  modelo y escenario, simula con `log: false` y devuelve exactamente el mismo `RunResult` que
+- **`run_simulation({ model?, process?, scenario, seed?, replications?, saveTo?, saveRun?, logTo?, detail?, locale? })`** (LILA-054) — valida
+  modelo y escenario, simula y devuelve exactamente el mismo `RunResult` que
   `lila run --json` (elementos, flujos, recursos, proceso, bottlenecks y avisos). `scenario` acepta
   una ruta `.json` (resuelve `extends`, igual que la CLI) o el escenario ya resuelto como objeto
   inline; `model` es opcional y por defecto es `scenario.model`; se rechaza un modelo distinto.
@@ -40,14 +40,24 @@ Schema del escenario como recursos, y el flujo de la guía como el prompt `inter
   [Resumen o resultado completo](#resumen-o-resultado-completo)). Una corrida larga informa su
   progreso y se puede cancelar ([Progreso y cancelación](#progreso-y-cancelación)).
   Con un `model` `.lila` y un escenario suyo, `saveRun: true` guarda la corrida en el proyecto (ver
-  [Guardar una corrida](#guardar-una-corrida)).
-- **`compare_scenarios({ model?, process?, scenarios, seed?, replications?, saveTo?, detail?, locale? })`** (LILA-054) — valida
+  [Guardar una corrida](#guardar-una-corrida)). `logTo` escribe el event log en un archivo CSV: los
+  mismos bytes que el `log.csv` de `lila run --csv` con el mismo modelo, escenario, semilla y
+  réplicas. Las filas se escriben en streaming a un temporal durante la corrida, así que la memoria
+  no crece en corridas largas, y el archivo se publica solo si la llamada sale bien, después de
+  `saveTo` y `saveRun`. Se rechaza un `logTo` que nombre el modelo, el `.lila`, el archivo del
+  escenario o `saveTo`. Con `logTo` o `saveRun`, un
+  segundo bloque de texto dice dónde quedaron: `{ log, savedRun }`, cada clave solo si se pidió;
+  `log` es la ruta absoluta.
+- **`compare_scenarios({ model?, process?, scenarios, seed?, replications?, saveTo?, format?, all?, detail?, locale? })`** (LILA-054) — valida
   y simula dos o más escenarios sobre el mismo modelo (el primero es la base) y devuelve
   exactamente el mismo `CompareResult` que `lila compare --json`, más `notes`: los avisos que la
   CLI imprime aparte de la tabla (semillas distintas, `baseTimeUnit` distinto, réplicas
   insuficientes para IC95). `scenarios` acepta rutas y objetos inline mezclados. Todo escenario se
   resuelve y valida contra el modelo antes de simular ninguno. Por defecto `comparison` conserva
-  las filas del proceso y de los recursos y las significativas; `detail: "full"` devuelve todas.
+  las filas del proceso y de los recursos y las significativas; `detail: "full"` devuelve todas, y
+  `all: true` es lo mismo con el nombre de `lila compare --all` (con `detail: "summary"` es un
+  error). `format: "xlsx"` hace que `saveTo` escriba el libro de `lila compare --xlsx`, los mismos
+  bytes, en vez del JSON; necesita `saveTo`.
 - **`patch_scenario({ scenario, project?, process?, patch, saveTo?, extendsFrom?, name?, description?, dryRun?, locale? })`**
   (LILA-055) — aplica un [JSON Patch](https://www.rfc-editor.org/rfc/rfc6902) a `scenario`, valida
   el resultado contra su modelo (mismas reglas que `validateScenario`, `docs/SCENARIO_FORMAT.md`
@@ -781,8 +791,8 @@ completo en un archivo, como `saveTo` (las tools responden con un resumen salvo 
 | --- | --- | --- |
 | `validate_bpmn` | `lila validate --json` | |
 | `describe_process` | `lila validate` | La CLI imprime el IR y los problemas; el `resumen` legible está escrito para un agente y es solo de MCP. |
-| `run_simulation` | `lila run --json` | `saveRun` es `--save`, `saveTo` es `--json <archivo>`. El event log de `--csv` (`log.csv`) todavía no tiene campo MCP: #665. Los cuatro CSV de resultados de `--csv` salen de una corrida guardada con `export_results`. |
-| `compare_scenarios` | `lila compare --json` | `--xlsx` y `--all` todavía no tienen campo MCP: #665. |
+| `run_simulation` | `lila run --json` | `saveRun` es `--save`, `saveTo` es `--json <archivo>`, `logTo` es el `log.csv` de `--csv <directorio>`. Los cuatro CSV de resultados de `--csv` salen de una corrida guardada con `export_results`. |
+| `compare_scenarios` | `lila compare --json` | `saveTo` es `--json <archivo>`, o `--xlsx <archivo>` con `format: "xlsx"`; `all: true` (o `detail: "full"`) es `--all`. |
 | `patch_scenario` con `project` | `lila scenario patch` | `dryRun` es `--dry-run`. |
 | `patch_scenario` sin `project` | ninguno | Parchear un escenario `.json` suelto es solo de MCP; desde la CLI, se edita el archivo. |
 | `export_diagram` | `lila export diagram` | |
@@ -875,7 +885,8 @@ respondiendo (un `ping`, otras llamadas) mientras corre una simulación. Cuando 
 `_meta.progressToken`, el servidor manda `notifications/progress` una vez por replicación terminada,
 con `progress` (replicaciones hechas) y `total` (`run.replications`, o la suma sobre los escenarios
 de una comparación). Un `notifications/cancelled` del cliente detiene la corrida en el acto: el
-worker se termina, no se guarda nada y, como pide MCP, no se responde a la petición cancelada.
+worker se termina, no se guarda nada (también se borra el temporal de un `logTo`) y, como pide MCP,
+no se responde a la petición cancelada.
 
 ```json
 { "method": "tools/call", "params": { "name": "run_simulation", "arguments": { "scenario": "examples/pedido/as-is.scenario.json", "replications": 30 }, "_meta": { "progressToken": 1 } } }
@@ -1033,7 +1044,7 @@ mcp_servers:
   `mcp_lila_<tool>` (`mcp_lila_create_process`); los argumentos son los de esta página.
 - `tools: { include: [...] }` limita lo que ve el agente; por ejemplo, a las de solo lectura
   `get_project`, `get_scenario`, `validate_bpmn`, `describe_process`, `get_process_outline`,
-  `get_raci_matrix` y `run_simulation` (que solo escribe con `saveTo` o `saveRun`).
+  `get_raci_matrix` y `run_simulation` (que solo escribe con `saveTo`, `saveRun` o `logTo`).
 
 El mismo bloque, con `command` y `args`, es la configuración stdio genérica para cualquier otro
 cliente MCP.
@@ -1162,7 +1173,8 @@ directorio: nadie llega a leer un JSON a medias. Un directorio con ese nombre es
 tool, no un borrado. Las tools de exportación son la excepción: nunca reemplazan un archivo
 salvo con `overwrite: true` (ver [Exportar sin la app](#exportar-sin-la-app)). `run_simulation` y `compare_scenarios` guardan el resultado
 completo diga lo que diga `detail`. `compare_scenarios` guarda ahí solo `comparison`, sin `notes`: los mismos
-bytes que `lila compare --json <ruta>`. En `patch_scenario`, `saveTo` cambia el modo de la tool
+bytes que `lila compare --json <ruta>`; con `format: "xlsx"`, el libro de la comparación. El `logTo`
+de `run_simulation` sigue las mismas reglas. En `patch_scenario`, `saveTo` cambia el modo de la tool
 (§ arriba): sin `saveTo` se sobrescribe `scenario`; con `saveTo` se crea un archivo nuevo con
 `extends` y solo el delta del patch.
 

@@ -143,6 +143,19 @@ test('run_simulation with saveRun stores the run; export_document then has the r
   const { savedRun } = JSON.parse(blocks[1]!.text) as { savedRun: { id: string; process: string; scenario: string } };
   expect(savedRun).toMatchObject({ process: 'pedido', scenario: 'as-is.scenario.json' });
 
+  // #665: with `logTo`, the second block says where the log and the run went.
+  await pedidoWithRuns(join(temp, 'logged.lila'), []);
+  const logged = await client.callTool({
+    name: 'run_simulation',
+    arguments: { model: 'logged.lila', scenario: 'as-is', seed: 42, replications: 1, saveRun: true, logTo: 'logged.csv' },
+  });
+  expect(logged.isError ?? false).toBe(false);
+  const written = JSON.parse((logged.content as { text: string }[])[1]!.text) as { log: string; savedRun: { process: string } };
+  expect(Object.keys(written)).toEqual(['log', 'savedRun']);
+  expect(written.log).toBe(join(temp, 'logged.csv').replaceAll('\\', '/'));
+  expect(written.savedRun).toMatchObject({ process: 'pedido', scenario: 'as-is.scenario.json' });
+  expect(readFileSync(join(temp, 'logged.csv'), 'utf8').length).toBeGreaterThan(100);
+
   const after = await call('export_document', { project: 'fresh.lila', format: 'html', saveTo: 'after.html' });
   expect(JSON.parse(after.text).run).toEqual({ id: savedRun.id, scenario: 'as-is.scenario.json', current: true });
   expect(readFileSync(join(temp, 'after.html'), 'utf8')).toContain('<h2>Results</h2>');

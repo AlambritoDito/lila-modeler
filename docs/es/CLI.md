@@ -84,7 +84,8 @@ Código de salida: `0`.
 - `--csv <directorio>` escribe `elements.csv`, `flows.csv`, `resources.csv`, `process.csv` (RFC
   4180) y `log.csv` (el event log, escrito en streaming mientras corre la simulación, con
   timestamps ISO desde `run.start`). Es la única bandera que escribe el event log; `--json` y
-  `--xlsx` no lo llevan.
+  `--xlsx` no lo llevan. La tool MCP `run_simulation` escribe los mismos bytes de `log.csv` con
+  `logTo` (`docs/es/MCP.md`).
 - `--xlsx <archivo>` escribe un libro con las hojas Resumen, Elementos, Flujos, Recursos y
   Parámetros. Sin hoja de event log: para eso está `--csv`.
 - Las tres crean los directorios que falten, escriben a una ruta temporal y renombran de forma
@@ -110,7 +111,8 @@ Código de salida: `0`.
 La tabla por defecto es un subconjunto curado de KPI; `--all` imprime todas las métricas que
 produce `compare()` para cada elemento, recurso, flujo y desenlace. `--json <archivo>` escribe el
 `CompareResult`; `--xlsx <archivo>` escribe un libro con una pestaña por escenario más una pestaña
-Comparación. `compare` no tiene `--csv`: compara corridas ya terminadas, no reproduce una.
+Comparación (la tool MCP `compare_scenarios` escribe los mismos bytes con `format: "xlsx"` y
+`saveTo`). `compare` no tiene `--csv`: compara corridas ya terminadas, no reproduce una.
 
 ## `export` (#538)
 

@@ -11,7 +11,7 @@
  */
 
 import { mkdirSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import type { ValidationResult } from './bpmn/validate.js';
@@ -22,12 +22,14 @@ import {
   comparablePath,
   compareWarnings,
   loadModelSource,
+  openEventLogSink,
   resolveScenarioArgument,
   resultWithBoundaryWarnings,
   stageFile,
   targetScenarios,
   validatedModelOf,
   withRunOverrides,
+  writeBytesAtomic,
   writeJsonAtomic,
   type LoadedScenarioResult,
   type ParsedIr,
@@ -37,8 +39,6 @@ import {
   ELEMENT_COLUMNS,
   RESOURCE_COLUMNS,
   elementsCsv,
-  eventLogCsvHeader,
-  eventLogRowCsv,
   flowsCsv,
   processCsv,
   resourcesCsv,
@@ -445,23 +445,8 @@ function writeJson(file: string, data: unknown, locale: Locale): void {
   console.log(`JSON: ${writeJsonAtomic(file, data, locale)}`);
 }
 
-/**
- * Publica un `.xlsx` con la misma técnica atómica que el CSV y el JSON: temporal + `rename`, y
- * nada se escribe encima de un archivo que ya existía sin pasar por `assertReplaceableFile`.
- */
 function writeXlsx(file: string, bytes: Uint8Array, locale: Locale): void {
-  const target = absolutePath(file);
-  assertReplaceableFile(target, locale);
-  mkdirSync(dirname(target), { recursive: true });
-  const staged = stageFile(target, locale);
-  try {
-    staged.write(bytes);
-    staged.commit();
-  } catch (error) {
-    staged.abort();
-    throw error;
-  }
-  console.log(`XLSX: ${target}`);
+  console.log(`XLSX: ${writeBytesAtomic(file, bytes, locale)}`);
 }
 
 function writeCsvDirectory(
@@ -499,60 +484,6 @@ function writeCsvDirectory(
     for (const entry of staged) entry.file.abort();
     throw error;
   }
-}
-
-interface EventLogSink {
-  onEvent(row: EventLogRow): void;
-  close(): void;
-  commit(): void;
-  abort(): void;
-}
-
-/**
- * Escribe el log por bloques mientras corre `simulate`, sin retener todas las replicaciones.
- * El archivo temporal solo se publica como `log.csv` después de una corrida completa.
- *
- * ponytail: buffer de 1 MiB + `writeFileSync(fd, ...)` en vez de un `WriteStream`. `simulate` es
- * síncrona y no admite pausa, así que un stream asíncrono no podría aplicar backpressure: se
- * limitaría a acumular en memoria justo lo que este ticket quiere evitar. La escritura bloqueante
- * sí acota el pico al tamaño del buffer, y el `rename` del temporal conserva la publicación
- * atómica de LILA-046. Si algún día `simulate` se vuelve reanudable, aquí entra `once(s,'drain')`.
- */
-function openEventLogSink(directory: string, startMs: number, locale: Locale): EventLogSink {
-  const targetDirectory = absolutePath(directory);
-  mkdirSync(targetDirectory, { recursive: true });
-  const target = resolve(targetDirectory, 'log.csv');
-  assertReplaceableFile(target, locale);
-  const staged = stageFile(target, locale);
-  let buffer = eventLogCsvHeader(startMs);
-  let closed = false;
-
-  const flush = (): void => {
-    if (buffer === '') return;
-    staged.write(buffer);
-    buffer = '';
-  };
-  const close = (): void => {
-    if (closed) return;
-    flush();
-    staged.close();
-    closed = true;
-  };
-
-  return {
-    onEvent(row) {
-      buffer += eventLogRowCsv(row, startMs);
-      if (buffer.length >= 1_048_576) flush();
-    },
-    close,
-    commit() {
-      close();
-      staged.commit();
-    },
-    abort() {
-      staged.abort();
-    },
-  };
 }
 
 interface RunCommandOptions {
@@ -604,7 +535,7 @@ async function runCommand(
   const logSink =
     options.csv === undefined
       ? undefined
-      : openEventLogSink(options.csv, runStartMs(scenario.run.start), locale);
+      : openEventLogSink(resolve(absolutePath(options.csv), 'log.csv'), runStartMs(scenario.run.start), locale);
   try {
     const simulated = simulate(ir, scenario, {
       log: logSink !== undefined,
