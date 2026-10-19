@@ -445,6 +445,7 @@ export const en: Catalog = {
     docSubprocess: () => 'Sub-process',
     docAttachedTo: () => 'Attached to',
     docDocumentation: () => 'Description',
+    docNote: () => 'Note',
     docResponsibilities: () => 'Responsibilities (RACI)',
     docScenario: (name) => `Scenario: ${name}`,
     docResults: () => 'Results',
@@ -543,6 +544,10 @@ export const en: Catalog = {
       `run "${id}" of process "${slug}" of ${file} is of an older model or scenario: the document would ` +
       'mix today\'s model with old results. Export its results instead, or simulate again.',
     exportNoDiagram: () => 'The model has no diagram (BPMN DI): the document goes without one.',
+    exportDiagramNone: () =>
+      'the model has no diagram (BPMN DI) to draw. Lay it out with edit_process (layout: true, lila process edit), or draw it in a BPMN editor; put_process_bpmn and create_project lay out a model they receive without one.',
+    exportDiagramUnreadable: (detail) =>
+      `the model has no diagram (BPMN DI) to draw, and none can be laid out for it: bpmn-moddle cannot read the model whole (${detail}), so laying it out would lose that content. Add the diagram in a BPMN editor.`,
     exportDocxNoDiagram: () =>
       'The Word document has no diagram: Word needs a PNG and the engine has no rasteriser. The HTML document has it.',
     exportDocumentNoRun: () => 'No current run: the document has the model and no results.',
@@ -687,7 +692,7 @@ export const en: Catalog = {
     editNeedsScenario: (field, scenario) =>
       `"${field}" goes into the base scenario ${scenario}, and this process has none; set it with patch_scenario instead.`,
     editRemoveAmbiguous: (id, incoming, outgoing) =>
-      `cannot remove "${id}": with ${incoming} incoming and ${outgoing} outgoing flows it is not clear how to reconnect them. Remove or reconnect its flows first.`,
+      `cannot remove "${id}": with ${n(incoming, 'incoming flow', 'incoming flows')} and ${n(outgoing, 'outgoing flow', 'outgoing flows')} it is not clear how to reconnect them. Remove or reconnect its flows first.`,
     editRemoveBoundary: (id, boundaries) => `cannot remove "${id}": boundary events are attached to it (${boundaries}); remove them first.`,
     editCannotRemove: (id, type) =>
       `"${id}" is a ${type}; only steps, sequence flows, boundary events and artifacts (text annotations, data objects and stores, groups, associations) can be removed.`,
@@ -736,6 +741,8 @@ export const en: Catalog = {
     editLaneMoved: (lane, where, other) => `moved lane "${lane}" ${where === 'before' ? 'above' : 'below'} "${other}"`,
     editNoteAdded: (step, text, id) => `annotated "${step}": "${text}" (${id})`,
     editNoteExists: (step, text) => `"${step}" already has the text annotation "${text}"; nothing changed`,
+    editNoteNotStep: (id, type) =>
+      `"${id}" is a${/^[aeiou]/i.test(type) ? 'n' : ''} ${type}; a text annotation goes on a step (a task, gateway, timer, message or sub-process), the only place the outline reads it back as \`notes\`.`,
     editNoteRemoved: (step, text, ids) => `removed the text annotation "${text}" from "${step}" (${ids})`,
     editDataAdded: (name, step, direction, id, created) =>
       `"${step}" ${direction === 'in' ? 'reads' : 'writes'} data object "${name}" (${id}${created ? ', new' : ''})`,

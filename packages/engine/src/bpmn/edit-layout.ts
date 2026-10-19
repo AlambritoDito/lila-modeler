@@ -689,6 +689,16 @@ async function layoutPositions(process: El, nodes: El[], flows: El[]): Promise<{
 }
 
 /**
+ * Where a pool drawn from nothing goes (#645): below what `plane` already draws (another pool, say),
+ * lined up with its left edge; the plane's corner when it draws nothing.
+ */
+function below(plane: El): Point {
+  const boxes = ((plane['planeElement'] ?? []) as El[]).flatMap((di) => (di.$type === 'bpmndi:BPMNShape' && di['bounds'] !== undefined ? [di['bounds'] as Box] : []));
+  if (boxes.length === 0) return { x: 0, y: 0 };
+  return { x: Math.min(...boxes.map((b) => b.x)), y: Math.max(...boxes.map(bottom)) + MARGIN };
+}
+
+/**
  * Lays out `process` again (see the header). Its top-level nodes and flows get new DI; its pool
  * and lanes are resized; what hangs on them follows.
  */
@@ -721,7 +731,7 @@ export async function relayout(context: RelayoutContext): Promise<void> {
   const oldLeft = old.size === 0 ? 0 : Math.min(...[...old.values()].map((b) => b.x));
   const oldTop = old.size === 0 ? 0 : Math.min(...[...old.values()].map((b) => b.y));
   let origin: Point = { x: 0, y: 0 };
-  if (participant !== undefined) origin = oldPoolBox !== undefined ? { x: oldPoolBox.x, y: oldPoolBox.y } : old.size > 0 ? { x: oldLeft - 2 * HEADER - MARGIN, y: oldTop - MARGIN } : origin;
+  if (participant !== undefined) origin = oldPoolBox !== undefined ? { x: oldPoolBox.x, y: oldPoolBox.y } : old.size > 0 ? { x: oldLeft - 2 * HEADER - MARGIN, y: oldTop - MARGIN } : below(plane);
 
   // The layouter's positions go into the DI first (shapes and edges, created when missing).
   for (const n of placed) {

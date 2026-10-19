@@ -124,8 +124,9 @@ the app uses:
   on the model it ran on. An overlay on a `.bpmn`, or with no stored run, is an error; so is
   `--run` or `--scenario` without `--overlay`.
 - `lila export doc <project.lila> --out file.docx|file.html` writes the process document, as the
-  app's «Export document»: diagram, descriptions in flow order, the scenario and the results of
-  a stored run. The HTML embeds the SVG diagram and the run's charts as SVG, the same as the app's
+  app's «Export document»: diagram, descriptions in flow order (with each element's text
+  annotations as `Note` lines; those on a flow, a lane or nothing under the process description),
+  the scenario and the results of a stored run. The HTML embeds the SVG diagram and the run's charts as SVG, the same as the app's
   Results charts, except the cycle time histogram (a stored run keeps no per-case times). The
   Word file has **no diagram and no charts**: Word needs a PNG and the engine has no rasteriser.
   A note on stderr says what was left out.
@@ -378,11 +379,16 @@ The raw BPMN of one process of a `.lila`, out and in — the MCP tools `get_proc
 
 A model with validation errors exits `1` and writes nothing, unless `--allow-unsimulatable`: then
 it is kept as a diagram that does not simulate, its errors printed as notes. A file that is not
-BPMN is always refused. A model without a diagram is laid out unless `--no-layout`. The write is
+BPMN is always refused. A model whose simulated process has no diagram is laid out unless
+`--no-layout`; one that cannot be (bpmn-moddle cannot read it whole, it is only partly drawn, or
+the layouter fails) is kept as given, with a note saying why. The write is
 the `.lila`'s atomic, locked write (see [A `.lila` as input](#a-lila-as-input-466)), every other
 process unchanged; `--dry-run` writes nothing; `--json` prints the result object of
 `put_process_bpmn`: `{ file, mode, slug, name, processId, revision, dryRun, laidOut, summary,
 scenarioRemovals, notes, warnings, slugs }`.
+
+Both take the project as `-p/--project <project.lila>` or as a positional `<project.lila>`, and so
+do `process raci` and `process attribute` (#645): either convention works, giving both is refused.
 
 ```bash
 npx lila process export-bpmn -p examples/pedido.lila --out results/pedido.bpmn

@@ -71,6 +71,16 @@ export function isProcessToolSubcommand(argv: readonly string[]): boolean {
   return index !== -1 && (PROCESS_TOOL_SUBCOMMANDS as readonly string[]).includes(argv[index]!);
 }
 
+/**
+ * The project of `process raci|attribute|export-bpmn|import` (#645): `-p/--project` or the
+ * positional `<project.lila>`, so both conventions work everywhere. `undefined` when neither is
+ * given, `null` when both are (two projects: ambiguous).
+ */
+function projectOf(option: string | undefined, positional: string | undefined): string | null | undefined {
+  if (option !== undefined && positional !== undefined) return null;
+  return option ?? positional;
+}
+
 /** `R:cajero` → `{ type: 'R', roleRef: 'cajero' }`. */
 function responsibilityOf(value: string, locale: Locale): Responsibility {
   const colon = value.indexOf(':');
@@ -185,12 +195,13 @@ function printRaci(matrix: LilaRaciMatrix, locale: Locale): void {
 async function raciCommand(argv: readonly string[], locale: Locale): Promise<number> {
   const { values, positionals } = parseArgs({
     args: [...argv],
-    options: { process: { type: 'string' }, json: { type: 'boolean' }, csv: { type: 'boolean' } },
+    options: { project: { type: 'string', short: 'p' }, process: { type: 'string' }, json: { type: 'boolean' }, csv: { type: 'boolean' } },
     allowPositionals: true,
   });
   const C = messages(locale).cli;
-  if (positionals.length !== 1) return usageError('process raci', C.expectedPositionals('<project.lila>'), locale);
-  const matrix = await lilaRaciMatrix({ file: positionals[0]!, process: values.process, locale });
+  const file = positionals.length > 1 ? null : projectOf(values.project, positionals[0]);
+  if (file === undefined || file === null) return usageError('process raci', C.expectedPositionals('<project.lila>'), locale);
+  const matrix = await lilaRaciMatrix({ file, process: values.process, locale });
   if (values.json === true) console.log(JSON.stringify(matrix, null, 2));
   else if (values.csv === true) process.stdout.write(raciCsv(matrix));
   else printRaci(matrix, locale);
@@ -206,9 +217,10 @@ async function exportBpmnCommand(argv: readonly string[], locale: Locale): Promi
     options: { project: { type: 'string', short: 'p' }, process: { type: 'string' }, out: { type: 'string' }, force: { type: 'boolean' } },
     allowPositionals: true,
   });
-  if (positionals.length > 0) return usageError('process export-bpmn', C.expectedPositionals('export-bpmn'), locale);
-  if (values.project === undefined) return usageError('process export-bpmn', C.processMissingOption('-p/--project <file.lila>'), locale);
-  const read = await readLilaProcessBpmn(values.project, { process: values.process, locale });
+  const project = positionals.length > 1 ? null : projectOf(values.project, positionals[0]);
+  if (project === null) return usageError('process export-bpmn', C.expectedPositionals('<project.lila>'), locale);
+  if (project === undefined) return usageError('process export-bpmn', C.processMissingOption('-p/--project <file.lila>'), locale);
+  const read = await readLilaProcessBpmn(project, { process: values.process, locale });
   if (values.out === undefined) process.stdout.write(read.xml);
   else console.log(T.bpmnWritten(writeExportFile(values.out, read.xml, { overwrite: values.force === true, source: read.file, locale })));
   return 0;
@@ -233,11 +245,12 @@ async function importBpmnCommand(argv: readonly string[], locale: Locale): Promi
     },
     allowPositionals: true,
   });
-  if (positionals.length > 0) return usageError('process import', C.expectedPositionals('import'), locale);
-  if (values.project === undefined) return usageError('process import', C.processMissingOption('-p/--project <file.lila>'), locale);
+  const project = positionals.length > 1 ? null : projectOf(values.project, positionals[0]);
+  if (project === null) return usageError('process import', C.expectedPositionals('<project.lila>'), locale);
+  if (project === undefined) return usageError('process import', C.processMissingOption('-p/--project <file.lila>'), locale);
   if (values.bpmn === undefined) return usageError('process import', T.bpmnRequired(), locale);
   const result = await putLilaProcessBpmn({
-    file: values.project,
+    file: project,
     mode: values.replace === true ? 'replace' : 'add',
     bpmn: values.bpmn,
     process: values.process,
@@ -272,6 +285,7 @@ async function attributeCommand(argv: readonly string[], locale: Locale): Promis
   const { values, positionals } = parseArgs({
     args: [...argv],
     options: {
+      project: { type: 'string', short: 'p' },
       process: { type: 'string' },
       id: { type: 'string' },
       name: { type: 'string' },
@@ -285,11 +299,12 @@ async function attributeCommand(argv: readonly string[], locale: Locale): Promis
     },
     allowPositionals: true,
   });
-  const [sub, file, ...extra] = positionals;
+  const [sub, positional, ...extra] = positionals;
   if (sub !== 'define' && sub !== 'list') {
     return usageError('process attribute', T.processToolUnknown(sub ?? '', 'define, list'), locale);
   }
-  if (file === undefined || extra.length > 0) return usageError(`process attribute ${sub}`, C.expectedPositionals('<project.lila>'), locale);
+  const file = extra.length > 0 ? null : projectOf(values.project, positional);
+  if (file === undefined || file === null) return usageError(`process attribute ${sub}`, C.expectedPositionals('<project.lila>'), locale);
   if (sub === 'list') {
     const list = await lilaAttributeList({ file, process: values.process, locale });
     if (values.json === true) console.log(JSON.stringify(list, null, 2));

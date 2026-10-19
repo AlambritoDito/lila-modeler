@@ -166,7 +166,7 @@ export const EditOperationSchema = z.discriminatedUnion('op', [
   z
     .strictObject({ op: z.literal('annotate'), on: Id.describe('Id of the step.'), text: z.string().min(1) })
     .describe(
-      'Attaches a BPMN text annotation to a step (read back as its `notes`; not annotate_element). The same text on the same step again changes nothing.',
+      'Attaches a BPMN text annotation to a step (read back as its `notes`; not annotate_element); not to a start, end or boundary event. The same text on the same step again changes nothing.',
     ),
   z
     .strictObject({ op: z.literal('removeAnnotation'), on: Id.describe('Id of the step.'), text: z.string().min(1) })
@@ -631,7 +631,11 @@ class Editor {
     const owner = el['$parent'] as El;
     if (el.$type === 'bpmn:Association') {
       this.deleteLink(el);
-      return [el.id];
+      // A text annotation it was the last link of would hang on nothing: it goes too (#645).
+      const loose = ([el['sourceRef'], el['targetRef']] as (El | undefined)[]).filter(
+        (end) => end?.$type === 'bpmn:TextAnnotation' && !this.associations().some((a) => a['sourceRef'] === end || a['targetRef'] === end),
+      ) as El[];
+      return [el.id, ...loose.flatMap((note) => this.removeArtifact(note))];
     }
     if (el.$type === 'bpmn:DataInputAssociation' || el.$type === 'bpmn:DataOutputAssociation') {
       const ref = el.$type === 'bpmn:DataInputAssociation' ? ((el['sourceRef'] ?? []) as El[])[0] : (el['targetRef'] as El | undefined);
@@ -1199,11 +1203,18 @@ class Editor {
     if (el === undefined || lane === undefined) return;
     if (el['$parent'] !== this.process) return this.issue('id', this.C.editLaneOutsideProcess(op.id));
     // The end events the outline made for this step (`EndEvent_<id>`, `EndEvent_<id>_2`, …) go with it
-    // while nothing else leads to them.
+    // while nothing else leads to them and they still sit in its lane (one moved by hand stays).
     const attached = ((this.process['flowElements'] ?? []) as El[]).filter((b) => b['attachedToRef'] === el);
+    const from = laneOfNode(this.process, el);
     const ownEnd = (source: El) => (t: El): boolean => {
       const base = `EndEvent_${source.id}`;
-      return is(t, 'bpmn:EndEvent') && t.id.startsWith(base) && /^(_\d+)?$/.test(t.id.slice(base.length)) && this.incoming(t).every((f) => f['sourceRef'] === source);
+      return (
+        is(t, 'bpmn:EndEvent') &&
+        t.id.startsWith(base) &&
+        /^(_\d+)?$/.test(t.id.slice(base.length)) &&
+        this.incoming(t).every((f) => f['sourceRef'] === source) &&
+        laneOfNode(this.process, t) === from
+      );
     };
     // The boundary events go with their host, and so do the ends they lead to (`EndEvent_<boundary>`).
     const ends = [el, ...attached].flatMap((source) => this.outgoing(source).map((f) => f['targetRef'] as El).filter(ownEnd(source)));
@@ -1408,6 +1419,11 @@ class Editor {
   annotate(op: Extract<Op, { op: 'annotate' }>): void {
     const node = this.node(op.on, 'on');
     if (node === undefined) return;
+    // The outline reads notes back only from steps: a note on a start, end or boundary event (or on
+    // anything else the outline has no step type for) would come back as a loss warning (#645).
+    if (!Object.hasOwn(BPMN_TYPE, typeName(node))) {
+      return this.issue('on', this.C.editNoteNotStep(op.on, typeName(node)));
+    }
     if (notesOf(node, this.associations()).some((n) => n.annotation['text'] === op.text)) return this.change(this.C.editNoteExists(op.on, op.text));
     const { annotation, association } = attachNote(node, op.text, (type, attrs) => this.create(type, attrs), (base) => this.uniqueId(base));
     this.touch(node, annotation, association);
@@ -1793,25 +1809,48 @@ function fail(C: CliMessages, issues: EditIssue[], wrap: (detail: string) => str
 }
 
 /**
- * #630: a model with no diagram (no `bpmndi` shape) gets one, drawn by the same layout as
- * `editBpmn` with `layout: true`, for the main process (`processId`, else the document-order
- * rule). Returns `undefined` when the model already has a diagram, has no process to draw, or
- * holds content the BPMN reader cannot write back whole. Throws `LayoutError` when the layouter
- * cannot place it.
+ * Why `drawMissingDiagram` left the simulated process without a full drawing (#645):
+ * `unreadable`, bpmn-moddle cannot read the model whole (`detail`, its warnings), so writing it
+ * back would lose content; `partial`, only some of its nodes have a shape (`missing`, the others),
+ * and the drawing there is kept rather than redrawn.
  */
-export async function layoutMissingDiagram(xml: string, options: { processId?: string | undefined; locale?: Locale | undefined } = {}): Promise<string | undefined> {
+export type DiagramGap =
+  | { readonly kind: 'unreadable'; readonly detail: string }
+  | { readonly kind: 'partial'; readonly missing: readonly string[] };
+
+/**
+ * #630: a model whose main process (`processId`, else the document-order rule) has no diagram
+ * gets one, drawn by the same layout as `editBpmn` with `layout: true`. "No diagram" is about that
+ * process (#645): a model whose only DI draws another pool is laid out too. Returns the drawn XML
+ * in `xml`; nothing when the process is drawn already or has no node; `gap` when it is not drawn
+ * (or only partly) and was left as it is. Throws `LayoutError` when the layouter cannot place it.
+ */
+export async function drawMissingDiagram(
+  xml: string,
+  options: { processId?: string | undefined; locale?: Locale | undefined } = {},
+): Promise<{ readonly xml?: string; readonly gap?: DiagramGap }> {
   const moddle = BpmnModdle({ lila });
   const { rootElement, warnings } = await moddle.fromXML(xml);
-  // Writing back what the reader could not take whole would lose it: such a model stays as it is.
-  if (warnings.length > 0) return undefined;
   const definitions = rootElement as unknown as El;
   const process = mainProcess(definitions, options.processId);
-  if (process === undefined) return undefined;
+  if (process === undefined) return {};
+  const nodes = ((process['flowElements'] ?? []) as El[]).filter((el) => is(el, 'bpmn:FlowNode'));
+  if (nodes.length === 0) return {};
+  const drawn = new Diagram(definitions, (type, attrs) => moddle.create(type, attrs) as unknown as El, (base) => base);
+  const missing = nodes.filter((node) => !drawn.shapes.has(node.id)).map((node) => node.id);
+  if (missing.length === 0) return {};
+  // Writing back what the reader could not take whole would lose it: such a model stays as it is.
+  if (warnings.length > 0) return { gap: { kind: 'unreadable', detail: warnings.map((w) => w.message).join('; ') } };
+  if (missing.length < nodes.length) return { gap: { kind: 'partial', missing } };
   const editor = new Editor(moddle, definitions, process, messages(options.locale ?? 'en').cli, undefined, 'as-is.scenario.json');
-  if (editor.diagram.hasDi || ((process['flowElements'] ?? []) as El[]).length === 0) return undefined;
   await relayout({ definitions, process, participant: editor.participant, pool: editor.pool, diagram: editor.diagram });
   const { xml: out } = await moddle.toXML(rootElement, { format: true });
-  return marcarExportador(out);
+  return { xml: marcarExportador(out) };
+}
+
+/** `drawMissingDiagram`'s XML alone: `undefined` when it drew nothing. Throws `LayoutError`. */
+export async function layoutMissingDiagram(xml: string, options: { processId?: string | undefined; locale?: Locale | undefined } = {}): Promise<string | undefined> {
+  return (await drawMissingDiagram(xml, options)).xml;
 }
 
 /**

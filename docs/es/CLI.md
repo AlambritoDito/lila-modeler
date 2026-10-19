@@ -128,8 +128,9 @@ usa la app:
   y marca el corte. La corrida se dibuja sobre el modelo con el que corrió. Una capa sobre un
   `.bpmn`, o sin corrida guardada, es un error; también `--run` o `--scenario` sin `--overlay`.
 - `lila export doc <proyecto.lila> --out archivo.docx|archivo.html` escribe el documento del
-  proceso, como «Exportar documento» de la app: diagrama, descripciones en orden de flujo, el
-  escenario y los resultados de una corrida guardada. El HTML incrusta el diagrama SVG y las
+  proceso, como «Exportar documento» de la app: diagrama, descripciones en orden de flujo (con las
+  anotaciones de texto de cada elemento como líneas `Nota`; las de un flujo, un carril o de nada,
+  bajo la descripción del proceso), el escenario y los resultados de una corrida guardada. El HTML incrusta el diagrama SVG y las
   gráficas de la corrida en SVG, las mismas de Resultados en la app, salvo el histograma del tiempo
   de ciclo (una corrida guardada no conserva los tiempos por caso). El Word va **sin diagrama y sin
   gráficas**: Word necesita un PNG y el motor no rasteriza. Una nota por stderr dice qué quedó
@@ -389,12 +390,18 @@ El BPMN de un proceso de un `.lila`, tal cual, hacia fuera y hacia dentro — la
 
 Un modelo con errores de validación sale con `1` y no escribe nada, salvo con
 `--allow-unsimulatable`: entonces se guarda como diagrama que no se simula, con sus errores
-impresos como notas. Un archivo que no es BPMN se rechaza siempre. Un modelo sin diagrama se
-maqueta salvo con `--no-layout`. La escritura es la escritura atómica y con candado del `.lila`
+impresos como notas. Un archivo que no es BPMN se rechaza siempre. Un modelo cuyo proceso
+simulado no tiene diagrama se maqueta salvo con `--no-layout`; uno que no se puede maquetar
+(bpmn-moddle no lo lee entero, solo está dibujado en parte o el maquetador falla) se guarda tal
+como llegó, con una nota que dice por qué. La escritura es la escritura atómica y con candado del `.lila`
 (ver [Un `.lila` como entrada](#un-lila-como-entrada-466)), con los demás procesos intactos;
 `--dry-run` no escribe nada; `--json` imprime el objeto de resultado de `put_process_bpmn`:
 `{ file, mode, slug, name, processId, revision, dryRun, laidOut, summary, scenarioRemovals, notes,
 warnings, slugs }`.
+
+Los dos toman el proyecto como `-p/--project <proyecto.lila>` o como posicional `<proyecto.lila>`,
+y lo mismo `process raci` y `process attribute` (#645): sirve cualquiera de las dos convenciones;
+dar las dos se rechaza.
 
 ```bash
 npx lila process export-bpmn -p examples/pedido.lila --out results/pedido.bpmn

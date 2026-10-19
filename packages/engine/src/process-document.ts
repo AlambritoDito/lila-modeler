@@ -94,6 +94,12 @@ export interface ProcessDocumentInput {
   readonly ir: ProcessIR;
   /** `readAnnotations(xml)`, keyed by the ids of the `.bpmn` file. */
   readonly annotations: Readonly<Record<string, Annotations>>;
+  /**
+   * `readTextNotes(xml)` (#645): the text annotations, keyed like `annotations`. Each element
+   * lists its own; the ones on an element without a section, or on nothing, go under the
+   * process description.
+   */
+  readonly textNotes?: Readonly<Record<string, readonly string[]>> | undefined;
   readonly title: string;
   /** `YYYY-MM-DD`, from the caller: the engine has no clock. */
   readonly date: string;
@@ -261,6 +267,13 @@ function build(input: ProcessDocumentInput, visit?: SectionVisitor): ProcessDocu
   if (png !== undefined || svg !== undefined) blocks.push({ kind: 'image', alt: C.docDiagramAlt() });
   blocks.push({ kind: 'heading', level: 1, text: C.docDescription() });
   blocks.push({ kind: 'paragraph', text: process.documentation ?? C.docNoDescription() });
+  // Text annotations (#645) on what has no section of its own (a flow, a lane, the pool, nothing).
+  const textNotes = input.textNotes ?? {};
+  const sectioned = new Set([...Object.keys(ir.nodes), ...Object.keys(input.subprocesses ?? {})].map(original));
+  for (const [id, texts] of Object.entries(textNotes)) {
+    if (sectioned.has(id)) continue;
+    for (const text of texts) blocks.push({ kind: 'paragraph', label: C.docNote(), text: id === '' ? text : `${text} (${id})` });
+  }
 
   // Extended attributes (#509): one labelled line per filled-in attribute, under the element.
   const definitions = Object.values(annotations).flatMap((a) => a.attributeDefinitions ?? []);
@@ -330,6 +343,7 @@ function build(input: ProcessDocumentInput, visit?: SectionVisitor): ProcessDocu
     const host = ir.nodes[id]?.attachedTo;
     if (host !== undefined) line(C.docAttachedTo(), ir.nodes[host]?.name || original(host));
     line(C.docDocumentation(), notes.documentation);
+    for (const text of textNotes[original(id)] ?? []) line(C.docNote(), text);
     line(C.docResponsibilities(), notes.responsibilities?.map((r) => `${r.type}: ${r.roleRef}`).join(', '));
     visit?.({
       id: original(id),
