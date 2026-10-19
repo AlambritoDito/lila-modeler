@@ -204,13 +204,27 @@ test('logTo (#665): the same bytes as the log.csv of `lila run --csv`, published
   const viaCli = readFileSync(join(csv, 'log.csv'));
   expect(viaCli.length).toBeGreaterThan(1000);
   expect(readFileSync(logTo).equals(viaCli)).toBe(true);
-  // The run itself is the one `log: false` gave before: the same `RunResult` as the CLI's.
+  // Streaming the log changes nothing in the run: the same `RunResult` as the CLI's and as a call
+  // without `logTo`, whose answer still has one block.
   expect(readFileSync(saveTo, 'utf8')).toBe(readFileSync(json, 'utf8'));
   expect(readdirSync(join(temp, 'log-mcp')).sort()).toEqual(['run.json', 'run.log.csv']);
-
-  // Without the new fields the answer has one block, as before.
-  const plain = await client.callTool({ name: 'run_simulation', arguments: { scenario: asIs, seed: 42 } });
+  const plain = await client.callTool({
+    name: 'run_simulation',
+    arguments: { scenario: asIs, seed: 42, replications: 2, detail: 'full' },
+  });
   expect((plain.content as unknown[]).length).toBe(1);
+  expect(plain.structuredContent).toEqual(JSON.parse(readFileSync(saveTo, 'utf8')));
+
+  // `logTo` never replaces `saveTo` or an input of the call.
+  for (const taken of [saveTo, asIs]) {
+    const refused = await client.callTool({
+      name: 'run_simulation',
+      arguments: { scenario: asIs, seed: 42, logTo: taken, saveTo },
+    });
+    expect(refused.isError).toBe(true);
+    expect(textOf(refused)).toContain('`logTo`');
+  }
+  expect(readFileSync(saveTo, 'utf8')).toBe(readFileSync(json, 'utf8'));
 }, 120_000);
 
 test('logTo (#665): a directory is refused and a cancelled run leaves neither the log nor a temporary', async () => {
@@ -269,7 +283,7 @@ test('compare_scenarios (#665): format "xlsx" is the workbook of `lila compare -
     name: 'compare_scenarios',
     arguments: { scenarios: [asIs, toBe], seed: 42, replications: 2, all: true, detail: 'full' },
   });
-  const summary = await client.callTool({ name: 'compare_scenarios', arguments: { scenarios: [asIs, toBe], seed: 42 } });
+  const summary = await client.callTool({ name: 'compare_scenarios', arguments: { scenarios: [asIs, toBe], seed: 42, replications: 2 } });
   expect(jsonOf(all).comparison.rows.length).toBe(jsonOf(full).comparison.rows.length);
   expect(jsonOf(all)).toEqual(jsonOf(full));
   expect(jsonOf(both)).toEqual(jsonOf(full));

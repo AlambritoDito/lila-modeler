@@ -522,6 +522,8 @@ export interface McpMessages {
   xlsxNeedsSaveTo: () => string;
   /** `compare_scenarios` with `all: true` and `detail: "summary"` (#665). */
   allWithSummary: () => string;
+  /** `run_simulation` whose `logTo` is the model, the `.lila`, the scenario or `saveTo` (#665). */
+  logToTaken: (target: string) => string;
   patchNotAnObject: () => string;
   /** Replaces `CliMessages.invalidScenarioLabel` when the defect came from a patch. */
   invalidAfterPatchLabel: () => string;

@@ -438,10 +438,10 @@ export function writeJsonAtomic(file: string, data: unknown, locale: Locale = 'e
 }
 
 /**
- * Publica bytes crudos (un `.xlsx`) con la misma técnica atómica que el CSV y el JSON: temporal +
- * `rename`, y nada se escribe encima de un archivo que ya existía sin pasar por
- * `assertReplaceableFile`. Devuelve la ruta absoluta escrita. Usado por `lila run|compare --xlsx` y
- * por `compare_scenarios` con `format: "xlsx"` (#665): mismos bytes, misma publicación.
+ * Publishes raw bytes (an `.xlsx`) with the same atomic technique as the CSV and the JSON: a
+ * temporary file and a `rename`, and nothing replaces an existing path without
+ * `assertReplaceableFile`. Returns the absolute path written. Used by `lila run|compare --xlsx` and
+ * by `compare_scenarios` with `format: "xlsx"` (#665): the same bytes, published the same way.
  */
 export function writeBytesAtomic(file: string, bytes: Uint8Array, locale: Locale = 'en'): string {
   const target = absolutePath(file);
@@ -466,9 +466,9 @@ export interface EventLogSink {
 }
 
 /**
- * Escribe el log en `file` por bloques mientras corre `simulate`, sin retener todas las
- * replicaciones. El archivo temporal solo se publica después de una corrida completa (`commit`).
- * Movido de `cli.ts` (#665); `lila run --csv` lo abre sobre `<dir>/log.csv`.
+ * Writes the event log to `file` in blocks while `simulate` runs, without holding every
+ * replication. The temporary file is published only after a complete run (`commit`). Moved from
+ * `cli.ts` (#665); `lila run --csv` opens it on `<dir>/log.csv`.
  *
  * ponytail: buffer de 1 MiB + `writeFileSync(fd, ...)` en vez de un `WriteStream`. `simulate` es
  * síncrona y no admite pausa, así que un stream asíncrono no podría aplicar backpressure: se

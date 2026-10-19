@@ -33,8 +33,9 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
   With a `.lila` `model` and a scenario of it, `saveRun: true` stores the run in the project (see
   [Saving a run](#saving-a-run)). `logTo` writes the event log to a CSV file: the same bytes as the
   `log.csv` of `lila run --csv` for the same model, scenario, seed and replications. Rows are
-  streamed to a temporary file during the run and published only after it completes, so memory
-  stays bounded on long runs. When `logTo` or `saveRun` is given, a second text block says where
+  streamed to a temporary file during the run, so memory stays bounded on long runs, and the file
+  is published only when the call succeeds, after `saveTo` and `saveRun`. A `logTo` that names the
+  model, the `.lila`, the scenario file or `saveTo` is refused. When `logTo` or `saveRun` is given, a second text block says where
   they went: `{ log, savedRun }`, each key only when asked for; `log` is the absolute path.
 - **`compare_scenarios({ model?, process?, scenarios, seed?, replications?, saveTo?, format?, all?, detail?, locale? })`** validates
   all scenarios before running any. Two or more scenarios must use the same model; the first

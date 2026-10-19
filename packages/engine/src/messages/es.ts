@@ -724,6 +724,7 @@ export const es: Catalog = {
     atLeastTwoScenarios: () => 'hacen falta al menos dos escenarios.',
     xlsxNeedsSaveTo: () => '`format: "xlsx"` necesita `saveTo`: el libro se escribe en un archivo, no se devuelve.',
     allWithSummary: () => '`all: true` pide todas las filas y `detail: "summary"` un resumen: pasa solo uno de los dos.',
+    logToTaken: (target) => `\`logTo\` (${target}) es un archivo que esta llamada ya lee o escribe: elige otra ruta.`,
     patchNotAnObject: () => 'el patch no produjo un objeto de escenario.',
     invalidAfterPatchLabel: () => 'escenario inválido tras el patch:',
     patchedMissingModel: () => 'el escenario resultante no declara model.',

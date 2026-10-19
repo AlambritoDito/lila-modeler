@@ -42,8 +42,10 @@ Schema del escenario como recursos, y el flujo de la guía como el prompt `inter
   Con un `model` `.lila` y un escenario suyo, `saveRun: true` guarda la corrida en el proyecto (ver
   [Guardar una corrida](#guardar-una-corrida)). `logTo` escribe el event log en un archivo CSV: los
   mismos bytes que el `log.csv` de `lila run --csv` con el mismo modelo, escenario, semilla y
-  réplicas. Las filas se escriben en streaming a un temporal durante la corrida y se publican solo
-  cuando termina, así que la memoria no crece en corridas largas. Con `logTo` o `saveRun`, un
+  réplicas. Las filas se escriben en streaming a un temporal durante la corrida, así que la memoria
+  no crece en corridas largas, y el archivo se publica solo si la llamada sale bien, después de
+  `saveTo` y `saveRun`. Se rechaza un `logTo` que nombre el modelo, el `.lila`, el archivo del
+  escenario o `saveTo`. Con `logTo` o `saveRun`, un
   segundo bloque de texto dice dónde quedaron: `{ log, savedRun }`, cada clave solo si se pidió;
   `log` es la ruta absoluta.
 - **`compare_scenarios({ model?, process?, scenarios, seed?, replications?, saveTo?, format?, all?, detail?, locale? })`** (LILA-054) — valida

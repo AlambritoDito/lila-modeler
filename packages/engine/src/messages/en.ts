@@ -718,6 +718,7 @@ export const en: Catalog = {
     atLeastTwoScenarios: () => 'at least two scenarios are needed.',
     xlsxNeedsSaveTo: () => '`format: "xlsx"` needs `saveTo`: the workbook is written to a file, not returned.',
     allWithSummary: () => '`all: true` asks for every row and `detail: "summary"` for a summary: pass one of them.',
+    logToTaken: (target) => `\`logTo\` (${target}) is a file this call already reads or writes: pick another path.`,
     patchNotAnObject: () => 'the patch did not produce a scenario object.',
     invalidAfterPatchLabel: () => 'invalid scenario after the patch:',
     patchedMissingModel: () => 'the resulting scenario does not declare model.',

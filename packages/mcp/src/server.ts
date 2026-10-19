@@ -317,8 +317,8 @@ interface RunSimulationInput {
 
 /**
  * Igual pipeline que `runCommand` de `cli.ts` (compartida en `@lila-modeler/engine/cli-shared`): valida
- * modelo y escenario, aplica overrides y simula con `log: false`, o con el event log en streaming
- * cuando hay `logTo` (#665). Ningún campo de nivel 2/3 se
+ * modelo y escenario, aplica overrides y simula con `log: false` (with `logTo`, #665, the event
+ * log is streamed to that file instead). Ningún campo de nivel 2/3 se
  * rechaza (LILA-184): `resources` y `calendars` los simula el motor desde LILA-033…036 y LILA-041.
  * El `RunResult` devuelto es el mismo objeto que produce `lila run --json`.
  */
@@ -371,9 +371,19 @@ async function runSimulation(
   const scenarioIssues = scenarioErrors(scenarioProblems);
   if (scenarioIssues.length > 0) return fail(M.scenarioInvalid(JSON.stringify(scenarioIssues)));
 
+  // #665: the log never replaces a file this call reads or writes (the model, the `.lila`, the
+  // scenario, `saveTo`).
+  if (logTo !== undefined) {
+    const taken = [lila?.file ?? modelPath];
+    if (typeof scenario === 'string') taken.push(absolutePath(scenario));
+    if (saveTo !== undefined) taken.push(absolutePath(saveTo));
+    const target = absolutePath(logTo);
+    if (taken.some((file) => comparablePath(file) === comparablePath(target))) return fail(M.logToTaken(target));
+  }
+
   // #665: the log is staged here, before the run, so that whatever ends this call (an error, the
-  // client's cancellation) the temporary file is removed; it is published only after `saveTo`, as
-  // `lila run --csv` publishes `log.csv` after `--json`.
+  // client's cancellation) the temporary file is removed. It is published last, once `saveTo` and
+  // `saveRun` succeeded: a call that fails leaves no log behind.
   let log: StagedFile | undefined;
   try {
     if (logTo !== undefined) log = stageTarget(logTo, locale);
@@ -385,7 +395,6 @@ async function runSimulation(
     const result = resultWithBoundaryWarnings(simulated, modelValidation, scenarioProblems);
 
     if (saveTo !== undefined) writeJsonAtomic(saveTo, result, locale);
-    log?.commit();
 
     // #629: the answer is a summary unless `detail: "full"`; what is saved above is always the full result.
     const answer = detail === 'full' ? result : summarizeRun(result, ir, withOverrides);
@@ -397,6 +406,7 @@ async function runSimulation(
     if (saveRun === true) {
       written.savedRun = await saveSimulationRun(lila!, scenario as string, withOverrides, result, locale);
     }
+    log?.commit();
     if (Object.keys(written).length > 0) content.push({ type: 'text', text: JSON.stringify(written, null, 2) });
     return { content, isError: false, structuredContent: answer };
   } catch (error) {
@@ -431,8 +441,8 @@ function scenarioLabel(entry: ScenarioInput, index: number): string {
  * los n − 1 anteriores). El `CompareResult` devuelto es el mismo objeto que produce
  * `lila compare --json`; los avisos que la CLI imprime aparte de la tabla (semillas distintas,
  * `baseTimeUnit` distinto, réplicas insuficientes) van en `notes`, sin tocar `comparison`.
- * `format: "xlsx"` (#665) guarda en `saveTo` el libro de `lila compare --xlsx`, y `all: true` es el
- * nombre de `--all` para `detail: "full"`: la comparación completa ya tiene todas las filas.
+ * With `format: "xlsx"` (#665), `saveTo` gets the workbook of `lila compare --xlsx`; `all: true` is
+ * the name of `--all` for `detail: "full"`, since the full comparison already has every row.
  */
 async function compareScenarios(
   { model, process, scenarios, seed, replications, saveTo, format, all: allRows, detail }: CompareScenariosInput,
