@@ -99,8 +99,10 @@ such as a parallel join waiting for branches of one exclusive split.
 
 To change a process, do not create it again: `edit_process` applies a list of operations (`add`,
 `connect`, `remove`, `rename`, `setType`, `moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`, `annotate`,
-`addDataObject`…) all or none, keeps every id and
-everything the operations do not touch (documentation, RACI, attributes, other processes). Send it
+`addDataObject`, `setCalledProcess`…) all or none, keeps every id and
+everything the operations do not touch (documentation, RACI, attributes, other processes).
+`setCalledProcess` points a call activity at another process of the same `.lila` by its slug
+(`process: null` clears it). Send it
 with `dryRun: true` first and show the `changes` to the person when the edit is not trivial.
 
 ```json

@@ -14,11 +14,11 @@
  */
 import { parseBpmn } from '../bpmn/parse.js';
 import { bpmnToOutline, type NormalOutline } from '../bpmn/outline.js';
-import { editBpmn, EditError, type EditChange, type EditIssue } from '../bpmn/edit.js';
+import { editBpmn, EditError, type CallTarget, type EditChange, type EditIssue } from '../bpmn/edit.js';
 import type { ValidationResult } from '../bpmn/validate.js';
 import type { ProcessIR } from '../core/ir.js';
 import { messages, type Locale } from '../messages/index.js';
-import { processesOf, withProcesses, type ProcessDocument, type ScenarioDocument } from '../project/index.js';
+import { processesOf, processIds, withProcesses, type ProcessDocument, type ScenarioDocument } from '../project/index.js';
 import { parseScenario, resolveExtends, validateScenario } from '../scenario.js';
 import { lilaScenarioPath, lilaScenarioReader, lilaWritten, openLilaProcess, writeLilaProject, type LilaProcess } from './input.js';
 import { BASE_SCENARIO } from './outline.js';
@@ -200,6 +200,21 @@ export function pruneScenarios(
 }
 
 /**
+ * What `setCalledProcess` can name (#664): every process of the project by slug, with the BPMN
+ * process id the app opens on a double-click (`processIds`): its `model.id`, or the model's only
+ * process id when the manifest's is not one of them.
+ */
+function callTargetsOf(processes: readonly ProcessDocument[]): Map<string, CallTarget> {
+  return new Map(
+    processes.map((p) => {
+      const ids = processIds(p.model.xml);
+      const processId = ids.length === 1 && !ids.includes(p.model.id) ? ids[0]! : p.model.id;
+      return [p.slug, { processId, name: p.name }];
+    }),
+  );
+}
+
+/**
  * Applies `operations` to one process of `file` (see `editBpmn` and the header). Throws
  * `EditError` when an operation is wrong, the model would not validate or a scenario would not
  * simulate, and `Error` with a catalog message for everything else (no file, unknown process, the
@@ -220,6 +235,7 @@ export async function editLilaProcess(file: string, operations: unknown, options
     scenarioName: BASE_SCENARIO,
     processId: simulated.id,
     scenarios: Object.values(current.scenarios),
+    callTargets: callTargetsOf(processesOf(input.document)),
   });
 
   // Scenario entries that no longer apply go, each one reported with what it held.

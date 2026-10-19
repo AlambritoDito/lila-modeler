@@ -64,8 +64,8 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
   outline: `{ file, slug, name, outline, warnings }`.
 - **`edit_process({ project, process?, operations, dryRun?, layout?, locale? })`** applies a list of
   operations (add, connect, remove, rename, setType, moveToLane, addLane, removeLane, moveLane,
-  addBoundary, annotate, removeAnnotation, addDataObject, removeDataObject) to one process of a
-  `.lila`, all or none. Returns `{ file, slug, name, dryRun, summary, changes, removed,
+  addBoundary, annotate, removeAnnotation, addDataObject, removeDataObject, setCalledProcess) to one
+  process of a `.lila`, all or none. Returns `{ file, slug, name, dryRun, summary, changes, removed,
   scenarioRemovals, notes, warnings, outline }`. See [Editing a process](#editing-a-process).
 
 - **`annotate_element({ project, process?, elementId, documentation?, responsibilities?, refs?, attributes?, dryRun?, locale? })`**
@@ -282,7 +282,8 @@ the file was saved; `summary` says what happened in one line.
 - **`delete_process`** removes a process with its scenarios and saved runs, listed in
   `removedScenarios` and `removedRuns`. The last process cannot be deleted. Neither can one that a
   call activity of another process names in its `calledElement` (with or without a prefix, as
-  `tns:Process_B`): the refusal lists those call activities as `slug/elementId (name)`. Down to one
+  `tns:Process_B`): the refusal lists those call activities as `slug/elementId (name)`; point them
+  elsewhere, or clear them, with `edit_process`'s `setCalledProcess`. Down to one
   process, the project is written as a version 1 archive, where that process takes the project's
   name and slug: `notes` says so and `slugs` lists what is left.
 - **`rename_scenario`** sets the scenario's `"name"`; its entry (`<name>.scenario.json`) stays. Its
@@ -688,6 +689,7 @@ terminal.
 | `removeAnnotation` | `on`, `text` | Removes the annotation with that text attached to the step, with its association (every one, in a model from elsewhere that repeats it). |
 | `addDataObject` | `name`, `on`, `direction` | Connects a data object to an activity (a task, a call activity or a sub-process): `in`, the activity reads it; `out`, the activity writes it. An object with that name in the process is reused, otherwise one is created. |
 | `removeDataObject` | `name`, `on?` | Disconnects the data object from the activity `on`, or from every activity without it. The object goes when nothing uses it any more. |
+| `setCalledProcess` | `id`, `process` | Sets the process the call activity `id` calls: `process` is the slug of another process of the same `.lila`, and the call activity's `calledElement` becomes that process's BPMN process id (its `model.id`), the one the app opens on a double-click. `process: null` removes the `calledElement`. An unknown slug is refused with the slugs of the project, and so is the process being edited (a call activity does not call its own process) and an `id` that is not a call activity. Only in a `.lila`: a bare model has no other process to name. A process some call activity names cannot be deleted with `delete_process` until it is pointed elsewhere or cleared. |
 
 - **Ids never change.** A renamed step keeps its scenario entries, and so does a retyped one, as
   far as they still apply. `duration`, `resources` and `selection` of an added step and the

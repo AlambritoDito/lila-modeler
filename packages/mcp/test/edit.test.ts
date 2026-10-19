@@ -131,3 +131,45 @@ test('editing the app example keeps the scenario keys; layout: false', async () 
   const run = await call('run_simulation', { model: 'pedido.lila', scenario: 'as-is', replications: 1 });
   expect(run.isError, run.text).toBe(false);
 }, 120_000);
+
+test('setCalledProcess (#664): calledElement written and read back by get_process_bpmn; delete_process of the target refused; null removes it', async () => {
+  const billing = { name: 'Billing', steps: [{ id: 'bill', name: 'Bill' }, { id: 'runCredit', name: 'Run credit', type: 'callActivity', end: true }] };
+  for (const outline of [credit, billing]) {
+    const created = await call('create_process', { outline, project: 'calls.lila' });
+    expect(created.isError, created.text).toBe(false);
+  }
+  const operations = [{ op: 'setCalledProcess', id: 'runCredit', process: 'credit-application' }];
+  const before = bytes('calls.lila');
+  const dry = await call('edit_process', { project: 'calls.lila', process: 'billing', operations, dryRun: true });
+  expect(dry.isError, dry.text).toBe(false);
+  expect(bytes('calls.lila').equals(before)).toBe(true);
+
+  for (const [bad, message] of [
+    ['nope', 'operations[0].process: the project has no process "nope"; its processes are: credit-application, billing.'],
+    ['billing', 'operations[0].process: "billing" has the BPMN process id Process_billing, that of the process being edited'],
+  ]) {
+    const refused = await call('edit_process', { project: 'calls.lila', process: 'billing', operations: [{ op: 'setCalledProcess', id: 'runCredit', process: bad }] });
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain(message);
+  }
+  const notCall = await call('edit_process', { project: 'calls.lila', process: 'billing', operations: [{ op: 'setCalledProcess', id: 'bill', process: 'credit-application' }] });
+  expect(notCall.isError).toBe(true);
+  expect(notCall.text).toContain('operations[0].id: "bill" is a task, not a call activity');
+  expect(bytes('calls.lila').equals(before)).toBe(true);
+
+  const revision = JSON.parse((await call('get_process_bpmn', { project: 'calls.lila', process: 'billing' })).text).revision as number;
+  const edited = await call('edit_process', { project: 'calls.lila', process: 'billing', operations });
+  expect(edited.isError, edited.text).toBe(false);
+  expect(JSON.parse(edited.text).changes).toEqual([{ op: 0, message: '"runCredit" now calls Credit application (credit-application)' }]);
+  const read = JSON.parse((await call('get_process_bpmn', { project: 'calls.lila', process: 'billing' })).text);
+  expect(read.xml).toMatch(/<bpmn:callActivity id="runCredit"[^>]*calledElement="Process_credit_application"/);
+  expect(read.revision).toBe(revision + 1);
+
+  const deleted = await call('delete_process', { project: 'calls.lila', process: 'credit-application' });
+  expect(deleted.isError).toBe(true);
+  expect(deleted.text).toContain('billing/runCredit (Run credit)');
+
+  const cleared = await call('edit_process', { project: 'calls.lila', process: 'billing', operations: [{ op: 'setCalledProcess', id: 'runCredit', process: null }] });
+  expect(cleared.isError, cleared.text).toBe(false);
+  expect(JSON.parse((await call('get_process_bpmn', { project: 'calls.lila', process: 'billing' })).text).xml).not.toContain('calledElement');
+}, 120_000);

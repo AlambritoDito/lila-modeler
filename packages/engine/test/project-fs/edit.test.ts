@@ -15,8 +15,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { EditError } from '../../src/bpmn/edit.js';
 import { main } from '../../src/cli.js';
 import { decodeLila, encodeLila, processesOf, withProcesses } from '../../src/project/index.js';
-import { createLilaProcess, editLilaProcess } from '../../src/project-fs/index.js';
-import { CREDIT } from '../fixtures/outlines.js';
+import { createLilaProcess, deleteLilaProcess, editLilaProcess, readLilaProcessBpmn } from '../../src/project-fs/index.js';
+import { CREDIT, ORDER } from '../fixtures/outlines.js';
 
 const repo = fileURLToPath(new URL('../../../../', import.meta.url));
 const exampleLila = join(repo, 'examples/pedido.lila');
@@ -252,5 +252,91 @@ describe('lila process edit', () => {
     writeFileSync(ops, '{ nope');
     expect(await main(['process', 'edit', '-p', file, '--ops', ops])).toBe(1);
     expect(out.join('\n')).toContain(`cannot read the operations ${ops}`);
+  });
+});
+
+describe('setCalledProcess (#664)', () => {
+  /** A .lila with ORDER (its call activity `fix`) and CREDIT. */
+  async function calls(): Promise<string> {
+    const file = join(scratch, 'calls.lila');
+    await createLilaProcess(file, ORDER);
+    await createLilaProcess(file, CREDIT);
+    return file;
+  }
+  const processOf = (file: string, slug: string) => processesOf(decodeLila(new Uint8Array(readFileSync(file)))).find((p) => p.slug === slug)!;
+  const fix = (xml: string): string => /<bpmn:callActivity id="fix"[^>]*>/.exec(xml)![0];
+
+  test('writes calledElement = the target\'s model.id (get_process_bpmn shows it); the revision goes up by one; delete_process of the target is refused', async () => {
+    const file = await calls();
+    const target = processOf(file, 'credit-application');
+    const revision = processOf(file, 'order-fulfilment').model.revision;
+    const edited = await editLilaProcess(file, [{ op: 'setCalledProcess', id: 'fix', process: 'credit-application' }], { process: 'order-fulfilment' });
+    expect(edited.changes).toEqual([{ op: 0, message: '"fix" now calls Credit application (credit-application)' }]);
+    const read = await readLilaProcessBpmn(file, { process: 'order-fulfilment' });
+    expect(fix(read.xml)).toContain(`calledElement="${target.model.id}"`);
+    expect(read.revision).toBe(revision + 1);
+    // The target and its scenarios are untouched.
+    expect(processOf(file, 'credit-application')).toEqual(target);
+
+    const hash = sha(file);
+    await expect(deleteLilaProcess({ file, process: 'credit-application' })).rejects.toThrow('order-fulfilment/fix (Fix)');
+    expect(sha(file)).toBe(hash);
+
+    // null removes it, and the target can then go.
+    const cleared = await editLilaProcess(file, [{ op: 'setCalledProcess', id: 'fix', process: null }], { process: 'order-fulfilment' });
+    expect(cleared.changes).toEqual([{ op: 0, message: '"fix" no longer calls a process' }]);
+    const after = processOf(file, 'order-fulfilment');
+    expect(fix(after.model.xml)).not.toContain('calledElement');
+    expect(after.model.revision).toBe(revision + 2);
+    await deleteLilaProcess({ file, process: 'credit-application', dryRun: true });
+  });
+
+  test('dryRun writes nothing; unknown slug, own slug, a step that is not a call activity: refused, nothing written', async () => {
+    const file = await calls();
+    const hash = sha(file);
+    const dry = await editLilaProcess(file, [{ op: 'setCalledProcess', id: 'fix', process: 'credit-application' }], { process: 'order-fulfilment', dryRun: true });
+    expect(dry).toMatchObject({ dryRun: true, changes: [{ op: 0, message: '"fix" now calls Credit application (credit-application)' }] });
+    expect(sha(file)).toBe(hash);
+
+    const refusal = async (ops: unknown[]): Promise<EditError> => {
+      const error = await editLilaProcess(file, ops, { process: 'order-fulfilment' }).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(EditError);
+      return error as EditError;
+    };
+    const error = await refusal([
+      { op: 'setCalledProcess', id: 'fix', process: 'billing' },
+      { op: 'setCalledProcess', id: 'fix', process: 'order-fulfilment' },
+      { op: 'setCalledProcess', id: 'take', process: 'credit-application' },
+    ]);
+    expect(error.issues.map((i) => [i.op, i.path, i.message])).toEqual([
+      [0, 'process', 'the project has no process "billing"; its processes are: order-fulfilment, credit-application.'],
+      [1, 'process', '"order-fulfilment" has the BPMN process id Process_order_fulfilment, that of the process being edited: a call activity cannot call its own process.'],
+      [2, 'id', '"take" is a userTask, not a call activity (callActivity); only a call activity calls a process.'],
+    ]);
+    // A valid operation next to a refused one is not written either.
+    await refusal([
+      { op: 'setCalledProcess', id: 'fix', process: 'credit-application' },
+      { op: 'setCalledProcess', id: 'fix', process: 'nope' },
+    ]);
+    expect(sha(file)).toBe(hash);
+  });
+
+  test('lila process edit passes it through (--dry-run, then written; es refusal exits 1)', async () => {
+    const file = await calls();
+    const hash = sha(file);
+    const ops = join(scratch, 'call.json');
+    writeFileSync(ops, JSON.stringify([{ op: 'setCalledProcess', id: 'fix', process: 'credit-application' }]));
+    expect(await main(['process', 'edit', '-p', file, '--process', 'order-fulfilment', '--ops', ops, '--dry-run'])).toBe(0);
+    expect(out).toContain('  0: "fix" now calls Credit application (credit-application)');
+    expect(sha(file)).toBe(hash);
+    expect(await main(['process', 'edit', '-p', file, '--process', 'order-fulfilment', '--ops', ops])).toBe(0);
+    expect(fix(processOf(file, 'order-fulfilment').model.xml)).toContain('calledElement="Process_credit_application"');
+
+    out = [];
+    const written = sha(file);
+    writeFileSync(ops, JSON.stringify([{ op: 'setCalledProcess', id: 'fix', process: 'nope' }]));
+    expect(await main(['process', 'edit', '-p', file, '--process', 'order-fulfilment', '--ops', ops, '--lang', 'es'])).toBe(1);
+    expect(out.join('\n')).toContain('operations[0].process: el proyecto no tiene un proceso "nope"; sus procesos son: order-fulfilment, credit-application.');
+    expect(sha(file)).toBe(written);
   });
 });

@@ -721,6 +721,15 @@ export const en: Catalog = {
     editBadBetween: () => 'must be two step ids: [from, to].',
     editDuplicateLane: (lane) => `there is already a lane named "${lane}"; choose another name.`,
     editLayoutFailed: (detail) => `the automatic layout failed on the edited process (${detail}); nothing was changed. Try again with layout: false (--no-layout).`,
+    editNotACallActivity: (id, type) => `"${id}" is a ${type}, not a call activity (callActivity); only a call activity calls a process.`,
+    editCallNeedsLila: () =>
+      'setCalledProcess needs a .lila: the called process is named by its slug among the processes of the project (edit_process, lila process edit).',
+    editCallUnknownProcess: (slug, slugs) => `the project has no process "${slug}"; its processes are: ${slugs}.`,
+    editCallSelf: (slug, processId) =>
+      `"${slug}" has the BPMN process id ${processId}, that of the process being edited: a call activity cannot call its own process.`,
+    editBadCalledProcess: () => 'must be the slug of a process of the project, or null to remove the called process.',
+    editCalled: (id, name, slug) => `"${id}" now calls ${name} (${slug})`,
+    editCallCleared: (id) => `"${id}" no longer calls a process`,
   },
   mcp: {
     nodeType: (type) => NODE_TYPES[type] ?? type,

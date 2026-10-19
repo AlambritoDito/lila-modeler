@@ -1741,3 +1741,104 @@ describe('QA of #661, round 5: a data object drawn off its step\'s lane stays in
     await expectCleanImport(xml);
   });
 });
+
+/* ------------------------------------------------------------------ *
+ * #664: setCalledProcess
+ * ------------------------------------------------------------------ */
+
+describe('setCalledProcess (#664)', () => {
+  /** ORDER's call activity `fix`, and the processes of a .lila it can call. */
+  async function order() {
+    const built = await outlineToBpmn(ORDER);
+    const own = /<bpmn:process id="([^"]+)"/.exec(built.xml)![1]!;
+    const callTargets = new Map([
+      ['order-fulfilment', { processId: own, name: 'Order fulfilment' }],
+      ['credit-application', { processId: 'Process_credit_application', name: 'Credit application' }],
+    ]);
+    return { xml: built.xml, scenario: built.scenario, callTargets };
+  }
+  const callActivity = (xml: string): string => /<bpmn:callActivity id="fix"[^>]*>/.exec(xml)![0];
+
+  test('the operation shape: a slug or null, in the schema and the reader', async () => {
+    const ops: EditOperation[] = [
+      { op: 'setCalledProcess', id: 'fix', process: 'credit-application' },
+      { op: 'setCalledProcess', id: 'fix', process: null },
+    ];
+    expect(EditOperationsSchema.safeParse(ops).success).toBe(true);
+    expect(EditOperationsSchema.safeParse([{ op: 'setCalledProcess', id: 'fix' }]).success).toBe(false);
+    const { xml, callTargets } = await order();
+    const error = await refused(
+      xml,
+      [
+        { op: 'setCalledProcess', id: 'fix' },
+        { op: 'setCalledProcess', id: 'fix', process: 3 },
+        { op: 'setCalledProcess', id: 'fix', process: '' },
+        { op: 'setCalledProcess', process: 'credit-application' },
+        { op: 'setCalledProcess', id: 'fix', process: 'credit-application', calledElement: 'X' },
+      ],
+      { callTargets },
+    );
+    const bad = 'must be the slug of a process of the project, or null to remove the called process.';
+    expect(error.issues.map((i) => [i.op, i.path, i.message])).toEqual([
+      [0, 'process', bad],
+      [1, 'process', bad],
+      [2, 'process', bad],
+      [3, 'id', 'must be a non-empty text.'],
+      [4, 'calledElement', 'unknown field "calledElement".'],
+    ]);
+  });
+
+  test('writes the calledElement of the target, and null removes it; ids, flows and the rest stay', async () => {
+    const { xml, scenario, callTargets } = await order();
+    expect(callActivity(xml)).not.toContain('calledElement');
+    const set = await editBpmn(xml, [{ op: 'setCalledProcess', id: 'fix', process: 'credit-application' }], { scenario, callTargets, layout: false });
+    expect(set.changes).toEqual([{ op: 0, message: '"fix" now calls Credit application (credit-application)' }]);
+    expect(callActivity(set.xml)).toContain('calledElement="Process_credit_application"');
+    expect(set.removed).toEqual([]);
+    expect(set.scenario).toBeUndefined();
+    expect(await errorsOf(set.xml)).toEqual(await errorsOf(xml));
+    expect((await outlineOf(set.xml)).steps).toEqual((await outlineOf(xml)).steps);
+
+    const cleared = await editBpmn(set.xml, [{ op: 'setCalledProcess', id: 'fix', process: null }], { scenario, callTargets, locale: 'es' });
+    expect(cleared.changes).toEqual([{ op: 0, message: '"fix" ya no llama a ningún proceso' }]);
+    expect(callActivity(cleared.xml)).not.toContain('calledElement');
+  });
+
+  test('refused: an unknown slug (the slugs listed), its own process, a step that is not a call activity, an unknown id', async () => {
+    const { xml, callTargets } = await order();
+    const error = await refused(
+      xml,
+      [
+        { op: 'setCalledProcess', id: 'fix', process: 'billing' },
+        { op: 'setCalledProcess', id: 'fix', process: 'order-fulfilment' },
+        { op: 'setCalledProcess', id: 'take', process: 'credit-application' },
+        { op: 'setCalledProcess', id: 'nope', process: 'credit-application' },
+        { op: 'setCalledProcess', id: 'fix', process: 'credit-application' },
+      ],
+      { callTargets },
+    );
+    const own = callTargets.get('order-fulfilment')!.processId;
+    expect(error.issues.map((i) => [i.op, i.path, i.message])).toEqual([
+      [0, 'process', 'the project has no process "billing"; its processes are: order-fulfilment, credit-application.'],
+      [1, 'process', `"order-fulfilment" has the BPMN process id ${own}, that of the process being edited: a call activity cannot call its own process.`],
+      [2, 'id', '"take" is a userTask, not a call activity (callActivity); only a call activity calls a process.'],
+      [3, 'id', '"nope" is not the id of an element of the model.'],
+    ]);
+  });
+
+  test('a bare model (no callTargets) refuses it: it needs a .lila', async () => {
+    const { xml } = await order();
+    for (const process of ['credit-application', null]) {
+      const error = await refused(xml, [{ op: 'setCalledProcess', id: 'fix', process }]);
+      expect(error.issues).toEqual([
+        {
+          op: 0,
+          path: 'process',
+          message: 'setCalledProcess needs a .lila: the called process is named by its slug among the processes of the project (edit_process, lila process edit).',
+        },
+      ]);
+    }
+    const es = await refused(xml, [{ op: 'setCalledProcess', id: 'fix', process: 'x' }], { locale: 'es' });
+    expect(es.message).toContain('operations[0].process: setCalledProcess necesita un .lila');
+  });
+});

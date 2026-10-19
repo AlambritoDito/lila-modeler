@@ -727,6 +727,15 @@ export const es: Catalog = {
     editBadBetween: () => 'deben ser dos ids de paso: [from, to].',
     editDuplicateLane: (lane) => `ya hay un carril llamado "${lane}"; elige otro nombre.`,
     editLayoutFailed: (detail) => `el maquetado automático falló en el proceso editado (${detail}); no se cambió nada. Prueba con layout: false (--no-layout).`,
+    editNotACallActivity: (id, type) => `"${id}" es un ${type}, no una actividad de llamada (callActivity); solo una actividad de llamada llama a un proceso.`,
+    editCallNeedsLila: () =>
+      'setCalledProcess necesita un .lila: el proceso llamado se nombra por su slug entre los procesos del proyecto (edit_process, lila process edit).',
+    editCallUnknownProcess: (slug, slugs) => `el proyecto no tiene un proceso "${slug}"; sus procesos son: ${slugs}.`,
+    editCallSelf: (slug, processId) =>
+      `"${slug}" tiene el id de proceso BPMN ${processId}, el del proceso que se edita: una actividad de llamada no puede llamar a su propio proceso.`,
+    editBadCalledProcess: () => 'debe ser el slug de un proceso del proyecto, o null para quitar el proceso llamado.',
+    editCalled: (id, name, slug) => `"${id}" ahora llama a ${name} (${slug})`,
+    editCallCleared: (id) => `"${id}" ya no llama a ningún proceso`,
   },
   mcp: {
     nodeType: (type) => TIPOS_NODO[type] ?? type,
