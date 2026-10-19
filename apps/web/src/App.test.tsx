@@ -208,7 +208,8 @@ function porEtiqueta(etiqueta: string): HTMLButtonElement {
 async function esperarReparse(): Promise<void> {
   await act(async () => {
     await new Promise((listo) => { setTimeout(listo, 200); });
-    // #645: under load the 150 ms timer can still be pending at 200 ms; wait until the parse started.
+    // #645: under load the 150 ms timer can still be pending at 200 ms; wait until the test's
+    // first reparse has started (`mocks.reparses` is reset per test, so this covers the first call).
     await vi.waitFor(() => { expect(mocks.reparses.length).toBeGreaterThan(0); }, { timeout: 5000 });
     await Promise.allSettled(mocks.reparses);
     await new Promise((listo) => { setTimeout(listo, 0); });
