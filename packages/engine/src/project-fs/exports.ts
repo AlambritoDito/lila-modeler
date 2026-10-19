@@ -262,7 +262,10 @@ export async function exportDocument(
     : { scenario: scenarioOfRun(lila, run, locale), result: run.result as RunResult };
   if (run === undefined) notes.push(C.exportDocumentNoRun());
   else notes.push(source.format === 'docx' ? C.exportDocxNoCharts() : C.exportNoHistogram());
-  const charts = results.result === undefined ? [] : chartsSvg({ ir, scenario: results.scenario, result: results.result, locale });
+  // Word skips SVG-only charts, so only the HTML draws them.
+  const charts = results.result === undefined || source.format === 'docx'
+    ? []
+    : chartsSvg({ ir, scenario: results.scenario, result: results.result, locale });
   const title = lila.slugs.length > 1 ? lila.process.name : lila.document.name;
   const doc = buildProcessDocument({
     ir, annotations, subprocesses, lanes, nodeLanes, laneParents, pool, poolName, types,

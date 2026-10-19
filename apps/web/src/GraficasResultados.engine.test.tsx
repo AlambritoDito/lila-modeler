@@ -39,16 +39,24 @@ beforeAll(async () => {
 
 afterAll(() => setLocale('en'));
 
-/** What a reader sees of a chart: its size, its bars and its texts (no hover titles). */
-function dibujo(svg: string): { size: string[]; paths: string[]; texts: string[] } {
+/**
+ * What a reader sees of a chart: every drawn element in order, with its attributes and text.
+ * Left out: what only works on screen (hover titles, transparent hit areas, the groups that hold
+ * them), ids and accessibility wiring.
+ */
+function dibujo(svg: string): string[] {
   const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
   expect(doc.querySelector('parsererror')).toBeNull();
-  const raiz = doc.documentElement;
-  return {
-    size: ['width', 'height', 'viewBox'].map((a) => raiz.getAttribute(a) ?? ''),
-    paths: [...raiz.querySelectorAll('path')].map((p) => `${p.getAttribute('d')} ${p.getAttribute('fill')}`),
-    texts: [...raiz.querySelectorAll('text')].map((t) => `${t.getAttribute('x')},${t.getAttribute('y')} ${t.textContent}`),
-  };
+  const fuera = /^(id|class|role|xmlns|aria-.*|data-.*)$/;
+  return [doc.documentElement, ...doc.documentElement.querySelectorAll('*')]
+    .filter((el) => !['title', 'desc'].includes(el.tagName) || el.parentElement === doc.documentElement)
+    .filter((el) => !(el.tagName === 'rect' && el.getAttribute('fill') === 'transparent'))
+    .filter((el) => el.tagName !== 'g' || el.hasAttribute('transform'))
+    .map((el) => {
+      const attrs = [...el.attributes].filter((a) => !fuera.test(a.name)).map((a) => `${a.name}=${a.value}`).sort();
+      const texto = ['text', 'title', 'desc'].includes(el.tagName) ? ` ${el.textContent}` : '';
+      return `${el.tagName}[${attrs.join(' ')}]${texto}`;
+    });
 }
 
 describe.each(['en', 'es'] as const)('the engine draws the app’s document charts (%s)', (locale) => {
