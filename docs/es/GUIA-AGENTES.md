@@ -102,8 +102,10 @@ atorados, como una unión paralela que espera ramas de una misma división exclu
 
 Para cambiar un proceso no lo crees otra vez: `edit_process` aplica una lista de operaciones
 (`add`, `connect`, `remove`, `rename`, `setType`, `moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`,
-`annotate`, `addDataObject`…) todas o ninguna, conserva
+`annotate`, `addDataObject`, `setCalledProcess`…) todas o ninguna, conserva
 cada id y todo lo que las operaciones no tocan (documentación, RACI, atributos, otros procesos).
+`setCalledProcess` apunta una actividad de llamada a otro proceso del mismo `.lila` por su slug
+(`process: null` lo quita).
 Mándala primero con `dryRun: true` y muéstrale los `changes` a la persona cuando la edición no sea
 trivial.
 
@@ -197,7 +199,7 @@ progreso por replicación y se puede cancelar.
 - `export_document` escribe el documento del proceso como `docx` o `html`: proceso, carriles, pasos
   con su descripción y RACI, compuertas con sus probabilidades y los resultados de la corrida
   vigente. El HTML lleva el diagrama en SVG.
-- `export_results` escribe las tablas de la corrida como `.xlsx` (o cuatro CSV).
+- `export_results` escribe las tablas de la corrida como `.xlsx` (o CSV), con los percentiles de espera por elemento.
 - `export_diagram` devuelve o escribe el diagrama en SVG.
 
 Ninguna sobrescribe un archivo sin `overwrite: true`, y ninguna escribe nunca sobre el proyecto.

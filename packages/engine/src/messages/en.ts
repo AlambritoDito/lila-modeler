@@ -393,6 +393,7 @@ export const en: Catalog = {
     xlsxSheetFlows: () => 'Flows',
     xlsxSheetResources: () => 'Resources',
     xlsxSheetParameters: () => 'Parameters',
+    xlsxSheetPercentiles: () => 'Percentiles',
     xlsxSheetComparison: () => 'Comparison',
     xlsxColumnSection: () => 'Section',
     xlsxColumnParameter: () => 'Parameter',
@@ -532,6 +533,10 @@ export const en: Catalog = {
       'The Word document has no diagram: Word needs a PNG and the engine has no rasteriser. The HTML document has it.',
     exportDocumentNoRun: () => 'No current run: the document has the model and no results.',
     exportNoCharts: () => 'The charts of the run are left out: the engine has no rasteriser.',
+    exportPercentilesNotReproduced: () =>
+      'The per-element wait percentiles are left out: the run\'s stored inputs do not reproduce its stored results (a cancelled run, or another engine version or platform, which can change the last digit).',
+    exportPercentilesFailed: (reason) =>
+      `The per-element wait percentiles are left out: simulating the run's stored inputs again failed: ${reason}`,
     exportTargetExists: (target) => `${target} already exists; nothing was written. Pass --force (\`overwrite\` in MCP) to replace it.`,
     exportNotDirectory: (path) => `cannot write into ${path}: it is a file, not a directory.`,
     exportUnknownKind: (kind) => `unknown export "${kind}": expected diagram, doc or results.`,
@@ -732,6 +737,22 @@ export const en: Catalog = {
     editBadBetween: () => 'must be two step ids: [from, to].',
     editDuplicateLane: (lane) => `there is already a lane named "${lane}"; choose another name.`,
     editLayoutFailed: (detail) => `the automatic layout failed on the edited process (${detail}); nothing was changed. Try again with layout: false (--no-layout).`,
+    editNotACallActivity: (id, type) => `"${id}" is a ${type}, not a call activity (callActivity); only a call activity calls a process.`,
+    editCallNeedsLila: () =>
+      'setCalledProcess needs a .lila: the called process is named by its slug among the processes of the project (edit_process, lila process edit).',
+    editCallUnknownProcess: (slug, slugs) =>
+      slugs === '' ? `the project has no process "${slug}", and no other process to call.` : `the project has no process "${slug}"; the processes a call activity can call are: ${slugs}.`,
+    editCallSelf: (slug, processId) =>
+      `"${slug}" has the BPMN process id ${processId}, that of the process being edited: a call activity cannot call its own process.`,
+    editCallShared: (slug, processId, others, count) =>
+      `"${slug}" has the BPMN process id ${processId}, which ${others} ${count === 1 ? 'declares' : 'declare'} too: a call activity cannot tell them apart; give one of them another id (put_process_bpmn with mode "replace").`,
+    editCallUnresolved: (slug, declared) =>
+      declared === ''
+        ? `the model of "${slug}" declares no BPMN process, so a call activity cannot name it.`
+        : `cannot tell which BPMN process of "${slug}" to call: its model declares ${declared}, and none of them is its model id or the process it simulates.`,
+    editBadCalledProcess: () => 'must be the slug of a process of the project, or null to remove the called process.',
+    editCalled: (id, name, slug) => `"${id}" now calls ${name} (${slug})`,
+    editCallCleared: (id) => `"${id}" no longer calls a process`,
   },
   mcp: {
     nodeType: (type) => NODE_TYPES[type] ?? type,

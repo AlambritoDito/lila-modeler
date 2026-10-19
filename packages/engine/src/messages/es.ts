@@ -397,6 +397,7 @@ export const es: Catalog = {
     xlsxSheetFlows: () => 'Flujos',
     xlsxSheetResources: () => 'Recursos',
     xlsxSheetParameters: () => 'Parámetros',
+    xlsxSheetPercentiles: () => 'Percentiles',
     xlsxSheetComparison: () => 'Comparación',
     xlsxColumnSection: () => 'Sección',
     xlsxColumnParameter: () => 'Parámetro',
@@ -538,6 +539,10 @@ export const es: Catalog = {
       'El documento Word va sin diagrama: Word necesita un PNG y el motor no rasteriza. El documento HTML sí lo lleva.',
     exportDocumentNoRun: () => 'Sin corrida actual: el documento lleva el modelo y no los resultados.',
     exportNoCharts: () => 'Las gráficas de la corrida quedan fuera: el motor no rasteriza.',
+    exportPercentilesNotReproduced: () =>
+      'Los percentiles de espera por elemento quedan fuera: las entradas guardadas de la corrida no reproducen sus resultados guardados (una corrida cancelada, u otra versión del motor u otra plataforma, que puede cambiar el último dígito).',
+    exportPercentilesFailed: (reason) =>
+      `Los percentiles de espera por elemento quedan fuera: volver a simular las entradas guardadas de la corrida falló: ${reason}`,
     exportTargetExists: (target) => `${target} ya existe; no se escribió nada. Pasa --force (\`overwrite\` en MCP) para reemplazarlo.`,
     exportNotDirectory: (path) => `no se puede escribir dentro de ${path}: es un archivo, no un directorio.`,
     exportUnknownKind: (kind) => `exportación desconocida "${kind}": se espera diagram, doc o results.`,
@@ -738,6 +743,22 @@ export const es: Catalog = {
     editBadBetween: () => 'deben ser dos ids de paso: [from, to].',
     editDuplicateLane: (lane) => `ya hay un carril llamado "${lane}"; elige otro nombre.`,
     editLayoutFailed: (detail) => `el maquetado automático falló en el proceso editado (${detail}); no se cambió nada. Prueba con layout: false (--no-layout).`,
+    editNotACallActivity: (id, type) => `"${id}" es un ${type}, no una actividad de llamada (callActivity); solo una actividad de llamada llama a un proceso.`,
+    editCallNeedsLila: () =>
+      'setCalledProcess necesita un .lila: el proceso llamado se nombra por su slug entre los procesos del proyecto (edit_process, lila process edit).',
+    editCallUnknownProcess: (slug, slugs) =>
+      slugs === '' ? `el proyecto no tiene un proceso "${slug}", ni otro proceso al que llamar.` : `el proyecto no tiene un proceso "${slug}"; los procesos a los que una actividad de llamada puede llamar son: ${slugs}.`,
+    editCallSelf: (slug, processId) =>
+      `"${slug}" tiene el id de proceso BPMN ${processId}, el del proceso que se edita: una actividad de llamada no puede llamar a su propio proceso.`,
+    editCallShared: (slug, processId, others, count) =>
+      `"${slug}" tiene el id de proceso BPMN ${processId}, que ${others} ${count === 1 ? 'también declara' : 'también declaran'}: una actividad de llamada no puede distinguirlos; dale otro id a uno de ellos (put_process_bpmn con mode "replace").`,
+    editCallUnresolved: (slug, declared) =>
+      declared === ''
+        ? `el modelo de "${slug}" no declara ningún proceso BPMN, así que una actividad de llamada no puede nombrarlo.`
+        : `no se sabe a qué proceso BPMN de "${slug}" llamar: su modelo declara ${declared}, y ninguno es su id de modelo ni el proceso que simula.`,
+    editBadCalledProcess: () => 'debe ser el slug de un proceso del proyecto, o null para quitar el proceso llamado.',
+    editCalled: (id, name, slug) => `"${id}" ahora llama a ${name} (${slug})`,
+    editCallCleared: (id) => `"${id}" ya no llama a ningún proceso`,
   },
   mcp: {
     nodeType: (type) => TIPOS_NODO[type] ?? type,

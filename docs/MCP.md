@@ -56,7 +56,8 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
   Returns `{ file, format, project, process, run, notes }`.
 - **`export_results({ project, process?, run?, scenario?, format, saveTo, overwrite?, locale? })`**
   writes the results of a stored run (`format`: `xlsx`, or `csv` into the directory `saveTo`).
-  Returns `{ files, format, project, process, run }`.
+  Returns `{ files, format, project, process, run, percentiles }`; `percentiles` is
+  `{ included, note? }`, see [App-free exports](#app-free-exports).
 - **`create_process({ outline, project, process?, name?, dryRun?, locale? })`** turns an outline —
   lanes plus an ordered list of steps — into a laid-out, validated BPMN process and writes it as a
   new process of the `.lila` `project` (or a new `.lila`). It never replaces a process. Returns
@@ -66,8 +67,8 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
   outline: `{ file, slug, name, outline, warnings }`.
 - **`edit_process({ project, process?, operations, dryRun?, layout?, locale? })`** applies a list of
   operations (add, connect, remove, rename, setType, moveToLane, addLane, removeLane, moveLane,
-  addBoundary, annotate, removeAnnotation, addDataObject, removeDataObject) to one process of a
-  `.lila`, all or none. Returns `{ file, slug, name, dryRun, summary, changes, removed,
+  addBoundary, annotate, removeAnnotation, addDataObject, removeDataObject, setCalledProcess) to one
+  process of a `.lila`, all or none. Returns `{ file, slug, name, dryRun, summary, changes, removed,
   scenarioRemovals, notes, warnings, outline }`. See [Editing a process](#editing-a-process).
 
 - **`annotate_element({ project, process?, elementId, documentation?, responsibilities?, refs?, attributes?, dryRun?, locale? })`**
@@ -284,7 +285,8 @@ the file was saved; `summary` says what happened in one line.
 - **`delete_process`** removes a process with its scenarios and saved runs, listed in
   `removedScenarios` and `removedRuns`. The last process cannot be deleted. Neither can one that a
   call activity of another process names in its `calledElement` (with or without a prefix, as
-  `tns:Process_B`): the refusal lists those call activities as `slug/elementId (name)`. Down to one
+  `tns:Process_B`): the refusal lists those call activities as `slug/elementId (name)`; point them
+  elsewhere, or clear them, with `edit_process`'s `setCalledProcess`. Down to one
   process, the project is written as a version 1 archive, where that process takes the project's
   name and slug: `notes` says so and `slugs` lists what is left.
 - **`rename_scenario`** sets the scenario's `"name"`; its entry (`<name>.scenario.json`) stays. Its
@@ -330,7 +332,12 @@ the file was saved; `summary` says what happened in one line.
   document only takes a current run; without one it goes without results, and the `run` of the
   answer is `null`. `export_results` without a run is `isError`, with a message that says so. An
   older run's results are exported against the model it ran on.
-- **Nothing is overwritten.** An existing file at `saveTo` (or, for CSV, any of the four files in
+- **Wait percentiles** (#666): `export_results` adds the resource-wait p50/p90/p95 per element
+  (a `Percentiles` sheet, or `percentiles.csv`), computed as the app's Simulate dock does but over
+  every replication, from simulating the run's stored inputs again. When that re-run does not give
+  back the stored results exactly (another engine version, or arm64 against x64), they are
+  left out and `percentiles` is `{ included: false, note }`. See `docs/RESULTS_FORMAT.md` § 12.
+- **Nothing is overwritten.** An existing file at `saveTo` (or, for CSV, any of its files in
   the directory) is `isError` and nothing is written, unless `overwrite: true`. The project (or
   `.bpmn`) being exported is never a destination, with `overwrite` or not. Writes are atomic
   (a temporary file, then published).
@@ -690,6 +697,7 @@ terminal.
 | `removeAnnotation` | `on`, `text` | Removes the annotation with that text attached to the step, with its association (every one, in a model from elsewhere that repeats it). |
 | `addDataObject` | `name`, `on`, `direction` | Connects a data object to an activity (a task, a call activity or a sub-process): `in`, the activity reads it; `out`, the activity writes it. An object with that name in the process is reused, otherwise one is created. |
 | `removeDataObject` | `name`, `on?` | Disconnects the data object from the activity `on`, or from every activity without it. The object goes when nothing uses it any more. |
+| `setCalledProcess` | `id`, `process` | Sets the process the call activity `id` calls: `process` is the slug of another process of the same `.lila`, and the call activity's `calledElement` becomes a BPMN process id that process's model declares (its `model.id` when it is one; else its only process, else the process it simulates), the one the app opens on a double-click. `process: null` removes the `calledElement`. An unknown slug is refused with the slugs a call activity can call, and so are the process being edited (a call activity does not call its own process), a process whose BPMN process id another process of the `.lila` declares too (the call could not tell them apart: give one of them another id with `put_process_bpmn` `mode: "replace"`), a process none of whose ids can be told to be the one, and an `id` that is not a call activity. Only in a `.lila`: a bare model has no other process to name. A process some call activity names cannot be deleted with `delete_process` until it is pointed elsewhere or cleared. |
 
 - **Ids never change.** A renamed step keeps its scenario entries, and so does a retyped one, as
   far as they still apply. `duration`, `resources` and `selection` of an added step and the
@@ -755,7 +763,7 @@ answer with a summary unless `detail: "full"`).
 | `patch_scenario` without `project` | none | Patching a loose `.json` scenario is MCP only; from the CLI, edit the file. |
 | `export_diagram` | `lila export diagram` | |
 | `export_document` | `lila export doc` | |
-| `export_results` | `lila export results` | Per-element wait percentiles: #666. |
+| `export_results` | `lila export results` | Same `Percentiles` sheet and `percentiles.csv`; the CLI prints the `percentiles.note` on stderr. |
 | `create_process` | `lila process create` | |
 | `get_process_outline` | `lila process show` | |
 | `edit_process` | `lila process edit` | |

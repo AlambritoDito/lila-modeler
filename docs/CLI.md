@@ -130,7 +130,11 @@ the app uses:
 - `lila export results <project.lila> --out book.xlsx|directory` writes the results of a stored
   run: one `.xlsx` (Summary, Elements, Flows, Resources, Parameters), or with `--format csv`
   `elements.csv`, `flows.csv`, `resources.csv` and `process.csv` in the directory, the same files
-  `lila run` writes (a stored run keeps no event log, so there is no `log.csv`).
+  `lila run` writes (a stored run keeps no event log, so there is no `log.csv`). It adds the
+  resource-wait p50/p90/p95 per element, a `Percentiles` sheet or `percentiles.csv`, from
+  simulating the run's stored inputs again; when that re-run does not reproduce the stored KPIs
+  (another engine version or platform), they are left out and a note on stderr says why
+  (`docs/RESULTS_FORMAT.md` § 12).
 
 `--format` defaults to the extension of `--out` (`.docx`, `.html`, `.xlsx`). `--process` picks
 the process of a repository, as elsewhere. **Runs** are the ones the app saved in the `.lila`:
@@ -547,7 +551,7 @@ Process "Restaurant" (pedido)
 
 `process edit` applies a list of operations to one process, all or none: the JSON array the MCP
 tool `edit_process` takes as `operations` (`add`, `connect`, `remove`, `rename`, `setType`,
-`moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`, `annotate`, `addDataObject`…; format and rules in
+`moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`, `annotate`, `addDataObject`, `setCalledProcess`…; format and rules in
 [`docs/MCP.md`](MCP.md#editing-a-process)). Every
 operation is checked, the result is validated, and the `.lila` is written only if all of it is fine;
 otherwise it exits `1`, writes nothing and lists every problem with the index of its operation. The

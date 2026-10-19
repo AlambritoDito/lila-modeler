@@ -134,7 +134,10 @@ usa la app:
   corrida guardada: un `.xlsx` (Resumen, Elementos, Flujos, Recursos, Parámetros) o, con
   `--format csv`, `elements.csv`, `flows.csv`, `resources.csv` y `process.csv` en el directorio,
   los mismos archivos que escribe `lila run` (una corrida guardada no conserva el log de eventos,
-  así que no hay `log.csv`).
+  así que no hay `log.csv`). Añade los p50/p90/p95 de la espera por recurso por elemento, una hoja
+  `Percentiles` o `percentiles.csv`, volviendo a simular las entradas guardadas de la corrida;
+  cuando esa nueva corrida no reproduce los KPI guardados (otra versión del motor u otra
+  plataforma), quedan fuera y una nota por stderr dice por qué (`docs/es/RESULTS_FORMAT.md` § 12).
 
 `--format` sale por defecto de la extensión de `--out` (`.docx`, `.html`, `.xlsx`). `--process`
 elige el proceso de un repositorio, como en el resto. Las **corridas** son las que la app guardó en
@@ -546,7 +549,7 @@ Código de salida: `0`.
 
 `process edit` aplica una lista de operaciones a un proceso, todas o ninguna: el arreglo JSON que la
 tool MCP `edit_process` recibe como `operations` (`add`, `connect`, `remove`, `rename`, `setType`,
-`moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`, `annotate`, `addDataObject`…; formato y reglas en
+`moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`, `annotate`, `addDataObject`, `setCalledProcess`…; formato y reglas en
 [`docs/es/MCP.md`](MCP.md#editar-un-proceso)). Se
 comprueba cada operación, se valida el resultado y el `.lila` se escribe solo si todo está bien; si
 no, sale con `1`, no escribe nada y lista cada problema con el índice de su operación. El proceso se

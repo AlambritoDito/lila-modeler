@@ -14,11 +14,11 @@
  */
 import { parseBpmn } from '../bpmn/parse.js';
 import { bpmnToOutline, type NormalOutline } from '../bpmn/outline.js';
-import { editBpmn, EditError, type EditChange, type EditIssue } from '../bpmn/edit.js';
+import { editBpmn, EditError, type CallTarget, type EditChange, type EditIssue } from '../bpmn/edit.js';
 import type { ValidationResult } from '../bpmn/validate.js';
 import type { ProcessIR } from '../core/ir.js';
 import { messages, type Locale } from '../messages/index.js';
-import { processesOf, withProcesses, type ProcessDocument, type ScenarioDocument } from '../project/index.js';
+import { processesOf, processIds, withProcesses, type ProcessDocument, type ScenarioDocument } from '../project/index.js';
 import { parseScenario, resolveExtends, validateScenario } from '../scenario.js';
 import { lilaScenarioPath, lilaScenarioReader, lilaWritten, openLilaProcess, writeLilaProject, type LilaProcess } from './input.js';
 import { BASE_SCENARIO } from './outline.js';
@@ -200,6 +200,47 @@ export function pruneScenarios(
 }
 
 /**
+ * The BPMN process id a call activity names to call `process` (#664): one its model declares
+ * (`processIds`, what the app's double-click and `delete_process` match), so that the call
+ * resolves. Its `model.id` when it is one; else the only one; else the process it simulates
+ * (`parseBpmn`'s rule, as for the edited process); else `undefined`.
+ */
+async function calledIdOf(process: ProcessDocument, declared: readonly string[]): Promise<string | undefined> {
+  if (declared.includes(process.model.id)) return process.model.id;
+  if (declared.length === 1) return declared[0];
+  try {
+    const { id } = (await parseBpmn(process.model.xml, { scenarios: Object.values(process.scenarios) })).ir;
+    return declared.includes(id) ? id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * What `setCalledProcess` can name (#664): every process of the project by slug, with the BPMN
+ * process id a call activity names (`calledIdOf`) and the other processes whose model declares that
+ * id too (then a call cannot tell them apart). `edited` is marked `self`.
+ */
+async function callTargetsOf(processes: readonly ProcessDocument[], edited: string): Promise<Map<string, CallTarget>> {
+  const declared = processes.map((p) => processIds(p.model.xml));
+  const targets = new Map<string, CallTarget>();
+  for (const [i, p] of processes.entries()) {
+    if (p.slug === edited) {
+      targets.set(p.slug, { processId: undefined, name: p.name, self: true, declared: declared[i] });
+      continue;
+    }
+    const processId = await calledIdOf(p, declared[i]!);
+    const sharedWith = processId === undefined ? [] : processes.filter((q, j) => j !== i && declared[j]!.includes(processId)).map((q) => q.slug);
+    targets.set(p.slug, { processId, name: p.name, sharedWith, declared: declared[i] });
+  }
+  return targets;
+}
+
+/** Whether `operations` holds a `setCalledProcess`: only then are the call targets worked out. */
+const callsAProcess = (operations: unknown): boolean =>
+  Array.isArray(operations) && operations.some((op) => typeof op === 'object' && op !== null && (op as { op?: unknown }).op === 'setCalledProcess');
+
+/**
  * Applies `operations` to one process of `file` (see `editBpmn` and the header). Throws
  * `EditError` when an operation is wrong, the model would not validate or a scenario would not
  * simulate, and `Error` with a catalog message for everything else (no file, unknown process, the
@@ -220,6 +261,7 @@ export async function editLilaProcess(file: string, operations: unknown, options
     scenarioName: BASE_SCENARIO,
     processId: simulated.id,
     scenarios: Object.values(current.scenarios),
+    callTargets: callsAProcess(operations) ? await callTargetsOf(processesOf(input.document), current.slug) : undefined,
   });
 
   // Scenario entries that no longer apply go, each one reported with what it held.

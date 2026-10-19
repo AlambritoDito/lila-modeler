@@ -2,6 +2,7 @@
 
 import type { ProcessIR } from './core/ir.js';
 import type { EventLogRow, RunResult } from './core/result.js';
+import { percentile } from './element-percentiles.js';
 import { columnLabel, type ResultScope } from './format.js';
 
 export type CsvValue = string | number | null | undefined;
@@ -199,6 +200,30 @@ export function processRows(result: RunResult): ResultTable {
   return { headers, rows };
 }
 
+/** Metrics of the `Percentiles` sheet and `percentiles.csv`, in column order (#666). */
+export const PERCENTILE_COLUMNS = ['resourceWait.n', 'resourceWait.p50', 'resourceWait.p90', 'resourceWait.p95'] as const;
+
+/**
+ * The resource-wait percentiles per element (#666): `Id`, `Name`, `n`, `p50`, `p90`, `p95`, in
+ * seconds, one row per element with a measured instance. `samples` is what `elementSamples`
+ * (or `elementSampler`) gives with `RESOURCE_WAIT`; rows follow `result.elements`, like
+ * `elements.csv`.
+ */
+export function percentilesRows(
+  ir: ProcessIR,
+  result: RunResult,
+  samples: ReadonlyMap<string, readonly number[]>,
+): ResultTable {
+  const headers = ['Id', 'Name', ...labels('elements', PERCENTILE_COLUMNS)];
+  const ids = [...new Set([...Object.keys(result.elements), ...samples.keys()])];
+  const rows = ids.flatMap((id) => {
+    const sample = samples.get(id);
+    if (sample === undefined || sample.length === 0) return [];
+    return [[id, ir.nodes[id]?.name ?? '', sample.length, percentile(sample, 0.5), percentile(sample, 0.9), percentile(sample, 0.95)]];
+  });
+  return { headers, rows };
+}
+
 /** Serializa una `ResultTable`; el CSV y el XLSX salen de la misma. */
 function tableCsv(table: ResultTable): string {
   return toCsv(table.headers, table.rows);
@@ -226,6 +251,11 @@ export function resourcesCsv(
  */
 export function processCsv(result: RunResult): string {
   return tableCsv(processRows(result));
+}
+
+/** `percentiles.csv` of `exportResults` (#666), from `percentilesRows`. */
+export function percentilesCsv(ir: ProcessIR, result: RunResult, samples: ReadonlyMap<string, readonly number[]>): string {
+  return tableCsv(percentilesRows(ir, result, samples));
 }
 
 /**

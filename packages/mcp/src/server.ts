@@ -1058,9 +1058,12 @@ export function createServer(options: ServerOptions = {}): McpServer {
       title: 'Export results',
       description:
         'Writes the results of a run stored in a .lila, like `lila run --xlsx`/`--csv`: `xlsx` is ' +
-        'one workbook (Summary, Elements, Flows, Resources, Parameters) at `saveTo`; `csv` writes ' +
-        'elements, flows, resources and process .csv into the directory `saveTo` (a stored run ' +
-        'keeps no event log). `run` "latest" (default) is the run of the current model and ' +
+        'one workbook (Summary, Elements, Flows, Resources, Parameters, Percentiles) at `saveTo`; ' +
+        '`csv` writes elements, flows, resources, process and percentiles .csv into the directory ' +
+        '`saveTo`. Percentiles are the p50/p90/p95 resource wait per element in seconds, over all ' +
+        'replications, from simulating the run\'s stored inputs again (a stored run keeps no event ' +
+        'log); `percentiles.included` is false, with a `note`, when that re-run does not reproduce ' +
+        'the stored process KPIs. `run` "latest" (default) is the run of the current model and ' +
         'scenario; an older run is exported by id against the model it ran on. An error says so ' +
         'when the process has no run. Like `lila export results`.',
       inputSchema: z.object({
@@ -1081,7 +1084,7 @@ export function createServer(options: ServerOptions = {}): McpServer {
         const files = results.data instanceof Uint8Array
           ? [writeExportFile(saveTo, results.data, { overwrite, source: results.file, locale: language })]
           : writeExportDirectory(saveTo, results.data, { overwrite, source: results.file, locale: language });
-        return textResult({ files, format, project: results.file, process: results.process, run: results.run });
+        return textResult({ files, format, project: results.file, process: results.process, run: results.run, percentiles: results.percentiles });
       } catch (error) {
         return errorResult(toolMessage('export_results', message(error)));
       }
@@ -1135,8 +1138,10 @@ export function createServer(options: ServerOptions = {}): McpServer {
         '`setType` (also `end` ↔ `terminate` on an end event), `moveToLane` (with the step\'s boundary ' +
         'events), `addLane`, `removeLane` (its nodes to `moveStepsTo`), `moveLane` (among its ' +
         'siblings), `addBoundary` (a boundary timer, as in an outline), `annotate`/`removeAnnotation` ' +
-        '(a text annotation on a step) and `addDataObject`/`removeDataObject` (by name; an object goes ' +
-        'when nothing uses it). Start events are neither added nor retyped. Ids never change, so renamed ' +
+        '(a text annotation on a step), `addDataObject`/`removeDataObject` (by name; an object goes ' +
+        'when nothing uses it) and `setCalledProcess` (the process a call activity calls, by the slug of ' +
+        'another process of the .lila: its `calledElement` becomes that process\'s BPMN process id, ' +
+        'refused when another process declares the same id; `process: null` removes it). Start events are neither added nor retyped. Ids never change, so renamed ' +
         'or retyped steps keep their scenario entries; durations, resources and probabilities given ' +
         'go into the base scenario `as-is.scenario.json`. The result is validated; any problem ' +
         'refuses the whole edit, writes nothing and lists every issue with the index of its ' +
@@ -1166,7 +1171,8 @@ export function createServer(options: ServerOptions = {}): McpServer {
             '{op:"removeLane", lane, moveStepsTo?}; {op:"moveLane", lane, before | after}; ' +
             '{op:"addBoundary", on, boundary:{id, type:"timer", name?, label?, duration?, interrupting?, to | end}}; ' +
             '{op:"annotate", on, text}; {op:"removeAnnotation", on, text}; ' +
-            '{op:"addDataObject", name, on, direction: "in" | "out"}; {op:"removeDataObject", name, on?}. ' +
+            '{op:"addDataObject", name, on, direction: "in" | "out"}; {op:"removeDataObject", name, on?}; ' +
+            '{op:"setCalledProcess", id: a call activity, process: slug of another process | null}. ' +
             'E.g. [{"op":"add","step":{"id":"verify","name":"Verify ID","duration":"5m"},"after":"receive"}, ' +
             '{"op":"connect","from":"ok","to":"verify","label":"Retry","probability":0.1}, {"op":"remove","id":"check"}, ' +
             '{"op":"rename","id":"issue","name":"Issue card"}, {"op":"setType","id":"check","type":"serviceTask"}, ' +
