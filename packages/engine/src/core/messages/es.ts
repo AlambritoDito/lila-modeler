@@ -8,6 +8,11 @@
  */
 import type { CoreCatalog } from './types.js';
 
+/** `de 30 replicaciones`, `de 1 replicación`. */
+const deReplicaciones = (total: string): string => `de ${total} ${total === '1' ? 'replicación' : 'replicaciones'}`;
+/** `las otras 18`, `la otra replicación`: «las otras 1» no se dice. */
+const lasOtras = (observed: string): string => (observed === '1' ? 'la otra replicación' : `las otras ${observed}`);
+
 export const coreEs: CoreCatalog = {
   codes: {
     'E-LIMITE-SIN-AVANCE': (nodeId, caseId, replication, instant, limit) =>
@@ -99,11 +104,11 @@ export const coreEs: CoreCatalog = {
       `${poolId}: la ocupación medida supera la capacidad disponible integrada; puede ocurrir al cruzar una bajada de capacidad sin apropiación.`,
 
     'W-REPLICACIONES-SIN-OBSERVACIONES': (nodeId, missing, total, observed) =>
-      `${nodeId}: ninguna instancia se completó en ${missing} de ${total} replicaciones; sus estadísticas de tiempo promedian solo las otras ${observed}.`,
+      `${nodeId}: ninguna instancia se completó en ${missing} ${deReplicaciones(total)}; sus estadísticas de tiempo promedian solo ${lasOtras(observed)}.`,
     'W-REPLICACIONES-SIN-OBSERVACIONES/proceso': (missing, total, observed) =>
-      `proceso: ningún caso se completó en ${missing} de ${total} replicaciones; su tiempo de ciclo, su espera, su costo por caso y su nivel de servicio promedian solo las otras ${observed}.`,
+      `proceso: ningún caso se completó en ${missing} ${deReplicaciones(total)}; su tiempo de ciclo, su espera, su costo por caso y su nivel de servicio promedian solo ${lasOtras(observed)}.`,
     'W-REPLICACIONES-SIN-OBSERVACIONES/desenlace': (endId, missing, total, observed) =>
-      `${endId}: ningún caso terminó aquí en ${missing} de ${total} replicaciones; sus estadísticas de tiempo promedian solo las otras ${observed}.`,
+      `${endId}: ningún caso terminó aquí en ${missing} ${deReplicaciones(total)}; sus estadísticas de tiempo promedian solo ${lasOtras(observed)}.`,
 
     'W-NORMAL-NEGATIVA': (mean, sd, percent) =>
       `distribución normal (media ${mean}, desviación típica ${sd}): P(x < 0) = ${percent} % > 1 %; las muestras negativas se truncan a 0.`,

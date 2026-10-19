@@ -37,7 +37,7 @@ import {
   type Responsibility,
   type ValidateBpmnReport,
 } from '../bpmn/index.js';
-import { layoutMissingDiagram } from '../bpmn/edit.js';
+import { drawMissingDiagram } from '../bpmn/edit.js';
 import { LayoutError } from '../bpmn/layout.js';
 import type { ProcessIR } from '../core/ir.js';
 import { toCsv } from '../csv.js';
@@ -149,7 +149,8 @@ export interface AnnotateRequest extends LilaTarget {
   /** Each kind given replaces that kind's list (`[]` clears it); the kinds left out stay. */
   readonly refs?: Readonly<Record<string, readonly string[]>> | undefined;
   /**
-   * Extended attribute values by definition id (or by name, when only one definition has it).
+   * Extended attribute values by definition id (or by name, when only one definition has it; the
+   * exact spelling first, else regardless of case and outer spaces).
    * Merged into what the element has: `''` removes a value, the attributes left out stay.
    */
   readonly attributes?: Readonly<Record<string, string>> | undefined;
@@ -206,7 +207,11 @@ function mergedAttributes(
   for (const [key, value] of Object.entries(request.attributes)) {
     let definition = definitions.find((d) => d.id === key);
     if (definition === undefined) {
-      const named = definitions.filter((d) => d.name === key);
+      // By name: the exact spelling first, else regardless of case and outer spaces, as
+      // define_attribute tells names apart (#645). The definition keeps its own spelling.
+      const exact = definitions.filter((d) => d.name === key);
+      const folded = key.trim().toLowerCase();
+      const named = exact.length > 0 ? exact : definitions.filter((d) => d.name.trim().toLowerCase() === folded);
       if (named.length > 1) throw new Error(T.ambiguousAttribute(key, named.map((d) => d.id).join(', ')));
       definition = named[0];
     }
@@ -574,7 +579,10 @@ export interface CreateProjectResult {
   readonly laidOut: boolean;
   /** The model's validation warnings (`code: message`). */
   readonly warnings: readonly string[];
-  /** #632: with `allowUnsimulatable`, the model's validation errors (`code: message`); otherwise empty. */
+  /**
+   * #632: with `allowUnsimulatable`, the model's validation errors (`code: message`); #645: then
+   * why the process it simulates was left without a (full) diagram, when it was.
+   */
   readonly notes: readonly string[];
   readonly scenarios: readonly CreatedScenario[];
 }
@@ -598,10 +606,33 @@ function problemText(problem: { code: string; message: string }): string {
 }
 
 /**
+ * #630, #645: `xml` with the process it simulates (`processId`) drawn when it had no diagram for
+ * it (`laidOut`), else as given; `note` says why a process without a (full) drawing was left so.
+ */
+export async function withDiagram(
+  xml: string,
+  processId: string,
+  locale: Locale,
+): Promise<{ readonly xml: string; readonly laidOut: boolean; readonly note?: string }> {
+  const T = agentToolMessages(locale);
+  try {
+    const { xml: drawn, gap } = await drawMissingDiagram(xml, { processId, locale });
+    if (drawn !== undefined) return { xml: drawn, laidOut: true };
+    if (gap === undefined) return { xml, laidOut: false };
+    return { xml, laidOut: false, note: gap.kind === 'unreadable' ? T.diagramUnreadable(gap.detail) : T.diagramPartial(gap.missing) };
+  } catch (error) {
+    if (!(error instanceof LayoutError)) throw error;
+    return { xml, laidOut: false, note: T.diagramLayoutFailed(error.message) };
+  }
+}
+
+/**
  * The `bpmn` argument of `create_project` and `put_process_bpmn` (#632): inline XML when it starts
- * with `<`, otherwise a path to a `.bpmn`, read as UTF-8 (`file` is then its absolute path).
+ * with `<`, otherwise a path to a `.bpmn`, read as UTF-8 (`file` is then its absolute path). A
+ * blank one is neither (#645).
  */
 export function readBpmnArgument(bpmn: string, locale: Locale): { readonly xml: string; readonly file?: string } {
+  if (bpmn.trim() === '') throw new Error(agentToolMessages(locale).bpmnEmpty());
   if (bpmn.trimStart().startsWith('<')) return { xml: bpmn };
   const source = absolute(bpmn);
   if (!existsSync(source) || lstatSync(source).isDirectory()) throw new Error(messages(locale).mcp.fileMissing(source));
@@ -707,14 +738,10 @@ export async function createLilaProject(request: CreateProjectRequest): Promise<
     throw new Error(T.createModelInvalid(report.errors.length, report.errors.map(problemText).join('; ')));
   }
   // #630: a model without a diagram gets one, as `edit_process` with `layout: true` draws it, so
-  // `export_diagram` and the apps show it. A model the layouter cannot place is kept as given.
-  let laidOut = false;
-  try {
-    const drawn = await layoutMissingDiagram(xml, { processId: report.ir.id, locale });
-    if (drawn !== undefined) [xml, laidOut] = [drawn, true];
-  } catch (error) {
-    if (!(error instanceof LayoutError)) throw error;
-  }
+  // `export_diagram` and the apps show it. A model left undrawn is kept as given, with a note.
+  const drawing = await withDiagram(xml, report.ir.id, locale);
+  xml = drawing.xml;
+  const laidOut = drawing.laidOut;
 
   const scenarios: Record<string, ScenarioDocument> = {};
   for (const { name: scenarioName, scenario } of request.scenarios ?? []) {
@@ -771,7 +798,7 @@ export async function createLilaProject(request: CreateProjectRequest): Promise<
     processId: report.ir.id,
     laidOut,
     warnings: report.warnings.map(problemText),
-    notes: report.errors.map((problem) => T.unsimulatableNote(problemText(problem))),
+    notes: [...report.errors.map((problem) => T.unsimulatableNote(problemText(problem))), ...(drawing.note === undefined ? [] : [drawing.note])],
     scenarios: Object.keys(scenarios).sort().map((entry) => scenarioDiagnostics(root, entry, scenarios, report, locale)),
   };
 }

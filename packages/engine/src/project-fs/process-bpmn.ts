@@ -19,8 +19,6 @@
 import { basename, extname, resolve } from 'node:path';
 
 import { annotatableElements } from '../bpmn/annotate.js';
-import { layoutMissingDiagram } from '../bpmn/edit.js';
-import { LayoutError } from '../bpmn/layout.js';
 import { parseBpmn } from '../bpmn/parse.js';
 import { validateBpmnModel, type ValidatedBpmnModel } from '../bpmn/validate-report.js';
 import type { ProcessIR } from '../core/ir.js';
@@ -34,7 +32,7 @@ import {
   type ProcessDocument,
   type ProjectDocument,
 } from '../project/index.js';
-import { readBpmnArgument } from './agent-tools.js';
+import { readBpmnArgument, withDiagram } from './agent-tools.js';
 import { pruneScenarios, scenarioErrors, type ScenarioRemoval } from './edit.js';
 import { lilaWritten, openLilaProcess, writeLilaProject, type LilaProcess } from './input.js';
 import { BASE_SCENARIO, existing } from './outline.js';
@@ -158,6 +156,7 @@ export async function putLilaProcessBpmn(request: PutLilaProcessBpmnRequest): Pr
   const path = absolute(request.file);
   if (!isLilaPath(path)) throw new Error(C.processNotLila(path));
   if (mode === 'replace' && request.name !== undefined) throw new Error(T.putReplaceName());
+  if (mode === 'add' && request.name !== undefined && request.name.trim() === '') throw new Error(T.putEmptyName());
   if (mode === 'add' && request.process !== undefined && !isProcessSlug(request.process)) throw new Error(C.processBadSlug(request.process));
   const allow = request.allowUnsimulatable === true;
   const dryRun = request.dryRun === true;
@@ -181,16 +180,13 @@ export async function putLilaProcessBpmn(request: PutLilaProcessBpmnRequest): Pr
   const ir = report.ir;
   const notes: string[] = report.errors.map((problem) => T.unsimulatableNote(problemText(problem)));
 
-  // #630: a model without a diagram gets one; a model the layouter cannot place is kept as given.
+  // #630: a model without a diagram gets one; one left undrawn is kept as given, with a note (#645).
   let xml = source.xml;
   let laidOut = false;
   if (request.layout !== false) {
-    try {
-      const drawn = await layoutMissingDiagram(xml, { processId: ir.id, locale });
-      if (drawn !== undefined) [xml, laidOut] = [drawn, true];
-    } catch (error) {
-      if (!(error instanceof LayoutError)) throw error;
-    }
+    const drawing = await withDiagram(xml, ir.id, locale);
+    [xml, laidOut] = [drawing.xml, drawing.laidOut];
+    if (drawing.note !== undefined) notes.push(drawing.note);
   }
 
   const { problems: _problems, loose: _loose, ...document } = opened.document;
@@ -249,24 +245,27 @@ export async function putLilaProcessBpmn(request: PutLilaProcessBpmnRequest): Pr
     next = withProcesses(document, others.map((p) => (p.slug === current.slug ? target : p)));
   }
 
-  let slug = target.slug;
+  // #613: a one-process version 2 archive is written as version 1, and its process then takes the
+  // project's name and the slug that follows it; a dry run reports what the write would give (#645).
+  const landed = current === undefined ? target : processesOf(next)[others.findIndex((p) => p.slug === current.slug)]!;
+  let { slug, name } = landed;
   let slugs = processesOf(next).map((p) => p.slug);
   if (!dryRun) {
     const written = await writeLilaProject(opened, next, locale);
-    // #613: a one-process version 2 archive is written as version 1, and its slug follows its name.
     if (current !== undefined) slug = lilaWritten(opened, written).slug;
+    name = processesOf(written).find((p) => p.slug === slug)?.name ?? name;
     slugs = processesOf(written).map((p) => p.slug);
   }
   return {
     file: path,
     mode,
     slug,
-    name: target.name,
+    name,
     processId: ir.id,
     revision: target.model.revision,
     dryRun,
     laidOut,
-    summary: T.putSummary(mode, dryRun, target.name, slug, path, target.model.revision),
+    summary: T.putSummary(mode, dryRun, name, slug, path, target.model.revision),
     scenarioRemovals,
     notes,
     warnings: report.warnings.map(problemText),

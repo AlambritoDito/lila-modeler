@@ -10,6 +10,9 @@
  */
 import type { Locale } from './types.js';
 
+/** At most five ids, then how many more: a partly drawn Bizagi export can miss dozens. */
+const idList = (ids: readonly string[]): string => (ids.length > 5 ? `${ids.slice(0, 5).join(', ')} (+${ids.length - 5})` : ids.join(', '));
+
 export interface AgentToolMessages {
   unknownElement: (id: string, slug: string, file: string) => string;
   contentLoss: (detail: string) => string;
@@ -54,6 +57,12 @@ export interface AgentToolMessages {
   putMode: (mode: string) => string;
   putNoProject: (path: string) => string;
   putReplaceName: () => string;
+  putEmptyName: () => string;
+  bpmnEmpty: () => string;
+  // #645: a model whose simulated process is left undrawn by `create_project` / `put_process_bpmn`
+  diagramUnreadable: (detail: string) => string;
+  diagramPartial: (missing: readonly string[]) => string;
+  diagramLayoutFailed: (detail: string) => string;
   putScenarioBroken: (detail: string) => string;
   putScenarioNote: (entry: string, problem: string) => string;
   putSummary: (mode: 'add' | 'replace', dryRun: boolean, name: string, slug: string, file: string, revision: number) => string;
@@ -184,6 +193,13 @@ const en: AgentToolMessages = {
   putNoProject: (path) =>
     `${path} does not exist; nothing was written. put_process_bpmn adds to an existing .lila: create it first with create_project (or create_process).`,
   putReplaceName: () => 'with mode "replace" the process keeps its name; `name` only names a process that is added. Nothing was written.',
+  putEmptyName: () => '`name` cannot be blank: leave it out to name the process after its pool, process or file. Nothing was written.',
+  bpmnEmpty: () => '`bpmn` is empty: give inline BPMN XML (starting with `<`) or the path to a .bpmn file. Nothing was written.',
+  diagramUnreadable: (detail) =>
+    `the process it simulates has no diagram (BPMN DI) and was saved as given: bpmn-moddle cannot read the model whole (${detail}), so laying it out would lose that content. export_diagram cannot draw it; add the diagram in a BPMN editor.`,
+  diagramPartial: (missing) =>
+    `only part of the process it simulates is drawn: ${idList(missing)} ${missing.length === 1 ? 'has' : 'have'} no shape (BPMN DI). The diagram was saved as given; draw ${missing.length === 1 ? 'it' : 'them'} in a BPMN editor, or redraw the process with edit_process (layout: true).`,
+  diagramLayoutFailed: (detail) => `the model has no diagram (BPMN DI) and the auto-layout could not place it (${detail}); it was saved without one.`,
   putScenarioBroken: (detail) =>
     `the new model would leave a scenario with errors it did not have; nothing was written:\n${detail}\nPass allowUnsimulatable (--allow-unsimulatable) to save it anyway.`,
   putScenarioNote: (entry, problem) => `${entry} cannot run as it is: ${problem}`,
@@ -340,6 +356,13 @@ const es: AgentToolMessages = {
   putNoProject: (path) =>
     `${path} no existe; no se escribió nada. put_process_bpmn añade a un .lila que ya existe: créalo antes con create_project (o create_process).`,
   putReplaceName: () => 'con mode "replace" el proceso conserva su nombre; `name` solo nombra un proceso que se añade. No se escribió nada.',
+  putEmptyName: () => '`name` no puede estar en blanco: omítelo para que el proceso tome el nombre de su pool, de su proceso o del archivo. No se escribió nada.',
+  bpmnEmpty: () => '`bpmn` está vacío: da el XML BPMN en línea (empieza por `<`) o la ruta de un .bpmn. No se escribió nada.',
+  diagramUnreadable: (detail) =>
+    `el proceso que simula no tiene diagrama (BPMN DI) y se guardó como llegó: bpmn-moddle no puede leer el modelo entero (${detail}), así que maquetarlo perdería ese contenido. export_diagram no puede dibujarlo; añade el diagrama en un editor BPMN.`,
+  diagramPartial: (missing) =>
+    `solo parte del proceso que simula está dibujada: ${idList(missing)} no ${missing.length === 1 ? 'tiene' : 'tienen'} forma (BPMN DI). El diagrama se guardó como llegó; dibújal${missing.length === 1 ? 'o' : 'os'} en un editor BPMN, o vuelve a dibujar el proceso con edit_process (layout: true).`,
+  diagramLayoutFailed: (detail) => `el modelo no tiene diagrama (BPMN DI) y el maquetado automático no pudo colocarlo (${detail}); se guardó sin él.`,
   putScenarioBroken: (detail) =>
     `el modelo nuevo dejaría un escenario con errores que no tenía; no se escribió nada:\n${detail}\nPasa allowUnsimulatable (--allow-unsimulatable) para guardarlo de todos modos.`,
   putScenarioNote: (entry, problem) => `${entry} no se puede correr así: ${problem}`,

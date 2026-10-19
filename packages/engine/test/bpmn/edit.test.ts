@@ -340,7 +340,7 @@ describe('all or none', () => {
   test('ambiguous removals and placements are refused', async () => {
     const built = await outlineToBpmn(ORDER);
     const split = await refused(built.xml, [{ op: 'remove', id: 'split' }]);
-    expect(split.issues[0]!.message).toContain('with 1 incoming and 2 outgoing flows');
+    expect(split.issues[0]!.message).toContain('with 1 incoming flow and 2 outgoing flows');
     const after = await refused(built.xml, [{ op: 'add', step: { id: 'x' }, after: 'split' }]);
     expect(after.issues[0]!.message).toContain('"after" is ambiguous; use "between"');
     const noScenario = await refused(built.xml, [{ op: 'add', step: { id: 'x', duration: '1m' }, after: 'take' }]);
@@ -1138,15 +1138,17 @@ describe.each([true, false])('the #638 operations (layout %s)', (layout) => {
     expect(edit.changes.map((c) => c.message)).toEqual([
       'removed TextAnnotation "TextAnnotation_check"; also removed Association_check',
       'removed DataObjectReference "DataObjectReference_check"; also removed DataInputAssociation_check, DataObject_check',
-      'removed Association "Association_issue"',
+      // #645: the annotation it was the last link of goes with it, instead of hanging on nothing.
+      'removed Association "Association_issue"; also removed TextAnnotation_issue',
       expect.stringContaining('removed "issue"'),
     ]);
     expect(edit.changes[3]!.message).toContain('DataOutputAssociation_issue');
     expect(edit.changes[3]!.message).toContain('DataObjectReference_issue');
     expect(edit.xml).not.toContain('DataObject_issue');
-    // The annotation that lost its association is still there, and the outline says so.
+    // No annotation is left loose, so the outline has nothing to say it left out.
+    expect(edit.xml).not.toContain('TextAnnotation_issue');
     const reading = await bpmnToOutline(edit.xml, { scenario: scenario as Record<string, unknown> });
-    expect(reading.warnings).toEqual(['1 annotation, group or association is not part of the outline and was left out.']);
+    expect(reading.warnings).toEqual([]);
     expect(reading.outline.steps.some((s) => s.notes !== undefined || s.data !== undefined)).toBe(false);
   });
 });

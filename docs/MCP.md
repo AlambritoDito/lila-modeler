@@ -249,14 +249,20 @@ the same from a terminal.
     and `notes` says the same in words. If a scenario still gets an error it did not have with the
     old model, the call is refused.
   - **`allowUnsimulatable: true`** keeps a model the simulator cannot run — message or signal
-    events, collaborations, loops, a diagram drawn for documentation — the way the app saves one.
+    events, loops, a diagram drawn for documentation — the way the app saves one. (A collaboration
+    is not one of them: a Bizagi collaboration simulates its main pool.)
     Any validation error is accepted, and so is a scenario error on replace; each comes back in
     `notes` (`does not simulate: E-NOSOP: …`). A file that is not XML, not BPMN or has no
     `bpmn:process` is still refused. Nothing marks the process: «does not simulate» is what
     `get_scenario` says (`runnable: false`, the errors in its `notes`) and `run_simulation`
     refuses it, until the model is fixed.
-  - **`layout`** (default `true`) draws a model without a diagram (no `bpmndi` shapes) with the
-    auto-layout of `create_project` (`laidOut: true`); `false` keeps it as given.
+  - **`layout`** (default `true`) draws a model whose simulated process has no diagram (none of
+    its nodes has a `bpmndi` shape, even when another pool is drawn) with the auto-layout of
+    `create_project` (`laidOut: true`); `false` keeps it as given. A process left undrawn comes
+    back with `laidOut: false` and a line in `notes` saying why: bpmn-moddle cannot read the model
+    whole (bizagi-miwg A.4.0 and B.1.0, for instance), so laying it out would lose content; only
+    part of the process is drawn (the drawing is kept, the nodes without a shape are named); or
+    the layouter cannot place it.
   - The write is the atomic, locked write of `patch_scenario`: if the file changed on disk since
     it was read, the call is refused (`E-CAMBIO-EXTERNO`) and nothing is lost. Every other
     process stays byte for byte. `dryRun` checks everything and writes nothing.
@@ -556,7 +562,9 @@ The base scenario runs for one hour (`run.duration` 3600 s), so no case would ev
 The deadline is the scenario entry `elements.sla.processingTime`, never a `timeDuration` in the
 XML. `elements.sla.completed` counts the deadlines that fired. `byEndEvent` counts each case at the
 end of the path that finished last, so an escalated claim that was then paid counts under
-`EndEvent_pay`. To put the same deadline on a process that already exists, use `addBoundary`:
+`EndEvent_pay`. That is why `byEndEvent` shows `EndEvent_escalate` at 0 although `escalate` runs
+(`elements.escalate` counts it): the boundary does not interrupt `assess`, so the escalation path
+ends first and the case ends where its main path does. To put the same deadline on a process that already exists, use `addBoundary`:
 
 ```json
 { "name": "edit_process", "arguments": { "project": "claims.lila", "operations": [
@@ -579,7 +587,8 @@ written. `dryRun: true` answers what would change and writes nothing.
   removes it). `responsibilities` is the whole RACI list, `[{ "type": "R"|"A"|"C"|"I", "roleRef":
   "cashier" }]` (`[]` clears it). `refs` maps a kind (`systemRef`, `documentRef`, `riskRef`,
   `controlRef`, `kpiRef`, `input`, `output`) to its ids and replaces only the kinds given.
-  `attributes` maps an extended attribute (its id, or its name when only one has it) to a value
+  `attributes` maps an extended attribute (its id, or its name when only one has it: the exact
+  spelling first, else any case) to a value
   and is merged: `""` removes a value, the attributes left out stay. Each value is checked
   against the project's attribute definitions, as in the app's properties panel: a `number` is
   a plain decimal (`12`, `-3.5`), a `date` is `YYYY-MM-DD`, a `list` value is one of its
@@ -598,7 +607,7 @@ written. `dryRun: true` answers what would change and writes nothing.
   ASCII (`"SLA (h)"` → `Attr_sla_h`, then `_2`… when taken), so a dry run and the write name it
   alike and calling it again changes nothing (`changed: false`). The rules are the app's attribute
   dialog's: a name unique per element type (ignoring case), a `list` with at least one option
-  (trimmed, repeats dropped), `options` only on a `list`, and a `default` that fits the type.
+  (trimmed, repeats dropped), `options` only on a `list`, and a `default` that fits the type (trimmed; a blank one is none).
   Definitions are written on the `bpmn:collaboration` (else the process), and copies elsewhere are
   moved there (`docs/BPMN_EXTENSION.md`). A rename keeps every value. `remove: true` (with `id`, or
   `name` and `appliesTo`) removes the definition and its values; retyping, changing `appliesTo` or
@@ -629,8 +638,8 @@ written. `dryRun: true` answers what would change and writes nothing.
   file is written whole or not at all, and an existing one is refused unless `overwrite`. The web
   and desktop apps open it. A model without a diagram (no `bpmndi` shapes) gets one, drawn by the
   same auto-layout as `edit_process` with `layout: true`, for the process it simulates, so
-  `export_diagram` works on it; `laidOut: true` says so (#630). A model the layouter cannot place
-  is saved as given.
+  `export_diagram` works on it; `laidOut: true` says so (#630). A model left undrawn is saved as
+  given, with `laidOut: false` and the reason in `notes`, as in `put_process_bpmn`'s `layout`.
 
 ```json
 { "name": "create_project", "arguments": { "path": "project.lila", "name": "Orders", "bpmn": "examples/pedido/model.bpmn",
@@ -694,15 +703,15 @@ terminal.
 | --- | --- | --- |
 | `add` | `step`, `after?` or `between?` | Adds a step. `step` is an outline step without its connections, boundary events, notes or data: `{ id, name?, type?, lane?, duration?, resources? }`, any outline type. With `after: id`, the new step takes over that step's outgoing flow (refused when it has several: use `between`). With `between: [from, to]`, it goes on the flow from → to. The flow it lands on keeps its id, name and probability; a new flow continues to the old successor. Without either, it is added unconnected. `lane` defaults to the lane of the step it follows. |
 | `connect` | `from`, `to`, `label?`, `probability?`, `default?`, `id?` | Adds a sequence flow (id `Flow_<from>_<to>` by default). `probability` and `default: true` (the gateway's default flow) only out of an `xor` or `or` gateway; `default: true` is refused when the gateway already has a default flow. No operation marks an existing flow as the default or clears the mark: in one call, `connect` the same steps again (with `default: true` or without it, and the `label` and `probability` to keep) and `remove` the old flow, after removing the gateway's current default flow if it has one; the flow gets a new id. |
-| `remove` | `id` | Removes a step and reconnects: its incoming flows go to its successor when it has at most one; a step with no incoming flow loses its outgoing ones; a step with several incoming and several outgoing flows (a split after a join) is refused. A step with boundary events is refused. Message flows and associations attached to it go with it, and so do its text annotations, its data associations and the data objects nothing else uses (listed in the change). An end event left with no incoming flow goes too (listed in `removed`). A sequence flow, a boundary event, a text annotation, a data object or data store, a group or an association can be removed too. |
+| `remove` | `id` | Removes a step and reconnects: its incoming flows go to its successor when it has at most one; a step with no incoming flow loses its outgoing ones; a step with several incoming and several outgoing flows (a split after a join) is refused. A step with boundary events is refused. Message flows and associations attached to it go with it, and so do its text annotations, its data associations and the data objects nothing else uses (listed in the change). An end event left with no incoming flow goes too (listed in `removed`). A sequence flow, a boundary event, a text annotation, a data object or data store, a group or an association can be removed too; a text annotation left with no association by removing its association goes with it. |
 | `rename` | `id`, `name` | Renames any element: step, flow, lane, pool, process. A lane can also be named by its name, when no element has that id. `""` clears the name. |
 | `setType` | `id`, `type` | One of the outline types, or `end`/`terminate` to turn an end event into a terminate end and back. For those two, `id` is the end event's (`EndEvent_<step>` in a process Lila made; the outline does not show it otherwise), or a step that leads to exactly one end event: then that end is retyped, not the step. `end`/`terminate` on anything else (neither an end event nor a step with exactly one end event after it) is refused. Name, documentation, extension elements and flows stay; a sub-process turned into something else loses its content (listed in `removed`). An `xor` or `or` turned into an `and` or an `eventGateway` loses the probabilities of its outgoing flows (listed in `scenarioRemovals`). |
-| `moveToLane` | `id`, `lane` | Lane by name or id. The step's boundary events, and the end events they lead to, move with it. |
+| `moveToLane` | `id`, `lane` | Lane by name or id. The step's boundary events move with it, and so do its own end event and theirs (`EndEvent_<id>`, the one the outline adds) while only they lead to it and it still sits in the step's lane: an end event moved by hand to another lane stays there. |
 | `addLane` | `name`, `id?`, `after?` or `before?` | Adds a lane (at the bottom by default). The first lane of a process without lanes holds all its steps, and a process without a pool gets one. |
 | `removeLane` | `lane`, `moveStepsTo?` | Removes a lane (by name or id). A lane that holds any node — a step, a start, an end event, a boundary event or its end — needs `moveStepsTo`, another lane with no sub-lanes that takes them. A lane with sub-lanes is refused. The only lane of the process is the exception: removing it removes the lane set, its nodes stay in the pool without lanes, and `moveStepsTo` is not needed. |
 | `moveLane` | `lane`, `before` or `after` | Moves a lane above (`before`) or below (`after`) a sibling lane; exactly one of the two. |
 | `addBoundary` | `on`, `boundary` | Attaches a boundary timer to a task (any variant) or a call activity, not a sub-process. `boundary` is as in an outline: `{ id, type: "timer", name?, label?, duration?, interrupting?, to \| end }`. Its `duration` goes into the base scenario. |
-| `annotate` | `on`, `text` | Attaches a BPMN text annotation to a step (it reads back as the step's `notes`). The same text on the same step again changes nothing, so `removeAnnotation` is never ambiguous. Not to be confused with `annotate_element`, which writes the documentation, RACI and attributes (`lila:` annotations). |
+| `annotate` | `on`, `text` | Attaches a BPMN text annotation to a step (it reads back as the step's `notes`); a start, end or boundary event is refused, since the outline would not read it back. The same text on the same step again changes nothing, so `removeAnnotation` is never ambiguous. Not to be confused with `annotate_element`, which writes the documentation, RACI and attributes (`lila:` annotations). |
 | `removeAnnotation` | `on`, `text` | Removes the annotation with that text attached to the step, with its association (every one, in a model from elsewhere that repeats it). |
 | `addDataObject` | `name`, `on`, `direction` | Connects a data object to an activity (a task, a call activity or a sub-process): `in`, the activity reads it; `out`, the activity writes it. An object with that name in the process is reused, otherwise one is created. |
 | `removeDataObject` | `name`, `on?` | Disconnects the data object from the activity `on`, or from every activity without it. The object goes when nothing uses it any more. |

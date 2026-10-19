@@ -280,14 +280,19 @@ export-bpmn` y `lila process import` (`docs/es/CLI.md`) hacen lo mismo desde una
     lo dice con palabras. Si aun así un escenario tiene un error que con el modelo viejo no tenía,
     la llamada se rechaza.
   - **`allowUnsimulatable: true`** guarda un modelo que el simulador no puede correr — eventos de
-    mensaje o señal, colaboraciones, ciclos, un diagrama dibujado para documentar — como lo guarda
-    la app. Acepta cualquier error de validación, y en un reemplazo también un error de escenario;
+    mensaje o señal, ciclos, un diagrama dibujado para documentar — como lo guarda la app. (Una
+    colaboración no es uno de ellos: una colaboración de Bizagi simula su pool principal.) Acepta cualquier error de validación, y en un reemplazo también un error de escenario;
     cada uno vuelve en `notes` (`no se simula: E-NOSOP: …`). Un archivo que no es XML, no es BPMN
     o no tiene `bpmn:process` se sigue rechazando. Nada marca el proceso: «no se simula» es lo que
     dice `get_scenario` (`runnable: false`, con los errores en sus `notes`) y `run_simulation` lo
     rechaza, hasta que se arregle el modelo.
-  - **`layout`** (por defecto `true`) dibuja un modelo sin diagrama (sin formas `bpmndi`) con el
-    maquetado automático de `create_project` (`laidOut: true`); `false` lo deja como llegó.
+  - **`layout`** (por defecto `true`) dibuja un modelo cuyo proceso simulado no tiene diagrama
+    (ninguno de sus nodos tiene forma `bpmndi`, aunque otro pool sí esté dibujado) con el maquetado
+    automático de `create_project` (`laidOut: true`); `false` lo deja como llegó. Un proceso que
+    queda sin dibujar vuelve con `laidOut: false` y una línea en `notes` que dice por qué:
+    bpmn-moddle no puede leer el modelo entero (bizagi-miwg A.4.0 y B.1.0, por ejemplo), así que
+    maquetarlo perdería contenido; solo parte del proceso está dibujada (el dibujo se conserva y se
+    nombran los nodos sin forma); o el maquetador no puede colocarlo.
   - La escritura es la misma escritura atómica y con candado de `patch_scenario`: si el archivo
     cambió en disco desde que se leyó, la llamada se rechaza (`E-CAMBIO-EXTERNO`) y no se pierde
     nada. Los demás procesos quedan byte a byte. `dryRun` comprueba todo y no escribe nada.
@@ -587,7 +592,9 @@ plazo de 48 horas ni a la espera de cinco días: alarga la corrida con `patch_sc
 El plazo es la entrada de escenario `elements.sla.processingTime`, nunca un `timeDuration` en el
 XML. `elements.sla.completed` cuenta los plazos que se dispararon. `byEndEvent` cuenta cada caso en
 el fin del camino que terminó al último, así que un siniestro escalado y luego pagado cuenta en
-`EndEvent_pay`. Para poner el mismo plazo en un proceso que ya existe, usa `addBoundary`:
+`EndEvent_pay`. Por eso `byEndEvent` muestra `EndEvent_escalate` en 0 aunque `escalate` sí corre
+(`elements.escalate` lo cuenta): el borde no interrumpe `assess`, así que el camino de la escalación
+termina antes y el caso termina donde termina su camino principal. Para poner el mismo plazo en un proceso que ya existe, usa `addBoundary`:
 
 ```json
 { "name": "edit_process", "arguments": { "project": "claims.lila", "operations": [
@@ -612,7 +619,7 @@ cambiaría y no escribe nada.
   `[{ "type": "R"|"A"|"C"|"I", "roleRef": "cajero" }]` (`[]` la vacía). `refs` asocia un tipo
   (`systemRef`, `documentRef`, `riskRef`, `controlRef`, `kpiRef`, `input`, `output`) con sus ids y
   reemplaza solo los tipos dados. `attributes` asocia un atributo extendido (su id, o su nombre si
-  solo uno lo tiene) con un valor y se fusiona: `""` quita un valor, los atributos que no se dan se
+  solo uno lo tiene: primero la grafía exacta, si no, sin importar mayúsculas) con un valor y se fusiona: `""` quita un valor, los atributos que no se dan se
   quedan. Cada valor se comprueba contra las definiciones de atributos del proyecto, como en el
   panel de propiedades de la app: un `number` es un decimal simple (`12`, `-3.5`), un `date` es
   `AAAA-MM-DD`, un valor de `list` es una de sus opciones, y el atributo debe aplicarse al tipo del
@@ -632,7 +639,7 @@ cambiaría y no escribe nada.
   escritura la nombran igual y repetir la llamada no cambia nada (`changed: false`). Las reglas son
   las del diálogo de atributos de la app: un nombre único por tipo de elemento (sin distinguir
   mayúsculas), una `list` con al menos una opción (recortadas y sin repetidas), `options` solo en
-  una `list` y un `default` que encaje con el tipo. Las definiciones se escriben en la
+  una `list` y un `default` que encaje con el tipo (recortado; uno en blanco es ninguno). Las definiciones se escriben en la
   `bpmn:collaboration` (si no, en el proceso), y las copias que haya en otro sitio se mueven ahí
   (`docs/es/BPMN_EXTENSION.md`). Renombrar conserva todos los valores. `remove: true` (con `id`, o
   con `name` y `appliesTo`) quita la definición y sus valores; cambiar el tipo, el `appliesTo` o
@@ -663,8 +670,8 @@ cambiaría y no escribe nada.
   uno existente se rechaza salvo con `overwrite`. Las apps web y de escritorio lo abren. Un modelo
   sin diagrama (sin formas `bpmndi`) recibe uno, dibujado con el mismo maquetado automático que
   `edit_process` con `layout: true`, para el proceso que simula, así que `export_diagram` funciona
-  con él; `laidOut: true` lo indica (#630). Un modelo que el maquetador no puede colocar se guarda
-  tal como llegó.
+  con él; `laidOut: true` lo indica (#630). Un modelo que queda sin dibujar se guarda tal como
+  llegó, con `laidOut: false` y el motivo en `notes`, como en el `layout` de `put_process_bpmn`.
 
 ```json
 { "name": "create_project", "arguments": { "path": "proyecto.lila", "name": "Pedidos", "bpmn": "examples/pedido/model.bpmn",
@@ -728,15 +735,15 @@ mismo desde una terminal.
 | --- | --- | --- |
 | `add` | `step`, `after?` o `between?` | Agrega un paso. `step` es un paso de esquema sin sus conexiones, eventos de borde, notas ni datos: `{ id, name?, type?, lane?, duration?, resources? }`, de cualquier tipo del esquema. Con `after: id`, el paso nuevo toma el flujo de salida de ese paso (se rechaza si tiene varios: usa `between`). Con `between: [from, to]`, va sobre el flujo from → to. El flujo donde cae conserva su id, nombre y probabilidad; un flujo nuevo sigue hasta el sucesor de antes. Sin ninguno de los dos, se agrega sin conectar. `lane` es, por defecto, el carril del paso al que sigue. |
 | `connect` | `from`, `to`, `label?`, `probability?`, `default?`, `id?` | Agrega un flujo de secuencia (id `Flow_<from>_<to>` por defecto). `probability` y `default: true` (el flujo por defecto de la compuerta) solo a la salida de un gateway `xor` u `or`; `default: true` se rechaza si la compuerta ya tiene flujo por defecto. Ninguna operación marca un flujo existente como el de por defecto ni le quita la marca: en una sola llamada, `connect` los mismos pasos otra vez (con `default: true` o sin él, y el `label` y la `probability` a conservar) y `remove` el flujo viejo, después de quitar el flujo por defecto actual de la compuerta si lo tiene; el flujo recibe un id nuevo. |
-| `remove` | `id` | Quita un paso y reconecta: sus flujos de entrada van a su sucesor cuando tiene a lo sumo uno; un paso sin flujos de entrada pierde los de salida; un paso con varios de entrada y varios de salida (un split tras un join) se rechaza. Un paso con eventos de borde se rechaza. Los flujos de mensaje y asociaciones que cuelgan de él se van con él, y también sus anotaciones de texto, sus asociaciones de datos y los objetos de datos que ya no usa nada más (van en el cambio). Un evento de fin que se queda sin flujo de entrada también se va (va en `removed`). También se puede quitar un flujo de secuencia, un evento de borde, una anotación de texto, un objeto o almacén de datos, un grupo o una asociación. |
+| `remove` | `id` | Quita un paso y reconecta: sus flujos de entrada van a su sucesor cuando tiene a lo sumo uno; un paso sin flujos de entrada pierde los de salida; un paso con varios de entrada y varios de salida (un split tras un join) se rechaza. Un paso con eventos de borde se rechaza. Los flujos de mensaje y asociaciones que cuelgan de él se van con él, y también sus anotaciones de texto, sus asociaciones de datos y los objetos de datos que ya no usa nada más (van en el cambio). Un evento de fin que se queda sin flujo de entrada también se va (va en `removed`). También se puede quitar un flujo de secuencia, un evento de borde, una anotación de texto, un objeto o almacén de datos, un grupo o una asociación; una anotación de texto que se queda sin asociación al quitar la suya se va con ella. |
 | `rename` | `id`, `name` | Renombra cualquier elemento: paso, flujo, carril, pool, proceso. Un carril también se puede nombrar por su nombre, cuando ningún elemento tiene ese id. `""` borra el nombre. |
 | `setType` | `id`, `type` | Uno de los tipos del esquema, o `end`/`terminate` para convertir un evento de fin en uno de terminación y de vuelta. Para esos dos, `id` es el del evento de fin (`EndEvent_<paso>` en un proceso que hizo Lila; el esquema no lo muestra de otro modo), o un paso que lleva a exactamente un evento de fin: entonces cambia ese fin, no el paso. `end`/`terminate` sobre otra cosa (ni un evento de fin ni un paso con exactamente un fin después) se rechaza. Se quedan el nombre, la documentación, los elementos de extensión y los flujos; un subproceso convertido en otra cosa pierde su contenido (va en `removed`). Un `xor` u `or` convertido en `and` o `eventGateway` pierde las probabilidades de sus flujos de salida (van en `scenarioRemovals`). |
-| `moveToLane` | `id`, `lane` | Carril por nombre o id. Los eventos de borde del paso, y los eventos de fin a los que llevan, se mueven con él. |
+| `moveToLane` | `id`, `lane` | Carril por nombre o id. Los eventos de borde del paso se mueven con él, y también su propio evento de fin y los de ellos (`EndEvent_<id>`, el que añade el esquema) mientras solo ellos lleven a él y siga en el carril del paso: un evento de fin movido a mano a otro carril se queda ahí. |
 | `addLane` | `name`, `id?`, `after?` o `before?` | Agrega un carril (abajo, por defecto). El primer carril de un proceso sin carriles contiene todos sus pasos, y un proceso sin pool recibe uno. |
 | `removeLane` | `lane`, `moveStepsTo?` | Quita un carril (por nombre o id). Un carril que tiene algún nodo —un paso, un inicio, un evento de fin, un evento de borde o su fin— necesita `moveStepsTo`, otro carril sin subcarriles que se los lleve. Un carril con subcarriles se rechaza. El único carril del proceso es la excepción: quitarlo quita el conjunto de carriles, sus nodos se quedan en el pool sin carriles y `moveStepsTo` no hace falta. |
 | `moveLane` | `lane`, `before` o `after` | Mueve un carril encima (`before`) o debajo (`after`) de un carril hermano; exactamente uno de los dos. |
 | `addBoundary` | `on`, `boundary` | Pega un temporizador de borde a una tarea (cualquier variante) o a una actividad de llamada, no a un subproceso. `boundary` es como en un esquema: `{ id, type: "timer", name?, label?, duration?, interrupting?, to \| end }`. Su `duration` va al escenario base. |
-| `annotate` | `on`, `text` | Cuelga una anotación de texto BPMN de un paso (se lee de vuelta como las `notes` del paso). El mismo texto en el mismo paso otra vez no cambia nada, así que `removeAnnotation` nunca es ambiguo. No confundir con `annotate_element`, que escribe la documentación, el RACI y los atributos (anotaciones `lila:`). |
+| `annotate` | `on`, `text` | Cuelga una anotación de texto BPMN de un paso (se lee de vuelta como las `notes` del paso); un evento de inicio, de fin o de borde se rechaza, porque el esquema no la releería. El mismo texto en el mismo paso otra vez no cambia nada, así que `removeAnnotation` nunca es ambiguo. No confundir con `annotate_element`, que escribe la documentación, el RACI y los atributos (anotaciones `lila:`). |
 | `removeAnnotation` | `on`, `text` | Quita la anotación con ese texto que cuelga del paso, con su asociación (todas, en un modelo de fuera que la repite). |
 | `addDataObject` | `name`, `on`, `direction` | Conecta un objeto de datos a una actividad (una tarea, una actividad de llamada o un subproceso): `in`, la actividad lo lee; `out`, lo escribe. Si el proceso tiene un objeto con ese nombre se reutiliza; si no, se crea. |
 | `removeDataObject` | `name`, `on?` | Desconecta el objeto de datos de la actividad `on`, o de todas sin él. El objeto se va cuando ya nada lo usa. |

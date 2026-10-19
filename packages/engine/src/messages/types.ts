@@ -244,6 +244,7 @@ export interface CliMessages {
   docSubprocess: () => string;
   docAttachedTo: () => string;
   docDocumentation: () => string;
+  docNote: () => string;
   docResponsibilities: () => string;
   docScenario: (name: string) => string;
   docResults: () => string;
@@ -326,6 +327,8 @@ export interface CliMessages {
   exportRunAmbiguous: (file: string, slug: string, scenarios: string) => string;
   exportRunStale: (id: string, slug: string, file: string) => string;
   exportNoDiagram: () => string;
+  exportDiagramNone: () => string;
+  exportDiagramUnreadable: (detail: string) => string;
   exportDocxNoDiagram: () => string;
   exportDocumentNoRun: () => string;
   exportDocxNoCharts: () => string;
@@ -497,6 +500,7 @@ export interface CliMessages {
   editLaneMoved: (lane: string, where: 'before' | 'after', other: string) => string;
   editNoteAdded: (step: string, text: string, id: string) => string;
   editNoteExists: (step: string, text: string) => string;
+  editNoteNotStep: (id: string, type: string) => string;
   editNoteRemoved: (step: string, text: string, ids: string) => string;
   editDataAdded: (name: string, step: string, direction: 'in' | 'out', id: string, created: boolean) => string;
   editDataExists: (name: string, step: string, direction: 'in' | 'out') => string;

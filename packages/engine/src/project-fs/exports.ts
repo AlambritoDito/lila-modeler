@@ -21,7 +21,10 @@
 import { closeSync, existsSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 
-import { parseBpmn, readAnnotations, renderSvg, type SvgTint } from '../bpmn/index.js';
+import { BpmnModdle } from 'bpmn-moddle';
+
+import lilaSchema from '../bpmn/lila.moddle.json' with { type: 'json' };
+import { parseBpmn, readAnnotations, readTextNotes, renderSvg, type SvgTint } from '../bpmn/index.js';
 import { chartsSvg } from '../charts.js';
 import { bottleneckCut, heatMap, WAIT_LEVEL_COLOURS, type WaitLevel } from '../bottleneck-levels.js';
 import type { ProcessIR } from '../core/ir.js';
@@ -78,6 +81,26 @@ export type DiagramOverlay = 'bottlenecks' | 'heatmap';
 export const DIAGRAM_OVERLAYS: readonly DiagramOverlay[] = ['bottlenecks', 'heatmap'];
 
 /**
+ * `renderSvg`, with the reason in `locale` when the model has no diagram at all (#645): a model
+ * bpmn-moddle cannot read whole was left undrawn on purpose, and its message says so.
+ */
+async function diagramSvg(xml: string, options: { readonly tint?: Record<string, SvgTint> }, locale: Locale): Promise<string> {
+  try {
+    return await renderSvg(xml, options);
+  } catch (error) {
+    let read: { rootElement: { diagrams?: unknown[] }; warnings: { message: string }[] };
+    try {
+      read = (await BpmnModdle({ lila: lilaSchema }).fromXML(xml)) as unknown as typeof read;
+    } catch {
+      throw error;
+    }
+    if ((read.rootElement.diagrams ?? []).length > 0) throw error;
+    const C = messages(locale).cli;
+    throw new Error(read.warnings.length > 0 ? C.exportDiagramUnreadable(read.warnings.map((w) => w.message).join('; ')) : C.exportDiagramNone());
+  }
+}
+
+/**
  * The diagram of a `.bpmn`, or of one process of a `.lila`, as SVG (`renderSvg`). With `overlay`,
  * coloured with a stored run of the `.lila` (selected as for the document, see the header), as the
  * app colours it: `'bottlenecks'` tints the canvas's bottleneck cut, `'heatmap'` every measured task
@@ -92,7 +115,7 @@ export async function exportDiagram(
   if (source.overlay === undefined && (source.run !== undefined || source.scenario !== undefined)) throw new Error(C.exportRunNeedsOverlay());
   if (isLilaPath(source.file)) {
     const lila = await openLilaProcess(source.file, { process: source.process, locale });
-    if (source.overlay === undefined) return { svg: await renderSvg(lila.process.model.xml), file: lila.file, process: lila.process.slug };
+    if (source.overlay === undefined) return { svg: await diagramSvg(lila.process.model.xml, {}, locale), file: lila.file, process: lila.process.slug };
     // No run at all says what the overlay needs; any other selection error speaks for itself.
     if (lila.process.runs.length === 0) {
       throw new Error(C.exportOverlayNoRun(source.overlay, C.exportNoRun(lila.file, lila.process.slug, '')));
@@ -100,7 +123,7 @@ export async function exportDiagram(
     const run = selectRun(lila, source, false, locale)!;
     const tint = await overlayTint(lila, run, source.overlay, locale);
     return {
-      svg: await renderSvg(run.inputs.xml, { tint }),
+      svg: await diagramSvg(run.inputs.xml, { tint }, locale),
       file: lila.file,
       process: lila.process.slug,
       run: { id: run.id, scenario: run.scenarioName, current: isCurrent(lila, run) },
@@ -110,7 +133,7 @@ export async function exportDiagram(
   const file = absolute(source.file);
   if (source.overlay !== undefined) throw new Error(C.exportOverlayNeedsLila(file));
   if (!existsSync(file)) throw new Error(messages(locale).mcp.fileMissing(file));
-  return { svg: await renderSvg(readFileSync(file, 'utf8')), file };
+  return { svg: await diagramSvg(readFileSync(file, 'utf8'), {}, locale), file };
 }
 
 /** From the coarsest unit to the finest: the first one in which the wait is 1 or more wins. */
@@ -249,6 +272,7 @@ export async function exportDocument(
   });
   // A model bpmn-moddle cannot rewrite still gets its document, without the descriptions (as in the app).
   const annotations = await readAnnotations(xml).catch(() => ({}));
+  const textNotes = await readTextNotes(xml).catch(() => ({}));
   const notes: string[] = [];
   let svg: string | undefined;
   try {
@@ -268,7 +292,7 @@ export async function exportDocument(
     : chartsSvg({ ir, scenario: results.scenario, result: results.result, locale });
   const title = lila.slugs.length > 1 ? lila.process.name : lila.document.name;
   const doc = buildProcessDocument({
-    ir, annotations, subprocesses, lanes, nodeLanes, laneParents, pool, poolName, types,
+    ir, annotations, textNotes, subprocesses, lanes, nodeLanes, laneParents, pool, poolName, types,
     title, date: source.date ?? today(), locale, ...(svg === undefined ? {} : { svg }), ...results,
     ...(charts.length === 0 ? {} : { charts }),
   });

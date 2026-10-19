@@ -60,8 +60,8 @@ corrección (paso 3), números nuevos (paso 5) o una corrida nueva (paso 6).
 Cuando la persona trae un BPMN dibujado en otro lado (una exportación de Bizagi, por ejemplo), no lo
 rehagas como esquema: añádelo como otro proceso del `.lila` con `put_process_bpmn` y `mode: "add"`.
 Recibe un escenario base con llegadas y tiempos de tarea por defecto, que llenas en el paso 5 antes
-de correr. Un diagrama que el simulador no puede correr (eventos de mensaje, colaboraciones) se
-guarda para documentar con `allowUnsimulatable: true`, con sus errores en `notes`.
+de correr. Un diagrama que el simulador no puede correr (eventos de mensaje o de señal, por ejemplo; una
+colaboración de Bizagi sí se simula, por su pool principal) se guarda para documentar con `allowUnsimulatable: true`, con sus errores en `notes`.
 `get_process_bpmn` entrega el XML de un proceso, y `mode: "replace"` lo recibe de vuelta (ver
 [El BPMN de un proceso](MCP.md#el-bpmn-de-un-proceso)).
 

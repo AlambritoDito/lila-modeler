@@ -450,6 +450,7 @@ export const es: Catalog = {
     docSubprocess: () => 'Subproceso',
     docAttachedTo: () => 'Adjunto a',
     docDocumentation: () => 'Descripción',
+    docNote: () => 'Nota',
     docResponsibilities: () => 'Responsabilidades (RACI)',
     docScenario: (name) => `Escenario: ${name}`,
     docResults: () => 'Resultados',
@@ -550,6 +551,10 @@ export const es: Catalog = {
       `la corrida "${id}" del proceso "${slug}" de ${file} es de un modelo o escenario anterior: el documento ` +
       'mezclaría el modelo de hoy con resultados viejos. Exporta sus resultados o vuelve a simular.',
     exportNoDiagram: () => 'El modelo no tiene diagrama (BPMN DI): el documento va sin él.',
+    exportDiagramNone: () =>
+      'el modelo no tiene diagrama (BPMN DI) que dibujar. put_process_bpmn y create_project (lila process import, lila project create) maquetan un modelo sin él; si no, dibújalo en un editor BPMN.',
+    exportDiagramUnreadable: (detail) =>
+      `el modelo no tiene diagrama (BPMN DI) que dibujar, y no se le puede maquetar uno: bpmn-moddle no puede leer el modelo entero (${detail}), así que maquetarlo perdería ese contenido. Añade el diagrama en un editor BPMN.`,
     exportDocxNoDiagram: () =>
       'El documento Word va sin diagrama: Word necesita un PNG y el motor no rasteriza. El documento HTML sí lo lleva.',
     exportDocumentNoRun: () => 'Sin corrida actual: el documento lleva el modelo y no los resultados.',
@@ -743,6 +748,8 @@ export const es: Catalog = {
     editLaneMoved: (lane, where, other) => `movido el carril "${lane}" ${where === 'before' ? 'encima de' : 'debajo de'} "${other}"`,
     editNoteAdded: (step, text, id) => `anotado "${step}": "${text}" (${id})`,
     editNoteExists: (step, text) => `"${step}" ya tiene la anotación de texto "${text}"; no cambió nada`,
+    editNoteNotStep: (id, type) =>
+      `"${id}" es un ${type}; una anotación de texto va en un paso (tarea, gateway, temporizador, mensaje o subproceso), el único lugar donde el esquema la relee como \`notes\`.`,
     editNoteRemoved: (step, text, ids) => `quitada la anotación de texto "${text}" de "${step}" (${ids})`,
     editDataAdded: (name, step, direction, id, created) =>
       `"${step}" ${direction === 'in' ? 'lee' : 'escribe'} el objeto de datos "${name}" (${id}${created ? ', nuevo' : ''})`,

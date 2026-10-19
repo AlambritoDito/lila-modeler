@@ -254,7 +254,8 @@ export function registerAgentTools(
         'or `extends` gets "model.bpmn"): each comes back with `runnable` and its `errors`, so a ' +
         'draft is kept but flagged. Written atomically (no partial file on error); an existing ' +
         'file is refused unless `overwrite`. A model without a diagram (BPMN DI) gets one, drawn ' +
-        'as `edit_process` with `layout: true` draws it (`laidOut: true`). `allowUnsimulatable: ' +
+        'as `edit_process` with `layout: true` draws it (`laidOut: true`); one that cannot be is ' +
+        'kept as given and `notes` says why. `allowUnsimulatable: ' +
         'true` keeps a model with validation errors as a diagram that does not simulate, the ' +
         'errors in `notes`.',
       inputSchema: z.object({
@@ -366,8 +367,9 @@ export function registerAgentTools(
         '`create_project` validates it: one with errors is refused unless `allowUnsimulatable`. ' +
         'On replace, scenario entries that no longer apply are removed and listed in ' +
         '`scenarioRemovals`, as `edit_process` does, and a scenario error the old model did not ' +
-        'cause refuses the call (unless `allowUnsimulatable`). A model without a diagram is laid ' +
-        'out (`layout`, default true). Atomic and locked like every write; `dryRun` writes ' +
+        'cause refuses the call (unless `allowUnsimulatable`). A model whose simulated process has ' +
+        'no diagram is laid out (`layout`, default true, `laidOut: true`); one that cannot be is ' +
+        'kept as given and `notes` says why. Atomic and locked like every write; `dryRun` writes ' +
         'nothing. Like `lila process import`.',
       inputSchema: z.object({
         project: projectSchema,
@@ -376,7 +378,7 @@ export function registerAgentTools(
           .optional()
           .describe('add: the slug of the new process (default: from its name). replace: the process replaced; implicit when the .lila holds one.'),
         bpmn: z.string().describe('BPMN 2.0 XML, or a path to a .bpmn.'),
-        mode: z.string().describe('"add" (a new process) or "replace" (the model of an existing one).'),
+        mode: z.enum(['add', 'replace']).describe('"add" (a new process) or "replace" (the model of an existing one).'),
         name: z.string().optional().describe('add only: the name of the new process. Default: its pool\'s, its process\'s, or the file\'s.'),
         layout: z.boolean().optional().describe('Lay out a model that has no diagram (BPMN DI). Default true.'),
         allowUnsimulatable: allowUnsimulatableSchema,
