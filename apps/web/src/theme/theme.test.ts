@@ -96,6 +96,26 @@ describe.each(themes)('tema %s', (_slug, theme) => {
   });
 });
 
+// #645: the two Lila themes (the defaults) also paint real, enabled text with `fg.disabled` — the
+// «Search activity…» hint and ⌘K over `bg.base`, the diagram tab's ✕ over `bg.surface` — and the
+// steps' ✓ with `status.success` over the Simulate bar (`bg.elevated`) and its hover.
+describe.each(themes.filter(([slug]) => slug.startsWith('lila-')))('theme %s (#645)', (_slug, theme) => {
+  it('fg.disabled and status.success meet AA where they carry real text', () => {
+    const t = theme.tokens;
+    const pares: Array<[TokenName, TokenName]> = [
+      ['fg.disabled', 'bg.base'],
+      ['fg.disabled', 'bg.surface'],
+      ['fg.disabled', 'bg.elevated'],
+      ['status.success', 'bg.surface'],
+      ['status.success', 'bg.elevated'],
+      ['status.success', 'bg.hover'],
+    ];
+    for (const [fg, bg] of pares) {
+      expect(contrast(t[fg]!, t[bg]!), `${fg} sobre ${bg}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+});
+
 describe('tokenToCssVar', () => {
   it('convierte los nombres del brief', () => {
     expect(tokenToCssVar('bg.base')).toBe('--bg-base');

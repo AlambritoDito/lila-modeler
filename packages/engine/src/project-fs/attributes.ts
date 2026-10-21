@@ -41,7 +41,7 @@ export interface DefineAttributeRequest extends LilaTarget {
   readonly appliesTo?: string | undefined;
   /** A `list`'s options (trimmed, empty and repeated ones dropped); refused on any other type. */
   readonly options?: readonly string[] | undefined;
-  /** What an element without its own value shows; it has to fit the definition. */
+  /** What an element without its own value shows, trimmed (blank is none); it has to fit the definition. */
   readonly default?: string | undefined;
   /** Removes the definition and every value it has. */
   readonly remove?: boolean | undefined;
@@ -170,7 +170,8 @@ export async function defineLilaAttribute(request: DefineAttributeRequest): Prom
       name: name!,
       type: type!,
       appliesTo: appliesTo!,
-      ...(request.default === undefined ? {} : { default: request.default }),
+      // A default is trimmed like the name and the options (#645); a blank one is no default.
+      ...(request.default === undefined ? {} : { default: request.default.trim() }),
       ...(request.options === undefined ? {} : { options: [...request.options] }),
     });
     checkDefinition(after, others, locale);

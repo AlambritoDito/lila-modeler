@@ -1,6 +1,6 @@
 {
   "name": "@lila-modeler/engine",
-  "version": "1.0.0-beta.28",
+  "version": "1.0.0-beta.29",
   "description": "Discrete-event simulation engine for BPMN processes, inspired by the simulation workflow of Bizagi Modeler and validated against public examples",
   "license": "Apache-2.0",
   "type": "module",
@@ -51,6 +51,14 @@
     "./csv": {
       "types": "./dist/csv.d.ts",
       "default": "./dist/csv.js"
+    },
+    "./bottleneck-levels": {
+      "types": "./dist/bottleneck-levels.d.ts",
+      "default": "./dist/bottleneck-levels.js"
+    },
+    "./charts": {
+      "types": "./dist/charts.d.ts",
+      "default": "./dist/charts.js"
     },
     "./format": {
       "types": "./dist/format.d.ts",

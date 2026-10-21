@@ -11,15 +11,16 @@
 import type { CSSProperties, KeyboardEvent, ReactNode } from 'react';
 import { formatNumber, SECONDS_PER_UNIT, type BaseTimeUnit } from '@lila-modeler/engine/format';
 import type { ResolvedScenario } from '@lila-modeler/engine/schema';
-import type { ProcessIR, RunResult } from '@lila-modeler/engine';
+import { RESOURCE_WAIT, elementPercentiles, type ProcessIR, type RunResult } from '@lila-modeler/engine';
 import { resourceNamesOf, scenarioWorkbook } from '@lila-modeler/engine/xlsx-report';
 import { buildResultCsvExports, downloadCsv, downloadXlsx, tableStyle, tdStyle, thStyle } from './ResultsView';
 import type { LogDeCorrida } from './GraficasResultados';
 import { exactDuration, formatDisplay, formatDisplayDurationWithUnit } from './formatDisplay';
 import { getLocale, useStrings } from './i18n';
 import { agruparAvisos, AvisoAgrupado, type GrupoAvisos } from './avisos';
-import { ESPERA_RECURSO, p95Fiable, percentilesPorElemento } from './percentilesPorElemento';
+import { p95Fiable } from './percentilesPorElemento';
 import { numerosLegibles } from './escenarioModelo';
+import { nombreRecurso } from './recursosModelo';
 import './DockSimular.css';
 
 export const PESTANAS_DOCK = ['tareas', 'detalle', 'log', 'avisos'] as const;
@@ -105,7 +106,7 @@ export interface FilaTarea {
 export function filasTareas(ir: ProcessIR, result: RunResult, scenario: ResolvedScenario, log?: LogDeCorrida): FilaTarea[] {
   // Same rule as the quick view (`p95Fiable`): no p95 from a truncated sample.
   const p95 = !p95Fiable(log) ? new Map<string, number[]>()
-    : percentilesPorElemento(log.rows, [0.95], { warmup: scenario.run.warmup, medida: ESPERA_RECURSO });
+    : elementPercentiles(log.rows, [0.95], { warmup: scenario.run.warmup, measure: RESOURCE_WAIT });
   return Object.entries(ir.nodes)
     .filter(([id, nodo]) => nodo.type === 'task' && result.elements[id] !== undefined)
     .map(([id, nodo]): FilaTarea => {
@@ -115,7 +116,7 @@ export function filasTareas(ir: ProcessIR, result: RunResult, scenario: Resolved
       return {
         id,
         nombre: nodo.name || id,
-        recursos: usos.map((u) => scenario.resources?.[u.ref]?.name ?? u.ref),
+        recursos: usos.map((u) => nombreRecurso(u.ref, scenario.resources?.[u.ref])),
         casos: m.completed,
         proceso: m.processing.mean,
         espera: m.resourceWait.mean,
@@ -294,7 +295,7 @@ function Log({ ir, scenario, log }: { ir: ProcessIR; scenario: ResolvedScenario;
             <tr key={i}>
               <td style={tdStyle}>{f.caseId}</td>
               <td style={tdStyle}>{ir.nodes[f.elementId]?.name || f.elementId}</td>
-              <td style={tdStyle}>{f.resourceId === null ? '—' : scenario.resources?.[f.resourceId]?.name ?? f.resourceId}</td>
+              <td style={tdStyle}>{f.resourceId === null ? '—' : nombreRecurso(f.resourceId, scenario.resources?.[f.resourceId])}</td>
               <td style={numero()} title={exacto(f.enabledAt)}>{tiempo(f.enabledAt)}</td>
               <td style={numero()} title={exacto(f.startedAt)}>{tiempo(f.startedAt)}</td>
               <td style={numero()} title={exacto(f.endedAt)}>{tiempo(f.endedAt)}</td>

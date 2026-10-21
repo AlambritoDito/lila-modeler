@@ -1,13 +1,17 @@
 /**
- * Texts of the agent tools of #99, #403, #514, #628 and #633 (annotate an element, the RACI matrix,
- * a scenario sheet as a tool, creating a `.lila`, the read-only inventory, defining an extended
- * attribute), English and Spanish, shared by the CLI and the MCP server.
+ * Texts of the agent tools of #99, #403, #514, #628, #633, #634 and #635 (annotate an element, the
+ * RACI matrix, a scenario sheet as a tool, creating a `.lila`, the read-only inventory, defining an
+ * extended attribute, renaming and deleting processes and scenarios, patching a scenario from the
+ * CLI), English and Spanish, shared by the CLI and the MCP server.
  *
  * Their own file, like `sheets.ts`: none of them is an `E-*`/`W-*` code, and keeping them out of
  * `en.ts`/`es.ts` keeps the main catalog to the problems of a model or a scenario.
  * `test/project-fs/agent-tools.test.ts` checks that both languages declare the same entries.
  */
 import type { Locale } from './types.js';
+
+/** At most five ids, then how many more: a partly drawn Bizagi export can miss dozens. */
+const idList = (ids: readonly string[]): string => (ids.length > 5 ? `${ids.slice(0, 5).join(', ')} (+${ids.length - 5})` : ids.join(', '));
 
 export interface AgentToolMessages {
   unknownElement: (id: string, slug: string, file: string) => string;
@@ -53,11 +57,32 @@ export interface AgentToolMessages {
   putMode: (mode: string) => string;
   putNoProject: (path: string) => string;
   putReplaceName: () => string;
+  putEmptyName: () => string;
+  bpmnEmpty: () => string;
+  // #645: a model whose simulated process is left undrawn by `create_project` / `put_process_bpmn`
+  diagramUnreadable: (detail: string) => string;
+  diagramPartial: (missing: readonly string[]) => string;
+  diagramLayoutFailed: (detail: string) => string;
   putScenarioBroken: (detail: string) => string;
   putScenarioNote: (entry: string, problem: string) => string;
   putSummary: (mode: 'add' | 'replace', dryRun: boolean, name: string, slug: string, file: string, revision: number) => string;
   bpmnRequired: () => string;
   bpmnWritten: (file: string) => string;
+  // `rename_process`, `delete_process`, `rename_scenario`, `delete_scenario` (#634)
+  manageEmptyName: () => string;
+  manageSingleProcess: (file: string) => string;
+  manageLastProcess: (slug: string, file: string) => string;
+  manageProcessCalled: (slug: string, callers: string) => string;
+  manageOneProcessLeft: (name: string, slug: string) => string;
+  manageLastScenario: (entry: string, slug: string) => string;
+  manageScenarioExtended: (entry: string, children: string) => string;
+  manageScenarioNameTaken: (name: string, other: string) => string;
+  manageBaseScenarioNote: (entry: string) => string;
+  manageNoChange: () => string;
+  processRenamed: (dryRun: boolean, slug: string, before: string, after: string, file: string) => string;
+  processDeleted: (dryRun: boolean, slug: string, name: string, file: string, scenarios: number, runs: number) => string;
+  scenarioRenamed: (dryRun: boolean, entry: string, slug: string, name: string, file: string) => string;
+  scenarioDeleted: (dryRun: boolean, entry: string, slug: string, file: string, runs: number) => string;
   // CLI chrome
   processToolUnknown: (sub: string, accepted: string) => string;
   scenarioUnknown: (sub: string, accepted: string) => string;
@@ -97,6 +122,15 @@ export interface AgentToolMessages {
   scenarioShowHeader: (entry: string, slug: string, revision: number, resolved: boolean) => string;
   scenarioShowNotes: (count: number) => string;
   scenarioShowRunnable: (runnable: boolean) => string;
+  // `lila scenario patch` / `patch_scenario` `dryRun`, `lila project create` (#635)
+  patchDryRun: (entry: string) => string;
+  patchRequired: () => string;
+  patchNotList: (file: string) => string;
+  scenarioPatched: (entry: string, slug: string, file: string) => string;
+  createNameRequired: () => string;
+  projectCreated: (name: string, file: string, processId: string) => string;
+  projectLaidOut: () => string;
+  projectScenario: (entry: string, runnable: boolean) => string;
 }
 
 /** Extended-attribute element types (`appliesTo`), as the app's attribute dialog names them. */
@@ -159,6 +193,13 @@ const en: AgentToolMessages = {
   putNoProject: (path) =>
     `${path} does not exist; nothing was written. put_process_bpmn adds to an existing .lila: create it first with create_project (or create_process).`,
   putReplaceName: () => 'with mode "replace" the process keeps its name; `name` only names a process that is added. Nothing was written.',
+  putEmptyName: () => '`name` cannot be blank: leave it out to name the process after its pool, process or file. Nothing was written.',
+  bpmnEmpty: () => '`bpmn` is empty: give inline BPMN XML (starting with `<`) or the path to a .bpmn file. Nothing was written.',
+  diagramUnreadable: (detail) =>
+    `the process it simulates has no diagram (BPMN DI) and was saved as given: bpmn-moddle cannot read the model whole (${detail}), so laying it out would lose that content. export_diagram cannot draw it; add the diagram in a BPMN editor.`,
+  diagramPartial: (missing) =>
+    `only part of the process it simulates is drawn: ${idList(missing)} ${missing.length === 1 ? 'has' : 'have'} no shape (BPMN DI). The diagram was saved as given; draw ${missing.length === 1 ? 'it' : 'them'} in a BPMN editor, or redraw the process with edit_process (layout: true).`,
+  diagramLayoutFailed: (detail) => `the model has no diagram (BPMN DI) and the auto-layout could not place it (${detail}); it was saved without one.`,
   putScenarioBroken: (detail) =>
     `the new model would leave a scenario with errors it did not have; nothing was written:\n${detail}\nPass allowUnsimulatable (--allow-unsimulatable) to save it anyway.`,
   putScenarioNote: (entry, problem) => `${entry} cannot run as it is: ${problem}`,
@@ -172,6 +213,42 @@ const en: AgentToolMessages = {
         : `Replaced the model of process "${name}" (${slug}) in ${file}: revision ${revision}.`,
   bpmnRequired: () => 'needs --bpmn <file.bpmn>.',
   bpmnWritten: (file) => `BPMN: ${file}`,
+  manageEmptyName: () => 'the new name cannot be empty. Nothing was written.',
+  manageSingleProcess: (file) =>
+    `${file} has a single process, and a project with one process is saved under the project's name; a process is renamed only in a project with two or more. Nothing was written.`,
+  manageLastProcess: (slug, file) => `${slug} is the only process of ${file}, and a project keeps at least one. Nothing was written.`,
+  manageProcessCalled: (slug, callers) =>
+    `process ${slug} is the target of call activities in other processes: ${callers}. Point them at another process first. Nothing was written.`,
+  manageOneProcessLeft: (name, slug) =>
+    `"${name}" is now the only process: the project is written as a version 1 archive, where its process takes the project's name and the slug ${slug}.`,
+  manageLastScenario: (entry, slug) => `${entry} is the only scenario of process ${slug}, and a process keeps at least one. Nothing was written.`,
+  manageScenarioExtended: (entry, children) =>
+    `other scenarios extend ${entry}: ${children}. Delete them first or change their extends. Nothing was written.`,
+  manageScenarioNameTaken: (name, other) =>
+    `the scenario ${other} of this process already goes by "${name}", so the name would no longer find one scenario. Nothing was written.`,
+  manageBaseScenarioNote: (entry) =>
+    `${entry} is gone: edit_process (lila process edit) stores the durations, resources and branch probabilities it is given in that scenario, so it can no longer take them.`,
+  manageNoChange: () => 'Nothing changes: it already has that name. Nothing was written.',
+  processRenamed: (dryRun, slug, before, after, file) =>
+    dryRun
+      ? `Dry run: would rename process ${slug} from "${before}" to "${after}" in ${file}. Nothing was written.`
+      : `Renamed process ${slug} from "${before}" to "${after}" in ${file}.`,
+  processDeleted: (dryRun, slug, name, file, scenarios, runs) => {
+    const what = `${scenarios} ${scenarios === 1 ? 'scenario' : 'scenarios'} and ${runs} saved ${runs === 1 ? 'run' : 'runs'}`;
+    return dryRun
+      ? `Dry run: would delete process "${name}" (${slug}) from ${file}, with ${what}. Nothing was written.`
+      : `Deleted process "${name}" (${slug}) from ${file}, with ${what}.`;
+  },
+  scenarioRenamed: (dryRun, entry, slug, name, file) =>
+    dryRun
+      ? `Dry run: would rename scenario ${entry} of process ${slug} to "${name}" in ${file}. Nothing was written.`
+      : `Renamed scenario ${entry} of process ${slug} to "${name}" in ${file}.`,
+  scenarioDeleted: (dryRun, entry, slug, file, runs) => {
+    const what = `${runs} saved ${runs === 1 ? 'run' : 'runs'}`;
+    return dryRun
+      ? `Dry run: would delete scenario ${entry} of process ${slug} from ${file}, with ${what}. Nothing was written.`
+      : `Deleted scenario ${entry} of process ${slug} from ${file}, with ${what}.`;
+  },
   processToolUnknown: (sub, accepted) => `unknown subcommand "${sub}"; use ${accepted}.`,
   scenarioUnknown: (sub, accepted) => `unknown subcommand "${sub}"; use ${accepted}.`,
   badResponsibilityArgument: (value) => `--responsibility takes TYPE:role, such as R:cashier; got "${value}".`,
@@ -216,6 +293,15 @@ const en: AgentToolMessages = {
     `Scenario ${entry} of process ${slug}, revision ${revision}${resolved ? ', resolved' : ', as stored'}:`,
   scenarioShowNotes: (count) => `${count} ${count === 1 ? 'note' : 'notes'} from the validator:`,
   scenarioShowRunnable: (runnable) => (runnable ? 'It can run.' : 'It cannot run as it is: see the errors above.'),
+  patchDryRun: (entry) => `Dry run: the result validates and would be written to ${entry}; nothing was written.`,
+  patchRequired: () => 'needs --patch <ops.json>.',
+  patchNotList: (file) =>
+    `${file} must be a non-empty JSON list of operations, each with "op" and "path" (RFC 6902); nothing was written.`,
+  scenarioPatched: (entry, slug, file) => `Saved scenario ${entry} of process ${slug} in ${file}.`,
+  createNameRequired: () => 'needs --name <name>.',
+  projectCreated: (name, file, processId) => `Created project "${name}" (${file}), process ${processId}.`,
+  projectLaidOut: () => 'The model had no diagram; one was drawn.',
+  projectScenario: (entry, runnable) => `  ${entry}: ${runnable ? 'can run' : 'draft, cannot run yet:'}`,
 };
 
 const es: AgentToolMessages = {
@@ -270,6 +356,13 @@ const es: AgentToolMessages = {
   putNoProject: (path) =>
     `${path} no existe; no se escribió nada. put_process_bpmn añade a un .lila que ya existe: créalo antes con create_project (o create_process).`,
   putReplaceName: () => 'con mode "replace" el proceso conserva su nombre; `name` solo nombra un proceso que se añade. No se escribió nada.',
+  putEmptyName: () => '`name` no puede estar en blanco: omítelo para que el proceso tome el nombre de su pool, de su proceso o del archivo. No se escribió nada.',
+  bpmnEmpty: () => '`bpmn` está vacío: da el XML BPMN en línea (empieza por `<`) o la ruta de un .bpmn. No se escribió nada.',
+  diagramUnreadable: (detail) =>
+    `el proceso que simula no tiene diagrama (BPMN DI) y se guardó como llegó: bpmn-moddle no puede leer el modelo entero (${detail}), así que maquetarlo perdería ese contenido. export_diagram no puede dibujarlo; añade el diagrama en un editor BPMN.`,
+  diagramPartial: (missing) =>
+    `solo parte del proceso que simula está dibujada: ${idList(missing)} no ${missing.length === 1 ? 'tiene' : 'tienen'} forma (BPMN DI). El diagrama se guardó como llegó; dibújal${missing.length === 1 ? 'o' : 'os'} en un editor BPMN, o vuelve a dibujar el proceso con edit_process (layout: true).`,
+  diagramLayoutFailed: (detail) => `el modelo no tiene diagrama (BPMN DI) y el maquetado automático no pudo colocarlo (${detail}); se guardó sin él.`,
   putScenarioBroken: (detail) =>
     `el modelo nuevo dejaría un escenario con errores que no tenía; no se escribió nada:\n${detail}\nPasa allowUnsimulatable (--allow-unsimulatable) para guardarlo de todos modos.`,
   putScenarioNote: (entry, problem) => `${entry} no se puede correr así: ${problem}`,
@@ -283,6 +376,42 @@ const es: AgentToolMessages = {
         : `Reemplazado el modelo del proceso "${name}" (${slug}) en ${file}: revisión ${revision}.`,
   bpmnRequired: () => 'necesita --bpmn <archivo.bpmn>.',
   bpmnWritten: (file) => `BPMN: ${file}`,
+  manageEmptyName: () => 'el nombre nuevo no puede estar vacío. No se escribió nada.',
+  manageSingleProcess: (file) =>
+    `${file} tiene un solo proceso, y un proyecto con un proceso se guarda con el nombre del proyecto; un proceso solo se renombra en un proyecto con dos o más. No se escribió nada.`,
+  manageLastProcess: (slug, file) => `${slug} es el único proceso de ${file}, y un proyecto conserva al menos uno. No se escribió nada.`,
+  manageProcessCalled: (slug, callers) =>
+    `el proceso ${slug} es el destino de actividades de llamada de otros procesos: ${callers}. Apúntalas a otro proceso antes. No se escribió nada.`,
+  manageOneProcessLeft: (name, slug) =>
+    `"${name}" queda como único proceso: el proyecto se escribe como un archivo de versión 1, donde su proceso toma el nombre del proyecto y el slug ${slug}.`,
+  manageLastScenario: (entry, slug) => `${entry} es el único escenario del proceso ${slug}, y un proceso conserva al menos uno. No se escribió nada.`,
+  manageScenarioExtended: (entry, children) =>
+    `otros escenarios heredan de ${entry}: ${children}. Bórralos antes o cambia su extends. No se escribió nada.`,
+  manageScenarioNameTaken: (name, other) =>
+    `el escenario ${other} de este proceso ya se llama "${name}", así que el nombre dejaría de encontrar un solo escenario. No se escribió nada.`,
+  manageBaseScenarioNote: (entry) =>
+    `${entry} ya no está: edit_process (lila process edit) guarda en ese escenario las duraciones, los recursos y las probabilidades de rama que recibe, así que ya no podrá recibirlos.`,
+  manageNoChange: () => 'No cambia nada: ya tiene ese nombre. No se escribió nada.',
+  processRenamed: (dryRun, slug, before, after, file) =>
+    dryRun
+      ? `Simulacro: se renombraría el proceso ${slug} de "${before}" a "${after}" en ${file}. No se escribió nada.`
+      : `Renombrado el proceso ${slug} de "${before}" a "${after}" en ${file}.`,
+  processDeleted: (dryRun, slug, name, file, scenarios, runs) => {
+    const what = `${scenarios} ${scenarios === 1 ? 'escenario' : 'escenarios'} y ${runs} ${runs === 1 ? 'corrida guardada' : 'corridas guardadas'}`;
+    return dryRun
+      ? `Simulacro: se borraría el proceso "${name}" (${slug}) de ${file}, con ${what}. No se escribió nada.`
+      : `Borrado el proceso "${name}" (${slug}) de ${file}, con ${what}.`;
+  },
+  scenarioRenamed: (dryRun, entry, slug, name, file) =>
+    dryRun
+      ? `Simulacro: se renombraría el escenario ${entry} del proceso ${slug} a "${name}" en ${file}. No se escribió nada.`
+      : `Renombrado el escenario ${entry} del proceso ${slug} a "${name}" en ${file}.`,
+  scenarioDeleted: (dryRun, entry, slug, file, runs) => {
+    const what = `${runs} ${runs === 1 ? 'corrida guardada' : 'corridas guardadas'}`;
+    return dryRun
+      ? `Simulacro: se borraría el escenario ${entry} del proceso ${slug} de ${file}, con ${what}. No se escribió nada.`
+      : `Borrado el escenario ${entry} del proceso ${slug} de ${file}, con ${what}.`;
+  },
   processToolUnknown: (sub, accepted) => `subcomando desconocido "${sub}"; usa ${accepted}.`,
   scenarioUnknown: (sub, accepted) => `subcomando desconocido "${sub}"; usa ${accepted}.`,
   badResponsibilityArgument: (value) => `--responsibility recibe TIPO:rol, como R:cajero; llegó "${value}".`,
@@ -327,6 +456,15 @@ const es: AgentToolMessages = {
     `Escenario ${entry} del proceso ${slug}, revisión ${revision}${resolved ? ', resuelto' : ', como está guardado'}:`,
   scenarioShowNotes: (count) => `${count} ${count === 1 ? 'nota' : 'notas'} del validador:`,
   scenarioShowRunnable: (runnable) => (runnable ? 'Se puede correr.' : 'No se puede correr así: mira los errores de arriba.'),
+  patchDryRun: (entry) => `Simulacro: el resultado valida y se escribiría en ${entry}; no se escribió nada.`,
+  patchRequired: () => 'necesita --patch <operaciones.json>.',
+  patchNotList: (file) =>
+    `${file} debe ser una lista JSON no vacía de operaciones, cada una con "op" y "path" (RFC 6902); no se escribió nada.`,
+  scenarioPatched: (entry, slug, file) => `Se guardó el escenario ${entry} del proceso ${slug} en ${file}.`,
+  createNameRequired: () => 'necesita --name <nombre>.',
+  projectCreated: (name, file, processId) => `Se creó el proyecto "${name}" (${file}), proceso ${processId}.`,
+  projectLaidOut: () => 'El modelo no tenía diagrama; se dibujó uno.',
+  projectScenario: (entry, runnable) => `  ${entry}: ${runnable ? 'se puede correr' : 'borrador, todavía no se puede correr:'}`,
 };
 
 export const AGENT_TOOL_MESSAGES: Readonly<Record<Locale, AgentToolMessages>> = { en, es };

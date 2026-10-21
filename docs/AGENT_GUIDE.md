@@ -20,15 +20,16 @@ interview ([`MCP.md`](MCP.md#resources-and-prompt)).
 
 | Step | Tool | CLI |
 | --- | --- | --- |
-| 0. The file exists: read what it holds, or bring in a BPMN | `get_project`, `get_scenario`, `put_process_bpmn`, `get_process_bpmn` | `lila project show`, `lila scenario show`, `lila process import`, `lila process export-bpmn` |
+| 0. The file exists: read what it holds, or bring in a BPMN; or start one from a BPMN | `get_project`, `get_scenario`, `put_process_bpmn`, `get_process_bpmn`, `create_project` | `lila project show`, `lila scenario show`, `lila process import`, `lila process export-bpmn`, `lila project create` |
 | 1. Read the interview, write an outline | (the agent) | |
 | 2. Create the process | `create_process` | `lila process create` |
 | 3. Fix it | `edit_process`, `get_process_outline` | `lila process edit`, `lila process show` |
 | 4. Document it (optional) | `annotate_element`, `get_raci_matrix` | `lila process annotate`, `lila process raci` |
-| 5. Fill the scenario | `patch_scenario`, or `export_scenario_template` + `import_scenario_sheet` | `lila scenario template`, `lila scenario import` |
+| 5. Fill the scenario | `patch_scenario`, or `export_scenario_template` + `import_scenario_sheet` | `lila scenario patch`, or `lila scenario template` + `lila scenario import` |
 | 6. Simulate and keep the run | `run_simulation` with `saveRun: true` | `lila run … --save` |
 | 7. Hand over | `export_document`, `export_results`, `export_diagram` | `lila export doc|results|diagram` |
 | 8. Show it | open the `.lila` in the app; it reloads on every later write | `open -a "Lila Modeler" file.lila` (macOS) |
+| Any time: tidy up | `rename_process`, `delete_process`, `rename_scenario`, `delete_scenario` | `lila process rename\|delete`, `lila scenario rename\|delete` |
 
 Two rules shape the flow:
 
@@ -58,13 +59,20 @@ nothing. `get_scenario` reads one scenario, as stored or `resolved: true`, with 
 When the person brings a BPMN drawn elsewhere (a Bizagi export, say), do not rebuild it as an
 outline: add it as another process of the `.lila` with `put_process_bpmn` and `mode: "add"`. It
 gets a base scenario with default arrivals and task times, to fill in at step 5 before a run.
-A diagram the simulator cannot run (message events, collaborations) is kept for documentation
+A diagram the simulator cannot run (message or signal events, say; a Bizagi collaboration does
+simulate, through its main pool) is kept for documentation
 with `allowUnsimulatable: true`, its errors in `notes`. `get_process_bpmn` hands out the XML of a
 process, and `mode: "replace"` takes it back (see [Raw BPMN of a process](MCP.md#raw-bpmn-of-a-process)).
 
 ```json
 { "name": "put_process_bpmn", "arguments": { "project": "card.lila", "mode": "add", "bpmn": "bizagi-export.bpmn", "name": "Card dispute" } }
 ```
+
+To tidy the file up, `rename_process` and `rename_scenario` change a name (never a slug or a file
+name), and `delete_process` and `delete_scenario` remove a process or a scenario with its saved
+runs. The deletes refuse what would break the project, writing nothing: the last process or
+scenario, a process another one calls, a scenario others extend. Try them with `dryRun: true`
+first (see [Renaming and deleting](MCP.md#renaming-and-deleting)).
 
 ### 1. From the interview to an outline
 
@@ -92,8 +100,10 @@ such as a parallel join waiting for branches of one exclusive split.
 
 To change a process, do not create it again: `edit_process` applies a list of operations (`add`,
 `connect`, `remove`, `rename`, `setType`, `moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`, `annotate`,
-`addDataObject`…) all or none, keeps every id and
-everything the operations do not touch (documentation, RACI, attributes, other processes). Send it
+`addDataObject`, `setCalledProcess`…) all or none, keeps every id and
+everything the operations do not touch (documentation, RACI, attributes, other processes).
+`setCalledProcess` points a call activity at another process of the same `.lila` by its slug
+(`process: null` clears it). Send it
 with `dryRun: true` first and show the `changes` to the person when the edit is not trivial.
 
 ```json
@@ -183,7 +193,7 @@ reports progress per replication and can be cancelled.
 - `export_document` writes the process document as `docx` or `html`: process, lanes, steps with
   their descriptions and RACI, gateways with their probabilities and the results of the current
   run. The HTML embeds the diagram as SVG.
-- `export_results` writes the run's tables as `.xlsx` (or four CSV files).
+- `export_results` writes the run's tables as `.xlsx` (or CSV files), with the wait percentiles per element.
 - `export_diagram` returns or writes the diagram as SVG.
 
 None of them overwrites a file unless `overwrite: true`, and none ever writes over the project.
@@ -338,9 +348,10 @@ the same `.lila`.
 
 ## Known limits
 
-- **The Word document has no diagram** and neither document has the run's charts: Word needs a
-  PNG and the engine has no rasteriser. The HTML document has the diagram (SVG). `notes` in the
-  answer says what was left out. To give someone a picture, send the HTML or `export_diagram`.
+- **The Word document has no diagram and no charts**: Word needs a PNG and the engine has no
+  rasteriser. The HTML document has the diagram and the run's charts (SVG), except the cycle time
+  histogram, as a stored run keeps no per-case times. `notes` in the answer says what was left
+  out. To give someone a picture, send the HTML or `export_diagram`.
 - **Layout.** `create_process` and `edit_process` (by default) lay the process out with
   `bpmn-auto-layout` 1.3 plus Lila's lane fix. It is readable, not beautiful: lanes can be taller
   than needed, a gateway's name can sit on a flow leaving from below, crossings are not untangled,

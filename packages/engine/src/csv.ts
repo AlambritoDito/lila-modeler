@@ -2,6 +2,7 @@
 
 import type { ProcessIR } from './core/ir.js';
 import type { EventLogRow, RunResult } from './core/result.js';
+import { percentile } from './element-percentiles.js';
 import { columnLabel, type ResultScope } from './format.js';
 
 export type CsvValue = string | number | null | undefined;
@@ -199,6 +200,30 @@ export function processRows(result: RunResult): ResultTable {
   return { headers, rows };
 }
 
+/** Metrics of the `Percentiles` sheet and `percentiles.csv`, in column order (#666). */
+export const PERCENTILE_COLUMNS = ['resourceWait.n', 'resourceWait.p50', 'resourceWait.p90', 'resourceWait.p95'] as const;
+
+/**
+ * The resource-wait percentiles per element (#666): `Id`, `Name`, `n`, `p50`, `p90`, `p95`, in
+ * seconds, one row per element with a measured instance. `samples` is what `elementSamples`
+ * (or `elementSampler`) gives with `RESOURCE_WAIT`; rows follow `result.elements`, like
+ * `elements.csv`.
+ */
+export function percentilesRows(
+  ir: ProcessIR,
+  result: RunResult,
+  samples: ReadonlyMap<string, readonly number[]>,
+): ResultTable {
+  const headers = ['Id', 'Name', ...labels('elements', PERCENTILE_COLUMNS)];
+  const ids = [...new Set([...Object.keys(result.elements), ...samples.keys()])];
+  const rows = ids.flatMap((id) => {
+    const sample = samples.get(id);
+    if (sample === undefined || sample.length === 0) return [];
+    return [[id, ir.nodes[id]?.name ?? '', sample.length, percentile(sample, 0.5), percentile(sample, 0.9), percentile(sample, 0.95)]];
+  });
+  return { headers, rows };
+}
+
 /** Serializa una `ResultTable`; el CSV y el XLSX salen de la misma. */
 function tableCsv(table: ResultTable): string {
   return toCsv(table.headers, table.rows);
@@ -226,6 +251,11 @@ export function resourcesCsv(
  */
 export function processCsv(result: RunResult): string {
   return tableCsv(processRows(result));
+}
+
+/** `percentiles.csv` of `exportResults` (#666), from `percentilesRows`. */
+export function percentilesCsv(ir: ProcessIR, result: RunResult, samples: ReadonlyMap<string, readonly number[]>): string {
+  return tableCsv(percentilesRows(ir, result, samples));
 }
 
 /**
@@ -310,6 +340,30 @@ export function eventLogRowCsv(row: EventLogRow, startMs?: number): string {
     values.push(isoAt(startMs, row.enabledAt), isoAt(startMs, row.startedAt), isoAt(startMs, row.endedAt));
   }
   return csvRow(values);
+}
+
+/**
+ * Streams the event log as CSV through `write`, header first, in blocks of about 1 MiB, so a run
+ * never holds its whole log (#665: `lila run --csv` and the MCP `logTo` share it). `flush` writes
+ * what is left; call it once the run is over.
+ */
+export function eventLogCsvWriter(
+  write: (chunk: string) => void,
+  startMs?: number,
+): { onEvent(row: EventLogRow): void; flush(): void } {
+  let buffer = eventLogCsvHeader(startMs);
+  const flush = (): void => {
+    if (buffer === '') return;
+    write(buffer);
+    buffer = '';
+  };
+  return {
+    onEvent(row) {
+      buffer += eventLogRowCsv(row, startMs);
+      if (buffer.length >= 1_048_576) flush();
+    },
+    flush,
+  };
 }
 
 /** Event log completo en memoria. La CLI usa header + fila a fila para no materializarlo. */

@@ -21,15 +21,16 @@ flujo de abajo con una entrevista ([`MCP.md`](MCP.md#recursos-y-prompt)).
 
 | Paso | Tool | CLI |
 | --- | --- | --- |
-| 0. El archivo ya existe: leer lo que tiene, o traer un BPMN | `get_project`, `get_scenario`, `put_process_bpmn`, `get_process_bpmn` | `lila project show`, `lila scenario show`, `lila process import`, `lila process export-bpmn` |
+| 0. El archivo ya existe: leer lo que tiene, o traer un BPMN; o empezar uno desde un BPMN | `get_project`, `get_scenario`, `put_process_bpmn`, `get_process_bpmn`, `create_project` | `lila project show`, `lila scenario show`, `lila process import`, `lila process export-bpmn`, `lila project create` |
 | 1. Leer la entrevista, escribir un esquema | (el agente) | |
 | 2. Crear el proceso | `create_process` | `lila process create` |
 | 3. Corregirlo | `edit_process`, `get_process_outline` | `lila process edit`, `lila process show` |
 | 4. Documentarlo (opcional) | `annotate_element`, `get_raci_matrix` | `lila process annotate`, `lila process raci` |
-| 5. Llenar el escenario | `patch_scenario`, o `export_scenario_template` + `import_scenario_sheet` | `lila scenario template`, `lila scenario import` |
+| 5. Llenar el escenario | `patch_scenario`, o `export_scenario_template` + `import_scenario_sheet` | `lila scenario patch`, o `lila scenario template` + `lila scenario import` |
 | 6. Simular y guardar la corrida | `run_simulation` con `saveRun: true` | `lila run … --save` |
 | 7. Entregar | `export_document`, `export_results`, `export_diagram` | `lila export doc|results|diagram` |
 | 8. Mostrarlo | abrir el `.lila` en la app; se recarga con cada escritura posterior | `open -a "Lila Modeler" archivo.lila` (macOS) |
+| En cualquier momento: ordenar | `rename_process`, `delete_process`, `rename_scenario`, `delete_scenario` | `lila process rename\|delete`, `lila scenario rename\|delete` |
 
 Dos reglas dan forma al flujo:
 
@@ -59,14 +60,20 @@ corrección (paso 3), números nuevos (paso 5) o una corrida nueva (paso 6).
 Cuando la persona trae un BPMN dibujado en otro lado (una exportación de Bizagi, por ejemplo), no lo
 rehagas como esquema: añádelo como otro proceso del `.lila` con `put_process_bpmn` y `mode: "add"`.
 Recibe un escenario base con llegadas y tiempos de tarea por defecto, que llenas en el paso 5 antes
-de correr. Un diagrama que el simulador no puede correr (eventos de mensaje, colaboraciones) se
-guarda para documentar con `allowUnsimulatable: true`, con sus errores en `notes`.
+de correr. Un diagrama que el simulador no puede correr (eventos de mensaje o de señal, por ejemplo; una
+colaboración de Bizagi sí se simula, por su pool principal) se guarda para documentar con `allowUnsimulatable: true`, con sus errores en `notes`.
 `get_process_bpmn` entrega el XML de un proceso, y `mode: "replace"` lo recibe de vuelta (ver
 [El BPMN de un proceso](MCP.md#el-bpmn-de-un-proceso)).
 
 ```json
 { "name": "put_process_bpmn", "arguments": { "project": "tarjeta.lila", "mode": "add", "bpmn": "exportacion-bizagi.bpmn", "name": "Aclaración de cargo", "locale": "es" } }
 ```
+
+Para ordenar el archivo, `rename_process` y `rename_scenario` cambian un nombre (nunca un slug ni
+un nombre de archivo), y `delete_process` y `delete_scenario` quitan un proceso o un escenario con
+sus corridas guardadas. Los borrados rechazan, sin escribir nada, lo que rompería el proyecto: el
+último proceso o escenario, un proceso al que llama otro, un escenario del que heredan otros.
+Pruébalos antes con `dryRun: true` (ver [Renombrar y borrar](MCP.md#renombrar-y-borrar)).
 
 ### 1. De la entrevista al esquema
 
@@ -95,8 +102,10 @@ atorados, como una unión paralela que espera ramas de una misma división exclu
 
 Para cambiar un proceso no lo crees otra vez: `edit_process` aplica una lista de operaciones
 (`add`, `connect`, `remove`, `rename`, `setType`, `moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`,
-`annotate`, `addDataObject`…) todas o ninguna, conserva
+`annotate`, `addDataObject`, `setCalledProcess`…) todas o ninguna, conserva
 cada id y todo lo que las operaciones no tocan (documentación, RACI, atributos, otros procesos).
+`setCalledProcess` apunta una actividad de llamada a otro proceso del mismo `.lila` por su slug
+(`process: null` lo quita).
 Mándala primero con `dryRun: true` y muéstrale los `changes` a la persona cuando la edición no sea
 trivial.
 
@@ -190,7 +199,7 @@ progreso por replicación y se puede cancelar.
 - `export_document` escribe el documento del proceso como `docx` o `html`: proceso, carriles, pasos
   con su descripción y RACI, compuertas con sus probabilidades y los resultados de la corrida
   vigente. El HTML lleva el diagrama en SVG.
-- `export_results` escribe las tablas de la corrida como `.xlsx` (o cuatro CSV).
+- `export_results` escribe las tablas de la corrida como `.xlsx` (o CSV), con los percentiles de espera por elemento.
 - `export_diagram` devuelve o escribe el diagrama en SVG.
 
 Ninguna sobrescribe un archivo sin `overwrite: true`, y ninguna escribe nunca sobre el proyecto.
@@ -348,9 +357,10 @@ Haz una escritura a la vez por archivo y espera su respuesta; escribir en parale
 
 ## Límites conocidos
 
-- **El documento Word va sin diagrama**, y ninguno de los dos documentos lleva las gráficas de la
-  corrida: Word necesita un PNG y el motor no rasteriza. El documento HTML sí lleva el diagrama
-  (SVG). `notes` en la respuesta dice qué quedó fuera. Para dar una imagen, manda el HTML o usa
+- **El documento Word va sin diagrama y sin gráficas**: Word necesita un PNG y el motor no
+  rasteriza. El documento HTML sí lleva el diagrama y las gráficas de la corrida (SVG), salvo el
+  histograma del tiempo de ciclo, porque una corrida guardada no conserva los tiempos por caso.
+  `notes` en la respuesta dice qué quedó fuera. Para dar una imagen, manda el HTML o usa
   `export_diagram`.
 - **Acomodo.** `create_process` y `edit_process` (por defecto) acomodan el proceso con
   `bpmn-auto-layout` 1.3 más el ajuste de carriles de Lila. Se lee bien, pero no es bonito: los

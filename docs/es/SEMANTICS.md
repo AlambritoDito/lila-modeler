@@ -1295,6 +1295,9 @@ W-REPLICACIONES-SIN-OBSERVACIONES: proceso: ningún caso se completó en <m> de 
 W-REPLICACIONES-SIN-OBSERVACIONES: <endId>: ningún caso terminó aquí en <m> de <R> replicaciones; sus estadísticas de tiempo promedian solo las otras <n>.
 ```
 
+Con `n = 1` los textos en español terminan en `solo la otra replicación` en vez de `solo las otras 1`.
+`R ≥ 2` siempre (`0 < n < R`); una sola replicación diría `of 1 replication` / `de 1 replicación`.
+
 `W-START-SIN-LLEGADAS` salta solo cuando el `start` no declara **ni** `interTriggerTimer` **ni**
 `triggerCount`: con `triggerCount` a solas hay llegadas (todas en `t = 0`, R-ARR-1) y no hay aviso.
 

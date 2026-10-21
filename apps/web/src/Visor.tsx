@@ -27,6 +27,7 @@ import { datosVistaRapida } from './vistaRapida';
 import { EJEMPLOS, proyectoDeEjemplo, type EjemploId } from './ejemplos';
 import { readLila, readProject } from './project';
 import { finishStartup } from './startup';
+import { urlReporteActual } from './reportarProblema';
 import { PREFERENCIAS, setLocale, useStrings, type Preferencia } from './i18n';
 import type { ProjectDocument } from './store/ProjectStore';
 import 'bpmn-js/dist/assets/diagram-js.css';
@@ -213,6 +214,8 @@ export function Visor({ inicial }: { inicial: ProjectDocument | null }): React.J
           {S.c5.resultados.mapaCalor}
         </label>
         <a className="boton" href="?editor">{S.visor.editor}</a>
+        {/* #645: the same prefilled GitHub form as Settings and the editor's Help (#651). */}
+        <a className="boton" href={urlReporteActual()} target="_blank" rel="noopener noreferrer">{S.app.reportarProblema}</a>
       </div>
       <div ref={caja} className="visor-lienzo" />
       {error !== null && <p className="visor-hoja error" role="alert">{error}</p>}

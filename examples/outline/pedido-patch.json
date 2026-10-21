@@ -1,0 +1,4 @@
+[
+  { "op": "test", "path": "/resources/cocinero/capacity", "value": 3 },
+  { "op": "replace", "path": "/resources/cocinero/capacity", "value": 4 }
+]

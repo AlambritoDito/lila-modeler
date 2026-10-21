@@ -183,6 +183,8 @@ export interface CliMessages {
   xlsxSheetFlows: () => string;
   xlsxSheetResources: () => string;
   xlsxSheetParameters: () => string;
+  /** The resource-wait percentiles sheet of `exportResults` (#666). */
+  xlsxSheetPercentiles: () => string;
   xlsxSheetComparison: () => string;
   xlsxColumnSection: () => string;
   xlsxColumnParameter: () => string;
@@ -242,10 +244,27 @@ export interface CliMessages {
   docSubprocess: () => string;
   docAttachedTo: () => string;
   docDocumentation: () => string;
+  docNote: () => string;
   docResponsibilities: () => string;
   docScenario: (name: string) => string;
   docResults: () => string;
   docDiagramAlt: () => string;
+
+  /* --- `chartsSvg()` (charts.ts, #636): the app's Results charts --- */
+  chartUtilization: () => string;
+  chartInstances: () => string;
+  chartPercentiles: (unit: string) => string;
+  chartCycle: () => string;
+  chartWait: () => string;
+  chartHistogram: (unit: string) => string;
+  chartHistogramSub: (cases: number, replications: number) => string;
+  /** A chart's description and alt text: every value, since the table is the source. */
+  chartValue: (label: string, text: string) => string;
+  chartNoValue: () => string;
+  chartCases: (n: number) => string;
+  chartCasesAxis: () => string;
+  /** Short name of a time unit (`s`, `min`, `h`, `day`), for a duration that also reads in hours. */
+  chartUnit: (unit: 's' | 'min' | 'h' | 'day') => string;
 
   /* --- `compareWarnings()` (cli-shared.ts) -------------------------- */
   mixedTimeUnit: (unit: string, others: string) => string;
@@ -308,9 +327,16 @@ export interface CliMessages {
   exportRunAmbiguous: (file: string, slug: string, scenarios: string) => string;
   exportRunStale: (id: string, slug: string, file: string) => string;
   exportNoDiagram: () => string;
+  exportDiagramNone: () => string;
+  exportDiagramUnreadable: (detail: string) => string;
   exportDocxNoDiagram: () => string;
   exportDocumentNoRun: () => string;
-  exportNoCharts: () => string;
+  exportDocxNoCharts: () => string;
+  exportNoHistogram: () => string;
+  /** #666: a stored run cannot be reproduced from its inputs (re-run mismatch, cancelled, other replications). */
+  exportPercentilesNotReproduced: () => string;
+  /** #666: the re-simulation of a stored run failed; `reason` is the engine's message. */
+  exportPercentilesFailed: (reason: string) => string;
   exportTargetExists: (target: string) => string;
   exportNotDirectory: (path: string) => string;
   exportUnknownKind: (kind: string) => string;
@@ -321,6 +347,15 @@ export interface CliMessages {
   exportTargetIsSource: (target: string) => string;
   exportFileNeeded: (path: string) => string;
   exportRunAndScenario: () => string;
+  /* --- the run overlay of `lila export diagram` / `export_diagram` (#669) -- */
+  exportOverlayNeedsLila: (file: string) => string;
+  exportOverlayNoRun: (overlay: string, detail: string) => string;
+  exportRunNeedsOverlay: () => string;
+  exportInvalidOverlay: (value: string) => string;
+  /** The heat map's badge: the task's mean resource wait, `wait` with its short unit. */
+  exportOverlayWait: (wait: string) => string;
+  /** The mark of the bottleneck ranking's tasks in the heat map. */
+  exportOverlayBottleneck: () => string;
   /* --- saving a run into a `.lila` (#538): `lila run --save`, `run_simulation` `saveRun` -- */
   saveRunNeedsLila: () => string;
   saveRunNeedsArchiveScenario: (scenario: string) => string;
@@ -465,6 +500,7 @@ export interface CliMessages {
   editLaneMoved: (lane: string, where: 'before' | 'after', other: string) => string;
   editNoteAdded: (step: string, text: string, id: string) => string;
   editNoteExists: (step: string, text: string) => string;
+  editNoteNotStep: (id: string, type: string) => string;
   editNoteRemoved: (step: string, text: string, ids: string) => string;
   editDataAdded: (name: string, step: string, direction: 'in' | 'out', id: string, created: boolean) => string;
   editDataExists: (name: string, step: string, direction: 'in' | 'out') => string;
@@ -479,6 +515,33 @@ export interface CliMessages {
   editBadBetween: () => string;
   editDuplicateLane: (lane: string) => string;
   editLayoutFailed: (detail: string) => string;
+  /* `setCalledProcess` (#664) */
+  editNotACallActivity: (id: string, type: string) => string;
+  editCallNeedsLila: () => string;
+  editCallUnknownProcess: (slug: string, slugs: string) => string;
+  editCallSelf: (slug: string, processId: string) => string;
+  editCallShared: (slug: string, processId: string, others: string, count: number) => string;
+  editCallUnresolved: (slug: string, declared: string) => string;
+  editBadCalledProcess: () => string;
+  editCalled: (id: string, name: string, slug: string) => string;
+  editCallCleared: (id: string) => string;
+
+  /* --- `resolveExtends` (`scenario.ts`) and JSON Patch (`json-patch.ts`), #645 ---------------- */
+  /** `chain` is the files of the cycle, already joined by ` -> `. */
+  extendsCycle: (chain: string) => string;
+  scenarioNotObject: (file: string) => string;
+  extendsNotPath: (file: string) => string;
+  patchRoot: () => string;
+  patchBadPointer: (pointer: string) => string;
+  patchForbiddenSegment: (key: string, pointer: string) => string;
+  patchForbiddenKey: (key: string, path: string) => string;
+  patchMissingSegment: (segment: string) => string;
+  patchNotContainer: () => string;
+  patchUnsupportedOp: (op: string) => string;
+  patchNeedsValue: (op: string, path: string) => string;
+  patchTestFailed: (path: string) => string;
+  patchBadIndex: (path: string) => string;
+  patchMissingPath: (path: string) => string;
 }
 
 /**
@@ -518,6 +581,12 @@ export interface McpMessages {
   modelInvalid: (detail: string) => string;
   scenarioInvalid: (detail: string) => string;
   atLeastTwoScenarios: () => string;
+  /** `compare_scenarios` with `format: "xlsx"` and no `saveTo` (#665): a workbook is only written. */
+  xlsxNeedsSaveTo: () => string;
+  /** `compare_scenarios` with `all: true` and `detail: "summary"` (#665). */
+  allWithSummary: () => string;
+  /** `run_simulation` whose `logTo` is the model, the `.lila`, the scenario or `saveTo` (#665). */
+  logToTaken: (target: string) => string;
   patchNotAnObject: () => string;
   /** Replaces `CliMessages.invalidScenarioLabel` when the defect came from a patch. */
   invalidAfterPatchLabel: () => string;

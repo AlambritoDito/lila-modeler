@@ -35,13 +35,14 @@ export {
 } from './input.js';
 export type { LilaProcess, LilaSnapshot } from './input.js';
 export {
+  DIAGRAM_OVERLAYS,
   exportDiagram,
   exportDocument,
   exportResults,
   writeExportDirectory,
   writeExportFile,
 } from './exports.js';
-export type { DocumentExport, ExportedRun, ExportSource, ResultsExport, RunSelection, WriteExportOptions } from './exports.js';
+export type { DiagramOverlay, DocumentExport, ExportedRun, ExportSource, ResultsExport, RunSelection, WriteExportOptions } from './exports.js';
 export { saveLilaRun, saveSimulationRun } from './save-run.js';
 export type { SavedRun } from './save-run.js';
 export { BASE_SCENARIO, createLilaProcess, readLilaOutline } from './outline.js';
@@ -74,4 +75,26 @@ export { lilaProjectInventory, lilaScenarioView } from './inventory.js';
 export type { LilaProcessSummary, LilaProjectInventory, LilaRunSummary, LilaScenarioSummary, LilaScenarioView } from './inventory.js';
 export type { EditedLilaProcess, EditLilaProcessOptions } from './edit.js';
 export { putLilaProcessBpmn, readLilaProcessBpmn } from './process-bpmn.js';
+export {
+  patchLilaScenario,
+  sameScenario,
+  validatePatchedScenario,
+  withoutPhantomFile,
+  withRelativeModel,
+} from './patch-scenario.js';
+export type { PatchLilaScenarioRequest, PatchLilaScenarioResult } from './patch-scenario.js';
+// The JSON Patch of `patch_scenario` (#635: moved from `packages/mcp` so the CLI shares it).
+export { applyJsonPatch, buildPatchDelta } from '../json-patch.js';
+export type { JsonPatchOp } from '../json-patch.js';
 export type { LilaProcessBpmn, PutLilaProcessBpmnRequest, PutLilaProcessBpmnResult } from './process-bpmn.js';
+export { deleteLilaProcess, deleteLilaScenario, renameLilaProcess, renameLilaScenario } from './manage.js';
+export type {
+  DeleteLilaProcessRequest,
+  DeleteLilaProcessResult,
+  DeleteLilaScenarioRequest,
+  DeleteLilaScenarioResult,
+  RenameLilaProcessRequest,
+  RenameLilaProcessResult,
+  RenameLilaScenarioRequest,
+  RenameLilaScenarioResult,
+} from './manage.js';

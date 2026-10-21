@@ -10,9 +10,9 @@
  * The time and resource lines are the same text the Simulate panel's step lists print
  * (`resumenDistribucion`, `resumenRecursos`), so the two never write a distribution differently.
  */
-import type { EventLogRow, ProcessIR, RunResult } from '@lila-modeler/engine';
+import { RESOURCE_WAIT, elementPercentiles, type EventLogRow, type ProcessIR, type RunResult } from '@lila-modeler/engine';
 import { esperaCorta } from './BottleneckOverlay';
-import { ESPERA_RECURSO, p95Fiable, percentilesPorElemento } from './percentilesPorElemento';
+import { p95Fiable } from './percentilesPorElemento';
 import { resumenDistribucion, resumenRecursos } from './ScenarioPanel';
 import { esUnidadTiempo, type UnidadTiempo } from './scenarioFields';
 import { repartoDe, resumenReparto } from './repartoRutas';
@@ -27,7 +27,7 @@ export interface VistaRapidaDatos {
    * Wait for a resource (`resourceWait`, the measure of the canvas labels, the Simulate dock and
    * Results; QA of #394) in the last valid run of the active
    * scenario, rounded like the bottleneck labels (`esperaCorta`). The 95th percentile of the
-   * measured cohort (`percentilesPorElemento`: after `run.warmup`) when the run's log sample is in
+   * measured cohort (the engine's `elementPercentiles`: after `run.warmup`) when the run's log sample is in
    * memory and complete — the shell keeps replication 0 only, up to `LOG_SAMPLE_LIMIT` rows, the
    * same sample the Results charts read —, otherwise the mean of `RunResult.elements[id]` over
    * every replication, labelled as a mean: the result carries no per-element percentile, and a
@@ -69,7 +69,7 @@ const cache = new WeakMap<readonly EventLogRow[], { warmup: number; p95: Map<str
 export function esperasP95(rows: readonly EventLogRow[], warmup = 0): Map<string, number> {
   const hecho = cache.get(rows);
   if (hecho !== undefined && hecho.warmup === warmup) return hecho.p95;
-  const p95 = new Map([...percentilesPorElemento(rows, [0.95], { warmup, medida: ESPERA_RECURSO })].map(([id, [valor]]) => [id, valor!]));
+  const p95 = new Map([...elementPercentiles(rows, [0.95], { warmup, measure: RESOURCE_WAIT })].map(([id, [valor]]) => [id, valor!]));
   cache.set(rows, { warmup, p95 });
   return p95;
 }

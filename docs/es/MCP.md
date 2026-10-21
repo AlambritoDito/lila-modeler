@@ -3,7 +3,7 @@
 > Leer en: [English](../MCP.md)
 
 `packages/mcp` (`@lila-modeler/mcp`) es un servidor [MCP](https://modelcontextprotocol.io) por stdio sobre
-`@lila-modeler/engine`, sin lógica propia: veintiuna tools, sobre el mismo pipeline de validación y
+`@lila-modeler/engine`, sin lógica propia: veinticinco tools, sobre el mismo pipeline de validación y
 simulación que la CLI — ver [`docs/es/CLI.md`](CLI.md) para ese mismo pipeline manejado desde una
 terminal en vez de un cliente MCP.
 
@@ -28,35 +28,47 @@ Schema del escenario como recursos, y el flujo de la guía como el prompt `inter
   del perfil y no se puede simular. Con `scenario` (ruta a un escenario `.json`, resuelve
   `extends`) agrega los recursos referenciados por elemento; si el escenario no se puede leer, el
   resumen dice por qué y la tool no falla.
-- **`run_simulation({ model?, process?, scenario, seed?, replications?, saveTo?, saveRun?, detail?, locale? })`** (LILA-054) — valida
-  modelo y escenario, simula con `log: false` y devuelve exactamente el mismo `RunResult` que
-  `lila run --json` (elementos, flujos, recursos, proceso, bottlenecks y avisos). `scenario` acepta
+- **`run_simulation({ model?, process?, scenario, seed?, replications?, saveTo?, saveRun?, logTo?, detail?, locale? })`** (LILA-054) — valida
+  modelo y escenario, simula y, por defecto, responde con un resumen de la corrida;
+  `detail: "full"` devuelve el `RunResult` completo, exactamente el mismo que `lila run --json`
+  (elementos, flujos, recursos, proceso, bottlenecks y avisos; ver
+  [Resumen o resultado completo](#resumen-o-resultado-completo)). `scenario` acepta
   una ruta `.json` (resuelve `extends`, igual que la CLI) o el escenario ya resuelto como objeto
   inline; `model` es opcional y por defecto es `scenario.model`; se rechaza un modelo distinto.
   Ningún campo de nivel 2/3 se rechaza (LILA-184): `resources` y `calendars` los simula el motor desde LILA-033…036 y LILA-041.
   `saveTo` escribe el mismo JSON de forma atómica que `lila run --json <ruta>`. Trae
   `outputSchema` (`@lila-modeler/engine/result-schema`) y responde `structuredContent` además del texto.
-  Por defecto la respuesta es un resumen; `detail: "full"` devuelve el `RunResult` completo (ver
-  [Resumen o resultado completo](#resumen-o-resultado-completo)). Una corrida larga informa su
-  progreso y se puede cancelar ([Progreso y cancelación](#progreso-y-cancelación)).
+  Una corrida larga informa su progreso y se puede cancelar
+  ([Progreso y cancelación](#progreso-y-cancelación)).
   Con un `model` `.lila` y un escenario suyo, `saveRun: true` guarda la corrida en el proyecto (ver
-  [Guardar una corrida](#guardar-una-corrida)).
-- **`compare_scenarios({ model?, process?, scenarios, seed?, replications?, saveTo?, detail?, locale? })`** (LILA-054) — valida
+  [Guardar una corrida](#guardar-una-corrida)). `logTo` escribe el event log en un archivo CSV: los
+  mismos bytes que el `log.csv` de `lila run --csv` con el mismo modelo, escenario, semilla y
+  réplicas. Las filas se escriben en streaming a un temporal durante la corrida, así que la memoria
+  no crece en corridas largas, y el archivo se publica solo si la llamada sale bien, después de
+  `saveTo` y `saveRun`. Se rechaza un `logTo` que nombre el modelo, el `.lila`, el archivo del
+  escenario o `saveTo`. Con `logTo` o `saveRun`, un
+  segundo bloque de texto dice dónde quedaron: `{ log, savedRun }`, cada clave solo si se pidió;
+  `log` es la ruta absoluta.
+- **`compare_scenarios({ model?, process?, scenarios, seed?, replications?, saveTo?, format?, all?, detail?, locale? })`** (LILA-054) — valida
   y simula dos o más escenarios sobre el mismo modelo (el primero es la base) y devuelve
   exactamente el mismo `CompareResult` que `lila compare --json`, más `notes`: los avisos que la
   CLI imprime aparte de la tabla (semillas distintas, `baseTimeUnit` distinto, réplicas
   insuficientes para IC95). `scenarios` acepta rutas y objetos inline mezclados. Todo escenario se
   resuelve y valida contra el modelo antes de simular ninguno. Por defecto `comparison` conserva
-  las filas del proceso y de los recursos y las significativas; `detail: "full"` devuelve todas.
-- **`patch_scenario({ scenario, project?, process?, patch, saveTo?, extendsFrom?, name?, description?, locale? })`**
+  las filas del proceso y de los recursos y las significativas; `detail: "full"` devuelve todas, y
+  `all: true` es lo mismo con el nombre de `lila compare --all` (con `detail: "summary"` es un
+  error). `format: "xlsx"` hace que `saveTo` escriba el libro de `lila compare --xlsx`, los mismos
+  bytes, en vez del JSON; necesita `saveTo`.
+- **`patch_scenario({ scenario, project?, process?, patch, saveTo?, extendsFrom?, name?, description?, dryRun?, locale? })`**
   (LILA-055) — aplica un [JSON Patch](https://www.rfc-editor.org/rfc/rfc6902) a `scenario`, valida
   el resultado contra su modelo (mismas reglas que `validateScenario`, `docs/SCENARIO_FORMAT.md`
   § 5) y **solo si valida** lo escribe a disco de forma atómica; nunca dos veces. Devuelve
-  `{ scenario, file, written, notes }`: el escenario resultante ya resuelto, la ruta absoluta escrita,
+  `{ scenario, file, written, dryRun, notes }`: el escenario resultante ya resuelto, la ruta absoluta escrita,
   si se escribió y los avisos de lint (`W-…`) como `notes`. Un patch que no cambia nada (solo `test`,
   o un `saveTo` cuyo destino ya tiene el resultado) no escribe nada: `written` es `false`, `notes`
   lo dice primero y el escenario conserva su revisión, así que sus corridas guardadas siguen
-  vigentes (#627). Dos modos:
+  vigentes (#627). Con `dryRun: true` valida igual y no escribe nada (`written: false`, con una
+  nota; la respuesta trae `dryRun`). Para un `.lila` es `lila scenario patch`. Dos modos:
   - **Sin `saveTo`** (modo a) — parchea `scenario` en sitio: el patch se aplica sobre el escenario
     ya resuelto (con `extends` fusionado) y se sobrescribe el mismo archivo con el resultado
     completo, sin `extends` propio. Es un "aplanar y parchear": si `scenario` tenía su propio
@@ -78,7 +90,7 @@ Schema del escenario como recursos, y el flujo de la guía como el prompt `inter
   El patch soporta `add`/`replace`/`remove`/`test` (RFC 6902) con punteros RFC 6901
   (`/resources/cajero/capacity`); **no** soporta `move` ni `copy` — son las dos operaciones que
   leen de una ubicación distinta a la que escriben, y ningún caso de uso de esta tool las necesita
-  (`packages/mcp/src/json-patch.ts`). Un patch que deja el escenario inválido — `probability` fuera
+  (`packages/engine/src/json-patch.ts`). Un patch que deja el escenario inválido — `probability` fuera
   de `[0, 1]`, `capacity < 1`, una `ref` que no existe en `resources`, un `id` que no existe en el
   modelo, … — es `isError: true` y **no escribe nada**, en ninguno de los dos modos.
 
@@ -86,15 +98,18 @@ Las tres tools de LILA-054/055 reutilizan `@lila-modeler/engine/cli-shared`, ext
 LILA-054 sin cambiar su salida: `runCommand`/`compareCommand` y las tools corren exactamente el
 mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
 
-- **`export_diagram({ project | path, process?, saveTo?, overwrite?, locale? })`** — dibuja el
-  diagrama de un proceso de un `.lila` (`project`) o de un `.bpmn` (`path`) como SVG, con el
-  renderizador propio del motor. Devuelve `{ process, svg }` o, con `saveTo`, `{ process, file }`.
+- **`export_diagram({ project | path, process?, overlay?, run?, scenario?, saveTo?, overwrite?, locale? })`** —
+  dibuja el diagrama de un proceso de un `.lila` (`project`) o de un `.bpmn` (`path`) como SVG, con
+  el renderizador propio del motor. Devuelve `{ process, svg }` o, con `saveTo`, `{ process, file }`.
+  Con `overlay` (`"bottlenecks"` | `"heatmap"`, #669) colorea el diagrama con una corrida guardada,
+  como `lila export diagram --overlay` (`docs/es/CLI.md`), y la respuesta añade el `run` usado.
 - **`export_document({ project, process?, run?, scenario?, format, saveTo, overwrite?, locale? })`** —
   escribe el documento del proceso (`format`: `docx` o `html`) con los resultados de una corrida
   guardada. Devuelve `{ file, format, project, process, run, notes }`.
 - **`export_results({ project, process?, run?, scenario?, format, saveTo, overwrite?, locale? })`** —
   escribe los resultados de una corrida guardada (`format`: `xlsx`, o `csv` en el directorio
-  `saveTo`). Devuelve `{ files, format, project, process, run }`.
+  `saveTo`). Devuelve `{ files, format, project, process, run, percentiles }`; `percentiles` es
+  `{ included, note? }`, ver [Exportar sin la app](#exportar-sin-la-app).
 - **`create_process({ outline, project, process?, name?, dryRun?, locale? })`** (#97) — convierte un
   esquema del proceso —carriles más una lista ordenada de pasos— en un proceso BPMN maquetado y
   validado, y lo escribe como un proceso nuevo del `.lila` `project` (o en un `.lila` nuevo). Nunca
@@ -104,8 +119,8 @@ mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
   como esquema: `{ file, slug, name, outline, warnings }`.
 - **`edit_process({ project, process?, operations, dryRun?, layout?, locale? })`** (#98) — aplica una
   lista de operaciones (add, connect, remove, rename, setType, moveToLane, addLane, removeLane,
-  moveLane, addBoundary, annotate, removeAnnotation, addDataObject, removeDataObject) a un proceso de
-  un `.lila`, todas o ninguna. Devuelve `{ file, slug, name, dryRun, summary, changes, removed,
+  moveLane, addBoundary, annotate, removeAnnotation, addDataObject, removeDataObject,
+  setCalledProcess) a un proceso de un `.lila`, todas o ninguna. Devuelve `{ file, slug, name, dryRun, summary, changes, removed,
   scenarioRemovals, notes, warnings, outline }`. Ver [Editar un proceso](#editar-un-proceso).
 
 - **`annotate_element({ project, process?, elementId, documentation?, responsibilities?, refs?, attributes?, dryRun?, locale? })`** —
@@ -127,7 +142,8 @@ mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
   nuevo a partir de un BPMN que ya existe (un agente que parte de pasos usa `create_process`) y
   escenarios. Devuelve `{ file, name, processId, laidOut, warnings, notes, scenarios }`.
 - **`get_project({ project, locale? })`** (#628) — lista lo que tiene un `.lila` sin escribir nada:
-  sus procesos, sus escenarios y sus corridas guardadas, vigentes u obsoletas. Devuelve
+  sus procesos, sus escenarios y sus corridas guardadas, vigentes u obsoletas. `project` tiene que
+  ser un archivo `.lila`, como en `patch_scenario`. Devuelve
   `{ file, name, formatVersion, processes }`.
 - **`get_scenario({ project, process?, scenario, resolved?, locale? })`** (#628) — lee un escenario
   como está guardado, o resuelto por `extends`, con las notas del validador, sin escribir nada.
@@ -138,11 +154,24 @@ mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
   (#632) — añade un BPMN como proceso nuevo de un `.lila` que ya existe (`mode: "add"`) o
   reemplaza el modelo de uno (`mode: "replace"`). Devuelve `{ file, mode, slug, name, processId,
   revision, dryRun, laidOut, summary, scenarioRemovals, notes, warnings, slugs }`.
+- **`rename_process({ project, process, name, dryRun?, locale? })`** (#634) — renombra un proceso de
+  un `.lila`; su slug no cambia. Devuelve `{ file, dryRun, written, process, before, after,
+  summary, notes }`.
+- **`delete_process({ project, process, dryRun?, locale? })`** (#634) — borra un proceso con sus
+  escenarios y sus corridas guardadas. Devuelve `{ file, dryRun, written, process, name,
+  removedScenarios, removedRuns, slugs, summary, notes }`.
+- **`rename_scenario({ project, process?, scenario, name, dryRun?, locale? })`** (#634) — renombra un
+  escenario; su archivo no cambia. Devuelve `{ file, dryRun, written, process, entry, before,
+  after, revision, summary, notes }`.
+- **`delete_scenario({ project, process?, scenario, dryRun?, locale? })`** (#634) — borra un
+  escenario con sus corridas guardadas. Devuelve `{ file, dryRun, written, process, entry,
+  removedRuns, summary, notes }`.
 
 Las tres de exportación se explican en [Exportar sin la app](#exportar-sin-la-app); las seis
 siguientes en [Herramientas de modelado para agentes](#herramientas-de-modelado-para-agentes);
-`get_project` y `get_scenario` en [Leer un proyecto](#leer-un-proyecto); las dos últimas en
-[El BPMN de un proceso](#el-bpmn-de-un-proceso).
+`get_project` y `get_scenario` en [Leer un proyecto](#leer-un-proyecto); `get_process_bpmn` y
+`put_process_bpmn` en [El BPMN de un proceso](#el-bpmn-de-un-proceso); las cuatro últimas en
+[Renombrar y borrar](#renombrar-y-borrar).
 
 Toda tool que recibe un modelo acepta también un proyecto `.lila`: ver
 [Un `.lila` como entrada](#un-lila-como-entrada).
@@ -202,7 +231,9 @@ descubrir sus procesos, escenarios y corridas por los errores de otras tools.
   `attributes`, los atributos extendidos que define (`id`, `name`, `type`, `appliesTo`, `default?`,
   `options?`; `null` si el modelo no se puede releer entero). Una
   corrida tiene `current: false` (obsoleta) cuando el modelo o su escenario cambiaron después de
-  ella: `export_results` y `export_document` solo la toman por id. Un `.lila` no guarda la fecha en
+  ella: `export_results` y `export_document` solo la toman por id. Solo cuenta el escenario que
+  corrió: un cambio solo en su padre de `extends` deja la corrida `current`, aunque el escenario
+  resuelto ya no sea el que corrió. Un `.lila` no guarda la fecha en
   que se tomó una corrida; `start` es el inicio simulado (`run.start`) del escenario que corrió.
 - **`get_scenario`** devuelve `{ file, process, entry, revision, resolved, scenario, runnable, notes }`.
   `scenario` es la entrada como está guardada (con su `extends`), o con `resolved: true` fusionada
@@ -211,7 +242,12 @@ descubrir sus procesos, escenarios y corridas por los errores de otras tools.
   —primero los errores (`E-…`), luego los avisos (`W-…`), las comprobaciones que hace
   `run_simulation` antes de simular—, así que sirve de lint de escenarios; `runnable` es `false`
   cuando hay un error. Un escenario cuyo `extends` no se puede resolver vuelve con
-  `scenario: null` (al resolverlo) y el motivo en `notes`.
+  `scenario: null` (al resolverlo) y el motivo en `notes`. Igual un proceso cuyo `model.bpmn` no
+  se puede leer: `runnable: false`, con el error del lector en `notes`.
+
+Las dos solo aceptan un archivo `.lila` en `project`: una carpeta o una ruta vacía se rechaza con
+el mismo mensaje que `patch_scenario`. Como `get_process_bpmn`, `get_process_outline`,
+`get_raci_matrix`, `validate_bpmn` y `describe_process`, declaran `readOnlyHint: true`.
 
 Para leer un escenario usa `get_scenario`, no un `patch_scenario` con solo `test`: ese tampoco
 escribe nada (#627), pero no es para leer.
@@ -253,14 +289,19 @@ export-bpmn` y `lila process import` (`docs/es/CLI.md`) hacen lo mismo desde una
     lo dice con palabras. Si aun así un escenario tiene un error que con el modelo viejo no tenía,
     la llamada se rechaza.
   - **`allowUnsimulatable: true`** guarda un modelo que el simulador no puede correr — eventos de
-    mensaje o señal, colaboraciones, ciclos, un diagrama dibujado para documentar — como lo guarda
-    la app. Acepta cualquier error de validación, y en un reemplazo también un error de escenario;
+    mensaje o señal, ciclos, un diagrama dibujado para documentar — como lo guarda la app. (Una
+    colaboración no es uno de ellos: una colaboración de Bizagi simula su pool principal.) Acepta cualquier error de validación, y en un reemplazo también un error de escenario;
     cada uno vuelve en `notes` (`no se simula: E-NOSOP: …`). Un archivo que no es XML, no es BPMN
     o no tiene `bpmn:process` se sigue rechazando. Nada marca el proceso: «no se simula» es lo que
     dice `get_scenario` (`runnable: false`, con los errores en sus `notes`) y `run_simulation` lo
     rechaza, hasta que se arregle el modelo.
-  - **`layout`** (por defecto `true`) dibuja un modelo sin diagrama (sin formas `bpmndi`) con el
-    maquetado automático de `create_project` (`laidOut: true`); `false` lo deja como llegó.
+  - **`layout`** (por defecto `true`) dibuja un modelo cuyo proceso simulado no tiene diagrama
+    (ninguno de sus nodos tiene forma `bpmndi`, aunque otro pool sí esté dibujado) con el maquetado
+    automático de `create_project` (`laidOut: true`); `false` lo deja como llegó. Un proceso que
+    queda sin dibujar vuelve con `laidOut: false` y una línea en `notes` que dice por qué:
+    bpmn-moddle no puede leer el modelo entero (bizagi-miwg A.4.0 y B.1.0, por ejemplo), así que
+    maquetarlo perdería contenido; solo parte del proceso está dibujada (el dibujo se conserva y se
+    nombran los nodos sin forma); o el maquetador no puede colocarlo.
   - La escritura es la misma escritura atómica y con candado de `patch_scenario`: si el archivo
     cambió en disco desde que se leyó, la llamada se rechaza (`E-CAMBIO-EXTERNO`) y no se pierde
     nada. Los demás procesos quedan byte a byte. `dryRun` comprueba todo y no escribe nada.
@@ -279,23 +320,79 @@ export-bpmn` y `lila process import` (`docs/es/CLI.md`) hacen lo mismo desde una
   "bpmn": "miwg-editado.bpmn", "allowUnsimulatable": true, "dryRun": true } }
 ```
 
+## Renombrar y borrar
+
+`rename_process`, `delete_process`, `rename_scenario` y `delete_scenario` (#634) ordenan un `.lila`
+Los renombres siguen a la app; los borrados rechazan lo que dejaría al proyecto con una referencia
+colgante. Hay una tool por operación, así que los dos borrados se anuncian como
+destructivos (`destructiveHint: true`) y los dos renombres no. Cada rechazo explica por qué, en el
+idioma de la llamada, y no escribe nada. Cada escritura es la escritura atómica y con candado de
+`patch_scenario` (`E-CAMBIO-EXTERNO` si el archivo cambió en disco desde que se leyó), los demás
+procesos quedan como estaban y `dryRun` comprueba todo y no escribe nada. `written` dice si se
+guardó el archivo; `summary` dice en una línea lo que pasó.
+
+- **`rename_process`** cambia el `name` del proceso, el que muestra su pestaña del lienzo. El slug
+  (su carpeta `processes/<slug>/`) nunca cambia. Un proyecto con un solo proceso se escribe como un
+  archivo de versión 1, cuyo proceso se llama como el proyecto, así que renombrar ese proceso se
+  rechaza. El mismo nombre no escribe nada.
+- **`delete_process`** quita un proceso con sus escenarios y sus corridas guardadas, que se listan
+  en `removedScenarios` y `removedRuns`. El último proceso no se puede borrar. Tampoco uno que una
+  actividad de llamada de otro proceso nombra en su `calledElement` (con o sin prefijo, como
+  `tns:Process_B`): el rechazo lista esas actividades como `slug/idElemento (nombre)`; apúntalas a
+  otro lado, o quítales el destino, con el `setCalledProcess` de `edit_process`. Si queda un
+  solo proceso, el proyecto se escribe como un archivo de versión 1, donde ese proceso toma el
+  nombre y el slug del proyecto: `notes` lo dice y `slugs` lista lo que queda.
+- **`rename_scenario`** cambia el `"name"` del escenario; su entrada (`<nombre>.scenario.json`) no
+  cambia. Su revisión sube, y también las de los escenarios que heredan de él, como en la app, así
+  que sus corridas guardadas quedan obsoletas. Un nombre por el que ya se encuentra otro escenario
+  del proceso (su `"name"`, o su nombre de archivo con o sin `.scenario.json`) se rechaza:
+  `scenario` dejaría de encontrar un solo escenario con él. El mismo nombre no escribe nada.
+- **`delete_scenario`** quita un escenario con su revisión y sus corridas guardadas, que se listan
+  en `removedRuns`; `get_project` deja de listarlas. El último escenario de un proceso no se puede
+  borrar, y tampoco uno del que heredan otros escenarios: el rechazo los lista. Borrar
+  `as-is.scenario.json` se permite, pero `edit_process` guarda ahí las duraciones, los recursos y
+  las probabilidades de rama que recibe, así que `notes` avisa que ya no podrá.
+
+```json
+{ "name": "rename_process", "arguments": { "project": "credito.lila", "process": "miwg-a-1-0", "name": "Disputa de tarjeta", "locale": "es" } }
+```
+
+```json
+{ "name": "delete_process", "arguments": { "project": "credito.lila", "process": "miwg-a-1-0", "dryRun": true } }
+```
+
+```json
+{ "name": "rename_scenario", "arguments": { "project": "examples/pedido.lila", "scenario": "to-be-3-cajeros", "name": "TO-BE", "dryRun": true } }
+```
+
+```json
+{ "name": "delete_scenario", "arguments": { "project": "examples/pedido.lila", "scenario": "to-be-3-cajeros", "dryRun": true } }
+```
+
 ## Exportar sin la app
 
 `export_diagram`, `export_document` y `export_results` (#538) son `lila export diagram|doc|results`
 (`docs/es/CLI.md`) como tools. No necesitan la app ni un navegador:
 
 - **El diagrama** sale del renderizador SVG del motor: la geometría del DI de BPMN con los colores
-  de Lila Light sobre blanco. El documento HTML lo incrusta. El Word va **sin diagrama** y ninguno
-  de los dos lleva las gráficas de la corrida: Word necesita un PNG y el motor no rasteriza.
-  `notes` dice qué quedó fuera.
+  de Lila Light sobre blanco. El documento HTML lo incrusta, junto con las gráficas de la corrida
+  en SVG, las mismas de Resultados en la app. El histograma del tiempo de ciclo queda fuera,
+  porque una corrida guardada no conserva los tiempos por caso. El Word va **sin diagrama y sin
+  gráficas**: Word necesita un PNG y el motor no rasteriza. `notes` dice qué quedó fuera.
 - **Las corridas** son las que la app guardó en el `.lila`. `run: "latest"` (por defecto) es la
   corrida del modelo y escenario actuales. `scenario` la acota a un escenario, y hace falta cuando
   varios tienen una corrida actual. `run: "<id>"` elige una, y un id desconocido lista los ids; `run` y `scenario` juntos son un error. El
   documento solo admite una corrida actual; sin ella va sin resultados y el `run` de la respuesta
   es `null`. `export_results` sin corrida es `isError`, con un mensaje que lo dice. Los resultados
   de una corrida anterior se exportan contra el modelo con el que corrió.
+- **Percentiles de espera** (#666): `export_results` añade los p50/p90/p95 de la espera por recurso
+  por elemento (una hoja `Percentiles`, o `percentiles.csv`), calculados como el dock de Simular de
+  la app pero sobre todas las replicaciones, volviendo a simular las entradas guardadas de la
+  corrida. Cuando esa nueva corrida no devuelve exactamente los resultados guardados (otra
+  versión del motor, o arm64 frente a x64), quedan fuera y `percentiles` es
+  `{ included: false, note }`. Ver `docs/es/RESULTS_FORMAT.md` § 12.
 - **No se sobrescribe nada.** Si ya existe un archivo en `saveTo` (o, en CSV, cualquiera de los
-  cuatro del directorio), la tool devuelve `isError` y no escribe nada, salvo con
+  suyos en el directorio), la tool devuelve `isError` y no escribe nada, salvo con
   `overwrite: true`. El proyecto (o `.bpmn`) que se exporta nunca es un destino, con `overwrite` o
   sin él. Las escrituras son atómicas: primero un temporal y luego se publica.
 
@@ -504,7 +601,9 @@ plazo de 48 horas ni a la espera de cinco días: alarga la corrida con `patch_sc
 El plazo es la entrada de escenario `elements.sla.processingTime`, nunca un `timeDuration` en el
 XML. `elements.sla.completed` cuenta los plazos que se dispararon. `byEndEvent` cuenta cada caso en
 el fin del camino que terminó al último, así que un siniestro escalado y luego pagado cuenta en
-`EndEvent_pay`. Para poner el mismo plazo en un proceso que ya existe, usa `addBoundary`:
+`EndEvent_pay`. Por eso `byEndEvent` muestra `EndEvent_escalate` en 0 aunque `escalate` sí corre
+(`elements.escalate` lo cuenta): el borde no interrumpe `assess`, así que el camino de la escalación
+termina antes y el caso termina donde termina su camino principal. Para poner el mismo plazo en un proceso que ya existe, usa `addBoundary`:
 
 ```json
 { "name": "edit_process", "arguments": { "project": "claims.lila", "operations": [
@@ -516,8 +615,8 @@ el fin del camino que terminó al último, así que un siniestro escalado y lueg
 
 `annotate_element`, `define_attribute`, `get_raci_matrix`, `import_scenario_sheet`,
 `export_scenario_template` y `create_project` (#99, #633, #403, #514) dejan que un agente construya
-y documente un proyecto sin la app. La CLI tiene las cinco primeras como
-`lila process annotate|attribute|raci` y `lila scenario import|template` (`docs/es/CLI.md`). Toda escritura pasa por el mismo guardado
+y documente un proyecto sin la app. La CLI las tiene como
+`lila process annotate|attribute|raci`, `lila scenario import|template` y `lila project create` (`docs/es/CLI.md`). Toda escritura pasa por el mismo guardado
 atómico y con candado del `.lila` que `patch_scenario` (ver
 [Un `.lila` como entrada](#un-lila-como-entrada)): solo cambia el proceso tocado, los demás pasan
 byte a byte, y una entrada inválida es `isError` sin escribir nada. `dryRun: true` responde qué
@@ -529,7 +628,7 @@ cambiaría y no escribe nada.
   `[{ "type": "R"|"A"|"C"|"I", "roleRef": "cajero" }]` (`[]` la vacía). `refs` asocia un tipo
   (`systemRef`, `documentRef`, `riskRef`, `controlRef`, `kpiRef`, `input`, `output`) con sus ids y
   reemplaza solo los tipos dados. `attributes` asocia un atributo extendido (su id, o su nombre si
-  solo uno lo tiene) con un valor y se fusiona: `""` quita un valor, los atributos que no se dan se
+  solo uno lo tiene: primero la grafía exacta, si no, sin importar mayúsculas) con un valor y se fusiona: `""` quita un valor, los atributos que no se dan se
   quedan. Cada valor se comprueba contra las definiciones de atributos del proyecto, como en el
   panel de propiedades de la app: un `number` es un decimal simple (`12`, `-3.5`), un `date` es
   `AAAA-MM-DD`, un valor de `list` es una de sus opciones, y el atributo debe aplicarse al tipo del
@@ -549,7 +648,7 @@ cambiaría y no escribe nada.
   escritura la nombran igual y repetir la llamada no cambia nada (`changed: false`). Las reglas son
   las del diálogo de atributos de la app: un nombre único por tipo de elemento (sin distinguir
   mayúsculas), una `list` con al menos una opción (recortadas y sin repetidas), `options` solo en
-  una `list` y un `default` que encaje con el tipo. Las definiciones se escriben en la
+  una `list` y un `default` que encaje con el tipo (recortado; uno en blanco es ninguno). Las definiciones se escriben en la
   `bpmn:collaboration` (si no, en el proceso), y las copias que haya en otro sitio se mueven ahí
   (`docs/es/BPMN_EXTENSION.md`). Renombrar conserva todos los valores. `remove: true` (con `id`, o
   con `name` y `appliesTo`) quita la definición y sus valores; cambiar el tipo, el `appliesTo` o
@@ -580,8 +679,8 @@ cambiaría y no escribe nada.
   uno existente se rechaza salvo con `overwrite`. Las apps web y de escritorio lo abren. Un modelo
   sin diagrama (sin formas `bpmndi`) recibe uno, dibujado con el mismo maquetado automático que
   `edit_process` con `layout: true`, para el proceso que simula, así que `export_diagram` funciona
-  con él; `laidOut: true` lo indica (#630). Un modelo que el maquetador no puede colocar se guarda
-  tal como llegó.
+  con él; `laidOut: true` lo indica (#630). Un modelo que queda sin dibujar se guarda tal como
+  llegó, con `laidOut: false` y el motivo en `notes`, como en el `layout` de `put_process_bpmn`.
 
 ```json
 { "name": "create_project", "arguments": { "path": "proyecto.lila", "name": "Pedidos", "bpmn": "examples/pedido/model.bpmn",
@@ -645,18 +744,19 @@ mismo desde una terminal.
 | --- | --- | --- |
 | `add` | `step`, `after?` o `between?` | Agrega un paso. `step` es un paso de esquema sin sus conexiones, eventos de borde, notas ni datos: `{ id, name?, type?, lane?, duration?, resources? }`, de cualquier tipo del esquema. Con `after: id`, el paso nuevo toma el flujo de salida de ese paso (se rechaza si tiene varios: usa `between`). Con `between: [from, to]`, va sobre el flujo from → to. El flujo donde cae conserva su id, nombre y probabilidad; un flujo nuevo sigue hasta el sucesor de antes. Sin ninguno de los dos, se agrega sin conectar. `lane` es, por defecto, el carril del paso al que sigue. |
 | `connect` | `from`, `to`, `label?`, `probability?`, `default?`, `id?` | Agrega un flujo de secuencia (id `Flow_<from>_<to>` por defecto). `probability` y `default: true` (el flujo por defecto de la compuerta) solo a la salida de un gateway `xor` u `or`; `default: true` se rechaza si la compuerta ya tiene flujo por defecto. Ninguna operación marca un flujo existente como el de por defecto ni le quita la marca: en una sola llamada, `connect` los mismos pasos otra vez (con `default: true` o sin él, y el `label` y la `probability` a conservar) y `remove` el flujo viejo, después de quitar el flujo por defecto actual de la compuerta si lo tiene; el flujo recibe un id nuevo. |
-| `remove` | `id` | Quita un paso y reconecta: sus flujos de entrada van a su sucesor cuando tiene a lo sumo uno; un paso sin flujos de entrada pierde los de salida; un paso con varios de entrada y varios de salida (un split tras un join) se rechaza. Un paso con eventos de borde se rechaza. Los flujos de mensaje y asociaciones que cuelgan de él se van con él, y también sus anotaciones de texto, sus asociaciones de datos y los objetos de datos que ya no usa nada más (van en el cambio). Un evento de fin que se queda sin flujo de entrada también se va (va en `removed`). También se puede quitar un flujo de secuencia, un evento de borde, una anotación de texto, un objeto o almacén de datos, un grupo o una asociación. |
+| `remove` | `id` | Quita un paso y reconecta: sus flujos de entrada van a su sucesor cuando tiene a lo sumo uno; un paso sin flujos de entrada pierde los de salida; un paso con varios de entrada y varios de salida (un split tras un join) se rechaza. Un paso con eventos de borde se rechaza. Los flujos de mensaje y asociaciones que cuelgan de él se van con él, y también sus anotaciones de texto, sus asociaciones de datos y los objetos de datos que ya no usa nada más (van en el cambio). Un evento de fin que se queda sin flujo de entrada también se va (va en `removed`). También se puede quitar un flujo de secuencia, un evento de borde, una anotación de texto, un objeto o almacén de datos, un grupo o una asociación; una anotación de texto que se queda sin asociación al quitar la suya se va con ella. |
 | `rename` | `id`, `name` | Renombra cualquier elemento: paso, flujo, carril, pool, proceso. Un carril también se puede nombrar por su nombre, cuando ningún elemento tiene ese id. `""` borra el nombre. |
 | `setType` | `id`, `type` | Uno de los tipos del esquema, o `end`/`terminate` para convertir un evento de fin en uno de terminación y de vuelta. Para esos dos, `id` es el del evento de fin (`EndEvent_<paso>` en un proceso que hizo Lila; el esquema no lo muestra de otro modo), o un paso que lleva a exactamente un evento de fin: entonces cambia ese fin, no el paso. `end`/`terminate` sobre otra cosa (ni un evento de fin ni un paso con exactamente un fin después) se rechaza. Se quedan el nombre, la documentación, los elementos de extensión y los flujos; un subproceso convertido en otra cosa pierde su contenido (va en `removed`). Un `xor` u `or` convertido en `and` o `eventGateway` pierde las probabilidades de sus flujos de salida (van en `scenarioRemovals`). |
-| `moveToLane` | `id`, `lane` | Carril por nombre o id. Los eventos de borde del paso, y los eventos de fin a los que llevan, se mueven con él. |
+| `moveToLane` | `id`, `lane` | Carril por nombre o id. Los eventos de borde del paso se mueven con él, y también su propio evento de fin y los de ellos (`EndEvent_<id>`, el que añade el esquema) mientras solo ellos lleven a él y siga en el carril del paso: un evento de fin movido a mano a otro carril se queda ahí. |
 | `addLane` | `name`, `id?`, `after?` o `before?` | Agrega un carril (abajo, por defecto). El primer carril de un proceso sin carriles contiene todos sus pasos, y un proceso sin pool recibe uno. |
 | `removeLane` | `lane`, `moveStepsTo?` | Quita un carril (por nombre o id). Un carril que tiene algún nodo —un paso, un inicio, un evento de fin, un evento de borde o su fin— necesita `moveStepsTo`, otro carril sin subcarriles que se los lleve. Un carril con subcarriles se rechaza. El único carril del proceso es la excepción: quitarlo quita el conjunto de carriles, sus nodos se quedan en el pool sin carriles y `moveStepsTo` no hace falta. |
 | `moveLane` | `lane`, `before` o `after` | Mueve un carril encima (`before`) o debajo (`after`) de un carril hermano; exactamente uno de los dos. |
 | `addBoundary` | `on`, `boundary` | Pega un temporizador de borde a una tarea (cualquier variante) o a una actividad de llamada, no a un subproceso. `boundary` es como en un esquema: `{ id, type: "timer", name?, label?, duration?, interrupting?, to \| end }`. Su `duration` va al escenario base. |
-| `annotate` | `on`, `text` | Cuelga una anotación de texto BPMN de un paso (se lee de vuelta como las `notes` del paso). El mismo texto en el mismo paso otra vez no cambia nada, así que `removeAnnotation` nunca es ambiguo. No confundir con `annotate_element`, que escribe la documentación, el RACI y los atributos (anotaciones `lila:`). |
+| `annotate` | `on`, `text` | Cuelga una anotación de texto BPMN de un paso (se lee de vuelta como las `notes` del paso); un evento de inicio, de fin o de borde (o cualquier elemento sin tipo de paso en el esquema) se rechaza, porque el esquema no la releería. El mismo texto en el mismo paso otra vez no cambia nada, así que `removeAnnotation` nunca es ambiguo. No confundir con `annotate_element`, que escribe la documentación, el RACI y los atributos (anotaciones `lila:`). |
 | `removeAnnotation` | `on`, `text` | Quita la anotación con ese texto que cuelga del paso, con su asociación (todas, en un modelo de fuera que la repite). |
 | `addDataObject` | `name`, `on`, `direction` | Conecta un objeto de datos a una actividad (una tarea, una actividad de llamada o un subproceso): `in`, la actividad lo lee; `out`, lo escribe. Si el proceso tiene un objeto con ese nombre se reutiliza; si no, se crea. |
 | `removeDataObject` | `name`, `on?` | Desconecta el objeto de datos de la actividad `on`, o de todas sin él. El objeto se va cuando ya nada lo usa. |
+| `setCalledProcess` | `id`, `process` | Fija el proceso al que llama la actividad de llamada `id`: `process` es el slug de otro proceso del mismo `.lila`, y el `calledElement` de la actividad pasa a ser un id de proceso BPMN que declara el modelo de ese proceso (su `model.id` cuando es uno de ellos; si no, su único proceso; si no, el proceso que simula), el que la app abre con un doble clic. `process: null` quita el `calledElement`. Un slug desconocido se rechaza con los slugs a los que una actividad de llamada puede llamar, y también el proceso que se edita (una actividad de llamada no llama a su propio proceso), un proceso cuyo id de proceso BPMN también declara otro proceso del `.lila` (la llamada no podría distinguirlos: dale otro id a uno de ellos con `put_process_bpmn` `mode: "replace"`), un proceso del que no se sabe cuál de sus ids es el que se llama, y un `id` que no es una actividad de llamada. Solo en un `.lila`: un modelo suelto no tiene otro proceso que nombrar. Un proceso que alguna actividad de llamada nombra no se puede borrar con `delete_process` hasta apuntarla a otro lado o quitarle el destino. |
 
 - **Los ids no cambian.** Un paso renombrado conserva sus entradas de escenario, y uno con otro tipo
   también, en lo que siga aplicando. El `duration`, los `resources` y el `selection` de un paso
@@ -697,6 +797,43 @@ mismo desde una terminal.
   La revisión del modelo sube, así que la app ve sus corridas viejas como desactualizadas. Todos los
   demás procesos quedan byte a byte. Con `dryRun`, se comprueba y devuelve todo y no se escribe nada.
 
+## MCP y CLI lado a lado
+
+Cada tool corre el mismo código del motor que su comando de la CLI, así que un agente que solo
+tiene una terminal obtiene las mismas respuestas. El `--json` de los comandos project, process y
+scenario imprime lo que devuelve la tool; `lila run|compare --json <archivo>` escriben el resultado
+completo en un archivo, como `saveTo` (las tools responden con un resumen salvo con `detail: "full"`).
+
+| Tool o campo MCP | CLI | Nota |
+| --- | --- | --- |
+| `validate_bpmn` | `lila validate --json` | |
+| `describe_process` | `lila validate` | La CLI imprime el IR y los problemas; el `resumen` legible está escrito para un agente y es solo de MCP. |
+| `run_simulation` | `lila run --json` | `saveRun` es `--save`, `saveTo` es `--json <archivo>`, `logTo` es el `log.csv` de `--csv <directorio>`. Los cuatro CSV de resultados de `--csv` salen de una corrida guardada con `export_results`. |
+| `compare_scenarios` | `lila compare --json` | `saveTo` es `--json <archivo>`, o `--xlsx <archivo>` con `format: "xlsx"`; `all: true` (o `detail: "full"`) es `--all`. |
+| `patch_scenario` con `project` | `lila scenario patch` | `dryRun` es `--dry-run`. |
+| `patch_scenario` sin `project` | ninguno | Parchear un escenario `.json` suelto es solo de MCP; desde la CLI, se edita el archivo. |
+| `export_diagram` | `lila export diagram` | |
+| `export_document` | `lila export doc` | |
+| `export_results` | `lila export results` | La misma hoja `Percentiles` y `percentiles.csv`; la CLI imprime la `percentiles.note` por stderr. |
+| `create_process` | `lila process create` | |
+| `get_process_outline` | `lila process show` | |
+| `edit_process` | `lila process edit` | |
+| `annotate_element` | `lila process annotate` | |
+| `define_attribute` | `lila process attribute define` | `lila process attribute list` los lista; en MCP lo hace `get_project`. |
+| `get_raci_matrix` | `lila process raci` | `--csv` es solo de la CLI: un agente arma el CSV con `rows`. |
+| `import_scenario_sheet` | `lila scenario import` | |
+| `export_scenario_template` | `lila scenario template` | |
+| `create_project` | `lila project create` | `overwrite` es `--force`; `scenarios` son `--scenario nombre=archivo.json`. |
+| `get_project` | `lila project show` | |
+| `get_scenario` | `lila scenario show` | |
+| `get_process_bpmn` | `lila process export-bpmn` | |
+| `put_process_bpmn` | `lila process import` | `mode: "replace"` es `--replace`. |
+| `rename_process` | `lila process rename` | `dryRun` es `--dry-run`. |
+| `delete_process` | `lila process delete` | `dryRun` es `--dry-run`. |
+| `rename_scenario` | `lila scenario rename` | `dryRun` es `--dry-run`. |
+| `delete_scenario` | `lila scenario delete` | `dryRun` es `--dry-run`. |
+| Los resources y el prompt | ninguno | Son parte del protocolo; la CLI tiene `--help` y `docs/`. |
+
 ## Resumen o resultado completo
 
 Un `RunResult` completo lista cada elemento y cada flujo con todas sus estadísticas: unos 70 KB (unos
@@ -711,7 +848,10 @@ El resumen de `run_simulation` (`"detail": "summary"`):
 - `process`: tiempo de ciclo, espera, throughput, costo por caso y `byEndEvent`, como en el resultado completo;
 - `bottlenecks`, como en el resultado completo;
 - `resources`: por recurso, `utilization`, `resourceWaitTotal` (la espera por recurso, en segundos,
-  de los elementos que lo piden; un elemento que pide dos recursos cuenta para los dos) y `totalCost`;
+  de cada elemento que lo nombra; con `selection: "or"`, de cada alternativa) y `totalCost`. Un
+  elemento que nombra dos recursos cuenta su espera entera para cada uno, así que la misma espera
+  aparece en los dos totales: en `examples/pedido` la espera de `Task_Preparar`, que necesita a Cook
+  y a Oven, está en los dos. Los totales de varios recursos no suman la espera del proceso;
 - `topWaits`: los cinco elementos que más esperan (espera por recurso más espera fuera de horario),
   con su `name`, `completed`, `resourceWaitMean`, `resourceWaitTotal`, `offHoursWaitMean` y
   `queueLengthMean`;
@@ -719,6 +859,8 @@ El resumen de `run_simulation` (`"detail": "summary"`):
   `completedReplications` como en el resultado completo;
 - `warnings` como `{ message, count }`: un aviso que cada replicación repite con otros números
   (`… (2941 veces)`, `… 1457 casos …`) sale una vez, con el primer mensaje y cuántas veces apareció.
+  Un aviso con código sale una vez por código y elemento (`W-JOIN-BLOQUEADO` de `Join_1`, haya
+  quedado un caso o varios); el resultado completo conserva todos los mensajes.
 
 El resumen de `compare_scenarios` conserva `{ comparison, notes }`: `comparison` trae `count`, las
 filas de alcance `process` y `resources`, toda otra fila marcada `significant` en algún escenario y
@@ -752,7 +894,9 @@ primero.
 
 Son los propios documentos: desde un checkout el servidor lee `docs/`, y el paquete publicado lleva
 copias de los mismos archivos en `dist/resources/` (`prepack` corre
-`packages/mcp/scripts/bundle-resources.mjs`).
+`packages/mcp/scripts/bundle-resources.mjs`). Un cliente que solo tiene MCP no puede seguir un
+enlace relativo, así que el servidor los convierte en enlaces absolutos a los docs en GitHub
+(`main`).
 
 ```json
 { "method": "resources/read", "params": { "uri": "lila://guide" } }
@@ -764,8 +908,12 @@ copias de los mismos archivos en `dist/resources/` (`prepack` corre
 respondiendo (un `ping`, otras llamadas) mientras corre una simulación. Cuando la llamada trae
 `_meta.progressToken`, el servidor manda `notifications/progress` una vez por replicación terminada,
 con `progress` (replicaciones hechas) y `total` (`run.replications`, o la suma sobre los escenarios
-de una comparación). Un `notifications/cancelled` del cliente detiene la corrida en el acto: el
-worker se termina, no se guarda nada y, como pide MCP, no se responde a la petición cancelada.
+de una comparación). Un `notifications/cancelled` del cliente que llega mientras se simula detiene
+la corrida en el acto: el worker se termina, no se guarda nada (también se borra el temporal de un
+`logTo`) y, como pide MCP, no se responde a la petición cancelada. Una vez terminada la simulación
+(en `compare_scenarios`, la del último escenario), las escrituras no se interrumpen: una
+cancelación que llega mientras se escribe `saveTo`, `saveRun` o `logTo` deja esos archivos
+escritos; solo no se manda la respuesta.
 
 ```json
 { "method": "tools/call", "params": { "name": "run_simulation", "arguments": { "scenario": "examples/pedido/as-is.scenario.json", "replications": 30 }, "_meta": { "progressToken": 1 } } }
@@ -923,7 +1071,7 @@ mcp_servers:
   `mcp_lila_<tool>` (`mcp_lila_create_process`); los argumentos son los de esta página.
 - `tools: { include: [...] }` limita lo que ve el agente; por ejemplo, a las de solo lectura
   `get_project`, `get_scenario`, `validate_bpmn`, `describe_process`, `get_process_outline`,
-  `get_raci_matrix` y `run_simulation` (que solo escribe con `saveTo` o `saveRun`).
+  `get_raci_matrix` y `run_simulation` (que solo escribe con `saveTo`, `saveRun` o `logTo`).
 
 El mismo bloque, con `command` y `args`, es la configuración stdio genérica para cualquier otro
 cliente MCP.
@@ -1052,7 +1200,8 @@ directorio: nadie llega a leer un JSON a medias. Un directorio con ese nombre es
 tool, no un borrado. Las tools de exportación son la excepción: nunca reemplazan un archivo
 salvo con `overwrite: true` (ver [Exportar sin la app](#exportar-sin-la-app)). `run_simulation` y `compare_scenarios` guardan el resultado
 completo diga lo que diga `detail`. `compare_scenarios` guarda ahí solo `comparison`, sin `notes`: los mismos
-bytes que `lila compare --json <ruta>`. En `patch_scenario`, `saveTo` cambia el modo de la tool
+bytes que `lila compare --json <ruta>`; con `format: "xlsx"`, el libro de la comparación. El `logTo`
+de `run_simulation` sigue las mismas reglas. En `patch_scenario`, `saveTo` cambia el modo de la tool
 (§ arriba): sin `saveTo` se sobrescribe `scenario`; con `saveTo` se crea un archivo nuevo con
 `extends` y solo el delta del patch.
 
@@ -1118,6 +1267,13 @@ el navegador y se queda en primer plano**: no lo lances desde un agente ni en CI
   mensaje. El resumen por defecto lo mantiene pequeño.
 - **`compare_scenarios` no publica `outputSchema`** (no hay esquema zod de `CompareResult` en el
   repo), aunque sí manda `structuredContent`. Un cliente estricto puede rechazarlo.
+- **No hay límite de simulaciones simultáneas.** Cada llamada a `run_simulation` y
+  `compare_scenarios` corre en su propio worker thread, así que un cliente que manda varias a la vez
+  las corre todas en paralelo, cada una con su CPU y su memoria.
+- **Los tests desde `src/` piden Node 22.18 o posterior.** Los paquetes declaran Node 22 o
+  posterior, pero al correr los tests (`npm test`) el servidor arranca su worker de simulación desde
+  `src/simulate-worker.ts`, que depende del type stripping de TypeScript de Node (activo por
+  defecto desde 22.18). El servidor compilado (`dist/`) corre en cualquier Node 22.
 - **Todo pasa por el disco del servidor.** `saveTo` escribe con los permisos del proceso servidor y
   sobrescribe sin preguntar; no hay sandbox de rutas.
 - **`create_process` maqueta con `bpmn-auto-layout` 1.3, que no dibuja pool ni carriles**: Lila

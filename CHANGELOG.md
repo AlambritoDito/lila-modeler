@@ -3,6 +3,103 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-beta.29] - 2026-10-21
+
+Lote R: an agent gets from MCP and the CLI what only the app gave before. It can rename and delete
+processes and scenarios of a `.lila`, point a call activity at another process, patch a scenario
+and create a project from the CLI, write the event log and the comparison workbook from MCP, export
+per-element wait percentiles, colour the diagram with a stored run, and put the run's charts in the
+HTML document. Lila Light and Lila Dark reach WCAG AA contrast where they fell short, and the phone
+viewer can report a problem. Simulation results are unchanged.
+
+### Added
+
+- **Rename and delete processes and scenarios (#634, #676)**: `rename_process`, `delete_process`,
+  `rename_scenario` and `delete_scenario`, and in the CLI `lila process|scenario rename|delete`,
+  all with `dryRun` (`--dry-run`). A rename keeps the process's slug or the scenario's entry.
+  Refused, with nothing written: renaming the only process, deleting the last process or the last
+  scenario, deleting a process that a call activity calls (the refusal lists them), a scenario
+  name already taken, and deleting a scenario that others `extends`. A deleted scenario's runs are
+  removed and listed in `removedRuns`; deleting down to one process writes a version 1 project.
+- **Call activity targets (#664, #680)**: `edit_process` takes `setCalledProcess`, which points a
+  call activity at another process of the same `.lila` by its slug (its `calledElement` becomes
+  that process's BPMN process id) or clears it with `process: null`. Refused, with nothing
+  written: an unknown slug, the process being edited, a target whose BPMN id another process also
+  declares, a step that is not a call activity, and a bare model. CLI: through
+  `lila process edit --ops`.
+- **`lila scenario patch` and `lila project create` (#635, #678)**: `scenario patch` applies a
+  JSON Patch to a scenario of a `.lila`, in place or `--save-to` a child that `extends` it, with
+  the same engine code and messages as `patch_scenario`. `project create` is `create_project`,
+  with `--force` for `overwrite`. `patch_scenario` gets `dryRun`. `docs/MCP.md` has an «MCP and
+  CLI side by side» table.
+- **Event log and comparison workbook in MCP (#665, #682)**: `run_simulation` takes `logTo`, which
+  writes the event log, byte for byte the `log.csv` of `lila run --csv`; a cancelled run leaves no
+  file behind. `compare_scenarios` takes `format: "xlsx"`, which writes the `lila compare --xlsx`
+  workbook through `saveTo`, and `all: true`, the `--all` name for `detail: "full"`.
+- **Per-element wait percentiles (#666, #679)**: `export_results` and `lila export results` add
+  the resource-wait p50/p90/p95 of each element, in seconds over all replications, as a
+  `Percentiles` sheet and `percentiles.csv`. They come from simulating the stored run again; when
+  that does not reproduce the stored results (another engine version or platform, say), they are
+  left out and a note says why. The existing sheets and files are unchanged. The app's
+  per-element percentile computation now lives in the engine (`elementPercentiles`).
+- **Diagram overlay of a stored run (#669, #681)**: `export_diagram` and `lila export diagram`
+  take `overlay: "bottlenecks" | "heatmap"`, with `run` and `scenario` chosen as in
+  `export_document`. The diagram is coloured as the canvas bottleneck cut or the Results heat map,
+  with the app's scale and the Lila Light colours. New subpath
+  `@lila-modeler/engine/bottleneck-levels`.
+- **Charts in the HTML document (#636, #683)**: `export_document` and `lila export doc` put the
+  stored run's charts in the HTML document as SVG, with alt text: utilization, cycle and wait
+  percentiles, and instances per task. The histogram is left out, because a stored run keeps no
+  per-case times, and the Word document still has no charts; the notes say both. The charts come
+  from the new subpath `@lila-modeler/engine/charts`, where the app's chart data functions now
+  live.
+- **Text annotations in the process document (#645, #686)**: each element's section lists its
+  notes, and notes on nothing in particular go under the process description. This applies to
+  `lila export doc`, `export_document` and the app's Export document.
+- **Report a problem in the phone viewer (#645, #687)**: `?visor` has «Report a problem…» next to
+  Full editor.
+
+### Changed
+
+- The MCP server has twenty-five tools.
+- `ProcessDocument.charts` holds `{ png?, svg? }` instead of PNG bytes, and `DocumentChart`
+  accepts `svg` (#636, #683).
+- **Contrast (#645, #687)**: in Lila Light and Lila Dark, the search hint, ⌘K, the diagram tab's ✕
+  and the steps' ✓ reach 4.5:1. The landing page's palette follows.
+- **MCP tools (#645, #685)**: the read-only tools declare `readOnlyHint`; the served docs
+  (`lila://…`) use absolute links; `compare_scenarios` has its own `detail` schema; a coded
+  warning is grouped by code and element, so the singular and plural of one `W-JOIN-BLOQUEADO`
+  are one entry. The docs say that `resourceWaitTotal` counts a wait once for every resource the
+  element requests, that a cancellation once the simulation is over still writes
+  `saveTo`/`saveRun`/`logTo`, that a change only in an `extends` parent leaves a run current, and
+  that there is no limit on concurrent simulation workers.
+- **Modelling tools (#645, #686)**: a model whose simulated process has no diagram is laid out
+  even when another pool is drawn; one only partly drawn is kept as is, with a note naming the
+  missing shapes; one that cannot be laid out comes back with a note, and `export_diagram` says
+  why it has no diagram. `annotate` accepts only steps, so every note reads back in the outline,
+  and removing an association also removes the note it left loose. Attribute names in
+  `define_attribute` and `annotate_element` match regardless of case and outer spaces, and the
+  default is trimmed. `lila process raci|attribute|export-bpmn|import` take the project either
+  with `-p` or positionally.
+
+### Fixed
+
+- Saving a repository folder whose `lila-project.json` was edited by hand to remove an open
+  process says `E-CAMBIO-EXTERNO` and offers Reload, instead of `E-CARPETA-OCUPADA` (#517, #684).
+- `get_scenario` on a process whose model does not parse answers `runnable: false` with the error
+  in `notes`, instead of failing; `get_project` and `get_scenario` refuse a path that is not a
+  `.lila` instead of a raw `EISDIR` (#645, #685).
+- The `extends` and JSON Patch errors follow the locale in MCP, the CLI and the app; they were
+  always in Spanish (#645, #685).
+- `moveToLane` no longer takes along an end event moved by hand to another lane. The outline
+  reads `cancelActivity` and `instantiate` literals such as `"1"` as the simulator does.
+  `put_process_bpmn` dry runs report the slug and name the write gives, and a blank `name` or
+  `bpmn` is refused (#645, #686).
+- Plurals: «2 incoming flows and 1 outgoing flow», and the singular in
+  `W-REPLICACIONES-SIN-OBSERVACIONES` when only one other replication is averaged (#645, #686).
+- The Simulate dock, the Results tables and the charts name a resource with a blank name by its
+  key. Tab reaches the pool's last «+» after the ⠿ of nested lanes (#645, #687).
+
 ## [1.0.0-beta.28] - 2026-10-14
 
 Lote Q: an agent can model what the simulator already runs, without the app: escalations with a
