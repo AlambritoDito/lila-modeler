@@ -9,6 +9,7 @@ import { parseBpmn } from '../../src/bpmn/index.js';
 import { simulate } from '../../src/index.js';
 import { ScenarioSchema } from '../../src/scenario.js';
 import {
+  decodeLilaArchive,
   decodeLila,
   encodeLila,
   isProcessSlug,
@@ -162,11 +163,11 @@ describe('a second process turns it into version 2', () => {
   test('a version the reader does not know is refused with the version error', () => {
     const entries = unzipSync(encodeLila(repo));
     const manifest = JSON.parse(strFromU8(entries['lila-project.json']!)) as Record<string, unknown>;
-    entries['lila-project.json'] = strToU8(JSON.stringify({ ...manifest, version: 3 }));
-    expect(() => decodeLila(zipSync(entries))).toThrow(/version 3/);
+    entries['lila-project.json'] = strToU8(JSON.stringify({ ...manifest, version: 4 }));
+    expect(() => decodeLila(zipSync(entries))).toThrow(/version 4/);
   });
 
-  test('a process folder without model.bpmn is fatal; stray entries are reported and dropped', () => {
+  test('a process folder without model.bpmn is fatal; stray entries are reported and kept', () => {
     const entries = unzipSync(encodeLila(repo));
     delete entries['processes/facturacion/model.bpmn'];
     expect(() => decodeLila(zipSync(entries))).toThrow(/processes\/facturacion\/model\.bpmn/);
@@ -177,6 +178,9 @@ describe('a second process turns it into version 2', () => {
     const opened = decodeLila(zipSync(again));
     expect(opened.problems?.map((p) => p.file)).toEqual(['model.bpmn', 'processes/borrado/model.bpmn']);
     expect(processesOf(opened).map((p) => p.slug)).toEqual(['pedido', 'facturacion']);
+    // An orphaned folder (`borrado` is not listed) is kept, as the folder form keeps it (RM-01 § 1.4).
+    const { document: read, preserved } = decodeLilaArchive(zipSync(again));
+    expect(Object.keys(unzipSync(encodeLila(read, preserved)))).toEqual(expect.arrayContaining(['model.bpmn', 'processes/borrado/model.bpmn']));
   });
 
   test('a Windows-reserved slug from a foreign manifest does not stop the repository opening', () => {

@@ -49,12 +49,16 @@ export function readProject(value: unknown): ProjectDocument {
 }
 
 /**
- * What the last `.lila` read of each project kept beside its document (RM-01 § 1.4, #725): the
- * entries it could not use (an unreadable scenario or run, a file outside the layout), by project
- * id. In memory only — the document is what reaches `localStorage`, and bytes cannot go there — so
- * `encodeProject` writes them back on every save to a file, and a reload loses them.
+ * What the last `.lila` read of each project kept beside its document (RM-01 § 1.4, #92): the
+ * entries this build does not interpret and the bytes of its catalog objects, by project id. In
+ * memory only — the document is what reaches `localStorage`, and bytes cannot go there (owner
+ * decision 4 of #127) — so `encodeProject` writes them back on every save to a file and in the
+ * desktop recovery copy, and a reload loses them, which is what `tomarAvisoRecuperacion` warns about.
  */
 const conservadas = new Map<string, LilaPreserved>();
+
+/** Projects read with kept entries whose warning has not been shown yet. */
+const avisosPendientes = new Map<string, readonly string[]>();
 
 /**
  * `decodeLila` with the same localized wording as `readProject` — the only way this app should
@@ -70,17 +74,33 @@ export function readLila(bytes: Uint8Array): ProjectDocument {
     localizado(error);
   }
   const { document, preserved } = leido;
-  if (Object.keys(preserved.entries).length > 0) conservadas.set(document.id, preserved);
+  const nombres = Object.keys(preserved.entries);
+  if (nombres.length > 0 || Object.keys(preserved.objects).length > 0) conservadas.set(document.id, preserved);
   else conservadas.delete(document.id);
+  if (nombres.length > 0) avisosPendientes.set(document.id, nombres);
+  else avisosPendientes.delete(document.id);
   return document;
 }
 
 /**
  * `encodeLila` with what the last `readLila` of the same project kept beside it: what every save
- * to a file writes, so an entry this version could not use survives it byte for byte (#725).
+ * to a file and the desktop autosave write, so an entry this version does not interpret survives
+ * them byte for byte.
  */
 export function encodeProject(doc: ProjectDocument): Uint8Array<ArrayBuffer> {
   return encodeLila(doc, conservadas.get(doc.id) ?? null);
+}
+
+/**
+ * The warning that automatic recovery in the browser will not include the entries the file of `id`
+ * kept (owner decision 4 of #127), or `null`. Once per read: it is taken, not peeked.
+ */
+export function tomarAvisoRecuperacion(id: string): string | null {
+  const nombres = avisosPendientes.get(id);
+  if (nombres === undefined) return null;
+  avisosPendientes.delete(id);
+  const lista = nombres.length > 3 ? `${nombres.slice(0, 3).join(', ')}, …` : nombres.join(', ');
+  return strings().app.avisoEntradasSinRecuperacion(lista);
 }
 
 /**

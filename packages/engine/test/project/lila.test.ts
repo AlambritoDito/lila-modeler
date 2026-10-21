@@ -102,6 +102,28 @@ describe('the .lila container', () => {
     expect(Object.keys(opened.scenarios)).toEqual([AS_IS, TO_BE]);
   });
 
+  test('a file that is not part of the layout is reported and kept; OS litter is dropped silently (RM-01 § 1.4)', () => {
+    const { document: opened, preserved } = decodeLilaArchive(rebuilt((entries) => {
+      entries['notes.md'] = strToU8('# notes');
+      entries['__MACOSX/._model.bpmn'] = strToU8('litter');
+      entries['.DS_Store'] = strToU8('litter');
+      entries['runs/.DS_Store'] = strToU8('litter');
+    }));
+    expect(opened.problems).toEqual([{ file: 'notes.md', message: 'not understood by this version; kept as is.' }]);
+    expect(opened.formatVersion).toBeUndefined();
+    // Beside the document, never inside it: the document is what crosses IPC and `localStorage`.
+    expect(JSON.stringify(opened)).not.toContain('# notes');
+    expect(Object.keys(preserved.entries)).toEqual(['notes.md']);
+    const saved = encodeLila(opened, preserved);
+    expect([...lilaEntryNames(saved)]).toContain('notes.md');
+    expect([...lilaEntryNames(saved)].filter((n) => n.includes('DS_Store') || n.startsWith('__MACOSX'))).toEqual([]);
+    expect(strFromU8(unzipSync(saved)['notes.md']!)).toBe('# notes');
+    // Still version 1: an unknown entry does not need version 3.
+    expect(JSON.parse(strFromU8(unzipSync(saved)['lila-project.json']!)).version).toBe(1);
+    // Without the preserved entries (`decodeLila` alone) there is nothing to write back.
+    expect([...lilaEntryNames(encodeLila(opened))]).not.toContain('notes.md');
+  });
+
   test('a file that is not part of the layout is reported and kept beside the document (#725)', () => {
     const bytes = rebuilt((entries) => { entries['notes.md'] = strToU8('# notes'); });
     const opened = decodeLila(bytes);
@@ -121,10 +143,12 @@ describe('the .lila container', () => {
   });
 
   test('a manifest of a newer version is refused instead of being read as version 1', () => {
-    expect(() => decodeLila(rebuilt((entries) => {
+    const newer = (): Uint8Array => rebuilt((entries) => {
       const manifest = JSON.parse(strFromU8(entries['lila-project.json']!));
-      entries['lila-project.json'] = strToU8(JSON.stringify({ ...manifest, version: 3 }));
-    }))).toThrow(/version 3/);
+      entries['lila-project.json'] = strToU8(JSON.stringify({ ...manifest, version: 4 }));
+    });
+    expect(() => decodeLila(newer())).toThrow(/version 4; this reader understands versions 1, 2 and 3/);
+    expect(() => decodeLila(newer())).toThrow(expect.objectContaining({ code: 'LILA-MANIFEST' }));
   });
 
   test('an archive without model.bpmn is not a project', () => {

@@ -11,6 +11,7 @@
  */
 import { ScenarioSchema } from '../scenario.js';
 import { runResultSchema } from '../result.schema.js';
+import { catalogObjectProblem } from './catalog.js';
 import { isProcessSlug, processesOf } from './repository.js';
 import type { ProjectDocument } from './types.js';
 
@@ -93,20 +94,42 @@ function isProcessContent(value: Record<string, unknown>): boolean {
   );
 }
 
-/** `process` and `processes` of a repository document (ADR-029): shapes and unique slugs. */
+/** A process id, when there is one (RM-01 § 3.2): the slug grammar. */
+function isOptionalProcessId(value: unknown): boolean {
+  return value === undefined || isProcessSlug(value);
+}
+
+/** `process` and `processes` of a repository document (ADR-029): shapes, unique slugs and unique process ids. */
 function hasValidProcesses(value: Record<string, unknown>): boolean {
   if (value.process !== undefined) {
-    if (!isPlainObject(value.process) || !isProcessSlug(value.process.slug) || typeof value.process.name !== 'string') {
+    if (
+      !isPlainObject(value.process) ||
+      !isProcessSlug(value.process.slug) ||
+      typeof value.process.name !== 'string' ||
+      !isOptionalProcessId(value.process.id)
+    ) {
       return false;
     }
   }
-  if (value.processes === undefined) return true;
-  if (!Array.isArray(value.processes)) return false;
-  if (!value.processes.every((p) => isPlainObject(p) && isProcessSlug(p.slug) && typeof p.name === 'string' && isProcessContent(p))) {
-    return false;
+  if (value.processes !== undefined) {
+    if (!Array.isArray(value.processes)) return false;
+    const valid = (p: unknown): boolean =>
+      isPlainObject(p) && isProcessSlug(p.slug) && typeof p.name === 'string' && isOptionalProcessId(p.id) && isProcessContent(p);
+    if (!value.processes.every(valid)) return false;
   }
-  const slugs = processesOf(value as unknown as ProjectDocument).map((p) => p.slug);
-  return new Set(slugs).size === slugs.length;
+  const all = processesOf(value as unknown as ProjectDocument);
+  const slugs = all.map((p) => p.slug);
+  const ids = all.flatMap((p) => (p.id !== undefined ? [p.id] : []));
+  return new Set(slugs).size === slugs.length && new Set(ids).size === ids.length;
+}
+
+/** `formatVersion` and `catalog` (RM-01 § 1.3, § 2): valid objects, no type and id twice. */
+function hasValidCatalog(value: Record<string, unknown>): boolean {
+  if (value.formatVersion !== undefined && value.formatVersion !== 3) return false;
+  if (value.catalog === undefined) return true;
+  if (!Array.isArray(value.catalog) || !value.catalog.every((o) => catalogObjectProblem(o) === null)) return false;
+  const keys = value.catalog.map((o: { type: string; id: string }) => `${o.type}/${o.id}`);
+  return new Set(keys).size === keys.length;
 }
 
 /** Structural validation; scenarios may hold drafts that do not validate yet. */
@@ -117,7 +140,8 @@ export function readProjectDocument(value: unknown): ProjectDocument {
     typeof value.id !== 'string' ||
     typeof value.name !== 'string' ||
     !isProcessContent(value) ||
-    !hasValidProcesses(value)
+    !hasValidProcesses(value) ||
+    !hasValidCatalog(value)
   ) {
     throw new ProjectFormatError('LILA-DOCUMENT', 'the value is not a Lila project document.');
   }

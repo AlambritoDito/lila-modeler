@@ -11,6 +11,7 @@
  * never interprets it — it serializes it as it comes.
  */
 import type { RunResult } from '../core/result.js';
+import type { CatalogObject } from './catalog.js';
 
 /** An editable scenario; its content may still be an invalid draft. */
 export type ScenarioDocument = Record<string, unknown>;
@@ -47,6 +48,13 @@ export interface ProjectModel {
  * canvas tab shows. The slug is the folder's identity and never changes on rename.
  */
 export interface ProcessDocument {
+  /**
+   * The process id (RM-01 § 3.2), `process-<12 of [0-9a-z]>`: the storage identity of the process,
+   * written only in a version 3 manifest. A version 1 or 2 document has none until it becomes
+   * version 3 (`asVersion3`), which gives each process a fresh one: nothing persisted can point at
+   * it before. A version 3 encode gives one to a process that still lacks it.
+   */
+  readonly id?: string;
   readonly slug: string;
   readonly name: string;
   readonly model: ProjectModel;
@@ -76,9 +84,23 @@ export interface ProjectDocument {
    * Slug and name of the first process: with `processes`, and also when read from a version 2
    * manifest that lists a single process (#517).
    */
-  readonly process?: { readonly slug: string; readonly name: string };
+  readonly process?: { readonly id?: string; readonly slug: string; readonly name: string };
   /** The repository's other processes, in order (ADR-029). Absent: a one-process project. */
   readonly processes?: readonly ProcessDocument[];
+  /**
+   * `3` once the document is a version 3 repository (RM-01 § 1.3): read as one, or given its first
+   * catalog object (`asVersion3`). It never goes back, even when the last object is removed.
+   * Absent: version 1 or 2, decided by the number of processes as before.
+   */
+  readonly formatVersion?: 3;
+  /**
+   * The catalog objects (RM-01 § 2), objects of types this build does not know included. Part of the
+   * document, so it travels with every save, autosave and recovery copy. A version 3 document read
+   * from a file always has it, empty or not.
+   */
+  readonly catalog?: readonly CatalogObject[];
+  /** The version 3 manifest's `limits` (RM-01 § 1.2), as found; written back unchanged. */
+  readonly limits?: unknown;
   /** Invalid files preserved by the adapter; visible when opening. */
   readonly problems?: readonly ProjectProblem[];
   /**

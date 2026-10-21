@@ -10,13 +10,14 @@
  *   <name>.scenario.json       the raw ScenarioDocument, one per scenario, `extends` untouched
  *   runs/<id>.result.json      the full StoredRun
  *
- * Anything else in the archive (`notes.md`, `attachments/…`), and a scenario or run that could not
- * be read, is KEPT, byte for byte, and written back by the next save (RM-01 § 1.4, § 2.4, #725) —
- * but beside the document, never inside it: `decodeLilaArchive` returns those entries as
- * `LilaPreserved`, and `encodeLila` takes them back. `ProjectDocument` travels through
- * `structuredClone` over IPC and through `JSON.stringify` into the browser's `localStorage` mirror,
- * and neither carries a `Uint8Array` honestly. Each kept entry is reported in `problems` ("… kept as
- * is"); operating-system litter (`__MACOSX/`, `.DS_Store`, `Thumbs.db`) and the writers' own
+ * Anything else in the archive (`notes.md`, a newer build's `maps/`), and a scenario or run that
+ * could not be read, is KEPT, byte for byte, and written back by the next save (RM-01 § 1.4,
+ * § 2.4, ADR-032, #725) — but beside the document, never inside it: `decodeLilaArchive` returns
+ * those entries as `LilaPreserved`, and `encodeLila` takes them back. `ProjectDocument` travels
+ * through `structuredClone` over IPC and through `JSON.stringify` into the browser's `localStorage`
+ * mirror, and neither carries a `Uint8Array` honestly. Each kept entry is reported in `problems`
+ * ("… kept as is"), except the reserved names of RM-01 § 1.1 and catalog files of unknown types,
+ * which are expected; operating-system litter (`__MACOSX/`, `.DS_Store`, `Thumbs.db`) and the writers' own
  * leftovers (`*.tmp-*`, `*.prev-*`, `*.lock`) are dropped without a word. See
  * `docs/PROJECT_FORMAT.md`.
  *
@@ -31,12 +32,27 @@
  *
  * Every `.lila` a released version wrote keeps opening (`docs/PROJECT_FORMAT.md`, «Compatibility»).
  * The one shape the reader repairs is the legacy loose-diagram project (#699, `projectModelOf`).
+ *
+ * Version 3 (RM-01 § 1, ADR-032) is the version 2 layout plus one file per catalog object,
+ * `catalog/<type>/<id>.json`, and a process id per process in the manifest. It is written when the
+ * document needs it (`formatVersionOf`) and, once read or written, it stays.
  */
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { version as engineVersion } from '../version.js';
+import {
+  canonicalCatalogObject,
+  catalogObjectPath,
+  catalogObjectProblem,
+  compareCatalogObjects,
+  isCatalogId,
+  isCatalogType,
+  newProcessId,
+  type CatalogObject,
+} from './catalog.js';
 import { ProjectFormatError, isPlainObject, isRevision, readProjectDocument, runProblem } from './document.js';
 import { isProcessSlug, processesOf, withProcesses } from './repository.js';
 import type { ProcessDocument, ProjectDocument, ProjectProblem, ScenarioDocument, StoredRun } from './types.js';
+import { asVersion3, formatVersionOf } from './upgrade.js';
 
 const MANIFEST_FILE = 'lila-project.json';
 const PROCESSES_DIR = 'processes';
@@ -65,8 +81,12 @@ interface Manifest {
   readonly engine?: string;
 }
 
-/** One entry of a version 2 manifest's `processes`: the version 1 manifest minus the project. */
+/**
+ * One entry of a version 2 or 3 manifest's `processes`: the version 1 manifest minus the project.
+ * `id` is the process id, in a version 3 manifest only (RM-01 § 1.2).
+ */
 export interface ProcessManifest {
+  readonly id?: string;
   readonly slug: string;
   readonly name: string;
   readonly model: { readonly id: string; readonly name: string; readonly revision: number };
@@ -113,10 +133,11 @@ function assertSafeEntryName(name: string): void {
 export interface LilaPreserved {
   /**
    * Entries kept as read and written back unchanged, by entry name: entries this build does not
-   * understand, and scenarios and runs that could not be read (#725).
+   * understand, broken catalog objects, the reserved names of RM-01 § 1.1, and scenarios and runs
+   * that could not be read (#725).
    */
   readonly entries: Readonly<Record<string, Uint8Array>>;
-  /** The bytes each catalog object was read from, by entry name. Always empty in format versions 1 and 2. */
+  /** The bytes each catalog object was read from, by entry name: an unchanged object is written back with them. */
   readonly objects: Readonly<Record<string, Uint8Array>>;
   /**
    * The slugs the manifest listed when the entries were read. A kept entry under
@@ -130,6 +151,12 @@ export interface LilaPreserved {
    */
   readonly models?: Readonly<Record<string, string>>;
 }
+
+/** Top-level folders RM-01 § 1.1 reserves for later phases (and `attachments/`, not read in A1): kept silently. */
+const RESERVED_DIRS = ['analysis/', 'attachments/', 'dashboards/', 'maps/', 'records/'];
+
+/** `catalog/<type>/<file>.json`, one level deep (RM-01 § 2.4). */
+const CATALOG_ENTRY = /^catalog\/([^/]+)\/([^/]+)\.json$/;
 
 /** Operating-system litter and the writers' own leftovers: dropped without a report (RM-01 § 1.4). */
 function isLitter(name: string): boolean {
@@ -148,27 +175,67 @@ function isLitter(name: string): boolean {
 /** What the readers of every version collect besides the processes. */
 interface Extras {
   readonly problems: ProjectProblem[];
+  readonly catalog: CatalogObject[];
   readonly entries: Record<string, Uint8Array>;
-  /** Slugs listed by the manifest (none in version 1). */
+  readonly objects: Record<string, Uint8Array>;
+  /** Slugs listed by the manifest (none in version 1): their `process.json` is a reserved name. */
   readonly slugs: readonly string[];
-  /** Model id of each listed process, by slug (version 2 only). */
+  /** Model id of each listed process, by slug (versions 2 and 3 only). */
   readonly models?: Readonly<Record<string, string>>;
+  /** `true` once something only version 3 holds was found (RM-01 § 1.3): a catalog object or a reserved name. */
+  version3: boolean;
 }
 
 function newExtras(manifests: readonly ProcessManifest[] = []): Extras {
   // Without a prototype: an entry may be called `__proto__` or `constructor`, and is kept like any other.
-  const entries = Object.create(null) as Record<string, Uint8Array>;
-  const slugs = manifests.map((m) => m.slug);
-  if (manifests.length === 0) return { problems: [], entries, slugs };
-  return { problems: [], entries, slugs, models: Object.fromEntries(manifests.map((m) => [m.slug, m.model.id])) };
+  const extras: Extras = {
+    problems: [],
+    catalog: [],
+    entries: Object.create(null) as Record<string, Uint8Array>,
+    objects: Object.create(null) as Record<string, Uint8Array>,
+    slugs: manifests.map((m) => m.slug),
+    version3: false,
+  };
+  if (manifests.length === 0) return extras;
+  return { ...extras, models: Object.fromEntries(manifests.map((m) => [m.slug, m.model.id])) };
 }
 
 /**
- * An entry that is not part of a process: litter, or an entry this build does not understand
- * (RM-01 § 1.4). Everything but litter is kept.
+ * An entry that is not part of a process: a catalog object, a reserved name, litter, or an entry
+ * this build does not understand (RM-01 § 1.4, § 2.4). Everything but litter is kept.
  */
 function readOtherEntry(name: string, raw: Uint8Array, extras: Extras): void {
   if (isLitter(name)) return;
+  const object = CATALOG_ENTRY.exec(name);
+  if (object !== null && isCatalogType(object[1])) {
+    extras.version3 = true;
+    const [, type, id] = object as unknown as [string, string, string];
+    let problem: string | null;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(strFromU8(raw));
+      problem = isCatalogId(id) ? catalogObjectProblem(parsed, { type, id }) : `the file name is not an object id (^[a-z0-9][a-z0-9-]{0,63}$).`;
+    } catch (error) {
+      problem = (error as Error).message;
+    }
+    if (problem === null) {
+      extras.catalog.push(parsed as CatalogObject);
+      extras.objects[name] = raw;
+    } else {
+      // Excluded and explained, never dropped: other objects may point at it (RM-01 § 2.4).
+      extras.problems.push({ file: name, message: `${problem} Not loaded; kept as is.` });
+      extras.entries[name] = raw;
+    }
+    return;
+  }
+  const reserved =
+    RESERVED_DIRS.some((dir) => name.startsWith(dir)) ||
+    extras.slugs.some((slug) => name === `${PROCESSES_DIR}/${slug}/process.json`);
+  if (reserved) {
+    extras.version3 = true;
+    extras.entries[name] = raw;
+    return;
+  }
   extras.entries[name] = raw;
   extras.problems.push({ file: name, message: 'not understood by this version; kept as is.' });
 }
@@ -200,7 +267,28 @@ function keepUnreadable(name: string, raw: Uint8Array, error: unknown, extras: E
 }
 
 function preservedOf(extras: Extras): LilaPreserved {
-  return { entries: extras.entries, objects: {}, slugs: extras.slugs, ...(extras.models === undefined ? {} : { models: extras.models }) };
+  return { entries: extras.entries, objects: extras.objects, slugs: extras.slugs, ...(extras.models === undefined ? {} : { models: extras.models }) };
+}
+
+/**
+ * The catalog as read, in catalog order, with an id found under two types reported (RM-01 § 2.3):
+ * both objects are loaded, and each typed reference resolves against the type it expects.
+ */
+function finishCatalog(extras: Extras): CatalogObject[] {
+  const catalog = [...extras.catalog].sort(compareCatalogObjects);
+  const first = new Map<string, CatalogObject>();
+  for (const object of catalog) {
+    const seen = first.get(object.id);
+    if (seen === undefined) {
+      first.set(object.id, object);
+      continue;
+    }
+    extras.problems.push({
+      file: catalogObjectPath(object),
+      message: `the id ${JSON.stringify(object.id)} is also used by ${catalogObjectPath(seen)}; references resolve by the type they expect.`,
+    });
+  }
+  return catalog;
 }
 
 /** `true` for a flat `<name>.scenario.json` at the root of the archive. */
@@ -241,18 +329,39 @@ function manifestOf(document: ProjectDocument): Manifest {
   };
 }
 
+/** The version 3 manifest of `document` (RM-01 § 1.2); every process must already have its id. */
+function version3ManifestOf(document: ProjectDocument, processes: readonly ProcessDocument[]): Record<string, unknown> {
+  return {
+    version: 3,
+    id: document.id,
+    name: document.name,
+    processes: processes.map((p) => ({
+      id: p.id,
+      slug: p.slug,
+      name: p.name,
+      model: { id: p.model.id, name: p.model.name, revision: p.model.revision },
+      scenarioRevisions: p.scenarioRevisions,
+    })),
+    ...(document.limits !== undefined ? { limits: document.limits } : {}),
+    engine: engineVersion,
+  };
+}
+
 function json(value: unknown): Uint8Array {
   return strToU8(`${JSON.stringify(value, null, 2)}\n`);
 }
 
 /**
- * The canonical entry order: manifest, model, scenarios sorted by name, runs sorted by id, and
- * last the entries `preserved` keeps, attachments first and then the rest, each sorted by name. It
- * is what makes two encodings of the same document byte-identical, and it is the order
- * `lilaEntryNames` reports.
+ * The canonical entry order: manifest, model, scenarios sorted by name, runs sorted by id; in a
+ * version 3 archive the catalog objects next, by type and then id (RM-01 § 1.5); and last the
+ * entries `preserved` keeps, attachments first and then the rest, each sorted by name. It is what
+ * makes two encodings of the same document byte-identical, and it is the order `lilaEntryNames`
+ * reports.
  *
  * `preserved` is what `decodeLilaArchive` returned for the archive this document came from (or
- * `null`): its entries are written back as `placeKept` places them, never dropped.
+ * `null`): its entries are written back as `placeKept` places them, never dropped, and an unchanged
+ * catalog object is written with the bytes it was read from. A version 3 document whose processes
+ * lack an id gets fresh ones here; call `asVersion3` first to keep them stable across saves.
  */
 export function encodeLila(document: ProjectDocument, preserved: LilaPreserved | null = null): Uint8Array<ArrayBuffer> {
   const valid = readProjectDocument(document);
@@ -282,15 +391,25 @@ export function encodeLila(document: ProjectDocument, preserved: LilaPreserved |
     }
   };
 
-  const version = valid.processes === undefined || valid.processes.length === 0 ? 1 : 2;
+  const version = formatVersionOf(valid);
   let slugs: string[] = [];
   if (version === 1) {
     put(MANIFEST_FILE, json(manifestOf(valid)));
     putProcess('', valid);
-  } else {
+  } else if (version === 2) {
     put(MANIFEST_FILE, json({ ...repositoryManifestOf(valid), engine: engineVersion }));
     slugs = processesOf(valid).map((p) => p.slug);
     for (const process of processesOf(valid)) putProcess(`${PROCESSES_DIR}/${process.slug}/`, process);
+  } else {
+    const processes = processesOf(valid).map((p) => (p.id !== undefined ? p : { ...p, id: newProcessId() }));
+    slugs = processes.map((p) => p.slug);
+    put(MANIFEST_FILE, json(version3ManifestOf(valid, processes)));
+    for (const process of processes) putProcess(`${PROCESSES_DIR}/${process.slug}/`, process);
+    for (const object of [...(valid.catalog ?? [])].sort(compareCatalogObjects)) {
+      const path = catalogObjectPath(object);
+      const bytes = json(canonicalCatalogObject(object));
+      put(path, sameObject(preserved?.objects[path], bytes) ?? bytes);
+    }
   }
 
   if (preserved !== null) {
@@ -342,7 +461,7 @@ function survivorOf(document: ProjectDocument, preserved: LilaPreserved): string
  */
 function placeKept(
   preserved: LilaPreserved,
-  version: 1 | 2,
+  version: 1 | 2 | 3,
   slugs: readonly string[],
   survivor: string | undefined,
   written: (name: string) => boolean,
@@ -354,18 +473,18 @@ function placeKept(
     let owned = false;
     if (!fromRepository && (isScenarioEntry(name) || isRunEntry(name))) {
       // The version 1 process is the first one of the document.
-      if (version === 2) target = `${PROCESSES_DIR}/${slugs[0]}/${name}`;
+      if (version !== 1) target = `${PROCESSES_DIR}/${slugs[0]}/${name}`;
       owned = true;
     } else if (fromRepository) {
       const entry = processEntry(name, preserved.slugs);
-      if (entry !== null && version === 2 && slugs.includes(entry.slug)) owned = true;
+      if (entry !== null && version !== 1 && slugs.includes(entry.slug)) owned = true;
       if (entry !== null && version === 1 && entry.slug === survivor) {
         target = entry.rest;
         owned = true;
       }
       // Its process was deleted: a slug never changes, so it is gone, not renamed. Refused rather
       // than dropped, or left behind where a later process could take its folder.
-      const deleted = version === 2 ? entry !== null && !slugs.includes(entry.slug) : entry !== null && survivor !== undefined && entry.slug !== survivor;
+      const deleted = version !== 1 ? entry !== null && !slugs.includes(entry.slug) : entry !== null && survivor !== undefined && entry.slug !== survivor;
       if (deleted && entry !== null) {
         throw new ProjectFormatError(
           'LILA-ENTRY-PATH',
@@ -388,7 +507,7 @@ function placeKept(
       const folder = slash > 0 ? target.slice(PROCESSES_DIR.length + 1, slash) : '';
       const rest = target.slice(slash + 1);
       const layout = rest === MODEL_FILE || isScenarioEntry(rest) || isRunEntry(rest);
-      if ((version === 2 && slugs.includes(folder) && layout) || written(target)) {
+      if ((version !== 1 && slugs.includes(folder) && layout) || written(target)) {
         throw new ProjectFormatError(
           'LILA-ENTRY-PATH',
           `${JSON.stringify(target)} is kept as is from a process that is no longer listed, and the project now writes a process there that would read it as its own. Choose another slug, or remove the entry by hand.`,
@@ -406,6 +525,20 @@ function placeKept(
       return aa !== bb ? aa - bb : a < b ? -1 : a > b ? 1 : 0;
     })
     .map(([target, name]) => [target, preserved.entries[name] as Uint8Array]);
+}
+
+/**
+ * `original` when it is the same object as `canonical` (the canonical bytes of the object now),
+ * however it was formatted: an object nobody changed keeps the bytes it was read with.
+ */
+function sameObject(original: Uint8Array | undefined, canonical: Uint8Array): Uint8Array | undefined {
+  if (original === undefined) return undefined;
+  try {
+    const parsed = JSON.parse(strFromU8(original)) as CatalogObject;
+    return strFromU8(json(canonicalCatalogObject(parsed))) === strFromU8(canonical) ? original : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Entry names of a `.lila`, in the order the archive stores them. */
@@ -443,7 +576,7 @@ function readManifest(raw: Uint8Array, problems: ProjectProblem[]): Manifest | n
   if (parsed.version !== 1) {
     throw new ProjectFormatError(
       'LILA-MANIFEST',
-      `"${MANIFEST_FILE}" declares version ${JSON.stringify(parsed.version)}; this reader understands versions 1 and 2.`,
+      `"${MANIFEST_FILE}" declares version ${JSON.stringify(parsed.version)}; this reader understands versions 1, 2 and 3.`,
     );
   }
   const revisions = isPlainObject(parsed.scenarioRevisions) ? parsed.scenarioRevisions : {};
@@ -503,7 +636,7 @@ export function decodeLila(bytes: Uint8Array): ProjectDocument {
 /**
  * `decodeLila`, plus what the archive held besides the document (`LilaPreserved`): the entries
  * outside the layout and the scenarios and runs that could not be read, for the next `encodeLila`
- * to write back (#725).
+ * to write back (#725). Versions 1, 2 and 3; anything above is refused with `LILA-MANIFEST`.
  */
 export function decodeLilaArchive(bytes: Uint8Array): DecodedLila {
   const entries = unzip(bytes);
@@ -514,16 +647,16 @@ export function decodeLilaArchive(bytes: Uint8Array): DecodedLila {
     throw new ProjectFormatError('LILA-NO-MANIFEST', `the archive has no "${MANIFEST_FILE}": it is not a .lila project.`);
   }
   // A repository has no `model.bpmn` at the root, so the version has to be known before the
-  // version 1 checks below run. Anything that is not a version 2 manifest takes the version 1
-  // path untouched, errors included.
+  // version 1 checks below run. Anything that is not a version 2 or 3 manifest takes the version
+  // 1 path untouched, errors included.
   const peeked = peekManifest(manifestRaw);
-  if (isPlainObject(peeked) && peeked.version === 2) return decodeRepository(peeked, entries);
+  if (isPlainObject(peeked) && (peeked.version === 2 || peeked.version === 3)) return decodeRepository(peeked, entries);
   // A newer version says so, instead of being blamed for a missing root `model.bpmn` its layout
   // never promised.
-  if (isPlainObject(peeked) && typeof peeked.version === 'number' && peeked.version > 2) {
+  if (isPlainObject(peeked) && typeof peeked.version === 'number' && peeked.version > 3) {
     throw new ProjectFormatError(
       'LILA-MANIFEST',
-      `"${MANIFEST_FILE}" declares version ${peeked.version}; this reader understands versions 1 and 2.`,
+      `"${MANIFEST_FILE}" declares version ${peeked.version}; this reader understands versions 1, 2 and 3.`,
     );
   }
   const modelRaw = entries[MODEL_FILE];
@@ -563,6 +696,7 @@ export function decodeLilaArchive(bytes: Uint8Array): DecodedLila {
     }
     readOtherEntry(name, raw, extras);
   }
+  const catalog = finishCatalog(extras);
 
   const process = projectModelOf(
     { model: { id: manifest.model.id, name: manifest.model.name, xml: strFromU8(modelRaw), revision: manifest.model.revision }, scenarios },
@@ -580,7 +714,10 @@ export function decodeLilaArchive(bytes: Uint8Array): DecodedLila {
     // encode/decode round-trip stop being an identity.
     ...(problems.length > 0 ? { problems } : {}),
   };
-  return { document: readProjectDocument(document), preserved: preservedOf(extras) };
+  // A catalog object or a reserved name in a version 1 archive (added by hand or by another tool)
+  // is loaded, and makes the document version 3 (RM-01 § 1.3): its next save writes it as one.
+  const read = extras.version3 ? asVersion3({ ...document, catalog }) : document;
+  return { document: readProjectDocument(read), preserved: preservedOf(extras) };
 }
 
 /**
@@ -612,13 +749,13 @@ export function readLilaPreserved(bytes: Uint8Array): { readonly id: string; rea
   if (!isPlainObject(parsed) || typeof parsed.id !== 'string') {
     throw new ProjectFormatError('LILA-MANIFEST', `"${MANIFEST_FILE}" does not describe a Lila project.`);
   }
-  if (typeof parsed.version === 'number' && parsed.version > 2) {
+  if (typeof parsed.version === 'number' && parsed.version > 3) {
     throw new ProjectFormatError(
       'LILA-MANIFEST',
-      `"${MANIFEST_FILE}" declares version ${parsed.version}; this reader understands versions 1 and 2.`,
+      `"${MANIFEST_FILE}" declares version ${parsed.version}; this reader understands versions 1, 2 and 3.`,
     );
   }
-  const repository = parsed.version === 2;
+  const repository = parsed.version === 2 || parsed.version === 3;
   const manifests = repository ? readRepositoryManifest(parsed) : [];
   const slugs = manifests.map((m) => m.slug);
   /** What `name` is in the layout: the part after its process folder, or `null` outside the layout. */
@@ -656,16 +793,19 @@ function peekManifest(raw: Uint8Array): unknown {
 }
 
 /**
- * The `processes` of a parsed version 2 manifest, or a `LILA-MANIFEST` saying why not: at least
- * one, each with a valid slug (`isProcessSlug`), a name and a model, and no slug twice.
+ * The `processes` of a parsed version 2 or 3 manifest, or a `LILA-MANIFEST` saying why not: at
+ * least one, each with a valid slug (`isProcessSlug`), a name and a model, and no slug twice. In a
+ * version 3 manifest (`parsed.version === 3`) each also needs its process id, unique (RM-01 § 1.2).
  */
 export function readRepositoryManifest(parsed: Record<string, unknown>): ProcessManifest[] {
   const bad = (why: string): never => {
     throw new ProjectFormatError('LILA-MANIFEST', `"${MANIFEST_FILE}" does not describe a Lila repository: ${why}`);
   };
+  const version3 = parsed.version === 3;
   if (typeof parsed.id !== 'string' || typeof parsed.name !== 'string') bad('"id" and "name" must be text.');
   if (!Array.isArray(parsed.processes) || parsed.processes.length === 0) bad('"processes" must list at least one process.');
   const seen = new Set<string>();
+  const ids = new Set<string>();
   return (parsed.processes as unknown[]).map((entry) => {
     if (
       !isPlainObject(entry) ||
@@ -680,8 +820,14 @@ export function readRepositoryManifest(parsed: Record<string, unknown>): Process
     }
     if (seen.has(entry.slug)) bad(`the slug ${JSON.stringify(entry.slug)} is repeated.`);
     seen.add(entry.slug);
+    if (version3) {
+      if (!isCatalogId(entry.id)) bad(`the process ${JSON.stringify(entry.slug)} needs an "id" (a-z, 0-9, -).`);
+      if (ids.has(entry.id as string)) bad(`the process id ${JSON.stringify(entry.id)} is repeated.`);
+      ids.add(entry.id as string);
+    }
     const revisions = isPlainObject(entry.scenarioRevisions) ? entry.scenarioRevisions : {};
     return {
+      ...(version3 ? { id: entry.id as string } : {}),
       slug: entry.slug,
       name: entry.name,
       model: { id: entry.model.id, name: entry.model.name, revision: entry.model.revision },
@@ -690,11 +836,35 @@ export function readRepositoryManifest(parsed: Record<string, unknown>): Process
   });
 }
 
+/** The largest size a `.lila` can hold (no ZIP64): the ceiling of each `limits` member (RM-01 § 1.2). */
+const MAX_LIMIT = 4_294_967_295;
+
 /**
- * Reads a version 2 archive (ADR-029): each listed process from its `processes/<slug>/` folder,
- * with exactly the tolerance of the version 1 reader — a missing `model.bpmn` is fatal, a broken
- * scenario or run is excluded, explained and kept, and anything outside the listed folders is
- * reported and kept (`readOtherEntry`).
+ * Reports what is wrong with a version 3 manifest's `limits` (RM-01 § 1.2). Nothing is refused or
+ * fixed: the defaults apply where a value is invalid, and the value is written back as found.
+ */
+function checkLimits(limits: unknown, problems: ProjectProblem[]): void {
+  if (!isPlainObject(limits)) {
+    problems.push({ file: MANIFEST_FILE, message: '"limits" is not an object; the default limits apply.' });
+    return;
+  }
+  for (const member of ['attachmentBytes', 'repositoryBytes']) {
+    const value = limits[member];
+    if (value === undefined) continue;
+    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1 || value > MAX_LIMIT) {
+      problems.push({
+        file: MANIFEST_FILE,
+        message: `"limits.${member}" must be a positive integer no larger than ${MAX_LIMIT}; the default applies.`,
+      });
+    }
+  }
+}
+
+/**
+ * Reads a version 2 or 3 archive (ADR-029, RM-01 § 1): each listed process from its
+ * `processes/<slug>/` folder, with exactly the tolerance of the version 1 reader — a missing
+ * `model.bpmn` is fatal, a broken scenario or run is excluded, explained and kept — plus the catalog
+ * objects, and every other entry kept (`readOtherEntry`).
  */
 function decodeRepository(parsed: Record<string, unknown>, entries: Record<string, Uint8Array>): DecodedLila {
   const manifests = readRepositoryManifest(parsed);
@@ -710,6 +880,8 @@ function decodeRepository(parsed: Record<string, unknown>, entries: Record<strin
       throw new ProjectFormatError('LILA-NO-MODEL', `the archive has no "${prefix}${MODEL_FILE}".`);
     }
   }
+  const version3 = parsed.version === 3;
+  if (version3 && parsed.limits !== undefined) checkLimits(parsed.limits, problems);
 
   for (const name of Object.keys(entries).sort()) {
     if (name === MANIFEST_FILE || name.endsWith('/')) continue;
@@ -736,8 +908,10 @@ function decodeRepository(parsed: Record<string, unknown>, entries: Record<strin
     }
     readOtherEntry(name, raw, extras);
   }
+  const catalog = finishCatalog(extras);
 
   const processes: ProcessDocument[] = [...byPrefix].map(([prefix, { manifest, scenarios, runs }]) => projectModelOf({
+    ...(manifest.id !== undefined ? { id: manifest.id } : {}),
     slug: manifest.slug,
     name: manifest.name,
     model: { ...manifest.model, xml: strFromU8(entries[`${prefix}${MODEL_FILE}`] as Uint8Array) },
@@ -754,7 +928,12 @@ function decodeRepository(parsed: Record<string, unknown>, entries: Record<strin
     scenarios: first.scenarios,
     scenarioRevisions: first.scenarioRevisions,
     runs: first.runs,
+    ...(version3 ? { formatVersion: 3 as const, catalog } : {}),
+    ...(version3 && parsed.limits !== undefined ? { limits: parsed.limits } : {}),
     ...(problems.length > 0 ? { problems } : {}),
   };
-  return { document: readProjectDocument(withProcesses(base, processes, { repository: true })), preserved: preservedOf(extras) };
+  const read = withProcesses(base, processes, { repository: true });
+  // A version 2 archive with a catalog object or a reserved name becomes version 3 (RM-01 § 1.3).
+  const document = !version3 && extras.version3 ? asVersion3({ ...read, catalog }) : read;
+  return { document: readProjectDocument(document), preserved: preservedOf(extras) };
 }

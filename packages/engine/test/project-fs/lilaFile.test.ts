@@ -3,9 +3,21 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { decodeLila, encodeLila } from '../../src/project/index.js';
+import { unzipSync } from 'fflate';
+
+import { decodeLila, encodeLila, withCatalog } from '../../src/project/index.js';
 import type { ProjectDocument } from '../../src/project/index.js';
-import { isLilaPath, isOwnSnapshot, ProjectIOError, readLilaFile, writeLilaFile } from '../../src/project-fs/index.js';
+import {
+  isLilaPath,
+  isOwnSnapshot,
+  openLilaProcess,
+  ProjectIOError,
+  readLilaFile,
+  writeLilaFile,
+  writeLilaScenario,
+  writeProjectFolder,
+} from '../../src/project-fs/index.js';
+import { BROKEN, v3Entries, v3Fixture } from '../project/fixtures/lila-v3.js';
 
 /**
  * Carpetas reales con `mkdtemp`, igual que `projectIO.test.ts`: lo que se comprueba aquí es el
@@ -185,5 +197,72 @@ describe('isOwnSnapshot (#539)', () => {
     const file = join(await carpeta(), 'nuevo.lila');
     await writeFile(file, encodeLila(documento()));
     expect(await isOwnSnapshot(file)).toBe(false);
+  });
+});
+
+describe('version 3 and the entries kept beside the document (#92, RM-01 § 1.4, § 8)', () => {
+  /** Every entry of `bytes`, as text, minus the ones named. */
+  function untouched(bytes: Uint8Array, except: (name: string) => boolean): Record<string, string> {
+    return Object.fromEntries(
+      Object.entries(unzipSync(bytes))
+        .filter(([name]) => !except(name))
+        .map(([name, data]) => [name, Buffer.from(data).toString('base64')]),
+    );
+  }
+
+  it('a save carries the entries of the archive it overwrites, byte for byte', async () => {
+    const file = join(await carpeta(), 'hotel.lila');
+    const fixture = v3Fixture({ notes: true });
+    await writeFile(file, fixture);
+    const { document } = await readLilaFile(file);
+    // The document alone does not hold them; `writeLilaFile` takes them from the file, in the lock.
+    await writeLilaFile(file, document);
+    expect(Buffer.from(await readFile(file)).equals(Buffer.from(fixture))).toBe(true);
+  });
+
+  it('an agent write (a scenario) keeps the catalog, the broken object, maps/ and notes.md untouched', async () => {
+    const file = join(await carpeta(), 'hotel.lila');
+    const fixture = v3Fixture({ notes: true });
+    await writeFile(file, fixture);
+    const input = await openLilaProcess(file, { process: 'billing' });
+    await writeLilaScenario(input, 'to-be', { version: 1, name: 'TO-BE', extends: 'as-is.scenario.json' });
+    const after = new Uint8Array(await readFile(file));
+    const touched = (name: string): boolean => name === 'lila-project.json' || name.startsWith('processes/billing/');
+    expect(untouched(after, touched)).toEqual(untouched(fixture, touched));
+    expect(Object.keys(unzipSync(after))).toEqual(
+      expect.arrayContaining([`catalog/role/${BROKEN}.json`, 'maps/x.json', 'notes.md', 'processes/billing/to-be.scenario.json']),
+    );
+    const manifest = JSON.parse(Buffer.from(unzipSync(after)['lila-project.json']!).toString('utf8')) as { version: number };
+    expect(manifest.version).toBe(3);
+    expect(v3Entries({ notes: true }).length + 1).toBe(Object.keys(unzipSync(after)).length);
+  });
+
+  it('a «Save as» starts a new copy: it does not take the entries of the file it replaces', async () => {
+    const file = join(await carpeta(), 'hotel.lila');
+    await writeFile(file, v3Fixture({ notes: true }));
+    const { document } = await readLilaFile(file);
+    await writeLilaFile(file, document, { saveAs: true, overwrite: true });
+    const names = Object.keys(unzipSync(new Uint8Array(await readFile(file))));
+    expect(names).not.toContain('notes.md');
+    expect(names).toContain('catalog/role/role-7k2m9q4x1pzd.json');
+  });
+
+  it('a file of another project lends nothing; `preserved: null` writes none', async () => {
+    const file = join(await carpeta(), 'hotel.lila');
+    await writeFile(file, v3Fixture({ notes: true }));
+    const other = withCatalog(documento(), [{ type: 'role', id: 'rol-1', name: 'Cashier', revision: 1 }]);
+    await writeLilaFile(file, other, { overwrite: true });
+    expect(Object.keys(unzipSync(new Uint8Array(await readFile(file))))).not.toContain('notes.md');
+    await writeFile(file, v3Fixture({ notes: true }));
+    const { document } = await readLilaFile(file);
+    await writeLilaFile(file, document, { overwrite: true, preserved: null });
+    expect(Object.keys(unzipSync(new Uint8Array(await readFile(file))))).not.toContain('notes.md');
+  });
+
+  it('a version 3 project is not written to a folder until the folder adapter exists (#671)', async () => {
+    const dir = await carpeta();
+    const v3 = decodeLila(v3Fixture());
+    await expect(writeProjectFolder(dir, v3)).rejects.toMatchObject({ code: 'E-DOCUMENTO' });
+    expect(await readdir(dir)).toEqual([]);
   });
 });
