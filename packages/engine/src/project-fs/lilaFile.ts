@@ -10,8 +10,8 @@
  */
 import { link, open, readFile, rename, stat, unlink, utimes, writeFile } from 'node:fs/promises';
 import { basename } from 'node:path';
-import { decodeLila, encodeLila, ProjectFormatError } from '../project/index.js';
-import type { ProjectDocument, ProjectErrorCode, ProjectProblem } from '../project/index.js';
+import { decodeLila, encodeLila, ProjectFormatError, readLilaPreserved } from '../project/index.js';
+import type { LilaPreserved, ProjectDocument, ProjectErrorCode, ProjectProblem } from '../project/index.js';
 import {
   assertNotAnotherProject,
   assertPathsUnchanged,
@@ -90,13 +90,15 @@ export async function readLilaFile(
 }
 
 /**
- * Lee el `id` del proyecto que YA está en `file`, o `null` si no hay archivo, no se puede leer, o
- * no es un `.lila` interpretable. Mismo criterio que `readManifest` con un manifiesto roto: sin
- * forma de saber de quién es, no se bloquea el guardado por un falso positivo.
+ * The project that is ALREADY in `file`: its `id` and the entries it keeps beside the document
+ * (`LilaPreserved`, RM-01 § 1.4), or `null` when there is no file, it cannot be read, or it is not
+ * a `.lila` this build can interpret. Only the manifest and the entries outside the layout are
+ * inflated (`readLilaPreserved`): every save runs this, and the runs need no second validation. Same criterion as `readManifest` with a broken manifest:
+ * without a way to know whose it is, the save is not blocked by a false positive.
  */
-async function existingProjectId(file: string): Promise<string | null> {
+async function existingProject(file: string): Promise<{ id: string; preserved: LilaPreserved } | null> {
   try {
-    return decodeLila(new Uint8Array(await readFile(file))).id;
+    return readLilaPreserved(new Uint8Array(await readFile(file)));
   } catch {
     return null;
   }
@@ -123,6 +125,14 @@ export interface WriteLilaOptions extends WriteProjectOptions {
    * slip in between that comparison and the `rename`.
    */
   readonly beforeWrite?: (() => Promise<void>) | undefined;
+  /**
+   * The entries to write back beside the document (RM-01 § 1.4, § 5.3). Left out, they are the ones
+   * of the archive `file` holds now, read inside the lock, when it holds the same project and this
+   * is not a `saveAs` (a new copy starts without them) — so
+   * every agent write carries the catalog files, the reserved names and the entries this build
+   * does not understand through, byte for byte, without knowing about them. `null` writes none.
+   */
+  readonly preserved?: LilaPreserved | null | undefined;
 }
 
 /** How long to wait for another writer's lock, and when a lock is old enough to be a crash's. */
@@ -223,13 +233,21 @@ export async function writeLilaFile(
 /** `writeLilaFile` with the lock already held. */
 async function writeLilaFileLocked(file: string, document: ProjectDocument, options: WriteLilaOptions): Promise<void> {
   await options.beforeWrite?.();
+  const existing = options.saveAs === true || options.preserved === undefined ? await existingProject(file) : null;
   if (options.saveAs === true) {
-    assertNotAnotherProject(await existingProjectId(file), document.id, 'El archivo');
+    assertNotAnotherProject(existing?.id ?? null, document.id, 'El archivo');
   }
   await assertPathsUnchanged([file], options.overwrite === true);
+  // A «Save as» writes a new copy: what an older file at the destination kept is not this document's.
+  const preserved =
+    options.preserved !== undefined
+      ? options.preserved
+      : options.saveAs !== true && existing?.id === document.id
+        ? existing.preserved
+        : null;
   let bytes: Uint8Array;
   try {
-    bytes = encodeLila(document);
+    bytes = encodeLila(document, preserved);
   } catch (error) {
     asProjectIOError(error);
   }

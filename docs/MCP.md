@@ -168,8 +168,9 @@ A `.lila` (`docs/PROJECT_FORMAT.md`) is accepted wherever a tool takes a model (
   (`encodeLila`) to a temporary file that is then renamed over the `.lila`, so a failure never
   leaves a partial archive. The scenario's revision goes up by one, so the app sees the runs of
   the old version as stale; a patch that changes nothing is not written and leaves the revision as it was. Every other process, scenario and run is carried through unchanged
-  and, in an archive written by the app or the engine, byte for byte; entries outside the
-  project layout are dropped, as in any `.lila` save. If the file changed on disk while the tool
+  and, in an archive written by the app or the engine, byte for byte; catalog objects and the
+  entries this version does not interpret are written back as they are in the file, as in any
+  `.lila` save ([project format](PROJECT_FORMAT.md#what-is-tolerated-and-what-is-not)). If the file changed on disk while the tool
   worked (another program, another MCP server, the CLI or the desktop app), nothing is written and
   the tool fails: call it again. Writers of the same `.lila` take turns through a lock file next to
   it (`<file>.lila.lock`, never inside the archive); when another writer holds it for more than 3
@@ -192,7 +193,8 @@ A `.lila` (`docs/PROJECT_FORMAT.md`) is accepted wherever a tool takes a model (
 byte as it was. Call `get_project` first on a file that already exists, instead of finding its
 processes, scenarios and runs through the errors of other tools.
 
-- **`get_project`** returns `{ file, name, formatVersion, processes }`. `formatVersion` is 2 for a
+- **`get_project`** returns `{ file, name, formatVersion, processes }`. `formatVersion` is 3 for a
+  repository with a catalog ([project format](PROJECT_FORMAT.md#version-3-the-catalog)), 2 for a
   repository of several processes and 1 otherwise. Each process has `slug` (what `process` takes),
   `name`, `processId` (its `bpmn:process`), `modelRevision`, `elements` (flow nodes: tasks, events,
   gateways; `null` when the model cannot be read), `scenarios` (`entry`, `name`, `revision`,

@@ -16,9 +16,8 @@
  */
 import type { RunResult } from '@lila-modeler/engine';
 import type { Scenario } from '@lila-modeler/engine/schema';
-import { encodeLila } from '@lila-modeler/engine/project';
 import { strings } from '../i18n';
-import { readLila, readProject } from '../project';
+import { encodeProject, readLila, readProject } from '../project';
 import type { ProcessData, ProcessSummary, ProjectSessionStore, ProjectDocument } from './ProjectStore';
 
 /**
@@ -370,7 +369,9 @@ export class BrowserStore implements ProjectSessionStore {
 
   private async guardarProyecto(document: ProjectDocument, saveAs: boolean, nuevo: boolean): Promise<ProjectDocument | null> {
     const snapshot = structuredClone(readProject(document));
-    const datos = encodeLila(snapshot);
+    // With what the `.lila` it came from kept beside it (#92): entries this version does not
+    // interpret go back into the file, though never into the `localStorage` mirror.
+    const datos = encodeProject(snapshot);
     const escrito = await this.escribir(snapshot, datos, saveAs);
     if (escrito === 'cancelado') return null;
     if (escrito === 'sin-api' || (escrito === 'rechazado' && !nuevo)) descargar(datos, `${snapshot.name}${LILA_EXT}`, LILA_MIME);

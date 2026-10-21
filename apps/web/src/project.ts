@@ -1,8 +1,8 @@
 import { resolveScenarioPath } from '@lila-modeler/engine/schema';
 import { marcarExportador } from '@lila-modeler/engine/bpmn';
 import type { ProcessIR } from '@lila-modeler/engine';
-import { decodeLila, processesOf, ProjectFormatError, readProjectDocument } from '@lila-modeler/engine/project';
-import type { ProcessDocument } from '@lila-modeler/engine/project';
+import { decodeLilaArchive, encodeLila, processesOf, ProjectFormatError, readProjectDocument } from '@lila-modeler/engine/project';
+import type { LilaPreserved, ProcessDocument } from '@lila-modeler/engine/project';
 import type { ProjectErrorCode } from '@lila-modeler/engine/project';
 import type { ProjectDocument, ProjectSessionStore, ProjectStore, ScenarioDocument } from './store/ProjectStore';
 import { strings } from './i18n';
@@ -49,16 +49,58 @@ export function readProject(value: unknown): ProjectDocument {
 }
 
 /**
+ * What the last `.lila` read of each project kept beside its document (RM-01 § 1.4, #92): the
+ * entries this build does not interpret and the bytes of its catalog objects, by project id. In
+ * memory only — the document is what reaches `localStorage`, and bytes cannot go there (owner
+ * decision 4 of #127) — so `encodeProject` writes them back on every save to a file and in the
+ * desktop recovery copy, and a reload loses them, which is what `tomarAvisoRecuperacion` warns about.
+ */
+const conservadas = new Map<string, LilaPreserved>();
+
+/** Projects read with kept entries whose warning has not been shown yet. */
+const avisosPendientes = new Map<string, readonly string[]>();
+
+/**
  * `decodeLila` with the same localized wording as `readProject` — the only way this app should
  * open a `.lila`. Calling `decodeLila` straight from a store bypasses the catalog and shows the
- * engine's English text.
+ * engine's English text. It also keeps what the archive held beside the document, for
+ * `encodeProject`.
  */
 export function readLila(bytes: Uint8Array): ProjectDocument {
+  let leido: ReturnType<typeof decodeLilaArchive>;
   try {
-    return decodeLila(bytes);
+    leido = decodeLilaArchive(bytes);
   } catch (error) {
     localizado(error);
   }
+  const { document, preserved } = leido;
+  const nombres = Object.keys(preserved.entries);
+  if (nombres.length > 0 || Object.keys(preserved.objects).length > 0) conservadas.set(document.id, preserved);
+  else conservadas.delete(document.id);
+  if (nombres.length > 0) avisosPendientes.set(document.id, nombres);
+  else avisosPendientes.delete(document.id);
+  return document;
+}
+
+/**
+ * `encodeLila` with what the last `readLila` of the same project kept beside it: what every save
+ * to a file and the desktop autosave write, so an entry this version does not interpret survives
+ * them byte for byte.
+ */
+export function encodeProject(doc: ProjectDocument): Uint8Array<ArrayBuffer> {
+  return encodeLila(doc, conservadas.get(doc.id) ?? null);
+}
+
+/**
+ * The warning that automatic recovery in the browser will not include the entries the file of `id`
+ * kept (owner decision 4 of #127), or `null`. Once per read: it is taken, not peeked.
+ */
+export function tomarAvisoRecuperacion(id: string): string | null {
+  const nombres = avisosPendientes.get(id);
+  if (nombres === undefined) return null;
+  avisosPendientes.delete(id);
+  const lista = nombres.length > 3 ? `${nombres.slice(0, 3).join(', ')}, …` : nombres.join(', ');
+  return strings().app.avisoEntradasSinRecuperacion(lista);
 }
 
 /**

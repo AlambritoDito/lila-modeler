@@ -23,6 +23,7 @@
 import { access, constants, lstat, mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import {
+  formatVersionOf,
   processesOf,
   ProjectFormatError,
   readRepositoryManifest,
@@ -958,6 +959,14 @@ export async function writeProjectFolder(
   fsImpl: WriteProjectFsImpl = {},
 ): Promise<void> {
   const modelFile = options.modelFile ?? MODEL_FILE;
+  // RM-01 § 1.3: a version 3 repository (a catalog) has no folder writer yet (#671). Writing it as
+  // version 1 or 2 would drop the catalog and the process ids without a word, so it is refused.
+  if (formatVersionOf(document) === 3) {
+    throw new ProjectIOError(
+      'E-DOCUMENTO',
+      'Este proyecto es un repositorio de versión 3 (con catálogo): todavía solo puede guardarse como archivo .lila.',
+    );
+  }
   await assertNotMiscasedInProject(dir, modelFile);
   if ((document.processes?.length ?? 0) > 0) {
     await writeRepositoryFolder(dir, document, options, fsImpl);
