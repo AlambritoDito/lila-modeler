@@ -51,6 +51,7 @@ citan; no implica una promesa pública de paridad con Bizagi Modeler.
 | **Extras que Bizagi no da** | | | | |
 | p50/p90/p95 de ciclo y espera | ✗ | ✓ | M2 | Implementado (LILA-028) |
 | Longitud de cola media/máx por actividad | ✗ | ✓ | M2 | Implementado (LILA-036) |
+| p50/p90/p95 de la espera por recurso por actividad | ✗ | ✓ en el dock de Simular y la vista rápida (p95), y en `lila export results` / `export_results` (hoja `Percentiles`, `percentiles.csv`) | M5 | Implementado (#396, #666) |
 | Throughput por hora, costo por caso | ✗ | ✓ | M2 | Implementado (LILA-028) |
 | Ranking de cuellos de botella | ✗ | ✓ | M2 | Implementado (LILA-036) |
 | Event log por caso (CSV; XES después) | ✗ | ✓ | M2 | Implementado (LILA-037) |

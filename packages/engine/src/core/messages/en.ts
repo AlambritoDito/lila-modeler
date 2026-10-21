@@ -5,6 +5,9 @@
  */
 import type { CoreCatalog } from './types.js';
 
+/** `of 30 replications`, `of 1 replication`. */
+const ofReplications = (total: string): string => `of ${total} ${total === '1' ? 'replication' : 'replications'}`;
+
 export const coreEn: CoreCatalog = {
   codes: {
     'E-LIMITE-SIN-AVANCE': (nodeId, caseId, replication, instant, limit) =>
@@ -92,11 +95,11 @@ export const coreEn: CoreCatalog = {
       `${poolId}: the measured occupancy exceeds the integrated available capacity; this can happen when crossing a capacity drop without preemption.`,
 
     'W-REPLICACIONES-SIN-OBSERVACIONES': (nodeId, missing, total, observed) =>
-      `${nodeId}: no instance completed in ${missing} of ${total} replications; its time statistics average only the other ${observed}.`,
+      `${nodeId}: no instance completed in ${missing} ${ofReplications(total)}; its time statistics average only the other ${observed}.`,
     'W-REPLICACIONES-SIN-OBSERVACIONES/proceso': (missing, total, observed) =>
-      `process: no case completed in ${missing} of ${total} replications; its cycle time, wait time, cost per case and service level average only the other ${observed}.`,
+      `process: no case completed in ${missing} ${ofReplications(total)}; its cycle time, wait time, cost per case and service level average only the other ${observed}.`,
     'W-REPLICACIONES-SIN-OBSERVACIONES/desenlace': (endId, missing, total, observed) =>
-      `${endId}: no case ended here in ${missing} of ${total} replications; its time statistics average only the other ${observed}.`,
+      `${endId}: no case ended here in ${missing} ${ofReplications(total)}; its time statistics average only the other ${observed}.`,
 
     'W-NORMAL-NEGATIVA': (mean, sd, percent) =>
       `normal(mean=${mean}, sd=${sd}): P(x < 0) = ${percent} % > 1 %; negative samples are truncated to 0.`,

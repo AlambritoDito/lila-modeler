@@ -115,7 +115,7 @@ describe('process document (#454)', () => {
     const base = { ir, annotations: {}, title: 't', date: 'd', png: PNG, scenario, charts };
     const doc = buildProcessDocument({ ...base, result });
     // The bytes that are not a PNG are left out; the others keep their order.
-    expect(doc.charts).toEqual([PNG, PNG]);
+    expect(doc.charts).toEqual([{ png: PNG }, { png: PNG }]);
     const blocks = doc.blocks.map((b) => (b.kind === 'image' ? `image:${b.chart ?? 'diagram'}` : b.kind));
     const results = doc.blocks.findIndex((b) => b.kind === 'heading' && b.text === 'Results');
     expect(blocks.slice(results + 1, results + 3)).toEqual(['image:0', 'image:1']);

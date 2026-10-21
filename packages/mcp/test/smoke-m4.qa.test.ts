@@ -155,7 +155,7 @@ test('extends cíclico y XML impenetrable: isError con el motivo, y el servidor 
 
   const ciclo = await client.callTool({ name: 'run_simulation', arguments: { scenario: a } });
   expect(ciclo.isError).toBe(true);
-  expect(textOf(ciclo)).toContain('ciclo en la cadena de herencia');
+  expect(textOf(ciclo)).toContain('cycle in the inheritance chain');
 
   const basura = await client.callTool({ name: 'describe_process', arguments: { xml: 'no soy xml <<<' } });
   expect(basura.isError).toBe(true);

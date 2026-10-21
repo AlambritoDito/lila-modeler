@@ -1186,22 +1186,6 @@ async function writeRepositoryFolder(
       }
     }
   }
-  // A new process that landed on the folder of a process deleted earlier (the writer never deletes
-  // folders) would inherit its scenarios and runs on the next read, and one that landed on a folder
-  // created after the project was opened (#517, item 2: the app's `occupiedSlugs` is a snapshot
-  // taken on open) would overwrite its model. The app avoids the slugs it knows of (`processSlug`);
-  // this is the disk layer's own refusal, listed right before writing, and it deletes nothing.
-  for (const process of processes) {
-    if (listados.has(process.slug)) continue;
-    const ajenos = await foreignFiles(join(processesDir, process.slug), process);
-    if (ajenos.length > 0) {
-      throw new ProjectIOError(
-        'E-CARPETA-OCUPADA',
-        `"${PROCESSES_DIR}/${process.slug}/" ya tiene archivos de otro proceso (${ajenos.join(', ')}); el proceso nuevo necesita otra carpeta.`,
-      );
-    }
-  }
-
   // Versión 1 → repositorio: los archivos del primer proceso salen de la raíz (ver arriba). Solo si
   // la carpeta no era ya un repositorio, y solo los que son de ese proceso.
   if (enDisco === null) {
@@ -1217,6 +1201,24 @@ async function writeRepositoryFolder(
   }
 
   await assertNoExternalChanges([...trackedWrites, manifestWrite, ...removals], options.overwrite === true);
+  // A new process that landed on the folder of a process deleted earlier (the writer never deletes
+  // folders) would inherit its scenarios and runs on the next read, and one that landed on a folder
+  // created after the project was opened (#517, item 2: the app's `occupiedSlugs` is a snapshot
+  // taken on open) would overwrite its model. The app avoids the slugs it knows of (`processSlug`);
+  // this is the disk layer's own refusal, listed right before writing, and it deletes nothing. It
+  // runs after `assertNoExternalChanges` (#517): a manifest edited by hand that drops an open
+  // process makes that process look new here, and what to report is the change on disk
+  // (`E-CAMBIO-EXTERNO`), not its own folder.
+  for (const process of processes) {
+    if (listados.has(process.slug)) continue;
+    const ajenos = await foreignFiles(join(processesDir, process.slug), process);
+    if (ajenos.length > 0) {
+      throw new ProjectIOError(
+        'E-CARPETA-OCUPADA',
+        `"${PROCESSES_DIR}/${process.slug}/" ya tiene archivos de otro proceso (${ajenos.join(', ')}); el proceso nuevo necesita otra carpeta.`,
+      );
+    }
+  }
   // The manifest goes after every process file and before the retirements (QA of #511, nit 4): a
   // crash half-way through the first version 2 save leaves the version 1 manifest pointing at the
   // root files, still there, instead of a version 2 one pointing at folders not written yet.

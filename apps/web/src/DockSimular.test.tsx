@@ -125,6 +125,11 @@ describe('the Tasks tab (Lote M, design 05)', () => {
       expect(f.casos).toBe(result.elements[f.id]!.completed);
       expect(f.costo).toBe(result.elements[f.id]!.fixedCostTotal);
     }
+    // #645: a blank name reads as the resource's key, as in the Resources step (`nombreRecurso`).
+    const [ref] = Object.keys(scenario.resources ?? {});
+    const enBlanco = { ...scenario, resources: { ...scenario.resources, [ref!]: { ...scenario.resources![ref!]!, name: '  ' } } } as typeof scenario;
+    expect(filasTareas(ir, result, enBlanco).flatMap((f) => f.recursos)).not.toContain('  ');
+    expect(filasTareas(ir, result, enBlanco).some((f) => f.recursos.includes(ref!))).toBe(true);
     // The engine ranks bottlenecks with the utilization of the busiest pool the element uses.
     for (const cuello of result.bottlenecks) {
       expect(filas.find((f) => f.id === cuello.elementId)?.utilizacion).toBeCloseTo(cuello.utilization, 12);

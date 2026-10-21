@@ -3,7 +3,7 @@
 > Read this in: [Español](es/MCP.md)
 
 `packages/mcp` (`@lila-modeler/mcp`) provides a stdio [MCP](https://modelcontextprotocol.io) server
-backed by `@lila-modeler/engine`. Its twenty-one tools reuse the CLI validation and simulation pipeline — see
+backed by `@lila-modeler/engine`. Its twenty-five tools reuse the CLI validation and simulation pipeline — see
 [`docs/CLI.md`](CLI.md) for the same pipeline driven from a terminal instead of an MCP client.
 
 For the whole flow an agent follows — interview, outline, scenario, run, document, and seeing the
@@ -22,38 +22,50 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
   `resumen`: node counts, gateway outputs, lanes, flattened subprocesses, ignored processes
   and validation status. An optional scenario path resolves `extends` and adds referenced
   resources. An unreadable scenario is reported in the summary without failing the tool.
-- **`run_simulation({ model?, process?, scenario, seed?, replications?, saveTo?, saveRun?, detail?, locale? })`** validates
-  the model and scenario, simulates with `log: false` and returns the same `RunResult` as
-  `lila run --json`. It supports resources and calendars. `scenario` may be a JSON file path
-  or an inline resolved scenario. `model` defaults to `scenario.model`; a supplied different
-  model is rejected. The response includes text, `structuredContent` and an `outputSchema`.
-  By default the answer is a summary; `detail: "full"` returns the whole `RunResult` (see
-  [Summary or full results](#summary-or-full-results)). Long runs report progress and can be
+- **`run_simulation({ model?, process?, scenario, seed?, replications?, saveTo?, saveRun?, logTo?, detail?, locale? })`** validates
+  the model and scenario, simulates and, by default, answers with a summary of the run;
+  `detail: "full"` returns the whole `RunResult`, the same as `lila run --json` (see
+  [Summary or full results](#summary-or-full-results)). It supports resources and calendars.
+  `scenario` may be a JSON file path or an inline resolved scenario. `model` defaults to
+  `scenario.model`; a supplied different model is rejected. The response includes text,
+  `structuredContent` and an `outputSchema`. Long runs report progress and can be
   cancelled ([Progress and cancellation](#progress-and-cancellation)).
   With a `.lila` `model` and a scenario of it, `saveRun: true` stores the run in the project (see
-  [Saving a run](#saving-a-run)).
-- **`compare_scenarios({ model?, process?, scenarios, seed?, replications?, saveTo?, detail?, locale? })`** validates
+  [Saving a run](#saving-a-run)). `logTo` writes the event log to a CSV file: the same bytes as the
+  `log.csv` of `lila run --csv` for the same model, scenario, seed and replications. Rows are
+  streamed to a temporary file during the run, so memory stays bounded on long runs, and the file
+  is published only when the call succeeds, after `saveTo` and `saveRun`. A `logTo` that names the
+  model, the `.lila`, the scenario file or `saveTo` is refused. When `logTo` or `saveRun` is given, a second text block says where
+  they went: `{ log, savedRun }`, each key only when asked for; `log` is the absolute path.
+- **`compare_scenarios({ model?, process?, scenarios, seed?, replications?, saveTo?, format?, all?, detail?, locale? })`** validates
   all scenarios before running any. Two or more scenarios must use the same model; the first
   is the baseline. Paths and inline objects may be mixed. Returns `{ comparison, notes }`,
   with the same `CompareResult` as `lila compare --json`. Notes cover seeds, units, insufficient
   replications for confidence intervals, and engine warnings. By default `comparison` keeps the
-  process and resource rows and the significant ones; `detail: "full"` returns every row.
-- **`patch_scenario({ scenario, project?, process?, patch, saveTo?, extendsFrom?, name?, description?, locale? })`**
+  process and resource rows and the significant ones; `detail: "full"` returns every row, and
+  `all: true` is the same request under the name of `lila compare --all` (with `detail: "summary"`
+  it is an error). `format: "xlsx"` makes `saveTo` write the workbook of `lila compare --xlsx`, the
+  same bytes, instead of the JSON; it needs `saveTo`.
+- **`patch_scenario({ scenario, project?, process?, patch, saveTo?, extendsFrom?, name?, description?, dryRun?, locale? })`**
   applies [JSON Patch](https://www.rfc-editor.org/rfc/rfc6902), validates the result and writes
-  only when valid. It returns `{ scenario, file, written, notes }` (plus `process` and `entry` inside a
+  only when valid. It returns `{ scenario, file, written, dryRun, notes }` (plus `process` and `entry` inside a
   `.lila`). A patch that changes nothing (only `test`, or a `saveTo` whose target already holds the
   result) writes nothing: `written` is `false`, `notes` says so first, and the scenario keeps its
-  revision, so its saved runs stay current (#627).
+  revision, so its saved runs stay current (#627). `dryRun: true` validates the same way and
+  writes nothing (`written: false`, with a note). For a `.lila` it is `lila scenario patch`.
 
-- **`export_diagram({ project | path, process?, saveTo?, overwrite?, locale? })`** draws the
-  diagram of a `.lila` process (`project`) or a `.bpmn` (`path`) as SVG with the engine's own
-  renderer. Returns `{ process, svg }`, or with `saveTo` `{ process, file }`.
+- **`export_diagram({ project | path, process?, overlay?, run?, scenario?, saveTo?, overwrite?, locale? })`**
+  draws the diagram of a `.lila` process (`project`) or a `.bpmn` (`path`) as SVG with the engine's
+  own renderer. Returns `{ process, svg }`, or with `saveTo` `{ process, file }`. With `overlay`
+  (`"bottlenecks"` | `"heatmap"`, #669) it colours the diagram with a stored run, as `lila export
+  diagram --overlay` does (`docs/CLI.md`), and the answer adds the `run` it used.
 - **`export_document({ project, process?, run?, scenario?, format, saveTo, overwrite?, locale? })`**
   writes the process document (`format`: `docx` or `html`) with the results of a stored run.
   Returns `{ file, format, project, process, run, notes }`.
 - **`export_results({ project, process?, run?, scenario?, format, saveTo, overwrite?, locale? })`**
   writes the results of a stored run (`format`: `xlsx`, or `csv` into the directory `saveTo`).
-  Returns `{ files, format, project, process, run }`.
+  Returns `{ files, format, project, process, run, percentiles }`; `percentiles` is
+  `{ included, note? }`, see [App-free exports](#app-free-exports).
 - **`create_process({ outline, project, process?, name?, dryRun?, locale? })`** turns an outline —
   lanes plus an ordered list of steps — into a laid-out, validated BPMN process and writes it as a
   new process of the `.lila` `project` (or a new `.lila`). It never replaces a process. Returns
@@ -63,8 +75,8 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
   outline: `{ file, slug, name, outline, warnings }`.
 - **`edit_process({ project, process?, operations, dryRun?, layout?, locale? })`** applies a list of
   operations (add, connect, remove, rename, setType, moveToLane, addLane, removeLane, moveLane,
-  addBoundary, annotate, removeAnnotation, addDataObject, removeDataObject) to one process of a
-  `.lila`, all or none. Returns `{ file, slug, name, dryRun, summary, changes, removed,
+  addBoundary, annotate, removeAnnotation, addDataObject, removeDataObject, setCalledProcess) to one
+  process of a `.lila`, all or none. Returns `{ file, slug, name, dryRun, summary, changes, removed,
   scenarioRemovals, notes, warnings, outline }`. See [Editing a process](#editing-a-process).
 
 - **`annotate_element({ project, process?, elementId, documentation?, responsibilities?, refs?, attributes?, dryRun?, locale? })`**
@@ -84,7 +96,8 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
   from a BPMN you already have (an agent that starts from steps uses `create_process`) and
   scenarios. Returns `{ file, name, processId, laidOut, warnings, notes, scenarios }`.
 - **`get_project({ project, locale? })`** lists what a `.lila` holds, writing nothing: its
-  processes, their scenarios and their saved runs, current or stale. Returns
+  processes, their scenarios and their saved runs, current or stale. `project` must be a `.lila`
+  file, as in `patch_scenario`. Returns
   `{ file, name, formatVersion, processes }`.
 - **`get_scenario({ project, process?, scenario, resolved?, locale? })`** reads one scenario as
   stored, or resolved through `extends`, with the validator's notes, writing nothing. Returns
@@ -95,11 +108,22 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
   adds a BPMN as a new process of an existing `.lila` (`mode: "add"`) or replaces the model of
   one (`mode: "replace"`). Returns `{ file, mode, slug, name, processId, revision, dryRun,
   laidOut, summary, scenarioRemovals, notes, warnings, slugs }`.
+- **`rename_process({ project, process, name, dryRun?, locale? })`** renames a process of a
+  `.lila`; its slug stays. Returns `{ file, dryRun, written, process, before, after, summary, notes }`.
+- **`delete_process({ project, process, dryRun?, locale? })`** deletes a process with its scenarios
+  and saved runs. Returns `{ file, dryRun, written, process, name, removedScenarios, removedRuns,
+  slugs, summary, notes }`.
+- **`rename_scenario({ project, process?, scenario, name, dryRun?, locale? })`** renames a scenario;
+  its file stays. Returns `{ file, dryRun, written, process, entry, before, after, revision,
+  summary, notes }`.
+- **`delete_scenario({ project, process?, scenario, dryRun?, locale? })`** deletes a scenario with
+  its saved runs. Returns `{ file, dryRun, written, process, entry, removedRuns, summary, notes }`.
 
 The three export tools are described in [App-free exports](#app-free-exports); the six after
 them in [Modelling tools for agents](#modelling-tools-for-agents); `get_project` and
-`get_scenario` in [Reading a project](#reading-a-project); the last two in
-[Raw BPMN of a process](#raw-bpmn-of-a-process).
+`get_scenario` in [Reading a project](#reading-a-project); `get_process_bpmn` and
+`put_process_bpmn` in [Raw BPMN of a process](#raw-bpmn-of-a-process); the last four in
+[Renaming and deleting](#renaming-and-deleting).
 
 Every tool that takes a model also takes a `.lila` project; see [A `.lila` as input](#a-lila-as-input).
 
@@ -176,7 +200,9 @@ processes, scenarios and runs through the errors of other tools.
   extended attributes it defines (`id`, `name`, `type`, `appliesTo`, `default?`, `options?`;
   `null` when the model cannot be read back whole). A run is
   `current: false` (stale) when the model or its scenario changed after it: `export_results` and
-  `export_document` take it only by id. A `.lila` keeps no date of when a run was taken; `start` is
+  `export_document` take it only by id. Only the scenario the run ran counts: a change in its
+  `extends` parent alone leaves the run `current`, although the resolved scenario is no longer
+  the one that ran. A `.lila` keeps no date of when a run was taken; `start` is
   the simulated start (`run.start`) of the scenario it ran.
 - **`get_scenario`** returns `{ file, process, entry, revision, resolved, scenario, runnable, notes }`.
   `scenario` is the entry as stored (with its `extends`), or with `resolved: true` merged through
@@ -184,7 +210,13 @@ processes, scenarios and runs through the errors of other tools.
   to the scenario. `notes` are the validator's against the process model — errors (`E-…`) first,
   then warnings (`W-…`), the checks `run_simulation` makes before it simulates — so it works as a
   scenario lint; `runnable` is `false` when there is an error. A scenario whose `extends` cannot be
-  resolved comes back with `scenario: null` (when resolved) and the reason in `notes`.
+  resolved comes back with `scenario: null` (when resolved) and the reason in `notes`. So does a
+  process whose `model.bpmn` does not parse: `runnable: false`, with the parser's error in
+  `notes`.
+
+Both take only a `.lila` file in `project`: a folder or an empty path is refused with the same
+message as `patch_scenario`. Like `get_process_bpmn`, `get_process_outline`, `get_raci_matrix`,
+`validate_bpmn` and `describe_process`, they declare `readOnlyHint: true`.
 
 To read a scenario, use `get_scenario`, not a `patch_scenario` with only `test`: that one writes
 nothing either (#627), but it is not meant for reading.
@@ -226,14 +258,20 @@ the same from a terminal.
     and `notes` says the same in words. If a scenario still gets an error it did not have with the
     old model, the call is refused.
   - **`allowUnsimulatable: true`** keeps a model the simulator cannot run — message or signal
-    events, collaborations, loops, a diagram drawn for documentation — the way the app saves one.
+    events, loops, a diagram drawn for documentation — the way the app saves one. (A collaboration
+    is not one of them: a Bizagi collaboration simulates its main pool.)
     Any validation error is accepted, and so is a scenario error on replace; each comes back in
     `notes` (`does not simulate: E-NOSOP: …`). A file that is not XML, not BPMN or has no
     `bpmn:process` is still refused. Nothing marks the process: «does not simulate» is what
     `get_scenario` says (`runnable: false`, the errors in its `notes`) and `run_simulation`
     refuses it, until the model is fixed.
-  - **`layout`** (default `true`) draws a model without a diagram (no `bpmndi` shapes) with the
-    auto-layout of `create_project` (`laidOut: true`); `false` keeps it as given.
+  - **`layout`** (default `true`) draws a model whose simulated process has no diagram (none of
+    its nodes has a `bpmndi` shape, even when another pool is drawn) with the auto-layout of
+    `create_project` (`laidOut: true`); `false` keeps it as given. A process left undrawn comes
+    back with `laidOut: false` and a line in `notes` saying why: bpmn-moddle cannot read the model
+    whole (bizagi-miwg A.4.0 and B.1.0, for instance), so laying it out would lose content; only
+    part of the process is drawn (the drawing is kept, the nodes without a shape are named); or
+    the layouter cannot place it.
   - The write is the atomic, locked write of `patch_scenario`: if the file changed on disk since
     it was read, the call is refused (`E-CAMBIO-EXTERNO`) and nothing is lost. Every other
     process stays byte for byte. `dryRun` checks everything and writes nothing.
@@ -252,15 +290,65 @@ the same from a terminal.
   "bpmn": "miwg-edited.bpmn", "allowUnsimulatable": true, "dryRun": true } }
 ```
 
+## Renaming and deleting
+
+`rename_process`, `delete_process`, `rename_scenario` and `delete_scenario` (#634) tidy up a
+`.lila`. The renames follow the app; the deletes refuse what would leave the project with a
+dangling reference. One tool per operation, so the two deletes are announced as
+destructive (`destructiveHint: true`) and the two renames are not. Every refusal explains why, in
+the call's language, and writes nothing. Every write is the atomic, locked write of
+`patch_scenario` (`E-CAMBIO-EXTERNO` when the file changed on disk since it was read), every other
+process stays as it was, and `dryRun` checks everything and writes nothing. `written` says whether
+the file was saved; `summary` says what happened in one line.
+
+- **`rename_process`** sets the process's `name`, the one its canvas tab shows. The slug (its
+  `processes/<slug>/` folder) never changes. A project with a single process is written as a
+  version 1 archive, whose process is named after the project, so renaming its process is refused.
+  The same name writes nothing.
+- **`delete_process`** removes a process with its scenarios and saved runs, listed in
+  `removedScenarios` and `removedRuns`. The last process cannot be deleted. Neither can one that a
+  call activity of another process names in its `calledElement` (with or without a prefix, as
+  `tns:Process_B`): the refusal lists those call activities as `slug/elementId (name)`; point them
+  elsewhere, or clear them, with `edit_process`'s `setCalledProcess`. Down to one
+  process, the project is written as a version 1 archive, where that process takes the project's
+  name and slug: `notes` says so and `slugs` lists what is left.
+- **`rename_scenario`** sets the scenario's `"name"`; its entry (`<name>.scenario.json`) stays. Its
+  revision goes up, and so do those of the scenarios that extend it, as in the app, so their saved
+  runs go stale. A name that another scenario of the process already answers to (its `"name"`, or
+  its file name with or without `.scenario.json`) is refused: `scenario` would no longer find one
+  scenario by it. The same name writes nothing.
+- **`delete_scenario`** removes a scenario with its revision and its saved runs, listed in
+  `removedRuns`; `get_project` no longer lists them. The last scenario of a process cannot be
+  deleted, and neither can one that other scenarios extend: the refusal lists them. Deleting
+  `as-is.scenario.json` is allowed, but `edit_process` stores the durations, resources and branch
+  probabilities it is given there, so `notes` warns that it no longer can.
+
+```json
+{ "name": "rename_process", "arguments": { "project": "credit.lila", "process": "miwg-a-1-0", "name": "Card dispute" } }
+```
+
+```json
+{ "name": "delete_process", "arguments": { "project": "credit.lila", "process": "miwg-a-1-0", "dryRun": true } }
+```
+
+```json
+{ "name": "rename_scenario", "arguments": { "project": "examples/pedido.lila", "scenario": "to-be-3-cajeros", "name": "TO-BE", "dryRun": true } }
+```
+
+```json
+{ "name": "delete_scenario", "arguments": { "project": "examples/pedido.lila", "scenario": "to-be-3-cajeros", "dryRun": true } }
+```
+
 ## App-free exports
 
 `export_diagram`, `export_document` and `export_results` (#538) are `lila export diagram|doc|results`
 (`docs/CLI.md`) as tools. They need no app and no browser:
 
 - **The diagram** is the engine's SVG renderer: the BPMN DI geometry in the Lila Light colours
-  on white. The HTML document embeds it. The Word document has **no diagram**, and neither
-  document has the run's charts: Word needs a PNG and the engine has no rasteriser. `notes`
-  says what was left out.
+  on white. The HTML document embeds it, and the run's charts as SVG, the same as the app's
+  Results charts. The cycle time histogram is left out, as a stored run keeps no per-case times.
+  The Word document has **no diagram and no charts**: Word needs a PNG and the engine has no
+  rasteriser. `notes` says what was left out.
 - **Runs** are the ones the app saved in the `.lila`. `run: "latest"` (the default) is the run
   of the current model and scenario. `scenario` narrows it to one scenario, which is needed when
   several have a current run. `run: "<id>"` picks one, and an unknown id lists the ids; `run` and
@@ -268,7 +356,12 @@ the same from a terminal.
   document only takes a current run; without one it goes without results, and the `run` of the
   answer is `null`. `export_results` without a run is `isError`, with a message that says so. An
   older run's results are exported against the model it ran on.
-- **Nothing is overwritten.** An existing file at `saveTo` (or, for CSV, any of the four files in
+- **Wait percentiles** (#666): `export_results` adds the resource-wait p50/p90/p95 per element
+  (a `Percentiles` sheet, or `percentiles.csv`), computed as the app's Simulate dock does but over
+  every replication, from simulating the run's stored inputs again. When that re-run does not give
+  back the stored results exactly (another engine version, or arm64 against x64), they are
+  left out and `percentiles` is `{ included: false, note }`. See `docs/RESULTS_FORMAT.md` § 12.
+- **Nothing is overwritten.** An existing file at `saveTo` (or, for CSV, any of its files in
   the directory) is `isError` and nothing is written, unless `overwrite: true`. The project (or
   `.bpmn`) being exported is never a destination, with `overwrite` or not. Writes are atomic
   (a temporary file, then published).
@@ -478,7 +571,9 @@ The base scenario runs for one hour (`run.duration` 3600 s), so no case would ev
 The deadline is the scenario entry `elements.sla.processingTime`, never a `timeDuration` in the
 XML. `elements.sla.completed` counts the deadlines that fired. `byEndEvent` counts each case at the
 end of the path that finished last, so an escalated claim that was then paid counts under
-`EndEvent_pay`. To put the same deadline on a process that already exists, use `addBoundary`:
+`EndEvent_pay`. That is why `byEndEvent` shows `EndEvent_escalate` at 0 although `escalate` runs
+(`elements.escalate` counts it): the boundary does not interrupt `assess`, so the escalation path
+ends first and the case ends where its main path does. To put the same deadline on a process that already exists, use `addBoundary`:
 
 ```json
 { "name": "edit_process", "arguments": { "project": "claims.lila", "operations": [
@@ -490,8 +585,8 @@ end of the path that finished last, so an escalated claim that was then paid cou
 
 `annotate_element`, `define_attribute`, `get_raci_matrix`, `import_scenario_sheet`,
 `export_scenario_template` and `create_project` (#99, #633, #403, #514) let an agent build and
-document a project with no app. The CLI has the first five as `lila process
-annotate|attribute|raci` and `lila scenario import|template` (`docs/CLI.md`). Every write goes through the same atomic, locked `.lila` save as
+document a project with no app. The CLI has them as `lila process
+annotate|attribute|raci`, `lila scenario import|template` and `lila project create` (`docs/CLI.md`). Every write goes through the same atomic, locked `.lila` save as
 `patch_scenario` (see [A `.lila` as input](#a-lila-as-input)): only the process touched changes,
 the others are carried through byte for byte, and an invalid input is `isError` with nothing
 written. `dryRun: true` answers what would change and writes nothing.
@@ -501,7 +596,8 @@ written. `dryRun: true` answers what would change and writes nothing.
   removes it). `responsibilities` is the whole RACI list, `[{ "type": "R"|"A"|"C"|"I", "roleRef":
   "cashier" }]` (`[]` clears it). `refs` maps a kind (`systemRef`, `documentRef`, `riskRef`,
   `controlRef`, `kpiRef`, `input`, `output`) to its ids and replaces only the kinds given.
-  `attributes` maps an extended attribute (its id, or its name when only one has it) to a value
+  `attributes` maps an extended attribute (its id, or its name when only one has it: the exact
+  spelling first, else any case) to a value
   and is merged: `""` removes a value, the attributes left out stay. Each value is checked
   against the project's attribute definitions, as in the app's properties panel: a `number` is
   a plain decimal (`12`, `-3.5`), a `date` is `YYYY-MM-DD`, a `list` value is one of its
@@ -520,7 +616,7 @@ written. `dryRun: true` answers what would change and writes nothing.
   ASCII (`"SLA (h)"` → `Attr_sla_h`, then `_2`… when taken), so a dry run and the write name it
   alike and calling it again changes nothing (`changed: false`). The rules are the app's attribute
   dialog's: a name unique per element type (ignoring case), a `list` with at least one option
-  (trimmed, repeats dropped), `options` only on a `list`, and a `default` that fits the type.
+  (trimmed, repeats dropped), `options` only on a `list`, and a `default` that fits the type (trimmed; a blank one is none).
   Definitions are written on the `bpmn:collaboration` (else the process), and copies elsewhere are
   moved there (`docs/BPMN_EXTENSION.md`). A rename keeps every value. `remove: true` (with `id`, or
   `name` and `appliesTo`) removes the definition and its values; retyping, changing `appliesTo` or
@@ -551,8 +647,8 @@ written. `dryRun: true` answers what would change and writes nothing.
   file is written whole or not at all, and an existing one is refused unless `overwrite`. The web
   and desktop apps open it. A model without a diagram (no `bpmndi` shapes) gets one, drawn by the
   same auto-layout as `edit_process` with `layout: true`, for the process it simulates, so
-  `export_diagram` works on it; `laidOut: true` says so (#630). A model the layouter cannot place
-  is saved as given.
+  `export_diagram` works on it; `laidOut: true` says so (#630). A model left undrawn is saved as
+  given, with `laidOut: false` and the reason in `notes`, as in `put_process_bpmn`'s `layout`.
 
 ```json
 { "name": "create_project", "arguments": { "path": "project.lila", "name": "Orders", "bpmn": "examples/pedido/model.bpmn",
@@ -616,18 +712,19 @@ terminal.
 | --- | --- | --- |
 | `add` | `step`, `after?` or `between?` | Adds a step. `step` is an outline step without its connections, boundary events, notes or data: `{ id, name?, type?, lane?, duration?, resources? }`, any outline type. With `after: id`, the new step takes over that step's outgoing flow (refused when it has several: use `between`). With `between: [from, to]`, it goes on the flow from → to. The flow it lands on keeps its id, name and probability; a new flow continues to the old successor. Without either, it is added unconnected. `lane` defaults to the lane of the step it follows. |
 | `connect` | `from`, `to`, `label?`, `probability?`, `default?`, `id?` | Adds a sequence flow (id `Flow_<from>_<to>` by default). `probability` and `default: true` (the gateway's default flow) only out of an `xor` or `or` gateway; `default: true` is refused when the gateway already has a default flow. No operation marks an existing flow as the default or clears the mark: in one call, `connect` the same steps again (with `default: true` or without it, and the `label` and `probability` to keep) and `remove` the old flow, after removing the gateway's current default flow if it has one; the flow gets a new id. |
-| `remove` | `id` | Removes a step and reconnects: its incoming flows go to its successor when it has at most one; a step with no incoming flow loses its outgoing ones; a step with several incoming and several outgoing flows (a split after a join) is refused. A step with boundary events is refused. Message flows and associations attached to it go with it, and so do its text annotations, its data associations and the data objects nothing else uses (listed in the change). An end event left with no incoming flow goes too (listed in `removed`). A sequence flow, a boundary event, a text annotation, a data object or data store, a group or an association can be removed too. |
+| `remove` | `id` | Removes a step and reconnects: its incoming flows go to its successor when it has at most one; a step with no incoming flow loses its outgoing ones; a step with several incoming and several outgoing flows (a split after a join) is refused. A step with boundary events is refused. Message flows and associations attached to it go with it, and so do its text annotations, its data associations and the data objects nothing else uses (listed in the change). An end event left with no incoming flow goes too (listed in `removed`). A sequence flow, a boundary event, a text annotation, a data object or data store, a group or an association can be removed too; a text annotation left with no association by removing its association goes with it. |
 | `rename` | `id`, `name` | Renames any element: step, flow, lane, pool, process. A lane can also be named by its name, when no element has that id. `""` clears the name. |
 | `setType` | `id`, `type` | One of the outline types, or `end`/`terminate` to turn an end event into a terminate end and back. For those two, `id` is the end event's (`EndEvent_<step>` in a process Lila made; the outline does not show it otherwise), or a step that leads to exactly one end event: then that end is retyped, not the step. `end`/`terminate` on anything else (neither an end event nor a step with exactly one end event after it) is refused. Name, documentation, extension elements and flows stay; a sub-process turned into something else loses its content (listed in `removed`). An `xor` or `or` turned into an `and` or an `eventGateway` loses the probabilities of its outgoing flows (listed in `scenarioRemovals`). |
-| `moveToLane` | `id`, `lane` | Lane by name or id. The step's boundary events, and the end events they lead to, move with it. |
+| `moveToLane` | `id`, `lane` | Lane by name or id. The step's boundary events move with it, and so do its own end event and theirs (`EndEvent_<id>`, the one the outline adds) while only they lead to it and it still sits in the step's lane: an end event moved by hand to another lane stays there. |
 | `addLane` | `name`, `id?`, `after?` or `before?` | Adds a lane (at the bottom by default). The first lane of a process without lanes holds all its steps, and a process without a pool gets one. |
 | `removeLane` | `lane`, `moveStepsTo?` | Removes a lane (by name or id). A lane that holds any node — a step, a start, an end event, a boundary event or its end — needs `moveStepsTo`, another lane with no sub-lanes that takes them. A lane with sub-lanes is refused. The only lane of the process is the exception: removing it removes the lane set, its nodes stay in the pool without lanes, and `moveStepsTo` is not needed. |
 | `moveLane` | `lane`, `before` or `after` | Moves a lane above (`before`) or below (`after`) a sibling lane; exactly one of the two. |
 | `addBoundary` | `on`, `boundary` | Attaches a boundary timer to a task (any variant) or a call activity, not a sub-process. `boundary` is as in an outline: `{ id, type: "timer", name?, label?, duration?, interrupting?, to \| end }`. Its `duration` goes into the base scenario. |
-| `annotate` | `on`, `text` | Attaches a BPMN text annotation to a step (it reads back as the step's `notes`). The same text on the same step again changes nothing, so `removeAnnotation` is never ambiguous. Not to be confused with `annotate_element`, which writes the documentation, RACI and attributes (`lila:` annotations). |
+| `annotate` | `on`, `text` | Attaches a BPMN text annotation to a step (it reads back as the step's `notes`); a start, end or boundary event (or any element the outline has no step type for) is refused, since the outline would not read it back. The same text on the same step again changes nothing, so `removeAnnotation` is never ambiguous. Not to be confused with `annotate_element`, which writes the documentation, RACI and attributes (`lila:` annotations). |
 | `removeAnnotation` | `on`, `text` | Removes the annotation with that text attached to the step, with its association (every one, in a model from elsewhere that repeats it). |
 | `addDataObject` | `name`, `on`, `direction` | Connects a data object to an activity (a task, a call activity or a sub-process): `in`, the activity reads it; `out`, the activity writes it. An object with that name in the process is reused, otherwise one is created. |
 | `removeDataObject` | `name`, `on?` | Disconnects the data object from the activity `on`, or from every activity without it. The object goes when nothing uses it any more. |
+| `setCalledProcess` | `id`, `process` | Sets the process the call activity `id` calls: `process` is the slug of another process of the same `.lila`, and the call activity's `calledElement` becomes a BPMN process id that process's model declares (its `model.id` when it is one; else its only process, else the process it simulates), the one the app opens on a double-click. `process: null` removes the `calledElement`. An unknown slug is refused with the slugs a call activity can call, and so are the process being edited (a call activity does not call its own process), a process whose BPMN process id another process of the `.lila` declares too (the call could not tell them apart: give one of them another id with `put_process_bpmn` `mode: "replace"`), a process none of whose ids can be told to be the one, and an `id` that is not a call activity. Only in a `.lila`: a bare model has no other process to name. A process some call activity names cannot be deleted with `delete_process` until it is pointed elsewhere or cleared. |
 
 - **Ids never change.** A renamed step keeps its scenario entries, and so does a retyped one, as
   far as they still apply. `duration`, `resources` and `selection` of an added step and the
@@ -676,6 +773,43 @@ terminal.
   "warnings": [], "outline": { … } }
 ```
 
+## MCP and CLI side by side
+
+Every tool runs the same engine code as its CLI command, so an agent that only has a shell gets
+the same answers. The `--json` of the project, process and scenario commands prints what the tool
+returns; `lila run|compare --json <file>` write the full result to a file, like `saveTo` (the tools
+answer with a summary unless `detail: "full"`).
+
+| MCP tool or field | CLI | Note |
+| --- | --- | --- |
+| `validate_bpmn` | `lila validate --json` | |
+| `describe_process` | `lila validate` | The CLI prints the IR and the problems; the readable `resumen` is written for an agent and is MCP only. |
+| `run_simulation` | `lila run --json` | `saveRun` is `--save`, `saveTo` is `--json <file>`, `logTo` is the `log.csv` of `--csv <directory>`. The four result CSVs of `--csv` come from a stored run with `export_results`. |
+| `compare_scenarios` | `lila compare --json` | `saveTo` is `--json <file>`, or `--xlsx <file>` with `format: "xlsx"`; `all: true` (or `detail: "full"`) is `--all`. |
+| `patch_scenario` with `project` | `lila scenario patch` | `dryRun` is `--dry-run`. |
+| `patch_scenario` without `project` | none | Patching a loose `.json` scenario is MCP only; from the CLI, edit the file. |
+| `export_diagram` | `lila export diagram` | |
+| `export_document` | `lila export doc` | |
+| `export_results` | `lila export results` | Same `Percentiles` sheet and `percentiles.csv`; the CLI prints the `percentiles.note` on stderr. |
+| `create_process` | `lila process create` | |
+| `get_process_outline` | `lila process show` | |
+| `edit_process` | `lila process edit` | |
+| `annotate_element` | `lila process annotate` | |
+| `define_attribute` | `lila process attribute define` | `lila process attribute list` lists them; `get_project` does for MCP. |
+| `get_raci_matrix` | `lila process raci` | `--csv` is CLI only: an agent builds the CSV from `rows`. |
+| `import_scenario_sheet` | `lila scenario import` | |
+| `export_scenario_template` | `lila scenario template` | |
+| `create_project` | `lila project create` | `overwrite` is `--force`; `scenarios` are `--scenario name=file.json`. |
+| `get_project` | `lila project show` | |
+| `get_scenario` | `lila scenario show` | |
+| `get_process_bpmn` | `lila process export-bpmn` | |
+| `put_process_bpmn` | `lila process import` | `mode: "replace"` is `--replace`. |
+| `rename_process` | `lila process rename` | `dryRun` is `--dry-run`. |
+| `delete_process` | `lila process delete` | `dryRun` is `--dry-run`. |
+| `rename_scenario` | `lila scenario rename` | `dryRun` is `--dry-run`. |
+| `delete_scenario` | `lila scenario delete` | `dryRun` is `--dry-run`. |
+| Resources and the prompt | none | Part of the protocol; the CLI has `--help` and `docs/`. |
+
 ## Summary or full results
 
 A full `RunResult` lists every element and flow with every statistic: about 70 KB (some 20k tokens)
@@ -689,8 +823,10 @@ The summary of `run_simulation` (`"detail": "summary"`):
 - `process`: cycle time, wait time, throughput, cost per case and `byEndEvent`, as in the full result;
 - `bottlenecks`, as in the full result;
 - `resources`: for each resource, `utilization`, `resourceWaitTotal` (the resource wait, in seconds,
-  of the elements that request it; an element that requests two resources counts for both) and
-  `totalCost`;
+  of every element that lists it; with `selection: "or"`, of every alternative) and `totalCost`.
+  An element that lists two resources counts its whole wait for each of them, so the same wait
+  shows in both totals: in `examples/pedido` the wait of `Task_Preparar`, which needs Cook and
+  Oven, is in both. The totals of several resources do not add up to the process wait;
 - `topWaits`: the five elements that wait most (resource wait plus off-hours wait), with their
   `name`, `completed`, `resourceWaitMean`, `resourceWaitTotal`, `offHoursWaitMean` and
   `queueLengthMean`;
@@ -698,6 +834,8 @@ The summary of `run_simulation` (`"detail": "summary"`):
   `completedReplications` as in the full result;
 - `warnings` as `{ message, count }`: a warning that each replication repeats with other numbers
   (`… (2941 times)`, `… 1457 cases …`) comes once, with the first message and how many times it came up.
+  A coded warning comes once per code and element (`W-JOIN-BLOQUEADO` of `Join_1`, whether one case
+  or several were left); the full result keeps every message.
 
 The summary of `compare_scenarios` keeps `{ comparison, notes }`: `comparison` has `count`, the rows
 of scope `process` and `resources`, every other row marked `significant` for some scenario, and
@@ -728,7 +866,8 @@ guide's flow, steps 1 to 8, followed by the interview; without `transcript` it a
 
 They are the docs themselves: from a checkout the server reads `docs/`, and the published package
 carries copies of the same files in `dist/resources/` (`prepack` runs
-`packages/mcp/scripts/bundle-resources.mjs`).
+`packages/mcp/scripts/bundle-resources.mjs`). A client that only has MCP cannot follow a relative
+link, so the server makes them absolute links to the docs on GitHub (`main`).
 
 ```json
 { "method": "resources/read", "params": { "uri": "lila://guide" } }
@@ -740,8 +879,12 @@ carries copies of the same files in `dist/resources/` (`prepack` runs
 (a `ping`, other calls) while a run works. When the call carries `_meta.progressToken`, the server
 sends `notifications/progress` once per completed replication, with `progress` (replications done)
 and `total` (`run.replications`, or the sum over the scenarios of a comparison). A client's
-`notifications/cancelled` stops the run at once: the worker is terminated, nothing is saved, and,
-as MCP requires, no answer is sent for the cancelled request.
+`notifications/cancelled` that arrives while a run simulates stops it at once: the worker is
+terminated, nothing is saved (the temporary file of a `logTo` is removed too), and, as MCP
+requires, no answer is sent for the cancelled request. Once the simulation is over (for
+`compare_scenarios`, the last scenario's), the writes are not interrupted: a cancellation that
+arrives while `saveTo`, `saveRun` or `logTo` is being written still leaves those files written;
+only the answer is not sent.
 
 ```json
 { "method": "tools/call", "params": { "name": "run_simulation", "arguments": { "scenario": "examples/pedido/as-is.scenario.json", "replications": 30 }, "_meta": { "progressToken": 1 } } }
@@ -879,7 +1022,7 @@ mcp_servers:
   `mcp_lila_<tool>` (`mcp_lila_create_process`); the arguments are the ones on this page.
 - `tools: { include: [...] }` limits what the agent sees, for example to the read-only
   `get_project`, `get_scenario`, `validate_bpmn`, `describe_process`, `get_process_outline`,
-  `get_raci_matrix` and `run_simulation` (which writes only with `saveTo` or `saveRun`).
+  `get_raci_matrix` and `run_simulation` (which writes only with `saveTo`, `saveRun` or `logTo`).
 
 The same block, with `command` and `args`, is the generic stdio configuration for any other MCP
 client.
@@ -969,7 +1112,8 @@ directory and published with `rename`, preventing partial JSON reads. An existin
 replaced; an existing directory is rejected. The export tools are the exception: they never
 replace a file unless `overwrite: true` (see [App-free exports](#app-free-exports)). `run_simulation` and `compare_scenarios` save the
 full result whatever `detail` asks. `compare_scenarios` saves only `comparison`,
-without `notes`, matching CLI JSON output. For `patch_scenario`, omitting `saveTo` selects
+without `notes`, matching CLI JSON output, or with `format: "xlsx"` the comparison workbook.
+The `logTo` of `run_simulation` follows the same rules. For `patch_scenario`, omitting `saveTo` selects
 in-place editing; supplying it selects the derived-scenario mode described above.
 
 ## Paths
@@ -1008,6 +1152,13 @@ stays in the foreground, so it is not a CI smoke test.
 - With `detail: "full"`, simulation results are returned as both text and `structuredContent`,
   doubling a large payload; the default summary keeps it small.
 - `compare_scenarios` returns structured content but does not publish an `outputSchema`.
+- There is no limit on concurrent simulations: each `run_simulation` and `compare_scenarios` call
+  runs in its own worker thread, so a client that sends several at once runs them all in parallel,
+  with the CPU and memory of each.
+- The packages declare Node 22 or later, but running the tests from `src/` (`npm test`) needs
+  Node 22.18 or later: the server then starts its simulation worker from `src/simulate-worker.ts`,
+  which relies on Node's TypeScript type stripping (on by default from 22.18). The built server
+  (`dist/`) runs on any Node 22.
 - File writes use server permissions and can overwrite files without an interactive confirmation.
 - `create_process` lays out with `bpmn-auto-layout` 1.3, which draws no pool or lanes: Lila keeps
   its columns and rows, moves each node into its lane, routes the flows again orthogonally (around

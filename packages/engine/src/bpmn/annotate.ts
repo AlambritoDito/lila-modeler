@@ -225,6 +225,31 @@ export async function readAnnotations(xml: string): Promise<Record<string, Annot
 }
 
 /**
+ * The BPMN text annotations of the file (#645), by the id of the element an association links each
+ * one to, in document order and each text once per element; `''` keys those linked to nothing.
+ * Blank texts are left out. What bpmn-moddle cannot read is skipped, not refused: the process
+ * document lists what it can.
+ */
+export async function readTextNotes(xml: string): Promise<Record<string, string[]>> {
+  const { rootElement: definitions } = await BpmnModdle({ lila }).fromXML(xml);
+  const all = [...walk(definitions)];
+  const associations = all.filter((el) => el.$type === 'bpmn:Association');
+  const result: Record<string, string[]> = {};
+  const add = (key: string, text: string): void => {
+    const texts = (result[key] ??= []);
+    if (!texts.includes(text)) texts.push(text);
+  };
+  for (const note of all) {
+    if (note.$type !== 'bpmn:TextAnnotation' || note.text === undefined || note.text.trim() === '') continue;
+    const linked = associations.flatMap((a) => (a.sourceRef === note ? [a.targetRef] : a.targetRef === note ? [a.sourceRef] : []));
+    const ids = linked.flatMap((el) => (typeof el?.id === 'string' ? [el.id] : []));
+    if (ids.length === 0) add('', note.text);
+    for (const id of ids) add(id, note.text);
+  }
+  return result;
+}
+
+/**
  * Escribe las anotaciones del elemento `id` y devuelve el XML resultante.
  *
  * Cada clave presente en `annotations` REEMPLAZA lo que hubiera de ese tipo; una clave ausente

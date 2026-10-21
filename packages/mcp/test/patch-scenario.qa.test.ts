@@ -72,7 +72,7 @@ test('un puntero /__proto__/… se rechaza, no contamina Object.prototype y no c
   });
 
   expect(result.isError).toBe(true);
-  expect(textOf(result)).toContain('prototipo');
+  expect(textOf(result)).toContain("it would write to the object's prototype");
   expect(readFileSync(path, 'utf8')).toBe(before);
   expect((({}) as Record<string, unknown>)['pwned']).toBeUndefined();
 
@@ -89,7 +89,7 @@ test('los segmentos constructor y prototype también se rechazan', async () => {
   for (const pointer of ['/constructor/prototype/x', '/resources/prototype']) {
     const result = await patch({ scenario: path, patch: [{ op: 'add', path: pointer, value: 1 }] });
     expect(result.isError, pointer).toBe(true);
-    expect(textOf(result), pointer).toContain('prototipo');
+    expect(textOf(result), pointer).toContain("it would write to the object's prototype");
   }
 });
 
@@ -107,7 +107,7 @@ test('un value con __proto__ dentro se rechaza y no deja un escenario contaminad
   ]) {
     const result = await patch(args);
     expect(result.isError, JSON.stringify(args['saveTo'] ?? 'en sitio')).toBe(true);
-    expect(textOf(result)).toContain('prototipo');
+    expect(textOf(result)).toContain("it would write to the object's prototype");
   }
 
   expect(existsSync(saveTo)).toBe(false);
@@ -127,7 +127,7 @@ test('`move` y `copy` se rechazan con su nombre, y `from` no se aplica en silenc
   for (const op of ['move', 'copy'] as const) {
     const result = await patch({ scenario: path, patch: [{ op, from: '/name', path: '/description' }] });
     expect(result.isError, op).toBe(true);
-    expect(textOf(result), op).toContain(`operación no soportada: "${op}"`);
+    expect(textOf(result), op).toContain(`unsupported operation: "${op}"`);
     expect(readFileSync(path, 'utf8')).toBe(before);
   }
 });
@@ -138,7 +138,7 @@ test('add/replace/test sin `value` es error explícito, no un borrado silencioso
   for (const op of ['add', 'replace', 'test'] as const) {
     const result = await patch({ scenario: path, patch: [{ op, path: '/description' }] });
     expect(result.isError, op).toBe(true);
-    expect(textOf(result), op).toContain('requiere "value"');
+    expect(textOf(result), op).toContain('requires "value"');
     expect(readFileSync(path, 'utf8')).toBe(before);
   }
 });
@@ -177,7 +177,7 @@ test('arrays: `-` añade al final, y el índice fuera de rango o no numérico es
       patch: [{ op: 'replace', path: `/elements/Task_Preparar/resources/${index}`, value: { ref: 'cajero' } }],
     });
     expect(bad.isError, index).toBe(true);
-    expect(textOf(bad), index).toContain('índice inválido');
+    expect(textOf(bad), index).toContain('invalid index');
   }
 });
 
@@ -185,11 +185,11 @@ test('la raíz no se puede parchear (path vacío) y un puntero sin `/` inicial e
   const path = copyAsIs();
   const root = await patch({ scenario: path, patch: [{ op: 'remove', path: '' }] });
   expect(root.isError).toBe(true);
-  expect(textOf(root)).toContain('raíz');
+  expect(textOf(root)).toContain('the document root cannot be patched');
 
   const bare = await patch({ scenario: path, patch: [{ op: 'replace', path: 'resources', value: {} }] });
   expect(bare.isError).toBe(true);
-  expect(textOf(bare)).toContain('puntero inválido');
+  expect(textOf(bare)).toContain('invalid pointer');
 });
 
 test('el patch es atómico: un `test` que falla, o una op posterior inválida, no dejan nada escrito', async () => {
@@ -204,7 +204,7 @@ test('el patch es atómico: un `test` que falla, o una op posterior inválida, n
     ],
   });
   expect(failedTest.isError).toBe(true);
-  expect(textOf(failedTest)).toContain('test falló');
+  expect(textOf(failedTest)).toContain('test failed at /resources/cajero/capacity');
   expect(readFileSync(path, 'utf8')).toBe(before);
 
   const halfway = await patch({
@@ -371,7 +371,7 @@ test('modo (b): `saveTo` igual a `scenario` es un ciclo de `extends`, error y ar
     patch: [{ op: 'replace', path: '/resources/cajero/capacity', value: 3 }],
   });
   expect(result.isError).toBe(true);
-  expect(textOf(result)).toContain('ciclo');
+  expect(textOf(result)).toContain('cycle in the inheritance chain');
   expect(readFileSync(path, 'utf8')).toBe(before);
 });
 

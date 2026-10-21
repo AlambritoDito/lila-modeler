@@ -11,7 +11,7 @@ import { BpmnModdle } from 'bpmn-moddle';
 import { describe, expect, test } from 'vitest';
 
 import { annotateElement, readAnnotations } from '../../src/bpmn/annotate.js';
-import { editBpmn, EditError, EditOperationsSchema, type EditOperation } from '../../src/bpmn/edit.js';
+import { editBpmn, EditError, EditOperationsSchema, type CallTarget, type EditOperation } from '../../src/bpmn/edit.js';
 import { bpmnToOutline, outlineToBpmn } from '../../src/bpmn/outline.js';
 import { validateBpmnXml } from '../../src/bpmn/validate-report.js';
 import type { ScenarioDocument } from '../../src/project/types.js';
@@ -340,7 +340,7 @@ describe('all or none', () => {
   test('ambiguous removals and placements are refused', async () => {
     const built = await outlineToBpmn(ORDER);
     const split = await refused(built.xml, [{ op: 'remove', id: 'split' }]);
-    expect(split.issues[0]!.message).toContain('with 1 incoming and 2 outgoing flows');
+    expect(split.issues[0]!.message).toContain('with 1 incoming flow and 2 outgoing flows');
     const after = await refused(built.xml, [{ op: 'add', step: { id: 'x' }, after: 'split' }]);
     expect(after.issues[0]!.message).toContain('"after" is ambiguous; use "between"');
     const noScenario = await refused(built.xml, [{ op: 'add', step: { id: 'x', duration: '1m' }, after: 'take' }]);
@@ -1138,15 +1138,17 @@ describe.each([true, false])('the #638 operations (layout %s)', (layout) => {
     expect(edit.changes.map((c) => c.message)).toEqual([
       'removed TextAnnotation "TextAnnotation_check"; also removed Association_check',
       'removed DataObjectReference "DataObjectReference_check"; also removed DataInputAssociation_check, DataObject_check',
-      'removed Association "Association_issue"',
+      // #645: the annotation it was the last link of goes with it, instead of hanging on nothing.
+      'removed Association "Association_issue"; also removed TextAnnotation_issue',
       expect.stringContaining('removed "issue"'),
     ]);
     expect(edit.changes[3]!.message).toContain('DataOutputAssociation_issue');
     expect(edit.changes[3]!.message).toContain('DataObjectReference_issue');
     expect(edit.xml).not.toContain('DataObject_issue');
-    // The annotation that lost its association is still there, and the outline says so.
+    // No annotation is left loose, so the outline has nothing to say it left out.
+    expect(edit.xml).not.toContain('TextAnnotation_issue');
     const reading = await bpmnToOutline(edit.xml, { scenario: scenario as Record<string, unknown> });
-    expect(reading.warnings).toEqual(['1 annotation, group or association is not part of the outline and was left out.']);
+    expect(reading.warnings).toEqual([]);
     expect(reading.outline.steps.some((s) => s.notes !== undefined || s.data !== undefined)).toBe(false);
   });
 });
@@ -1739,5 +1741,120 @@ describe('QA of #661, round 5: a data object drawn off its step\'s lane stays in
     expect(inside(data, shapes.get('Lane_1')!)).toBe(true);
     expect(await errorsOf(xml)).toEqual([]);
     await expectCleanImport(xml);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * #664: setCalledProcess
+ * ------------------------------------------------------------------ */
+
+describe('setCalledProcess (#664)', () => {
+  /** ORDER's call activity `fix`, and the processes of a .lila it can call. */
+  async function order() {
+    const built = await outlineToBpmn(ORDER);
+    const own = /<bpmn:process id="([^"]+)"/.exec(built.xml)![1]!;
+    const callTargets = new Map<string, CallTarget>([
+      ['order-fulfilment', { processId: undefined, name: 'Order fulfilment', self: true }],
+      ['credit-application', { processId: 'Process_credit_application', name: 'Credit application' }],
+      ['b', { processId: 'Process_1', name: 'B', sharedWith: ['c'] }],
+      ['c', { processId: 'Process_1', name: 'C', sharedWith: ['b', 'd'] }],
+      ['twin', { processId: own, name: 'Twin' }],
+      ['lost', { processId: undefined, name: 'Lost', declared: ['Process_A', 'Process_B'] }],
+    ]);
+    return { xml: built.xml, scenario: built.scenario, callTargets, own };
+  }
+  const callActivity = (xml: string): string => /<bpmn:callActivity id="fix"[^>]*>/.exec(xml)![0];
+
+  test('the operation shape: a slug or null, in the schema and the reader', async () => {
+    const ops: EditOperation[] = [
+      { op: 'setCalledProcess', id: 'fix', process: 'credit-application' },
+      { op: 'setCalledProcess', id: 'fix', process: null },
+    ];
+    expect(EditOperationsSchema.safeParse(ops).success).toBe(true);
+    expect(EditOperationsSchema.safeParse([{ op: 'setCalledProcess', id: 'fix' }]).success).toBe(false);
+    const { xml, callTargets } = await order();
+    const error = await refused(
+      xml,
+      [
+        { op: 'setCalledProcess', id: 'fix' },
+        { op: 'setCalledProcess', id: 'fix', process: 3 },
+        { op: 'setCalledProcess', id: 'fix', process: '' },
+        { op: 'setCalledProcess', process: 'credit-application' },
+        { op: 'setCalledProcess', id: 'fix', process: 'credit-application', calledElement: 'X' },
+      ],
+      { callTargets },
+    );
+    const bad = 'must be the slug of a process of the project, or null to remove the called process.';
+    expect(error.issues.map((i) => [i.op, i.path, i.message])).toEqual([
+      [0, 'process', bad],
+      [1, 'process', bad],
+      [2, 'process', bad],
+      [3, 'id', 'must be a non-empty text.'],
+      [4, 'calledElement', 'unknown field "calledElement".'],
+    ]);
+  });
+
+  test('writes the calledElement of the target, and null removes it; ids, flows and the rest stay', async () => {
+    const { xml, scenario, callTargets } = await order();
+    expect(callActivity(xml)).not.toContain('calledElement');
+    const set = await editBpmn(xml, [{ op: 'setCalledProcess', id: 'fix', process: 'credit-application' }], { scenario, callTargets, layout: false });
+    expect(set.changes).toEqual([{ op: 0, message: '"fix" now calls Credit application (credit-application)' }]);
+    expect(callActivity(set.xml)).toContain('calledElement="Process_credit_application"');
+    expect(set.removed).toEqual([]);
+    expect(set.scenario).toBeUndefined();
+    expect(await errorsOf(set.xml)).toEqual(await errorsOf(xml));
+    expect((await outlineOf(set.xml)).steps).toEqual((await outlineOf(xml)).steps);
+
+    const cleared = await editBpmn(set.xml, [{ op: 'setCalledProcess', id: 'fix', process: null }], { scenario, callTargets, locale: 'es' });
+    expect(cleared.changes).toEqual([{ op: 0, message: '"fix" ya no llama a ningún proceso' }]);
+    expect(callActivity(cleared.xml)).not.toContain('calledElement');
+  });
+
+  test('refused: an unknown slug (the other slugs listed), its own process, a shared or unresolvable id, a step that is not a call activity, an unknown id', async () => {
+    const { xml, callTargets, own } = await order();
+    const error = await refused(
+      xml,
+      [
+        { op: 'setCalledProcess', id: 'fix', process: 'billing' },
+        { op: 'setCalledProcess', id: 'fix', process: 'order-fulfilment' },
+        { op: 'setCalledProcess', id: 'take', process: 'credit-application' },
+        { op: 'setCalledProcess', id: 'nope', process: 'credit-application' },
+        { op: 'setCalledProcess', id: 'fix', process: 'credit-application' },
+        { op: 'setCalledProcess', id: 'fix', process: 'b' },
+        { op: 'setCalledProcess', id: 'fix', process: 'c' },
+        { op: 'setCalledProcess', id: 'fix', process: 'twin' },
+        { op: 'setCalledProcess', id: 'fix', process: 'lost' },
+      ],
+      { callTargets },
+    );
+    expect(error.issues.map((i) => [i.op, i.path, i.message])).toEqual([
+      [0, 'process', 'the project has no process "billing"; the processes a call activity can call are: credit-application, b, c, twin, lost.'],
+      [1, 'process', `"order-fulfilment" has the BPMN process id ${own}, that of the process being edited: a call activity cannot call its own process.`],
+      [2, 'id', '"take" is a userTask, not a call activity (callActivity); only a call activity calls a process.'],
+      [3, 'id', '"nope" is not the id of an element of the model.'],
+      [5, 'process', '"b" has the BPMN process id Process_1, which "c" declares too: a call activity cannot tell them apart; give one of them another id (put_process_bpmn with mode "replace").'],
+      [6, 'process', '"c" has the BPMN process id Process_1, which "b", "d" declare too: a call activity cannot tell them apart; give one of them another id (put_process_bpmn with mode "replace").'],
+      // A map without sharedWith still never writes the edited process's own id.
+      [7, 'process', `"twin" has the BPMN process id ${own}, that of the process being edited: a call activity cannot call its own process.`],
+      [8, 'process', 'cannot tell which BPMN process of "lost" to call: its model declares Process_A, Process_B, and none of them is its model id or the process it simulates.'],
+    ]);
+    const es = await refused(xml, [{ op: 'setCalledProcess', id: 'fix', process: 'b' }], { callTargets, locale: 'es' });
+    expect(es.message).toContain('operations[0].process: "b" tiene el id de proceso BPMN Process_1, que "c" también declara: una actividad de llamada no puede distinguirlos');
+  });
+
+  test('a bare model (no callTargets) refuses it: it needs a .lila', async () => {
+    const { xml } = await order();
+    for (const process of ['credit-application', null]) {
+      const error = await refused(xml, [{ op: 'setCalledProcess', id: 'fix', process }]);
+      expect(error.issues).toEqual([
+        {
+          op: 0,
+          path: 'process',
+          message: 'setCalledProcess needs a .lila: the called process is named by its slug among the processes of the project (edit_process, lila process edit).',
+        },
+      ]);
+    }
+    const es = await refused(xml, [{ op: 'setCalledProcess', id: 'fix', process: 'x' }], { locale: 'es' });
+    expect(es.message).toContain('operations[0].process: setCalledProcess necesita un .lila');
   });
 });

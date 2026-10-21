@@ -72,6 +72,12 @@ export const COLUMN_LABELS: Readonly<Record<string, string>> = {
   'elements:resourceWait.sd': 'Standard deviation (waiting for resource)',
   'elements:resourceWait.total': 'Total time (waiting for resource)',
   'elements:fixedCostTotal': 'Total fixed cost',
+  // Lila extras of the `Percentiles` sheet / `percentiles.csv` of `exportResults` (#666): Bizagi
+  // has no per-element percentile, so the names are the plain statistic, in that sheet only.
+  'elements:resourceWait.n': 'n',
+  'elements:resourceWait.p50': 'p50',
+  'elements:resourceWait.p90': 'p90',
+  'elements:resourceWait.p95': 'p95',
   'flows:count': 'Instances/Tokens completed',
   'resources:utilization': 'Utilization (%)',
   'resources:busyTime': 'Busy time',

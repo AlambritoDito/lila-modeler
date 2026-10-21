@@ -52,6 +52,14 @@
       "types": "./dist/csv.d.ts",
       "default": "./dist/csv.js"
     },
+    "./bottleneck-levels": {
+      "types": "./dist/bottleneck-levels.d.ts",
+      "default": "./dist/bottleneck-levels.js"
+    },
+    "./charts": {
+      "types": "./dist/charts.d.ts",
+      "default": "./dist/charts.js"
+    },
     "./format": {
       "types": "./dist/format.d.ts",
       "default": "./dist/format.js"

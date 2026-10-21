@@ -81,7 +81,7 @@ Exit code: `0`.
 - `--csv <directory>` writes `elements.csv`, `flows.csv`, `resources.csv`, `process.csv` (RFC
   4180) and `log.csv` (the event log, streamed while the run executes, ISO timestamps from
   `run.start`). It is the only flag that writes the event log; `--json` and `--xlsx` do not
-  carry it.
+  carry it. The MCP `run_simulation` writes the same `log.csv` bytes with `logTo` (`docs/MCP.md`).
 - `--xlsx <file>` writes one workbook with the Summary, Elements, Flows, Resources and Parameters
   sheets. No event log sheet — use `--csv` for that.
 - All three create missing directories, write to a temporary path and rename atomically, and
@@ -106,7 +106,8 @@ Exit code: `0`.
 
 The default table is a curated KPI subset; `--all` prints every metric `compare()` produces for
 every element, resource, flow and outcome. `--json <file>` writes the `CompareResult`; `--xlsx
-<file>` writes one workbook with one tab per scenario plus a Comparison tab. `compare` has no
+<file>` writes one workbook with one tab per scenario plus a Comparison tab (the MCP
+`compare_scenarios` writes the same bytes with `format: "xlsx"` and `saveTo`). `compare` has no
 `--csv` — it compares finished runs, it does not replay one.
 
 ## `export` (#538)
@@ -116,16 +117,27 @@ the app uses:
 
 - `lila export diagram <model.bpmn|project.lila>` draws the diagram with the engine's own SVG
   renderer (the BPMN DI geometry, Lila Light colours on white). Without `--out` it prints the SVG
-  on stdout.
+  on stdout. With `--overlay bottlenecks|heatmap` (#669) it colours the diagram with a stored run
+  of the `.lila` on the app's scale and Lila Light's `sim.bottleneck` colours: `bottlenecks` tints
+  the canvas's bottleneck cut, each with its mean wait and utilization; `heatmap` tints every
+  measured task as the Results heat map does, with its wait, and marks the cut. The run is drawn
+  on the model it ran on. An overlay on a `.bpmn`, or with no stored run, is an error; so is
+  `--run` or `--scenario` without `--overlay`.
 - `lila export doc <project.lila> --out file.docx|file.html` writes the process document, as the
-  app's «Export document»: diagram, descriptions in flow order, the scenario and the results of
-  a stored run. The HTML embeds the SVG diagram. The Word file has **no diagram**, and neither
-  format has the run's charts: Word needs a PNG and the engine has no rasteriser. A note on stderr
-  says what was left out.
+  app's «Export document»: diagram, descriptions in flow order (with each element's text
+  annotations as `Note` lines; those on a flow, a lane or nothing under the process description),
+  the scenario and the results of a stored run. The HTML embeds the SVG diagram and the run's charts as SVG, the same as the app's
+  Results charts, except the cycle time histogram (a stored run keeps no per-case times). The
+  Word file has **no diagram and no charts**: Word needs a PNG and the engine has no rasteriser.
+  A note on stderr says what was left out.
 - `lila export results <project.lila> --out book.xlsx|directory` writes the results of a stored
   run: one `.xlsx` (Summary, Elements, Flows, Resources, Parameters), or with `--format csv`
   `elements.csv`, `flows.csv`, `resources.csv` and `process.csv` in the directory, the same files
-  `lila run` writes (a stored run keeps no event log, so there is no `log.csv`).
+  `lila run` writes (a stored run keeps no event log, so there is no `log.csv`). It adds the
+  resource-wait p50/p90/p95 per element, a `Percentiles` sheet or `percentiles.csv`, from
+  simulating the run's stored inputs again; when that re-run does not reproduce the stored KPIs
+  (another engine version or platform), they are left out and a note on stderr says why
+  (`docs/RESULTS_FORMAT.md` § 12).
 
 `--format` defaults to the extension of `--out` (`.docx`, `.html`, `.xlsx`). `--process` picks
 the process of a repository, as elsewhere. **Runs** are the ones the app saved in the `.lila`:
@@ -294,6 +306,60 @@ npx lila scenario show examples/pedido.lila to-be-3-cajeros --resolved
 ```
 Exit code: `0`.
 
+## `scenario patch` and `project create` (#635)
+
+The CLI side of the MCP tools `patch_scenario` (for a `.lila`) and `create_project`
+([`docs/MCP.md`](MCP.md#mcp-and-cli-side-by-side)), over the same engine functions:
+
+- `lila scenario patch <project.lila> <scenario> --patch <ops.json>` applies a
+  [JSON Patch](https://www.rfc-editor.org/rfc/rfc6902) (`add`, `replace`, `remove` and `test`;
+  no `move` or `copy`) to a scenario of the `.lila`, validates the result against the process
+  model and writes it only when it validates. Without `--save-to` it patches the scenario in
+  place: the patch applies to the resolved scenario, which is written whole, without `extends`.
+  With `--save-to name` it creates (or replaces) the scenario `name`, which `extends` the scenario
+  given (or `--extends-from name`) and holds only the keys the patch touched. `--name` and
+  `--description` set those of the result. An invalid patch, or a result that does not validate,
+  exits `1` and writes nothing. A patch that changes nothing writes nothing and says so: the
+  scenario keeps its revision and its saved runs stay current. `--dry-run` validates everything
+  and writes nothing; `--json` prints `{ scenario, file, process, entry, written, dryRun, notes }`.
+  Patching a loose `.json` scenario is MCP only: from the CLI, edit the file.
+- `lila project create <path.lila> --name name --bpmn <file.bpmn>` creates a new `.lila` with one
+  process. A model with validation errors exits `1`, unless `--allow-unsimulatable`: then it is
+  kept as a diagram that does not simulate, its errors printed as notes. `--scenario name=file.json`
+  (repeatable) adds a scenario saved as `name.scenario.json`; a scenario that cannot run yet is
+  kept as a draft and listed with what it lacks. A model without a diagram gets one. The file is
+  written whole or not at all, and an existing file exits `1` unless `--force`. `--json` prints
+  `{ file, name, processId, laidOut, warnings, notes, scenarios }`.
+
+```bash
+npx lila scenario patch examples/pedido.lila as-is --patch examples/outline/pedido-patch.json --save-to to-be-4-cocineros --dry-run
+```
+Exit code: `0`.
+
+```text
+Dry run: the result validates and would be written to to-be-4-cocineros.scenario.json; nothing was written.
+warning W-ELEMENTO-SIN-PARAMETROS: the element exists in the model and has no parameters; it takes its default values (elements.Task_Empacar).
+```
+
+The file already exists, so `project create` refuses it without `--force`:
+
+```bash
+npx lila project create examples/pedido.lila --name Orders --bpmn examples/pedido/model.bpmn
+```
+Exit code: `1`.
+
+```text
+lila project create: /…/examples/pedido.lila already exists; nothing was written. Pass --force (`overwrite` in MCP) to replace it.
+```
+
+A full round trip, in a folder of your own: create a project, derive a scenario, compare the two.
+
+```text
+npx lila project create orders.lila --name Orders --bpmn examples/pedido/model.bpmn --scenario as-is=examples/pedido/as-is.scenario.json
+npx lila scenario patch orders.lila as-is --patch examples/outline/pedido-patch.json --save-to to-be-4-cocineros
+npx lila compare orders.lila as-is to-be-4-cocineros
+```
+
 ## `process export-bpmn` and `process import` (#632)
 
 The raw BPMN of one process of a `.lila`, out and in — the MCP tools `get_process_bpmn` and
@@ -313,11 +379,16 @@ The raw BPMN of one process of a `.lila`, out and in — the MCP tools `get_proc
 
 A model with validation errors exits `1` and writes nothing, unless `--allow-unsimulatable`: then
 it is kept as a diagram that does not simulate, its errors printed as notes. A file that is not
-BPMN is always refused. A model without a diagram is laid out unless `--no-layout`. The write is
+BPMN is always refused. A model whose simulated process has no diagram is laid out unless
+`--no-layout`; one that cannot be (bpmn-moddle cannot read it whole, it is only partly drawn, or
+the layouter fails) is kept as given, with a note saying why. The write is
 the `.lila`'s atomic, locked write (see [A `.lila` as input](#a-lila-as-input-466)), every other
 process unchanged; `--dry-run` writes nothing; `--json` prints the result object of
 `put_process_bpmn`: `{ file, mode, slug, name, processId, revision, dryRun, laidOut, summary,
 scenarioRemovals, notes, warnings, slugs }`.
+
+Both take the project as `-p/--project <project.lila>` or as a positional `<project.lila>`, and so
+do `process raci` and `process attribute` (#645): either convention works, giving both is refused.
 
 ```bash
 npx lila process export-bpmn -p examples/pedido.lila --out results/pedido.bpmn
@@ -338,6 +409,57 @@ A.3.0 has boundary events the simulator does not support, so it is refused unles
 
 ```bash
 npx lila process import -p examples/pedido.lila --bpmn examples/bizagi-exports/bizagi-miwg-A.3.0-roundtrip.bpmn --dry-run
+```
+Exit code: `1`.
+
+## `process rename|delete` and `scenario rename|delete` (#634)
+
+Tidying up a `.lila` — the MCP tools `rename_process`, `delete_process`, `rename_scenario` and
+`delete_scenario` ([`docs/MCP.md`](MCP.md#renaming-and-deleting)), with the same rules:
+
+- `lila process rename <project.lila> <slug> --name <name>` renames a process; its slug stays. A
+  project with a single process (named after the project) exits `1`.
+- `lila process delete <project.lila> <slug>` deletes a process with its scenarios and saved runs.
+  The last process, or one a call activity of another process names in its `calledElement`, exits
+  `1` (the refusal lists those call activities). Down to one process, the project is written as a
+  version 1 archive.
+- `lila scenario rename <project.lila> <scenario> --name <name>` renames a scenario; its file stays,
+  its revision and those of the scenarios that extend it go up. A name another scenario of the
+  process already answers to exits `1`.
+- `lila scenario delete <project.lila> <scenario>` deletes a scenario with its saved runs. The last
+  scenario of the process, or one other scenarios extend, exits `1`.
+
+`<scenario>` is a scenario of the process (its file name, with or without `.scenario.json`, or its
+`"name"`); `--process slug` picks the process of a `.lila` with several. A refusal writes nothing.
+The write is the `.lila`'s atomic, locked write (see [A `.lila` as input](#a-lila-as-input-466)),
+every other process unchanged; `--dry-run` writes nothing; `--json` prints the result object of the
+MCP tool, and without it the CLI prints its `summary` and `notes`.
+
+```bash
+npx lila scenario rename examples/pedido.lila to-be-3-cajeros --name TO-BE --dry-run
+```
+Exit code: `0`.
+
+```text
+Dry run: would rename scenario to-be-3-cajeros.scenario.json of process pedido to "TO-BE" in /…/examples/pedido.lila. Nothing was written.
+```
+
+The AS-IS cannot go while the TO-BE extends it:
+
+```bash
+npx lila scenario delete examples/pedido.lila as-is --dry-run
+```
+Exit code: `1`.
+
+```bash
+npx lila scenario delete examples/pedido.lila to-be-3-cajeros --dry-run --json
+```
+Exit code: `0`.
+
+pedido is a one-process project, so its process can neither be renamed nor deleted:
+
+```bash
+npx lila process delete examples/pedido.lila pedido --dry-run
 ```
 Exit code: `1`.
 
@@ -437,7 +559,7 @@ Process "Restaurant" (pedido)
 
 `process edit` applies a list of operations to one process, all or none: the JSON array the MCP
 tool `edit_process` takes as `operations` (`add`, `connect`, `remove`, `rename`, `setType`,
-`moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`, `annotate`, `addDataObject`…; format and rules in
+`moveToLane`, `addLane`, `removeLane`, `moveLane`, `addBoundary`, `annotate`, `addDataObject`, `setCalledProcess`…; format and rules in
 [`docs/MCP.md`](MCP.md#editing-a-process)). Every
 operation is checked, the result is validated, and the `.lila` is written only if all of it is fine;
 otherwise it exits `1`, writes nothing and lists every problem with the index of its operation. The

@@ -56,13 +56,14 @@ offline start and the phone viewer in headless Chrome.
 
 ### Phone and tablet viewer (#653)
 
-A phone (screen's short side under 600 CSS px) gets `Visor.tsx` instead of the editor: a
-read-only bpmn-js viewer with finger pan and pinch zoom, a sheet with the tapped element's
-parameters, and the heat map and KPIs of the last current run stored in the project. Tablets open
-it from View → Viewer mode, any browser with `?visor`; «Full editor» links to `?editor`. It opens a
-`.lila` from the device's files or an example and never writes the session, so a reload shows the
-editor's last saved project. `check:pwa` drives it at 390×844 with touch emulation; opening a file
-from iCloud/Files and the gestures on a real device are still a person's check.
+A phone (screen's short side under 600 CSS px) gets `Visor.tsx` instead of the editor: a read-only
+bpmn-js viewer with finger pan and pinch zoom, a sheet with the tapped element's parameters, and
+the heat map and KPIs of the last current run stored in the project. Tablets open it from View →
+Viewer mode, any browser with `?visor`; «Full editor» links to `?editor` and «Report a problem…»
+opens the same prefilled GitHub form as the editor (#651). It opens a `.lila` from the device's
+files or an example and never writes the session, so a reload shows the editor's last saved
+project. `check:pwa` drives it at 390×844 with touch emulation; opening a file from iCloud/Files
+and the gestures on a real device are still a person's check.
 
 ## Publish an update (owner action)
 

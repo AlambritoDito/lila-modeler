@@ -63,6 +63,7 @@ import lila from './lila.moddle.json' with { type: 'json' };
 import { isNCName, marcarExportador } from './ids.js';
 import { autoLayout, labelFlows, layOutLanes, LayoutError, separateSubprocessPlanes, sortOutgoing, type Create, type El } from './layout.js';
 import { Diagram, everything, placeArtifacts } from './edit-layout.js';
+import { rawAttributeLiterals, xsdBoolean } from './parse.js';
 import { validateBpmnXml } from './validate-report.js';
 import type { ValidationResult } from './validate.js';
 import { messages, type CliMessages, type Locale } from '../messages/index.js';
@@ -1668,6 +1669,18 @@ export async function bpmnToOutline(xml: string, options: BpmnToOutlineOptions =
 
   const flowElements = (process['flowElements'] ?? []) as El[];
   const byId = new Map(flowElements.map((el) => [el.id, el]));
+  // `cancelActivity` and `instantiate` by the simulator's rule (R-BND-10, R-EVG-1): moddle reads
+  // "1" as false, so the literal comes from the XML; any literal but true/1/false/0 is unsupported.
+  const rawCancel = rawAttributeLiterals(xml, 'boundaryEvent', 'cancelActivity');
+  const rawInstantiate = rawAttributeLiterals(xml, 'eventBasedGateway', 'instantiate');
+  const interruptingOf = (b: El): boolean | undefined => {
+    const raw = rawCancel.get(b.id);
+    return raw === undefined ? b['cancelActivity'] !== false : xsdBoolean(raw);
+  };
+  const instantiates = (gateway: El): boolean | undefined => {
+    const raw = rawInstantiate.get(gateway.id);
+    return raw === undefined ? gateway['instantiate'] === true : xsdBoolean(raw);
+  };
   const kept = new Map<string, OutlineStepType>();
   /** end event id → how it ends a path */
   const ends = new Map<string, NormalEnd>();
@@ -1691,7 +1704,7 @@ export async function bpmnToOutline(xml: string, options: BpmnToOutlineOptions =
     } else if (
       el.$type === 'bpmn:EventBasedGateway' &&
       // R-EVG-1: only an exclusive gateway that does not instantiate the process.
-      (el['instantiate'] === true || (el['eventGatewayType'] !== undefined && el['eventGatewayType'] !== 'Exclusive'))
+      (instantiates(el) !== false || (el['eventGatewayType'] !== undefined && el['eventGatewayType'] !== 'Exclusive'))
     ) {
       warnings.push(C.outlineUnsupported(el.id, el.$type));
     } else if (OUTLINE_TYPE[el.$type] !== undefined) kept.set(el.id, OUTLINE_TYPE[el.$type]!);
@@ -1726,7 +1739,8 @@ export async function bpmnToOutline(xml: string, options: BpmnToOutlineOptions =
       outs.length === 1 &&
       target !== undefined &&
       (kept.has(target.id) || ends.has(target.id)) &&
-      !sequenceFlows.some((f) => f['targetRef'] === b);
+      !sequenceFlows.some((f) => f['targetRef'] === b) &&
+      interruptingOf(b) !== undefined;
     if (!ok) {
       warnings.push(C.outlineUnsupported(b.id, b.$type));
       continue;
@@ -1738,7 +1752,7 @@ export async function bpmnToOutline(xml: string, options: BpmnToOutlineOptions =
       name: (b['name'] as string | undefined) ?? '',
       label: flowName(outs[0]!),
       duration: delay === undefined ? undefined : parseDuration(delay) ?? undefined,
-      interrupting: b['cancelActivity'] !== false,
+      interrupting: interruptingOf(b)!,
       to: ends.has(target!.id) ? END : target!.id,
       terminate: ends.get(target!.id) === 'terminate' || undefined,
     };

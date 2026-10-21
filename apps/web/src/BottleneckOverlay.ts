@@ -2,14 +2,14 @@
  * Overlay de cuellos de botella (LILA-064): `BaseRenderer` de bpmn-js con prioridad 1500 que
  * delega en el renderer por defecto y tiñe `fill`/`stroke` de las tareas según su
  * `resourceWait.mean`, en tres pasos (cuánto pesa esa espera frente al propio tiempo de proceso
- * de la tarea, ver `nivelDeRatio` más abajo), más el servicio `overlays` para una etiqueta con la
+ * de la tarea, ver `waitLevel` en `@lila-modeler/engine/bottleneck-levels`), más el servicio `overlays` para una etiqueta con la
  * espera media y la utilización del recurso principal, y un marcador CSS para `bottlenecks[0]`.
  * Aspecto de referencia: `docs/design/bottleneck-overlay.png`.
  *
  * El ranking **no se recalcula aquí**: se recorre `result.bottlenecks` tal cual, que ya viene
  * ordenado por `resourceWait.total` con desempate por utilización (docs/RESULTS_FORMAT.md §6) y
  * ya trae la `utilization` del recurso principal de cada elemento. Lo único que hace el overlay
- * es **cortarlo** (ver `TECHO`): pinta siempre el rango 0 y los cuellos de nivel `high`, o las
+ * es **cortarlo** (ver `bottleneckCut`): pinta siempre el rango 0 y los cuellos de nivel `high`, o las
  * tres primeras si no hay ninguno, y nunca más de cinco. Así el overlay, la tarjeta de
  * `ResultsView` (LILA-062) y `lila run` coinciden siempre, y el escenario solo se usa para saber
  * en qué unidad presentar los tiempos.
@@ -39,6 +39,7 @@ import { formatDuration, SECONDS_PER_UNIT, type BaseTimeUnit } from '@lila-model
 import { formatDisplay, formatDisplayDurationWithUnit } from './formatDisplay';
 import type { ResolvedScenario } from '@lila-modeler/engine/schema';
 import type { RunResult } from '@lila-modeler/engine';
+import { bottleneckCut, heatMap, type WaitLevel } from '@lila-modeler/engine/bottleneck-levels';
 import { strings } from './i18n';
 
 const PRIORITY = 1500;
@@ -47,7 +48,8 @@ const OVERLAY_CALOR = 'lila-calor';
 const MARKER_PRINCIPAL = 'lila-bottleneck-principal';
 const STYLE_ID = 'lila-bottleneck-overlay-styles';
 
-export type NivelEspera = 'low' | 'mid' | 'high';
+/** The scale (`waitLevel`, the cut, the heat map) lives in `@lila-modeler/engine/bottleneck-levels` (#669). */
+export type NivelEspera = WaitLevel;
 
 export interface OverlayEntry {
   nivel: NivelEspera;
@@ -63,7 +65,7 @@ export interface OverlayEntry {
 
 /**
  * Mapa `id de elemento -> entrada`. El orden de inserción **es** el de `result.bottlenecks`, así
- * que `Object.keys(modelo)` devuelve el ranking del motor (recortado, ver `TECHO`) sin volver a
+ * que `Object.keys(modelo)` devuelve el ranking del motor (recortado, ver `bottleneckCut`) sin volver a
  * ordenar nada; `rango` conserva siempre la posición original.
  */
 export type OverlayModel = Readonly<Record<string, OverlayEntry>>;
@@ -80,7 +82,7 @@ export interface Corrida {
   originalIds: Readonly<Record<string, string>>;
   /**
    * Lote M: the Results heat map. With it every task of `tareas` is tinted by its own wait (same
-   * `nivelDeRatio` as the ranking) and carries a «Wait …» badge, and the ranking's cut keeps its
+   * `waitLevel` as the ranking) and carries a «Wait …» badge, and the ranking's cut keeps its
    * label with a BOTTLENECK mark. Without it (and outside Results) only the cut is painted, as
    * before. `tareas` are the task ids of the IR: the result has no node types.
    */
@@ -96,51 +98,21 @@ export interface EntradaCalor {
 
 /**
  * Pure: the heat map of `tareas` — every task the result measured, tinted by the ratio of its own
- * mean resource wait to its own processing time (`nivelDeRatio`, the rule documented above; no
+ * mean resource wait to its own processing time (`heatMap` of `@lila-modeler/engine/bottleneck-levels`; no
  * new threshold). A task that never started is left out: it has nothing to say.
  */
 export function modeloCalor(result: RunResult, scenario: ResolvedScenario, tareas: readonly string[]): Readonly<Record<string, EntradaCalor>> {
   const S = strings();
   const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
   const salida: Record<string, EntradaCalor> = {};
-  for (const id of tareas) {
-    const m = result.elements[id];
-    if (m === undefined || m.started === 0) continue;
-    const ratio = m.processing.mean > 0 ? m.resourceWait.mean / m.processing.mean : m.resourceWait.mean > 0 ? Infinity : 0;
+  for (const [id, entry] of Object.entries(heatMap(result, tareas))) {
     salida[id] = {
-      nivel: nivelDeRatio(ratio),
-      etiqueta: S.c5.mapa.espera(esperaCorta(m.resourceWait.mean)),
-      titulo: S.c5.mapa.esperaTitulo(formatDisplayDurationWithUnit(m.resourceWait.mean, unit)),
+      nivel: entry.level,
+      etiqueta: S.c5.mapa.espera(esperaCorta(entry.resourceWaitMean)),
+      titulo: S.c5.mapa.esperaTitulo(formatDisplayDurationWithUnit(entry.resourceWaitMean, unit)),
     };
   }
   return salida;
-}
-
-/**
- * Umbrales del nivel, como fracción de `resourceWait.mean / processing.mean`: cuántas veces más
- * tarda una tarea esperando un recurso que trabajando de verdad. `RATIO_LOW` = la espera es menos
- * del 5 % del tiempo de proceso, apenas se nota; entre `RATIO_LOW` y `RATIO_HIGH`, la espera es
- * comparable al tiempo de proceso; desde `RATIO_HIGH` = 1, la tarea espera **más** de lo que tarda
- * en procesarse — el caso de libro de un cuello de botella.
- *
- * El ticket permite terciles "o documenta otra regla simple"; terciles entre las tareas con
- * espera **del propio resultado** se probaron primero y se descartaron: con solo dos o tres
- * tareas compitiendo por recursos (el caso típico, `examples/pedido` incluido) el nivel de una
- * tarea depende de su **orden** frente a las demás, no de cuánto cambió su propia espera — así,
- * `Task_TomarPedido` nunca cambiaba de nivel entre AS-IS y TO-BE 3 cajeros aunque su espera media
- * bajara de 14,9 s a 2,2 s, porque siempre seguía siendo la segunda de dos. Este ratio es propio
- * de cada tarea, no depende de las demás, así que sí refleja ese cambio. Los dos umbrales
- * quedan fijados en `BottleneckOverlay.qa.test.ts` («los umbrales low/mid…», «un ratio de
- * exactamente 1…»): desde #226 el corte deja fuera del lienzo las tareas que no son `high`, así
- * que ya no hay ninguna que seguir entre AS-IS y TO-BE sobre `examples/pedido`.
- */
-const RATIO_LOW = 0.05;
-const RATIO_HIGH = 1;
-
-function nivelDeRatio(ratio: number): NivelEspera {
-  if (ratio < RATIO_LOW) return 'low';
-  if (ratio < RATIO_HIGH) return 'mid';
-  return 'high';
 }
 
 /** De la más gruesa a la más fina: gana la primera en la que la espera valga 1 o más. */
@@ -162,65 +134,30 @@ export function esperaCorta(seconds: number): string {
 }
 
 /**
- * Cuántas tareas del ranking se pintan (#226). Decisión: el rango 0 **siempre**, sea cual sea su
- * nivel —es el que nombra el panel derecho y el único que lleva halo—, más las de nivel `high`
- * —las que esperan más de lo que trabajan, que son las que el usuario vino a buscar—; si no hay
- * ninguna alta, las tres primeras del ranking, para que el lienzo no se quede mudo justo después
- * de simular; y nunca más de `TECHO`, porque cada entrada añade una etiqueta flotante sobre el
- * diagrama.
- *
- * El rango 0 se trata aparte porque `bottlenecks` viene ordenado por `resourceWait.total` y el
- * nivel sale del ratio `resourceWait.mean / processing.mean`: son dos ordenaciones distintas, así
- * que el primero del ranking puede ser `mid` mientras otro es `high`. Filtrar solo por nivel
- * dejaba al principal sin pintar y sin halo, con el panel derecho nombrando una tarea invisible.
- *
- * // ponytail: techo fijo de 5 y sin control en la UI. El siguiente paso, cuando alguien pida
- * // ver más (o menos), es un campo «cuántos cuellos pintar» en Ajustes que alimente este corte.
- */
-const TECHO = 5;
-const SIN_ALTAS = 3;
-
-/**
- * Función pura: recorre `result.bottlenecks` en su orden, arma la entrada de cada elemento y se
- * queda con las que se pintan (`TECHO`). Sin
- * recursos en el escenario (R-DEG-1) o sin ninguna tarea con espera, `bottlenecks` viene vacío y
- * el mapa queda `{}`: no hay overlay que pintar y `applyOverlay` no falla, solo no añade nada.
+ * Función pura: el corte del ranking que se pinta (`bottleneckCut`, #226: el rango 0 siempre, las
+ * de nivel `high` o las tres primeras, nunca más de cinco) con su etiqueta. Sin recursos en el
+ * escenario (R-DEG-1) o sin ninguna tarea con espera, `bottlenecks` viene vacío y el mapa queda
+ * `{}`: no hay overlay que pintar y `applyOverlay` no falla, solo no añade nada.
  */
 export function overlayModel(result: RunResult, scenario: ResolvedScenario): OverlayModel {
   const S = strings();
   const unit = scenario.run.baseTimeUnit as BaseTimeUnit;
-
-  const entradas: [string, OverlayEntry][] = [];
-  for (const [rango, entrada] of result.bottlenecks.entries()) {
-    const metrics = result.elements[entrada.elementId];
-    // Un `bottlenecks` sin su elemento en `elements` no lo produce el motor; si llegara de un
-    // JSON editado a mano, se ignora esa entrada en vez de reventar el lienzo entero.
-    if (metrics === undefined) continue;
-    // `processing.mean` de una tarea con espera > 0 no debería ser 0 (tuvo que completar al
-    // menos una vez para tener processing.mean, ver docs/RESULTS_FORMAT.md §2); si igual lo es,
-    // la espera es infinitamente mayor que el proceso — el caso más alto, no un error.
-    const ratio =
-      metrics.processing.mean > 0 ? metrics.resourceWait.mean / metrics.processing.mean : Infinity;
-    entradas.push([
+  return Object.fromEntries(
+    bottleneckCut(result).map((entrada): [string, OverlayEntry] => [
       entrada.elementId,
       {
-        etiqueta: S.lienzo.cuelloEtiqueta(esperaCorta(metrics.resourceWait.mean), Math.round(entrada.utilization * 100)),
-        nivel: nivelDeRatio(ratio),
-        principal: rango === 0,
-        rango,
+        etiqueta: S.lienzo.cuelloEtiqueta(esperaCorta(entrada.resourceWaitMean), Math.round(entrada.utilization * 100)),
+        nivel: entrada.level,
+        principal: entrada.rank === 0,
+        rango: entrada.rank,
         titulo: S.lienzo.cuelloTitulo(
           // The same text as the Results tables (#578): hours from an hour on, with its unit.
-          formatDisplayDurationWithUnit(metrics.resourceWait.mean, unit),
+          formatDisplayDurationWithUnit(entrada.resourceWaitMean, unit),
           formatDisplay(entrada.utilization * 100),
         ),
       },
-    ]);
-  }
-  const altas = entradas.filter(([, entry]) => entry.nivel === 'high');
-  const corte = altas.length > 0 ? altas : entradas.slice(0, SIN_ALTAS);
-  const principal = entradas[0];
-  if (principal !== undefined && !corte.includes(principal)) corte.unshift(principal);
-  return Object.fromEntries(corte.slice(0, TECHO));
+    ]),
+  );
 }
 
 /* ------------------------------------------------------------------ *

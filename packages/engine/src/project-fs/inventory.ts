@@ -151,9 +151,25 @@ export async function lilaScenarioView(
   const entry = findLilaScenario(lila, target.scenario, locale);
   const path = lilaScenarioPath(lila, entry);
   const read = lilaScenarioReader(lila, (file) => JSON.parse(readFileSync(file, 'utf8')) as unknown, locale);
-  const model = await validatedModelOf({ path: lila.modelPath, xml: lila.process.model.xml, lila }, locale, [
-    lila.process.scenarios[entry]!,
-  ]);
+  let model: Awaited<ReturnType<typeof validatedModelOf>>;
+  try {
+    model = await validatedModelOf({ path: lila.modelPath, xml: lila.process.model.xml, lila }, locale, [
+      lila.process.scenarios[entry]!,
+    ]);
+  } catch (error) {
+    // #645: a `model.bpmn` that does not parse leaves nothing to check the scenario against; it is
+    // a note of a scenario that cannot run, not a failure of the read.
+    return {
+      file: lila.file,
+      process: lila.process.slug,
+      entry,
+      revision: lila.process.scenarioRevisions[entry] ?? 0,
+      resolved: target.resolved === true,
+      scenario: target.resolved === true ? null : (lila.process.scenarios[entry] as Record<string, unknown>),
+      runnable: false,
+      notes: [messages(locale).mcp.modelInvalid(error instanceof Error ? error.message : String(error))],
+    };
+  }
   const check = checkScenario(path, read, model.ir, { locale, elsewhere: model.elsewhere });
   const modelErrors = model.validation.errors.map((problem) => `${problem.code}: ${problem.message}`);
   // In a `.lila` the model is the process's own `model.bpmn`, as `run_simulation` requires.
