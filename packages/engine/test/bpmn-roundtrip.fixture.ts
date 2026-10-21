@@ -116,8 +116,11 @@ export function renameLilaPrefix(xml: string, to: string): string {
  *
  * Reading the XML text rather than the moddle tree is the point: it is the file that travels to
  * another tool, and a tree can hold what the serializer then fails to write.
+ *
+ * `{ sorted: false }` keeps the lines in document order instead, for a comparison where moving one
+ * `lila:` element before another on the same owner has to count as a difference (#670).
  */
-export function lilaInventory(xml: string): string[] {
+export function lilaInventory(xml: string, options: { readonly sorted?: boolean } = {}): string[] {
   const prefix = lilaPrefix(xml);
   if (prefix === undefined) throw new Error(`the document does not declare ${LILA_URI}`);
 
@@ -153,5 +156,5 @@ export function lilaInventory(xml: string): string[] {
     }
   }
 
-  return found.sort();
+  return options.sorted === false ? found : found.sort();
 }
