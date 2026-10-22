@@ -39,11 +39,13 @@ import { version as engineVersion } from '../version.js';
 import {
   canonicalCatalogObject,
   catalogObjectPath,
-  catalogObjectProblem,
   compareCatalogObjects,
   isCatalogId,
   isCatalogType,
   newProcessId,
+  readCatalogObject,
+  repeatedCatalogIds,
+  sameCatalogObject,
   type CatalogObject,
 } from './catalog.js';
 import { ProjectFormatError, isPlainObject, isRevision, readProjectDocument, runProblem } from './document.js';
@@ -189,20 +191,13 @@ function readOtherEntry(name: string, raw: Uint8Array, extras: Extras): void {
   if (object !== null && isCatalogType(object[1])) {
     extras.version3 = true;
     const [, type, id] = object as unknown as [string, string, string];
-    let problem: string | null;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(strFromU8(raw));
-      problem = isCatalogId(id) ? catalogObjectProblem(parsed, { type, id }) : `the file name is not an object id (^[a-z0-9][a-z0-9-]{0,63}$).`;
-    } catch (error) {
-      problem = (error as Error).message;
-    }
-    if (problem === null) {
-      extras.catalog.push(parsed as CatalogObject);
+    const read = readCatalogObject(type, id, strFromU8(raw));
+    if ('object' in read) {
+      extras.catalog.push(read.object);
       extras.objects[name] = raw;
     } else {
       // Excluded and explained, never dropped: other objects may point at it (RM-01 § 2.4).
-      extras.problems.push({ file: name, message: `${problem} Not loaded; kept as is.` });
+      extras.problems.push({ file: name, message: `${read.problem} Not loaded; kept as is.` });
       extras.entries[name] = raw;
     }
     return;
@@ -225,18 +220,7 @@ function readOtherEntry(name: string, raw: Uint8Array, extras: Extras): void {
  */
 function finishCatalog(extras: Extras): CatalogObject[] {
   const catalog = [...extras.catalog].sort(compareCatalogObjects);
-  const first = new Map<string, CatalogObject>();
-  for (const object of catalog) {
-    const seen = first.get(object.id);
-    if (seen === undefined) {
-      first.set(object.id, object);
-      continue;
-    }
-    extras.problems.push({
-      file: catalogObjectPath(object),
-      message: `the id ${JSON.stringify(object.id)} is also used by ${catalogObjectPath(seen)}; references resolve by the type they expect.`,
-    });
-  }
+  extras.problems.push(...repeatedCatalogIds(catalog));
   return catalog;
 }
 
@@ -278,8 +262,11 @@ function manifestOf(document: ProjectDocument): Manifest {
   };
 }
 
-/** The version 3 manifest of `document` (RM-01 § 1.2); every process must already have its id. */
-function version3ManifestOf(document: ProjectDocument, processes: readonly ProcessDocument[]): Record<string, unknown> {
+/**
+ * The version 3 manifest of `document` (RM-01 § 1.2), without the `engine` stamp; every process of
+ * `processes` must already have its id. Exported so the folder writes the manifest the archive does.
+ */
+export function version3ManifestOf(document: ProjectDocument, processes: readonly ProcessDocument[]): Record<string, unknown> {
   return {
     version: 3,
     id: document.id,
@@ -292,7 +279,6 @@ function version3ManifestOf(document: ProjectDocument, processes: readonly Proce
       scenarioRevisions: p.scenarioRevisions,
     })),
     ...(document.limits !== undefined ? { limits: document.limits } : {}),
-    engine: engineVersion,
   };
 }
 
@@ -354,7 +340,7 @@ export function encodeLila(document: ProjectDocument, preserved: LilaPreserved |
   } else {
     const processes = processesOf(valid).map((p) => (p.id !== undefined ? p : { ...p, id: newProcessId() }));
     slugs = processes.map((p) => p.slug);
-    put(MANIFEST_FILE, json(version3ManifestOf(valid, processes)));
+    put(MANIFEST_FILE, json({ ...version3ManifestOf(valid, processes), engine: engineVersion }));
     for (const process of processes) putProcess(`${PROCESSES_DIR}/${process.slug}/`, process);
     for (const object of [...(valid.catalog ?? [])].sort(compareCatalogObjects)) {
       const path = catalogObjectPath(object);
@@ -401,12 +387,7 @@ export function encodeLila(document: ProjectDocument, preserved: LilaPreserved |
  */
 function sameObject(original: Uint8Array | undefined, canonical: Uint8Array): Uint8Array | undefined {
   if (original === undefined) return undefined;
-  try {
-    const parsed = JSON.parse(strFromU8(original)) as CatalogObject;
-    return strFromU8(json(canonicalCatalogObject(parsed))) === strFromU8(canonical) ? original : undefined;
-  } catch {
-    return undefined;
-  }
+  return sameCatalogObject(strFromU8(original), JSON.parse(strFromU8(canonical)) as CatalogObject) ? original : undefined;
 }
 
 /** Entry names of a `.lila`, in the order the archive stores them. */
@@ -672,8 +653,9 @@ const MAX_LIMIT = 4_294_967_295;
 /**
  * Reports what is wrong with a version 3 manifest's `limits` (RM-01 § 1.2). Nothing is refused or
  * fixed: the defaults apply where a value is invalid, and the value is written back as found.
+ * Exported for the folder reader (`projectIO.ts`).
  */
-function checkLimits(limits: unknown, problems: ProjectProblem[]): void {
+export function checkLimits(limits: unknown, problems: ProjectProblem[]): void {
   if (!isPlainObject(limits)) {
     problems.push({ file: MANIFEST_FILE, message: '"limits" is not an object; the default limits apply.' });
     return;

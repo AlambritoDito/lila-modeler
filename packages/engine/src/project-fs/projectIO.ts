@@ -19,18 +19,37 @@
  * Repositorio (ADR-029, #498): con más de un proceso, `lila-project.json` pasa a `version: 2` con
  * la lista de procesos y cada proceso guarda exactamente la disposición de arriba (sin manifiesto
  * propio) en `processes/<slug>/`. Con un solo proceso se sigue escribiendo la versión 1 tal cual.
+ *
+ * Version 3 (RM-01 § 1, ADR-032, #671) is the version 2 layout plus a process id per process in the
+ * manifest and one file per catalog object, `catalog/<type>/<id>.json`. It is written when the
+ * document is version 3 (`formatVersionOf`); a version 1 folder moves to `processes/<slug>/` in the
+ * same all-or-nothing commit as version 2. Files of the folder outside the layout are never read,
+ * rewritten or deleted (RM-01 § 1.4).
  */
+import type { Dirent } from 'node:fs';
 import { access, constants, lstat, mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import {
+  asVersion3,
+  catalogObjectPath,
+  catalogObjectProblem,
+  catalogObjectText,
+  checkLimits,
+  compareCatalogObjects,
   formatVersionOf,
+  isCatalogType,
+  newProcessId,
   processesOf,
   ProjectFormatError,
+  readCatalogObject,
   readRepositoryManifest,
+  repeatedCatalogIds,
   repositoryManifestOf,
+  sameCatalogObject,
+  version3ManifestOf,
   withProcesses,
 } from '../project/index.js';
-import type { ProcessDocument, ProcessManifest } from '../project/index.js';
+import type { CatalogObject, ProcessDocument, ProcessManifest } from '../project/index.js';
 import type { ProjectDocument, ProjectProblem, ScenarioDocument, StoredRun } from '../project/index.js';
 import { isLilaPath, isMiscasedModelFile, isSymlink } from './paths.js';
 
@@ -40,6 +59,8 @@ const RUNS_DIR = 'runs';
 const PROCESSES_DIR = 'processes';
 const SCENARIO_SUFFIX = '.scenario.json';
 const RUN_SUFFIX = '.result.json';
+const CATALOG_DIR = 'catalog';
+const JSON_SUFFIX = '.json';
 /** Dejado en la carpeta del proyecto solo cuando el rollback de un guardado fallido también falla
  *  a mitad de camino (`E-RECUPERACION-PENDIENTE`, ver `commitWithRollback`) — lista los `.prev-*`
  *  que quedaron pendientes de restaurar a mano. En el resto de casos (éxito, o fallo con rollback
@@ -381,8 +402,11 @@ export async function readProjectFolder(
   // Finder) is not a project of its own: it opens loose, so a save writes only that `.bpmn` and not
   // a nested `lila-project.json` (QA of #511, nit 5).
   const loose = modelFile !== MODEL_FILE || (await isRepositoryProcessFolder(dir));
+  // A catalog in a version 1 folder (added by hand or by another tool) is read whatever the manifest
+  // says, and makes the document version 3 (RM-01 § 1.3): its next save writes it as one.
+  const catalog = loose ? { objects: [], found: false } : await readCatalog(dir, problems);
 
-  const document: ProjectDocument = {
+  const read: ProjectDocument = {
     version: 1,
     // Un diagrama suelto NO es el proyecto de la carpeta, aunque comparta carpeta con él
     // (LILA-208, hallazgo 1 del QA de #268): con `manifest.id` aquí, un «Guardar como» sobre esa
@@ -404,14 +428,75 @@ export async function readProjectFolder(
     scenarioRevisions: manifest.scenarioRevisions,
     runs,
   };
+  const document = catalog.found ? asVersion3({ ...read, catalog: catalog.objects }) : read;
   return { document, problems, loose };
 }
 
 /**
- * El manifiesto de `dir` si es un repositorio (`version: 2`, ADR-029), `null` si no lo es (versión
- * 1, sin versión, ausente, ilegible o symlink: todo eso lo sigue tratando la lectura de la versión
- * 1, con sus `problems` de siempre). Una versión posterior a la 2 se rechaza (`E-MANIFEST`) en vez
- * de leerse como si fuera la 1: es lo que exige `docs/PROJECT_FORMAT.md` § Versioning.
+ * The catalog objects of the folder (RM-01 § 2.4): `catalog/<type>/<id>.json`, one level deep, with
+ * `<type>` a type token. A file that is not an object (not JSON, a field missing, `type`/`id` that
+ * disagree with its path) or a symlink is excluded and explained in `problems`, and stays on disk
+ * untouched like every file the writer does not own. `found` is `true` when there was at least one
+ * object file, broken or not: the folder holds something only version 3 holds.
+ */
+async function readCatalog(
+  dir: string,
+  problems: ProjectProblem[],
+): Promise<{ objects: CatalogObject[]; found: boolean }> {
+  const catalogDir = join(dir, CATALOG_DIR);
+  if (await isSymlink(catalogDir)) {
+    problems.push({ file: CATALOG_DIR, message: 'es un symlink; se excluye por seguridad (no se sigue fuera de la carpeta autorizada).' });
+    return { objects: [], found: false };
+  }
+  const objects: CatalogObject[] = [];
+  let found = false;
+  for (const type of await listDir(catalogDir)) {
+    if (!isCatalogType(type.name) || !(type.isDirectory() || type.isSymbolicLink())) continue;
+    const typeDir = join(catalogDir, type.name);
+    if (type.isSymbolicLink()) {
+      problems.push({ file: `${CATALOG_DIR}/${type.name}`, message: 'es un symlink; se excluye por seguridad (no se sigue fuera de la carpeta autorizada).' });
+      continue;
+    }
+    const files = (await listDir(typeDir))
+      .filter((entry) => (entry.isFile() || entry.isSymbolicLink()) && entry.name.endsWith(JSON_SUFFIX))
+      .map((entry) => entry.name)
+      .sort();
+    for (const name of files) {
+      found = true;
+      const file = `${CATALOG_DIR}/${type.name}/${name}`;
+      const path = join(typeDir, name);
+      if (await isSymlink(path)) {
+        problems.push({ file, message: 'es un symlink; se excluye por seguridad (no se sigue fuera de la carpeta autorizada).' });
+        continue;
+      }
+      const text = await readFile(path, 'utf8');
+      await rememberSnapshot(path);
+      const read = readCatalogObject(type.name, name.slice(0, -JSON_SUFFIX.length), text);
+      if ('object' in read) objects.push(read.object);
+      else problems.push({ file, message: `${read.problem} Not loaded; kept as is.` });
+    }
+  }
+  objects.sort(compareCatalogObjects);
+  problems.push(...repeatedCatalogIds(objects));
+  return { objects, found };
+}
+
+/** The entries of `path`, or none when it does not exist or is not a folder. */
+async function listDir(path: string): Promise<Dirent[]> {
+  try {
+    return await readdir(path, { withFileTypes: true });
+  } catch (error) {
+    if (isNotFound(error) || isNotDirectory(error)) return [];
+    throw error;
+  }
+}
+
+/**
+ * El manifiesto de `dir` si es un repositorio (`version: 2`, ADR-029, or `version: 3`, RM-01 § 1),
+ * `null` si no lo es (versión 1, sin versión, ausente, ilegible o symlink: todo eso lo sigue
+ * tratando la lectura de la versión 1, con sus `problems` de siempre). Una versión posterior a la 3
+ * se rechaza (`E-MANIFEST`) en vez de leerse como si fuera la 1: es lo que exige
+ * `docs/PROJECT_FORMAT.md` § Versioning.
  */
 async function readRepositoryManifestOf(dir: string): Promise<Record<string, unknown> | null> {
   const target = join(dir, MANIFEST_FILE);
@@ -423,10 +508,10 @@ async function readRepositoryManifestOf(dir: string): Promise<Record<string, unk
     return null;
   }
   if (!isPlainObject(parsed) || typeof parsed.version !== 'number' || parsed.version === 1) return null;
-  if (parsed.version !== 2) {
+  if (parsed.version !== 2 && parsed.version !== 3) {
     throw new ProjectIOError(
       'E-MANIFEST',
-      `"${MANIFEST_FILE}" declara la versión ${parsed.version}; esta versión de Lila Modeler entiende la 1 y la 2.`,
+      `"${MANIFEST_FILE}" declara la versión ${parsed.version}; esta versión de Lila Modeler entiende la 1, la 2 y la 3.`,
     );
   }
   return parsed;
@@ -474,6 +559,8 @@ async function assertNotSymlink(path: string): Promise<void> {
  * tolerancia que la versión 1 — `model.bpmn` ausente o symlink es fatal; un escenario o una corrida
  * rotos se excluyen y quedan en `problems` con su ruta completa. Lo que haya en la carpeta fuera de
  * los procesos listados se deja en paz, como cualquier otro archivo ajeno de una carpeta.
+ * Version 3 (RM-01 § 1) adds the process ids, `limits` and the catalog (`readCatalog`); a catalog in
+ * a version 2 folder makes the document version 3, as in the archive.
  */
 async function readRepositoryFolder(
   dir: string,
@@ -514,6 +601,7 @@ async function readRepositoryFolder(
     const runs = await readRuns(processDir, own);
     problems.push(...own.map((p) => ({ file: `${prefix}${p.file}`, message: p.message })));
     processes.push({
+      ...(manifest.id !== undefined ? { id: manifest.id } : {}),
       slug: manifest.slug,
       name: manifest.name,
       model: { ...manifest.model, xml },
@@ -522,6 +610,9 @@ async function readRepositoryFolder(
       runs,
     });
   }
+  const version3 = parsed.version === 3;
+  if (version3 && parsed.limits !== undefined) checkLimits(parsed.limits, problems);
+  const catalog = await readCatalog(dir, problems);
   const first = processes[0]!;
   const base: ProjectDocument = {
     version: 1,
@@ -531,8 +622,12 @@ async function readRepositoryFolder(
     scenarios: first.scenarios,
     scenarioRevisions: first.scenarioRevisions,
     runs: first.runs,
+    ...(version3 ? { formatVersion: 3 as const, catalog: catalog.objects } : {}),
+    ...(version3 && parsed.limits !== undefined ? { limits: parsed.limits } : {}),
   };
-  return { document: withProcesses(base, processes, { repository: true }), problems, loose: false };
+  const read = withProcesses(base, processes, { repository: true });
+  const document = !version3 && catalog.found ? asVersion3({ ...read, catalog: catalog.objects }) : read;
+  return { document, problems, loose: false };
 }
 
 /**
@@ -959,16 +1054,9 @@ export async function writeProjectFolder(
   fsImpl: WriteProjectFsImpl = {},
 ): Promise<void> {
   const modelFile = options.modelFile ?? MODEL_FILE;
-  // RM-01 § 1.3: a version 3 repository (a catalog) has no folder writer yet (#671). Writing it as
-  // version 1 or 2 would drop the catalog and the process ids without a word, so it is refused.
-  if (formatVersionOf(document) === 3) {
-    throw new ProjectIOError(
-      'E-DOCUMENTO',
-      'Este proyecto es un repositorio de versión 3 (con catálogo): todavía solo puede guardarse como archivo .lila.',
-    );
-  }
   await assertNotMiscasedInProject(dir, modelFile);
-  if ((document.processes?.length ?? 0) > 0) {
+  // A repository (version 2) or a version 3 document, even with one process (RM-01 § 1.3).
+  if (formatVersionOf(document) !== 1) {
     await writeRepositoryFolder(dir, document, options, fsImpl);
     return;
   }
@@ -1007,6 +1095,7 @@ export async function writeProjectFolder(
   // Defensivo en la capa de disco a propósito: el llamador (`main.ts` → `writeProject`) manda
   // `diagramOnly` según el `loose` de la lectura, que aquí es `false` (la carpeta SÍ es proyecto).
   const diagramOnly = options.diagramOnly === true || modelFile !== MODEL_FILE;
+  if (!diagramOnly) await assertKnownManifestVersion(dir);
   const runsDir = join(dir, RUNS_DIR);
   const runWrites: PendingWrite[] = [];
 
@@ -1102,6 +1191,28 @@ export async function writeProjectFolder(
 }
 
 /**
+ * `E-MANIFEST` when the folder's manifest declares a version above 3 (RM-01 § 1.4): a newer build's
+ * repository is not overwritten with an older layout. Checked before anything is written. A missing,
+ * unreadable or version 1–3 manifest passes: the other guards deal with those.
+ */
+async function assertKnownManifestVersion(dir: string): Promise<void> {
+  const target = join(dir, MANIFEST_FILE);
+  if (await isSymlink(target)) return;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await readFile(target, 'utf8'));
+  } catch {
+    return;
+  }
+  if (isPlainObject(parsed) && typeof parsed.version === 'number' && parsed.version > 3) {
+    throw new ProjectIOError(
+      'E-MANIFEST',
+      `"${MANIFEST_FILE}" declara la versión ${parsed.version}; esta versión de Lila Modeler entiende la 1, la 2 y la 3 y no la sobrescribe.`,
+    );
+  }
+}
+
+/**
  * `E-SYMLINK` si `path` es un enlace y `E-DESTINO-INVALIDO` si existe y no es una carpeta: las
  * carpetas que el repositorio crea (`processes/`, `processes/<slug>/`, su `runs/`), con el mismo
  * criterio que `assertRunsDirUsable`.
@@ -1128,6 +1239,13 @@ async function assertDirUsable(path: string): Promise<void> {
  * 1, los archivos del primer proceso se retiran de la raíz en el mismo commit: se MUEVEN, y así una
  * versión anterior de la app no abre ese `model.bpmn` viejo ni reescribe el manifiesto encima del
  * repositorio. Un repositorio se guarda entero: ni `modelFile` ni `diagramOnly` tienen sentido aquí.
+ *
+ * A version 3 document (RM-01 § 1, § 7) also writes the process ids in the manifest and its catalog
+ * objects, `catalog/<type>/<id>.json`: an object whose file already holds it (however formatted) is
+ * not written again, and the file of an object removed from the document is removed — only if this
+ * process read it as an object, so a file someone else just added is never deleted. Broken object
+ * files and every other file of the folder are left alone. Order: process files and objects, then
+ * the manifest, then the removals.
  */
 async function writeRepositoryFolder(
   dir: string,
@@ -1142,9 +1260,13 @@ async function writeRepositoryFolder(
     );
   }
   if (options.saveAs === true) await assertFolderNotOccupied(dir, document.id);
+  await assertKnownManifestVersion(dir);
 
+  const version3 = formatVersionOf(document) === 3;
   const processesDir = join(dir, PROCESSES_DIR);
-  const processes = processesOf(document);
+  // A version 3 process without an id gets a fresh one (as `encodeLila` does); `asVersion3` gives
+  // them to the document itself, which keeps them stable across saves.
+  const processes = processesOf(document).map((p) => (version3 && p.id === undefined ? { ...p, id: newProcessId() } : p));
   const creatable = new Set<string>([processesDir]);
   await assertDirUsable(processesDir);
   // The slugs the folder already lists. A process whose slug is not among them is NEW for this
@@ -1158,7 +1280,7 @@ async function writeRepositoryFolder(
   }
   const manifestWrite: PendingWrite = {
     dest: join(dir, MANIFEST_FILE),
-    content: `${JSON.stringify(repositoryManifestOf(document), null, 2)}\n`,
+    content: `${JSON.stringify(version3 ? version3ManifestOf(document, processes) : repositoryManifestOf(document), null, 2)}\n`,
   };
   const trackedWrites: PendingWrite[] = [];
   const runWrites: PendingWrite[] = [];
@@ -1209,7 +1331,12 @@ async function writeRepositoryFolder(
     }
   }
 
-  await assertNoExternalChanges([...trackedWrites, manifestWrite, ...removals], options.overwrite === true);
+  const catalog = version3 ? await catalogChanges(dir, document.catalog ?? [], creatable) : { writes: [], removals: [] };
+
+  await assertNoExternalChanges(
+    [...trackedWrites, ...catalog.writes, manifestWrite, ...removals, ...catalog.removals],
+    options.overwrite === true,
+  );
   // A new process that landed on the folder of a process deleted earlier (the writer never deletes
   // folders) would inherit its scenarios and runs on the next read, and one that landed on a folder
   // created after the project was opened (#517, item 2: the app's `occupiedSlugs` is a snapshot
@@ -1231,7 +1358,9 @@ async function writeRepositoryFolder(
   // The manifest goes after every process file and before the retirements (QA of #511, nit 4): a
   // crash half-way through the first version 2 save leaves the version 1 manifest pointing at the
   // root files, still there, instead of a version 2 one pointing at folders not written yet.
-  const writes: PendingWrite[] = [...trackedWrites, ...runWrites, manifestWrite, ...removals];
+  // Version 3 (RM-01 § 7): the objects go with the process files, before the manifest; the objects
+  // removed go last, with the retirements.
+  const writes: PendingWrite[] = [...trackedWrites, ...runWrites, ...catalog.writes, manifestWrite, ...removals, ...catalog.removals];
   for (const { dest, content } of writes) {
     if (content !== null) await assertValidDestination(dest, creatable);
   }
@@ -1250,9 +1379,55 @@ async function writeRepositoryFolder(
     throw error;
   }
   await commitWithRollback(dir, writes, tmpPaths, fsImpl);
-  for (const { dest } of [...trackedWrites, manifestWrite, ...removals]) {
+  for (const { dest } of [...trackedWrites, ...catalog.writes, manifestWrite, ...removals, ...catalog.removals]) {
     await rememberSnapshot(dest);
   }
+}
+
+/**
+ * What saving `objects` changes under `catalog/` (RM-01 § 2, § 5.3): a write for each object whose
+ * file does not already hold it, and a removal for each object file this process read as an object
+ * (`lastSeen`) whose object is no longer in the document. Adds the folders it needs to `creatable`.
+ * `E-DOCUMENTO` for an object that is not one, or the same type and id twice.
+ */
+async function catalogChanges(
+  dir: string,
+  objects: readonly CatalogObject[],
+  creatable: Set<string>,
+): Promise<{ writes: PendingWrite[]; removals: PendingWrite[] }> {
+  const catalogDir = join(dir, CATALOG_DIR);
+  const writes: PendingWrite[] = [];
+  const kept = new Set<string>();
+  for (const object of objects) {
+    const problem = catalogObjectProblem(object);
+    if (problem !== null) throw new ProjectIOError('E-DOCUMENTO', `${catalogObjectPath(object)}: ${problem}`);
+    const dest = join(dir, catalogObjectPath(object));
+    if (kept.has(dest)) throw new ProjectIOError('E-DOCUMENTO', `${catalogObjectPath(object)} está dos veces en el catálogo.`);
+    kept.add(dest);
+    await assertDirUsable(catalogDir);
+    creatable.add(catalogDir);
+    const typeDir = join(catalogDir, object.type);
+    await assertDirUsable(typeDir);
+    creatable.add(typeDir);
+    // Not opened when it is not a regular file: the preflight refuses that destination.
+    if ((await isRegularFile(dest)) && sameCatalogObject(await readFile(dest, 'utf8'), object)) continue;
+    writes.push({ dest, content: catalogObjectText(object) });
+  }
+  const removals: PendingWrite[] = [];
+  if (await isSymlink(catalogDir)) return { writes, removals };
+  for (const type of await listDir(catalogDir)) {
+    if (!isCatalogType(type.name) || !type.isDirectory()) continue;
+    const typeDir = join(catalogDir, type.name);
+    for (const entry of await listDir(typeDir)) {
+      if (!entry.isFile() || !entry.name.endsWith(JSON_SUFFIX)) continue;
+      const path = join(typeDir, entry.name);
+      if (kept.has(path) || !lastSeen.has(path)) continue;
+      // Only a file that still is the object it was: a broken file was never in the document.
+      const read = readCatalogObject(type.name, entry.name.slice(0, -JSON_SUFFIX.length), await readFile(path, 'utf8'));
+      if ('object' in read) removals.push({ dest: path, content: null });
+    }
+  }
+  return { writes, removals };
 }
 
 /**
