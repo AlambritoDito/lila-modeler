@@ -132,7 +132,7 @@ mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
   rellena `annotate_element`. Devuelve
   `{ file, process, dryRun, changed, written, before, after, removedValues, definitions }`.
 - **`get_raci_matrix({ project, process?, locale? })`** — devuelve la matriz RACI del proceso:
-  `{ file, process, roles, rows }`.
+  `{ file, process, roles, rows, roleNames }`.
 - **`import_scenario_sheet({ project, process?, scenario, sheet, dryRun?, locale? })`** — aplica
   una hoja de escenario (`.xlsx`/`.csv`) a un escenario del `.lila`. Devuelve
   `{ file, process, scenario, sheet, dryRun, written, tables, changes, issues }`.
@@ -166,12 +166,29 @@ mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
 - **`delete_scenario({ project, process?, scenario, dryRun?, locale? })`** (#634) — borra un
   escenario con sus corridas guardadas. Devuelve `{ file, dryRun, written, process, entry,
   removedRuns, summary, notes }`.
+- **`list_catalog({ project, type?, locale? })`** (#672) — lista los objetos del catálogo de un
+  `.lila`, sin escribir nada. Devuelve `{ file, formatVersion, objects }`.
+- **`get_catalog_object({ project, id, type?, locale? })`** (#672) — lee un objeto del catálogo, sin
+  escribir nada. Devuelve `{ file, object }`.
+- **`create_catalog_object({ project, type, name, description?, attributes?, unitRef?, parentRef?, ownerRef?, url?, dryRun?, locale? })`**
+  (#672) — crea un rol, una unidad, un sistema o un documento. Devuelve `{ file, dryRun, changed,
+  written, object, created, updated, deleted, processes, wouldUpgrade, note? }`.
+- **`update_catalog_object({ project, id, type?, baseRevision, name?, description?, attributes?, unitRef?, parentRef?, ownerRef?, url?, dryRun?, locale? })`**
+  (#672) — renombra un objeto o cambia sus campos. Devuelve lo mismo que `create_catalog_object`.
+- **`delete_catalog_object({ project, id, type?, baseRevision?, replaceWith?, removeReferences?, dryRun?, locale? })`**
+  (#672) — borra un objeto; uno en uso, solo con `replaceWith` o `removeReferences`. Devuelve lo
+  mismo que `create_catalog_object`.
+- **`find_usages({ project, id?, type?, locale? })`** (#672) — dice dónde se usan los objetos, sin
+  escribir nada. Devuelve `{ file, type?, id, resolved, uses }` para un id, o `{ file, uses,
+  unresolved, duplicateProcessIds }`.
+- **`adopt_reference({ project, type, ref, name?, dryRun?, locale? })`** (#672) — convierte una
+  referencia escrita a mano en un objeto del catálogo. Devuelve lo mismo que `create_catalog_object`.
 
 Las tres de exportación se explican en [Exportar sin la app](#exportar-sin-la-app); las seis
 siguientes en [Herramientas de modelado para agentes](#herramientas-de-modelado-para-agentes);
 `get_project` y `get_scenario` en [Leer un proyecto](#leer-un-proyecto); `get_process_bpmn` y
-`put_process_bpmn` en [El BPMN de un proceso](#el-bpmn-de-un-proceso); las cuatro últimas en
-[Renombrar y borrar](#renombrar-y-borrar).
+`put_process_bpmn` en [El BPMN de un proceso](#el-bpmn-de-un-proceso); las cuatro siguientes en
+[Renombrar y borrar](#renombrar-y-borrar); las siete últimas en [El catálogo](#el-catálogo).
 
 Toda tool que recibe un modelo acepta también un proyecto `.lila`: ver
 [Un `.lila` como entrada](#un-lila-como-entrada).
@@ -369,6 +386,87 @@ guardó el archivo; `summary` dice en una línea lo que pasó.
 
 ```json
 { "name": "delete_scenario", "arguments": { "project": "examples/pedido.lila", "scenario": "to-be-3-cajeros", "dryRun": true } }
+```
+
+## El catálogo
+
+El catálogo de un repositorio (`docs/es/REPOSITORY_CONTRACT.md`, #672) guarda los roles, unidades,
+sistemas y documentos a los que se refieren sus modelos. Los modelos nunca guardan un nombre, solo
+el id del objeto: `annotate_element` lo escribe en `responsibilities[].roleRef` o en `refs`, y lo
+sigue escribiendo tal como se le da, sin comprobarlo contra el catálogo. Estas siete tools manejan
+los objetos:
+
+- **`list_catalog`** y **`get_catalog_object`** leen los objetos enteros: `type`, `id`, `name`,
+  `revision` y los campos que tengan (`description`, `attributes`, y `unitRef` en un rol,
+  `parentRef` en una unidad, `ownerRef` y `url` en un sistema o un documento). Los objetos de tipos
+  que esta versión no conoce (un `risk` escrito por una versión más nueva) también se listan, y son
+  de solo lectura.
+- **`create_catalog_object`** da al objeto un id generado, `<tipo>-` y 12 caracteres al azar, y la
+  revisión 1. Los nombres no son únicos ni son una clave; refiérete al objeto por su id.
+- **`update_catalog_object`** recibe `baseRevision`, la revisión que leíste. Si el objeto cambió
+  desde entonces, la llamada falla con `E-REVISION` y no escribe nada: vuelve a leerlo. Un campo que
+  no se pasa se queda, `null` quita uno opcional, y la revisión sube en uno. Un renombre solo escribe
+  el archivo del objeto (`catalog/<tipo>/<id>.json`): ningún modelo cambia, porque los modelos
+  guardan el id. Una actualización que no cambia nada no escribe nada.
+- **`delete_catalog_object`** rechaza un objeto en uso, en un modelo o en el `unitRef`/`parentRef`/
+  `ownerRef` de otro objeto, con `E-OBJETO-EN-USO` y la lista de sus usos. Di qué pasa con las
+  referencias: `replaceWith` otro objeto del mismo tipo (toda referencia se reescribe a él) o
+  `removeReferences: true`. No hay un borrado forzado que deje referencias rotas.
+- **`find_usages`** con `id` lista los usos de ese objeto, cada uno `{ process, slug, element,
+  relation }` (`relation` es `responsibility:R`, `systemRef`, `documentRef`, `input`, `output`…) o
+  `{ object, field }`. Si ningún objeto tiene ese id, responde `resolved: false` con las referencias
+  sin resolver a él. Sin `id` devuelve el índice entero: `uses` por `<tipo>/<id>`, cada referencia
+  `unresolved` y `duplicateProcessIds`, los ids de proceso BPMN que declara más de un proceso. El
+  índice se deriva de los modelos en cada llamada y nunca se guarda.
+- **`adopt_reference`** convierte en objeto una referencia escrita a mano antes de que existiera el
+  catálogo. Un valor que es un id válido (minúsculas, dígitos y guiones, como `cajero`) pasa a ser el
+  id del objeto y no se reescribe ningún modelo. Cualquier otro valor (`POS`) recibe un id generado,
+  y toda referencia de ese tipo con ese valor, en todos los procesos, se reescribe a él. `name` es
+  por defecto el valor.
+
+Cada escritura es la escritura atómica y con candado de `patch_scenario` (`E-CAMBIO-EXTERNO` si el
+archivo cambió en disco desde que se leyó), y `dryRun` comprueba todo y no escribe nada. Una
+escritura devuelve `created`, `updated` y `deleted` (como `<tipo>/<id>`) y `processes`, los procesos
+cuyo modelo reescribió, con cuántas referencias en cada uno. Un modelo reescrito recibe una revisión
+nueva, así que sus corridas guardadas quedan obsoletas. Un id desconocido es un mensaje de error
+simple, sin código propio.
+
+**Versión 3.** El primer objeto creado o adoptado en un `.lila` de versión 1 o 2 lo guarda como
+repositorio versión 3. El resultado, también el de un simulacro, dice `wouldUpgrade: true` y añade
+una `note`: Lila 1.0.0-beta.15 a beta.28 y las versiones anteriores no pueden abrir el archivo
+actualizado, y la actualización no se puede deshacer. Después, `get_project` informa
+`formatVersion: 3`. Las tools del catálogo trabajan sobre archivos `.lila`; los proyectos en carpeta
+esperan al adaptador de carpeta de la versión 3 (#671).
+
+`get_raci_matrix` añade `roleNames`: id de rol → el nombre del rol del catálogo al que resuelve. Los
+ids siguen siendo las claves de `roles` y `cells`, y un id que no coincide con ningún rol se omite.
+
+```json
+{ "name": "create_catalog_object", "arguments": { "project": "hotel.lila", "type": "role", "name": "Recepcionista", "dryRun": true } }
+```
+
+```json
+{ "name": "list_catalog", "arguments": { "project": "hotel.lila", "type": "role" } }
+```
+
+```json
+{ "name": "get_catalog_object", "arguments": { "project": "hotel.lila", "id": "role-4k9w2m7q1z8c" } }
+```
+
+```json
+{ "name": "update_catalog_object", "arguments": { "project": "hotel.lila", "id": "role-4k9w2m7q1z8c", "baseRevision": 1, "name": "Agente de recepción" } }
+```
+
+```json
+{ "name": "find_usages", "arguments": { "project": "hotel.lila", "id": "role-4k9w2m7q1z8c" } }
+```
+
+```json
+{ "name": "delete_catalog_object", "arguments": { "project": "hotel.lila", "id": "role-4k9w2m7q1z8c", "replaceWith": "role-p0x3n8d2r5ta" } }
+```
+
+```json
+{ "name": "adopt_reference", "arguments": { "project": "hotel.lila", "type": "system", "ref": "POS", "name": "Punto de venta" } }
 ```
 
 ## Exportar sin la app
@@ -834,6 +932,7 @@ completo en un archivo, como `saveTo` (las tools responden con un resumen salvo 
 | `delete_process` | `lila process delete` | `dryRun` es `--dry-run`. |
 | `rename_scenario` | `lila scenario rename` | `dryRun` es `--dry-run`. |
 | `delete_scenario` | `lila scenario delete` | `dryRun` es `--dry-run`. |
+| `list_catalog`, `get_catalog_object`, `create_catalog_object`, `update_catalog_object`, `delete_catalog_object`, `find_usages`, `adopt_reference` | ninguno todavía | Los comandos de la CLI llegan con #673. |
 | Los resources y el prompt | ninguno | Son parte del protocolo; la CLI tiene `--help` y `docs/`. |
 
 ## Resumen o resultado completo

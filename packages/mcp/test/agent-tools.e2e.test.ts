@@ -1,7 +1,7 @@
 /**
- * The tools of #99, #403 and #514 through the real `lila mcp` over stdio, as an agent calls them:
- * create a project, annotate it, read its RACI matrix, hand out the scenario sheet and import it
- * back. Refusals come back as `isError` in English and Spanish with the file untouched, and a
+ * The tools of #99, #403, #514 and #672 through the real `lila mcp` over stdio, as an agent calls
+ * them: create a project, annotate it, read its RACI matrix, hand out the scenario sheet and import
+ * it back, and manage its catalog. Refusals come back as `isError` in English and Spanish with the file untouched, and a
  * repository's other process stays byte-identical. Requires `dist/` (built before the tests).
  */
 import { mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
@@ -15,6 +15,7 @@ import { unzipSync } from 'fflate';
 import { afterAll, beforeAll, expect, test } from 'vitest';
 
 import { decodeLila, encodeLila, type ProjectDocument } from '../../engine/src/project/index.js';
+import { HOTEL_PROCESSES, hotelLila } from '../../engine/test/project/fixtures/catalog-hotel.js';
 
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
 const lilaBin = join(repo, 'packages/engine/bin/lila.js');
@@ -162,4 +163,76 @@ test('export_scenario_template, then import_scenario_sheet: dry run, write, and 
   const missing = await call('import_scenario_sheet', { project: 'sheets.lila', scenario: 'as-is', sheet: 'none.csv' });
   expect(missing.text).toBe(`import_scenario_sheet: the file ${temp}/none.csv does not exist.`);
   expect(readFileSync(join(temp, 'sheets.lila'))).toEqual(before);
+}, 120_000);
+
+/** The archive's entries as base64, by name. */
+function entriesOf(file: string): Record<string, string> {
+  return Object.fromEntries(Object.entries(unzipSync(readFileSync(file))).map(([name, data]) => [name, Buffer.from(data).toString('base64')]));
+}
+
+function changedEntries(before: Record<string, string>, after: Record<string, string>): string[] {
+  return [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((name) => before[name] !== after[name]).sort();
+}
+
+test('the catalog tools (#672): the Receptionist scenario on a version 2 file', async () => {
+  const file = join(temp, 'hotel.lila');
+  writeFileSync(file, hotelLila(2));
+  const slugs = HOTEL_PROCESSES.map((p) => p.slug);
+  const original = readFileSync(file);
+  const ok = async (name: string, args: Record<string, unknown>): Promise<Record<string, any>> => {
+    const result = await call(name, { project: 'hotel.lila', ...args });
+    expect(result.isError, `${name}: ${result.text}`).toBe(false);
+    return JSON.parse(result.text) as Record<string, any>;
+  };
+
+  const dry = await ok('create_catalog_object', { type: 'role', name: 'Receptionist', dryRun: true });
+  expect(dry).toMatchObject({ dryRun: true, written: false, wouldUpgrade: true });
+  expect(dry.note).toContain('1.0.0-beta.28');
+  expect(readFileSync(file)).toEqual(original);
+
+  const created = await ok('create_catalog_object', { type: 'role', name: 'Receptionist' });
+  const id = created.object.id as string;
+  expect(id).toMatch(/^role-[0-9a-z]{12}$/);
+  expect((await ok('get_project', {})).formatVersion).toBe(3);
+  expect((await ok('create_catalog_object', { type: 'role', name: 'Guest relations' })).wouldUpgrade).toBe(false);
+
+  for (const process of slugs) await ok('annotate_element', { process, elementId: 'Task_1', responsibilities: [{ type: 'R', roleRef: id }] });
+  const usages = await ok('find_usages', { id });
+  expect(usages.uses.map((u: { slug: string; relation: string }) => [u.slug, u.relation])).toEqual(slugs.map((slug) => [slug, 'responsibility:R']));
+  expect(new Set(usages.uses.map((u: { process: string }) => u.process)).size).toBe(3);
+
+  const beforeRename = entriesOf(file);
+  const renamed = await ok('update_catalog_object', { id, baseRevision: 1, name: 'Front desk agent' });
+  expect(renamed.object).toMatchObject({ name: 'Front desk agent', revision: 2 });
+  expect(changedEntries(beforeRename, entriesOf(file))).toEqual([`catalog/role/${id}.json`]);
+  for (const process of slugs) expect((await ok('get_raci_matrix', { process })).roleNames).toEqual({ [id]: 'Front desk agent' });
+  expect((await ok('get_catalog_object', { id })).object).toMatchObject({ id, revision: 2 });
+
+  const settled = readFileSync(file);
+  const stale = await call('update_catalog_object', { project: 'hotel.lila', id, baseRevision: 1, name: 'Night auditor' });
+  expect(stale.isError).toBe(true);
+  expect(stale.text).toMatch(/^update_catalog_object: E-REVISION: /);
+  const inUse = await call('delete_catalog_object', { project: 'hotel.lila', id, locale: 'es' });
+  expect(inUse.isError).toBe(true);
+  expect(inUse.text).toMatch(/^delete_catalog_object: E-OBJETO-EN-USO: .* está en uso \(3 usos: /);
+  expect(readFileSync(file)).toEqual(settled);
+
+  const other = (await ok('list_catalog', { type: 'role' })).objects.find((o: { id: string }) => o.id !== id).id as string;
+  const replaced = await ok('delete_catalog_object', { id, replaceWith: other });
+  expect(replaced.processes.map((p: { slug: string }) => p.slug)).toEqual(slugs);
+  expect((await ok('find_usages', { id: other })).uses).toHaveLength(3);
+  const removed = await ok('delete_catalog_object', { id: other, removeReferences: true });
+  expect(removed.deleted).toEqual([`role/${other}`]);
+  expect((await ok('find_usages', {})).unresolved).toEqual([]);
+
+  const hand = join(temp, 'hand.lila');
+  writeFileSync(hand, hotelLila(1, { handTyped: true }));
+  const adopted = await ok('adopt_reference', { project: 'hand.lila', type: 'role', ref: 'cajero' });
+  expect(adopted).toMatchObject({ object: { id: 'cajero' }, processes: [], wouldUpgrade: true });
+  const pos = await ok('adopt_reference', { project: 'hand.lila', type: 'system', ref: 'POS' });
+  expect(pos.processes).toEqual([{ slug: 'check-in', process: expect.stringMatching(/^process-/), references: 1 }]);
+  expect(decodeLila(readFileSync(hand)).model.xml).toContain(`<lila:systemRef ref="${pos.object.id}" />`);
+
+  const unknown = await call('get_catalog_object', { project: 'hotel.lila', id: 'role-nothere00000' });
+  expect(unknown).toEqual({ isError: true, text: expect.stringContaining('has no catalog object with the id "role-nothere00000"') });
 }, 120_000);

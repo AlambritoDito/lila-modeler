@@ -120,11 +120,14 @@ test('#645: the tools that only read declare readOnlyHint, and the rest do not',
   const readOnly = tools.filter((tool) => tool.annotations?.readOnlyHint === true).map((tool) => tool.name).sort();
   expect(readOnly).toEqual([
     'describe_process',
+    'find_usages',
+    'get_catalog_object',
     'get_process_bpmn',
     'get_process_outline',
     'get_project',
     'get_raci_matrix',
     'get_scenario',
+    'list_catalog',
     'validate_bpmn',
   ]);
   // #645: compare_scenarios describes its own summary, not run_simulation's.

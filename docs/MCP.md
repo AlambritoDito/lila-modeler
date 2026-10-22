@@ -86,7 +86,7 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
   defines, changes or removes an extended attribute of a `.lila` process, the one `annotate_element`
   fills in. Returns `{ file, process, dryRun, changed, written, before, after, removedValues, definitions }`.
 - **`get_raci_matrix({ project, process?, locale? })`** returns the process's RACI matrix:
-  `{ file, process, roles, rows }`.
+  `{ file, process, roles, rows, roleNames }`.
 - **`import_scenario_sheet({ project, process?, scenario, sheet, dryRun?, locale? })`** applies a
   scenario sheet (`.xlsx`/`.csv`) to a scenario of the `.lila`. Returns
   `{ file, process, scenario, sheet, dryRun, written, tables, changes, issues }`.
@@ -118,12 +118,29 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
   summary, notes }`.
 - **`delete_scenario({ project, process?, scenario, dryRun?, locale? })`** deletes a scenario with
   its saved runs. Returns `{ file, dryRun, written, process, entry, removedRuns, summary, notes }`.
+- **`list_catalog({ project, type?, locale? })`** lists the catalog objects of a `.lila`, writing
+  nothing. Returns `{ file, formatVersion, objects }`.
+- **`get_catalog_object({ project, id, type?, locale? })`** reads one catalog object, writing
+  nothing. Returns `{ file, object }`.
+- **`create_catalog_object({ project, type, name, description?, attributes?, unitRef?, parentRef?, ownerRef?, url?, dryRun?, locale? })`**
+  creates a role, unit, system or document. Returns `{ file, dryRun, changed, written, object,
+  created, updated, deleted, processes, wouldUpgrade, note? }`.
+- **`update_catalog_object({ project, id, type?, baseRevision, name?, description?, attributes?, unitRef?, parentRef?, ownerRef?, url?, dryRun?, locale? })`**
+  renames an object or changes its fields. Returns what `create_catalog_object` returns.
+- **`delete_catalog_object({ project, id, type?, baseRevision?, replaceWith?, removeReferences?, dryRun?, locale? })`**
+  deletes an object; one in use only with `replaceWith` or `removeReferences`. Returns what
+  `create_catalog_object` returns.
+- **`find_usages({ project, id?, type?, locale? })`** says where objects are used, writing nothing.
+  Returns `{ file, type?, id, resolved, uses }` for one id, or `{ file, uses, unresolved,
+  duplicateProcessIds }`.
+- **`adopt_reference({ project, type, ref, name?, dryRun?, locale? })`** turns a reference typed by
+  hand into a catalog object. Returns what `create_catalog_object` returns.
 
 The three export tools are described in [App-free exports](#app-free-exports); the six after
 them in [Modelling tools for agents](#modelling-tools-for-agents); `get_project` and
 `get_scenario` in [Reading a project](#reading-a-project); `get_process_bpmn` and
-`put_process_bpmn` in [Raw BPMN of a process](#raw-bpmn-of-a-process); the last four in
-[Renaming and deleting](#renaming-and-deleting).
+`put_process_bpmn` in [Raw BPMN of a process](#raw-bpmn-of-a-process); the four after them in
+[Renaming and deleting](#renaming-and-deleting); the last seven in [The catalog](#the-catalog).
 
 Every tool that takes a model also takes a `.lila` project; see [A `.lila` as input](#a-lila-as-input).
 
@@ -339,6 +356,84 @@ the file was saved; `summary` says what happened in one line.
 
 ```json
 { "name": "delete_scenario", "arguments": { "project": "examples/pedido.lila", "scenario": "to-be-3-cajeros", "dryRun": true } }
+```
+
+## The catalog
+
+The catalog of a repository (`docs/REPOSITORY_CONTRACT.md`, #672) holds the roles, units, systems
+and documents its models refer to. Models never hold a name, only an object's id:
+`annotate_element` writes it in `responsibilities[].roleRef` or in `refs`, and it keeps writing ids
+exactly as given, without checking them against the catalog. These seven tools manage the objects:
+
+- **`list_catalog`** and **`get_catalog_object`** read objects whole: `type`, `id`, `name`,
+  `revision`, and the fields they have (`description`, `attributes`, and `unitRef` for a role,
+  `parentRef` for a unit, `ownerRef` and `url` for a system or a document). Objects of types this
+  build does not know (a `risk` written by a newer build) are listed too, and are read-only.
+- **`create_catalog_object`** gives the object a generated id, `<type>-` and 12 random characters,
+  and revision 1. Names are not unique and never a key; refer to the object by its id.
+- **`update_catalog_object`** takes `baseRevision`, the revision you read. If the object changed
+  since, the call fails with `E-REVISION` and writes nothing: read it again. A field left out stays,
+  `null` removes an optional one, and the revision goes up by one. A rename writes only the object's
+  file (`catalog/<type>/<id>.json`): no model changes, because models hold the id. An update that
+  changes nothing writes nothing.
+- **`delete_catalog_object`** refuses an object in use, in a model or in another object's
+  `unitRef`/`parentRef`/`ownerRef`, with `E-OBJETO-EN-USO` and the list of its uses. Say what
+  happens to the references: `replaceWith` another object of the same type (every reference is
+  rewritten to it) or `removeReferences: true`. There is no forced delete that leaves broken
+  references.
+- **`find_usages`** with `id` lists the uses of that object, each `{ process, slug, element,
+  relation }` (`relation` is `responsibility:R`, `systemRef`, `documentRef`, `input`, `output`…) or
+  `{ object, field }`. When no object has that id it answers `resolved: false` with the unresolved
+  references to it. Without `id` it returns the whole index: `uses` by `<type>/<id>`, every
+  `unresolved` reference, and `duplicateProcessIds`, the BPMN process ids declared by more than one
+  process. The index is derived from the models on every call and never stored.
+- **`adopt_reference`** turns a reference typed by hand before the catalog existed into an object.
+  A value that is a valid id (lowercase letters, digits and hyphens, like `cajero`) becomes the
+  object's id and no model is rewritten. Any other value (`POS`) gets a generated id, and every
+  reference of that type with that value, in every process, is rewritten to it. `name` defaults to
+  the value.
+
+Every write is the atomic, locked write of `patch_scenario` (`E-CAMBIO-EXTERNO` when the file
+changed on disk since it was read), and `dryRun` checks everything and writes nothing. A write
+returns `created`, `updated` and `deleted` (as `<type>/<id>`) and `processes`, the processes whose
+model it rewrote, with how many references each. A rewritten model gets a new revision, so its saved
+runs become stale. An unknown id is a plain error message, with no code of its own.
+
+**Version 3.** The first object created or adopted in a version 1 or 2 `.lila` saves it as
+repository version 3. The result, a dry run's too, says `wouldUpgrade: true` and adds a `note`:
+Lila 1.0.0-beta.15 to beta.28 and older builds cannot open the upgraded file, and the upgrade
+cannot be undone. `get_project` then reports `formatVersion: 3`. The catalog tools work on `.lila`
+files; folder projects wait for the version 3 folder adapter (#671).
+
+`get_raci_matrix` adds `roleNames`: role id → the name of the catalog role it resolves to. The ids
+stay the keys of `roles` and `cells`, and an id that matches no role is left out.
+
+```json
+{ "name": "create_catalog_object", "arguments": { "project": "hotel.lila", "type": "role", "name": "Receptionist", "dryRun": true } }
+```
+
+```json
+{ "name": "list_catalog", "arguments": { "project": "hotel.lila", "type": "role" } }
+```
+
+```json
+{ "name": "get_catalog_object", "arguments": { "project": "hotel.lila", "id": "role-4k9w2m7q1z8c" } }
+```
+
+```json
+{ "name": "update_catalog_object", "arguments": { "project": "hotel.lila", "id": "role-4k9w2m7q1z8c", "baseRevision": 1, "name": "Front desk agent" } }
+```
+
+```json
+{ "name": "find_usages", "arguments": { "project": "hotel.lila", "id": "role-4k9w2m7q1z8c" } }
+```
+
+```json
+{ "name": "delete_catalog_object", "arguments": { "project": "hotel.lila", "id": "role-4k9w2m7q1z8c", "replaceWith": "role-p0x3n8d2r5ta" } }
+```
+
+```json
+{ "name": "adopt_reference", "arguments": { "project": "hotel.lila", "type": "system", "ref": "POS", "name": "Point of sale" } }
 ```
 
 ## App-free exports
@@ -810,6 +905,7 @@ answer with a summary unless `detail: "full"`).
 | `delete_process` | `lila process delete` | `dryRun` is `--dry-run`. |
 | `rename_scenario` | `lila scenario rename` | `dryRun` is `--dry-run`. |
 | `delete_scenario` | `lila scenario delete` | `dryRun` is `--dry-run`. |
+| `list_catalog`, `get_catalog_object`, `create_catalog_object`, `update_catalog_object`, `delete_catalog_object`, `find_usages`, `adopt_reference` | none yet | The CLI commands come with #673. |
 | Resources and the prompt | none | Part of the protocol; the CLI has `--help` and `docs/`. |
 
 ## Summary or full results
