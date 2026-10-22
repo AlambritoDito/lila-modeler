@@ -256,6 +256,8 @@ async function rewriteProcesses(
 /**
  * The catalog with the reference fields of other objects that point at `type`/`id` rewritten to
  * `to` (`null` removes the field), each such object one revision up. Returns the keys it changed.
+ * The object `to` itself loses the field instead: pointing it at itself (a unit its own parent)
+ * would make a cycle.
  */
 function rewriteObjectFields(
   catalog: readonly CatalogObject[],
@@ -269,9 +271,10 @@ function rewriteObjectFields(
     const fields = Object.entries(REFERENCE_FIELDS[object.type]!).filter(([field, expected]) => expected === type && object[field] === id);
     if (fields.length === 0) return object;
     const next: Record<string, unknown> = { ...object, revision: object.revision + 1 };
+    const target = object.type === type && object.id === to ? null : to;
     for (const [field] of fields) {
-      if (to === null) delete next[field];
-      else next[field] = to;
+      if (target === null) delete next[field];
+      else next[field] = target;
     }
     updated.push(catalogKey(object));
     return canonicalCatalogObject(next as CatalogObject);
@@ -361,7 +364,8 @@ export async function deleteCatalogObject(
     }
     to = replacement.id;
   }
-  const uses = (await usageIndex(document)).uses[catalogKey(current)] ?? [];
+  // A unit that is its own parent does not keep itself in use.
+  const uses = ((await usageIndex(document)).uses[catalogKey(current)] ?? []).filter((use) => !('object' in use && use.object === catalogKey(current)));
   if (uses.length > 0 && request.replaceWith === undefined && !remove) {
     fail({ reason: 'in-use', type: current.type, id: current.id, uses });
   }

@@ -211,6 +211,32 @@ describe('deleteCatalogObject', () => {
   });
 });
 
+describe('deleteCatalogObject, QA of #672', () => {
+  test('replaceWith does not repeat a responsibility the element already has', async () => {
+    const first = createCatalogObject(hotelDocument(2), { type: 'role', name: 'Receptionist' });
+    const second = createCatalogObject(first.document, { type: 'role', name: 'Front desk agent' });
+    const [r1, r2] = [first.object.id, second.object.id];
+    const document = withRefs(second.document, () =>
+      `<lila:responsibility type="R" roleRef="${r1}" /><lila:responsibility type="R" roleRef="${r2}" /><lila:responsibility type="A" roleRef="${r1}" />`);
+    const result = await deleteCatalogObject(document, { id: r1, replaceWith: r2 });
+    const xml = processesOf(result.document)[0]!.model.xml;
+    expect(xml.match(/<lila:responsibility [^>]*>/g)).toEqual([
+      `<lila:responsibility type="R" roleRef="${r2}" />`,
+      `<lila:responsibility type="A" roleRef="${r2}" />`,
+    ]);
+  });
+
+  test('replaceWith never makes a unit its own parent; a unit that is its own parent is not in use by itself', async () => {
+    const parent = createCatalogObject(hotelDocument(2), { type: 'unit', name: 'Rooms division' });
+    const child = createCatalogObject(parent.document, { type: 'unit', name: 'Front office', parentRef: parent.object.id });
+    const result = await deleteCatalogObject(child.document, { id: parent.object.id, replaceWith: child.object.id });
+    expect(getCatalogObject(result.document, { id: child.object.id })).toEqual({ type: 'unit', id: child.object.id, name: 'Front office', revision: 2 });
+
+    const loop: ProjectDocument = { ...parent.document, catalog: [{ ...parent.object, parentRef: parent.object.id }] };
+    expect(listCatalog((await deleteCatalogObject(loop, { id: parent.object.id })).document)).toEqual([]);
+  });
+});
+
 describe('adoptReference', () => {
   test('a value of the id grammar becomes the id, and no model is rewritten', async () => {
     const before = hotelDocument(2, { handTyped: true });

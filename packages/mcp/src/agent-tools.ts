@@ -674,7 +674,8 @@ export function registerAgentTools(
         'listing its uses, unless you say what happens to the references: `replaceWith` another ' +
         'object of the same type (every reference is rewritten to it) or `removeReferences: true`. ' +
         'Rewritten models get a new revision, so their saved runs become stale; `processes` lists ' +
-        'them. There is no forced delete that leaves broken references. Returns what ' +
+        'them. There is no forced delete that leaves broken references (references held by objects ' +
+        'of types this build does not know are not seen). Returns what ' +
         '`create_catalog_object` returns; `object` is the deleted one.',
       inputSchema: z.object({
         project: catalogProjectSchema,
@@ -705,7 +706,8 @@ export function registerAgentTools(
       title: 'Find usages',
       description:
         'Where catalog objects are used in a .lila. With `id`: the uses of that object, each ' +
-        '`{ process, slug, element, relation }` (relation `responsibility:R`, `systemRef`, `input`…) ' +
+        '`{ process, slug, element, relation }` (relation `responsibility:R`, `systemRef`, `input`…; ' +
+        '`process` is the process id, absent in a version 1 or 2 file) ' +
         'or `{ object, field }`; when no object has that id, `resolved: false` and the unresolved ' +
         'references to it (what `adopt_reference` would adopt). Without `id`: `uses` of every object ' +
         '(by `<type>/<id>`), every `unresolved` reference, and `duplicateProcessIds` (BPMN process ' +
@@ -734,8 +736,9 @@ export function registerAgentTools(
       description:
         'Turns a reference typed by hand before the catalog existed (a roleRef "cashier", a ' +
         'systemRef "POS") into a catalog object of `type`, and saves the project atomically. A value ' +
-        'that is a valid id (lowercase letters, digits, hyphens) becomes the object\'s id, and no ' +
-        'model is rewritten; any other value gets a generated id, and every reference of that type ' +
+        'that is a valid id (lowercase letters, digits, hyphens, at most 64), not a reserved Windows ' +
+        'name (con, nul…) and not the id of another object becomes the object\'s id, and no model is ' +
+        'rewritten; any other value gets a generated id, and every reference of that type ' +
         'with that value, in every process, is rewritten to it (`processes` lists them). `name` ' +
         'defaults to the value. ' + upgradeText +
         ' Returns what `create_catalog_object` returns.',

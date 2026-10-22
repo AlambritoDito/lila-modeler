@@ -383,6 +383,10 @@ export async function rewriteCatalogReferences(
     if (values === undefined || seen.has(el)) continue;
     seen.add(el);
     const removed = new Set<ModdleElement>();
+    const rewritten: ModdleElement[] = [];
+    /** What makes two references of one element the same: element type, RACI type and id. */
+    const signature = (value: ModdleElement): string =>
+      JSON.stringify([value.$type, value.type ?? '', (value.$type === RESPONSIBILITY_TYPE ? value.roleRef : value.ref) ?? '']);
     for (const value of values) {
       const responsibility = value.$type === RESPONSIBILITY_TYPE;
       const kind = responsibility ? 'responsibility' : REF_TYPE_TO_KIND.get(value.$type);
@@ -392,8 +396,18 @@ export async function rewriteCatalogReferences(
       if (next === undefined || next === ref) continue;
       changed++;
       if (next === null) removed.add(value);
-      else if (responsibility) value.roleRef = next;
-      else value.ref = next;
+      else {
+        if (responsibility) value.roleRef = next;
+        else value.ref = next;
+        rewritten.push(value);
+      }
+    }
+    // A rewrite that makes a reference repeat one the element already has (R r1 and R r2, r1
+    // replaced by r2) keeps one: the duplicate says nothing more.
+    const kept = new Set(values.filter((value) => !removed.has(value) && !rewritten.includes(value)).map(signature));
+    for (const value of rewritten) {
+      if (kept.has(signature(value))) removed.add(value);
+      else kept.add(signature(value));
     }
     if (removed.size > 0) keepExtensions(el, (value) => !removed.has(value));
   }

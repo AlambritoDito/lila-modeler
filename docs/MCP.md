@@ -380,15 +380,18 @@ exactly as given, without checking them against the catalog. These seven tools m
   `unitRef`/`parentRef`/`ownerRef`, with `E-OBJETO-EN-USO` and the list of its uses. Say what
   happens to the references: `replaceWith` another object of the same type (every reference is
   rewritten to it) or `removeReferences: true`. There is no forced delete that leaves broken
-  references.
+  references. References held by objects of types this build does not know (a `risk`'s fields)
+  are not seen, as RM-01 § 3.4 accepts. A replacement that would repeat a reference an element
+  already has is written once, and an object never becomes its own parent or owner.
 - **`find_usages`** with `id` lists the uses of that object, each `{ process, slug, element,
-  relation }` (`relation` is `responsibility:R`, `systemRef`, `documentRef`, `input`, `output`…) or
-  `{ object, field }`. When no object has that id it answers `resolved: false` with the unresolved
+  relation }` (`relation` is `responsibility:R`, `systemRef`, `documentRef`, `input`, `output`…;
+  `process` is the process id, absent in a version 1 or 2 file) or `{ object, field }`. When no object has that id it answers `resolved: false` with the unresolved
   references to it. Without `id` it returns the whole index: `uses` by `<type>/<id>`, every
   `unresolved` reference, and `duplicateProcessIds`, the BPMN process ids declared by more than one
   process. The index is derived from the models on every call and never stored.
 - **`adopt_reference`** turns a reference typed by hand before the catalog existed into an object.
-  A value that is a valid id (lowercase letters, digits and hyphens, like `cajero`) becomes the
+  A value that is a valid id (lowercase letters, digits and hyphens, at most 64, like `cajero`),
+  not a reserved Windows name (`con`, `nul`…) and not the id of another object becomes the
   object's id and no model is rewritten. Any other value (`POS`) gets a generated id, and every
   reference of that type with that value, in every process, is rewritten to it. `name` defaults to
   the value.
@@ -402,7 +405,8 @@ runs become stale. An unknown id is a plain error message, with no code of its o
 **Version 3.** The first object created or adopted in a version 1 or 2 `.lila` saves it as
 repository version 3. The result, a dry run's too, says `wouldUpgrade: true` and adds a `note`:
 Lila 1.0.0-beta.15 to beta.28 and older builds cannot open the upgraded file, and the upgrade
-cannot be undone. `get_project` then reports `formatVersion: 3`. The catalog tools work on `.lila`
+cannot be undone. The upgrade gives each process a fresh process id; a dry run's ids are only a
+preview. `get_project` then reports `formatVersion: 3`. The catalog tools work on `.lila`
 files; folder projects wait for the version 3 folder adapter (#671).
 
 `get_raci_matrix` adds `roleNames`: role id → the name of the catalog role it resolves to. The ids

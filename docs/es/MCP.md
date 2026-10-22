@@ -411,16 +411,20 @@ los objetos:
 - **`delete_catalog_object`** rechaza un objeto en uso, en un modelo o en el `unitRef`/`parentRef`/
   `ownerRef` de otro objeto, con `E-OBJETO-EN-USO` y la lista de sus usos. Di qué pasa con las
   referencias: `replaceWith` otro objeto del mismo tipo (toda referencia se reescribe a él) o
-  `removeReferences: true`. No hay un borrado forzado que deje referencias rotas.
+  `removeReferences: true`. No hay un borrado forzado que deje referencias rotas. Las referencias
+  que guardan objetos de tipos que esta versión no conoce (los campos de un `risk`) no se ven, como
+  acepta RM-01 § 3.4. Un reemplazo que repetiría una referencia que el elemento ya tiene se escribe
+  una sola vez, y un objeto nunca pasa a ser su propio padre o dueño.
 - **`find_usages`** con `id` lista los usos de ese objeto, cada uno `{ process, slug, element,
-  relation }` (`relation` es `responsibility:R`, `systemRef`, `documentRef`, `input`, `output`…) o
-  `{ object, field }`. Si ningún objeto tiene ese id, responde `resolved: false` con las referencias
+  relation }` (`relation` es `responsibility:R`, `systemRef`, `documentRef`, `input`, `output`…;
+  `process` es el id del proceso, ausente en un archivo de versión 1 o 2) o `{ object, field }`. Si ningún objeto tiene ese id, responde `resolved: false` con las referencias
   sin resolver a él. Sin `id` devuelve el índice entero: `uses` por `<tipo>/<id>`, cada referencia
   `unresolved` y `duplicateProcessIds`, los ids de proceso BPMN que declara más de un proceso. El
   índice se deriva de los modelos en cada llamada y nunca se guarda.
 - **`adopt_reference`** convierte en objeto una referencia escrita a mano antes de que existiera el
-  catálogo. Un valor que es un id válido (minúsculas, dígitos y guiones, como `cajero`) pasa a ser el
-  id del objeto y no se reescribe ningún modelo. Cualquier otro valor (`POS`) recibe un id generado,
+  catálogo. Un valor que es un id válido (minúsculas, dígitos y guiones, como mucho 64, como
+  `cajero`), que no es un nombre reservado de Windows (`con`, `nul`…) ni el id de otro objeto pasa a
+  ser el id del objeto y no se reescribe ningún modelo. Cualquier otro valor (`POS`) recibe un id generado,
   y toda referencia de ese tipo con ese valor, en todos los procesos, se reescribe a él. `name` es
   por defecto el valor.
 
@@ -434,7 +438,8 @@ simple, sin código propio.
 **Versión 3.** El primer objeto creado o adoptado en un `.lila` de versión 1 o 2 lo guarda como
 repositorio versión 3. El resultado, también el de un simulacro, dice `wouldUpgrade: true` y añade
 una `note`: Lila 1.0.0-beta.15 a beta.28 y las versiones anteriores no pueden abrir el archivo
-actualizado, y la actualización no se puede deshacer. Después, `get_project` informa
+actualizado, y la actualización no se puede deshacer. La actualización da a cada proceso un id de
+proceso nuevo; los ids de un simulacro son solo una vista previa. Después, `get_project` informa
 `formatVersion: 3`. Las tools del catálogo trabajan sobre archivos `.lila`; los proyectos en carpeta
 esperan al adaptador de carpeta de la versión 3 (#671).
 
