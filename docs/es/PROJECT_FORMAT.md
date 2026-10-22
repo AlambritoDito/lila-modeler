@@ -201,9 +201,8 @@ catalog/<tipo>/<id>.json       un archivo por objeto de catálogo
   solo si esta versión lo leyó como objeto; un archivo que otro añadió mientras tanto, o uno roto, se
   queda. Un archivo de objeto que cambió en disco desde que se leyó es `E-CAMBIO-EXTERNO`, como un
   modelo o un escenario, y el escritorio recarga cuando otro programa cambia un archivo de
-  `catalog/`. Un catálogo que aparece en una carpeta versión 1 o 2 se lee, y el siguiente guardado
-  escribe la versión 3; los nombres reservados no cambian la versión de la carpeta, porque todo
-  guardado de carpeta ya los deja en paz.
+  `catalog/`. Como en el archivo, un catálogo o una carpeta no vacía de un nombre reservado (`maps/`…)
+  que aparece en una carpeta versión 1 o 2 se lee como versión 3, y el siguiente guardado la escribe.
 
 Las entradas se escriben manifiesto, procesos (como en la versión 2), objetos de catálogo ordenados
 por tipo y luego por id, y al final las entradas que se conservan tal como estaban (abajo) ordenadas
@@ -214,7 +213,8 @@ por nombre, con la misma fecha fija: dos guardados del mismo repositorio siguen 
 `version` es `1`, `2` o `3`. Los cambios a este formato solo pueden **añadir campos opcionales**; lo
 que haría que un lector interpretara mal un archivo lleva una `version` nueva, y el lector la rechaza
 en vez de adivinar: el lector actual rechaza una versión 4 con `LILA-MANIFEST` (`E-MANIFEST` en una
-carpeta, cuyo escritor tampoco guarda encima, así que no se escribe nada). No hay paso de migración ni está previsto: los archivos están en el disco del usuario,
+carpeta, cuyo escritor tampoco guarda encima de un manifiesto de una versión que no lee, así que no
+se escribe nada). No hay paso de migración ni está previsto: los archivos están en el disco del usuario,
 no en una base de datos que alguien controle.
 
 Una versión de la app que solo lee la versión 1 (hasta la 1.0.0-beta.14) rechaza limpiamente un
@@ -269,8 +269,8 @@ ninguno de los dos lleva bytes con honestidad. Así que:
   recuperación y toda escritura de un agente.
 
 En la forma de **carpeta** esos archivos simplemente se dejan en paz, como antes, porque el escritor
-solo toca los archivos que son suyos: no se avisan, y una carpeta con un nombre reservado (`maps/`…)
-pero sin catálogo se queda en la versión que tenía.
+solo toca los archivos que son suyos: no se avisan. Una carpeta no vacía de un nombre reservado
+sigue haciendo del repositorio una versión 3, como arriba.
 
 ## Tipo MIME y extensión
 

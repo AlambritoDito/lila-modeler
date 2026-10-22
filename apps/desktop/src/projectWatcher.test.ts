@@ -227,6 +227,7 @@ describe('watchProject on a project folder (#539)', () => {
     expect(relevantProjectFile(join('catalog', 'role', 'old', 'role-1.json'))).toBe(false);
     expect(relevantProjectFile(join('catalog', '.hidden', 'role-1.json'))).toBe(false);
     expect(relevantProjectFile(join('catalog', 'role-1.json'))).toBe(false);
+    expect(relevantProjectFile(join('catalog', 'Bad Type', 'x.json'))).toBe(false); // Not a type the reader reads.
   });
 
   it('reloads when someone else changes a catalog object, not for Lila\'s own save (#671)', async () => {

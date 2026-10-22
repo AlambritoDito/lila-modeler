@@ -58,7 +58,7 @@ export function relevantProjectFile(relative: string): boolean {
   const modelOrScenario = name === 'model.bpmn' || name.endsWith('.scenario.json');
   if (parts.length === 1) return modelOrScenario || name === 'lila-project.json';
   if (parts.length !== 3 || parts[1]!.startsWith('.')) return false;
-  if (parts[0] === 'catalog') return name.endsWith('.json') && name.length > '.json'.length;
+  if (parts[0] === 'catalog') return /^[a-z][a-z0-9-]{0,31}$/.test(parts[1]!) && name.endsWith('.json') && name.length > '.json'.length;
   return parts[0] === 'processes' && modelOrScenario;
 }
 

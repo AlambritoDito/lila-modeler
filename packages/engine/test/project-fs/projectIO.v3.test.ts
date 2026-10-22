@@ -251,6 +251,32 @@ describe('versions above 3 and files outside the layout (RM-01 § 1.4)', () => {
     expect(await files(dir)).toEqual(before);
   });
 
+  it('a manifest version the reader refuses (0, 2.5) is not overwritten either (QA)', async () => {
+    for (const version of [0, 2.5]) {
+      await writeProjectFolder(dir, v1, { overwrite: true });
+      const manifest = JSON.parse(await readFile(join(dir, 'lila-project.json'), 'utf8')) as Record<string, unknown>;
+      await writeFile(join(dir, 'lila-project.json'), JSON.stringify({ ...manifest, version }));
+      const before = await files(dir);
+      await expect(readProjectFolder(dir)).rejects.toMatchObject({ code: 'E-MANIFEST' });
+      await expect(writeProjectFolder(dir, v1)).rejects.toMatchObject({ code: 'E-MANIFEST' });
+      expect(await files(dir)).toEqual(before);
+      await rm(join(dir, 'lila-project.json'));
+    }
+  });
+
+  it('a non-empty reserved folder (maps/) makes a version 1 folder version 3, as in the archive (RM-01 § 1.3)', async () => {
+    await writeProjectFolder(dir, v1);
+    await mkdir(join(dir, 'maps'));
+    expect((await readProjectFolder(dir)).document.formatVersion).toBeUndefined(); // Empty: nothing in it.
+    await writeFile(join(dir, 'maps', 'x.json'), '{}');
+    const { document } = await readProjectFolder(dir);
+    expect(document.formatVersion).toBe(3);
+    await writeProjectFolder(dir, document);
+    const after = await files(dir);
+    expect(after['maps/x.json']).toBe('{}');
+    expect(JSON.parse(after['lila-project.json']!).version).toBe(3);
+  });
+
   it('an unknown file and folder survive every write: version 3, an object added, an object removed', async () => {
     await unzipFixture({ notes: true });
     await mkdir(join(dir, 'drafts'));
@@ -315,6 +341,37 @@ describe('catalog objects on disk (RM-01 § 2, § 5.3)', () => {
     await expect(writeProjectFolder(dir, edited)).rejects.toMatchObject({ code: 'E-CAMBIO-EXTERNO' });
     await expect(writeProjectFolder(dir, withCatalog(document, []))).rejects.toMatchObject({ code: 'E-CAMBIO-EXTERNO' });
     expect(await readFile(path, 'utf8')).toBe(theirs);
+  });
+
+  it('a broken object file someone repairs meanwhile neither blocks a save nor is deleted by one (QA)', async () => {
+    await writeProjectFolder(dir, withCatalog(v1, [receptionist]));
+    const path = join(dir, 'catalog', 'role', 'role-bbbbbbbbbbbb.json');
+    await writeFile(path, '{ broken');
+    const { document, problems } = await readProjectFolder(dir);
+    expect(problems.map((p) => p.file)).toEqual(['catalog/role/role-bbbbbbbbbbbb.json']);
+    const theirs = JSON.stringify({ type: 'role', id: 'role-bbbbbbbbbbbb', name: 'Night porter', revision: 1 });
+    await writeFile(path, theirs);
+    await writeProjectFolder(dir, document);
+    await writeProjectFolder(dir, document, { overwrite: true });
+    expect(await readFile(path, 'utf8')).toBe(theirs);
+  });
+
+  it('an object removed after a «Save as» onto identical object files is removed (QA)', async () => {
+    const other = await mkdtemp(join(tmpdir(), 'lila-v3-other-'));
+    try {
+      await unzipFixture();
+      for (const [name, text] of v3Entries()) {
+        await mkdir(dirname(join(other, name)), { recursive: true });
+        await writeFile(join(other, name), text);
+      }
+      const { document } = await readProjectFolder(dir);
+      await writeProjectFolder(other, document, { saveAs: true });
+      await writeProjectFolder(other, withCatalog(document, (document.catalog ?? []).filter((o) => o.id !== RECEPTIONIST)));
+      expect(await files(other)).not.toHaveProperty([`catalog/role/${RECEPTIONIST}.json`]);
+      expect((await readProjectFolder(other)).document.catalog?.map((o) => o.id)).not.toContain(RECEPTIONIST);
+    } finally {
+      await rm(other, { recursive: true, force: true });
+    }
   });
 
   it('a version 3 archive saved into a folder carries its process ids and limits', async () => {

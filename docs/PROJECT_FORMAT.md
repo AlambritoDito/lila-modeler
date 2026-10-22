@@ -194,9 +194,9 @@ catalog/<type>/<id>.json       one file per catalog object
   formatted, is not rewritten. The file of an object removed in the session is deleted, but only one
   this build read as an object; a file someone else added meanwhile, or a broken one, stays. An
   object file changed on disk since it was read is `E-CAMBIO-EXTERNO`, like a model or a scenario,
-  and the desktop reloads when another program changes a `catalog/` file. A catalog found in a
-  version 1 or 2 folder is read, and the next save writes version 3; the reserved names do not
-  change the folder's version, since every folder save already leaves them alone.
+  and the desktop reloads when another program changes a `catalog/` file. As in the archive, a
+  catalog or a non-empty folder of a reserved name (`maps/`…) found in a version 1 or 2 folder is
+  read as version 3, and the next save writes it.
 
 Entries are written manifest, processes (as in version 2), catalog objects sorted by type and then
 id, and last the entries kept as they were (below) sorted by name, with the same fixed timestamp:
@@ -207,7 +207,7 @@ two saves of the same repository are still the same bytes.
 `version` is `1`, `2` or `3`. Changes to this format may only **add optional fields**; anything that
 would make a reader misread a file takes a new `version`, and the reader refuses it instead of
 guessing — the current reader refuses a version 4 with `LILA-MANIFEST` (`E-MANIFEST` for a folder,
-whose writer also refuses to save over it, so nothing is written).
+whose writer also refuses to save over a manifest version it does not read, so nothing is written).
 There is no migration step and none is planned: the files are on the user's disk, not in a database
 anybody controls.
 
@@ -259,8 +259,8 @@ IPC boundary (`structuredClone`) and goes into the browser's `localStorage` mirr
   agent write.
 
 In the **folder** form those files are simply left alone, as before, because the writer only touches
-the files it owns: they are not reported, and a folder with a reserved name (`maps/`…) but no catalog
-stays the version it was.
+the files it owns: they are not reported. A non-empty folder of a reserved name still makes the
+repository version 3, as above.
 
 ## MIME type and extension
 

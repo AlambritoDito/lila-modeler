@@ -60,6 +60,8 @@ const PROCESSES_DIR = 'processes';
 const SCENARIO_SUFFIX = '.scenario.json';
 const RUN_SUFFIX = '.result.json';
 const CATALOG_DIR = 'catalog';
+/** Top-level folders RM-01 § 1.1 reserves for later phases: never read or written, but version 3 only. */
+const RESERVED_DIRS = ['analysis', 'attachments', 'dashboards', 'maps', 'records'];
 const JSON_SUFFIX = '.json';
 /** Dejado en la carpeta del proyecto solo cuando el rollback de un guardado fallido también falla
  *  a mitad de camino (`E-RECUPERACION-PENDIENTE`, ver `commitWithRollback`) — lista los `.prev-*`
@@ -114,6 +116,13 @@ interface FileSnapshot {
 }
 
 const lastSeen = new Map<string, FileSnapshot>();
+
+/**
+ * The catalog object files (absolute paths) this process last read or wrote as an object (#671): the
+ * only ones a save may remove when their object leaves the document. A broken file, or one someone
+ * else added, is never in it, so a save never deletes it.
+ */
+const catalogObjectFiles = new Set<string>();
 
 async function currentSnapshot(path: string): Promise<FileSnapshot | null> {
   try {
@@ -436,8 +445,10 @@ export async function readProjectFolder(
  * The catalog objects of the folder (RM-01 § 2.4): `catalog/<type>/<id>.json`, one level deep, with
  * `<type>` a type token. A file that is not an object (not JSON, a field missing, `type`/`id` that
  * disagree with its path) or a symlink is excluded and explained in `problems`, and stays on disk
- * untouched like every file the writer does not own. `found` is `true` when there was at least one
- * object file, broken or not: the folder holds something only version 3 holds.
+ * untouched like every file the writer does not own. `found` is `true` when the folder holds
+ * something only version 3 holds (RM-01 § 1.3): an object file, broken or not, or a non-empty folder
+ * of a name reserved for later phases (`maps/`, `analysis/`, `dashboards/`, `records/`,
+ * `attachments/`). `processes/<slug>/process.json` is checked by the repository reader.
  */
 async function readCatalog(
   dir: string,
@@ -469,15 +480,33 @@ async function readCatalog(
         problems.push({ file, message: 'es un symlink; se excluye por seguridad (no se sigue fuera de la carpeta autorizada).' });
         continue;
       }
-      const text = await readFile(path, 'utf8');
+      let text: string;
+      try {
+        text = await readFile(path, 'utf8');
+      } catch (error) {
+        // Unreadable (permissions): excluded like a broken object, without stopping the opening.
+        catalogObjectFiles.delete(path);
+        problems.push({ file, message: `${(error as Error).message} Not loaded; kept as is.` });
+        continue;
+      }
       await rememberSnapshot(path);
       const read = readCatalogObject(type.name, name.slice(0, -JSON_SUFFIX.length), text);
-      if ('object' in read) objects.push(read.object);
-      else problems.push({ file, message: `${read.problem} Not loaded; kept as is.` });
+      if ('object' in read) {
+        objects.push(read.object);
+        catalogObjectFiles.add(path);
+      } else {
+        catalogObjectFiles.delete(path);
+        problems.push({ file, message: `${read.problem} Not loaded; kept as is.` });
+      }
     }
   }
   objects.sort(compareCatalogObjects);
   problems.push(...repeatedCatalogIds(objects));
+  for (const reserved of RESERVED_DIRS) {
+    if (found) break;
+    const path = join(dir, reserved);
+    if (!(await isSymlink(path)) && (await listDir(path)).length > 0) found = true;
+  }
   return { objects, found };
 }
 
@@ -613,6 +642,9 @@ async function readRepositoryFolder(
   const version3 = parsed.version === 3;
   if (version3 && parsed.limits !== undefined) checkLimits(parsed.limits, problems);
   const catalog = await readCatalog(dir, problems);
+  for (const manifest of manifests) {
+    if (await pathExists(join(processesDir, manifest.slug, 'process.json'))) catalog.found = true;
+  }
   const first = processes[0]!;
   const base: ProjectDocument = {
     version: 1,
@@ -1191,9 +1223,10 @@ export async function writeProjectFolder(
 }
 
 /**
- * `E-MANIFEST` when the folder's manifest declares a version above 3 (RM-01 § 1.4): a newer build's
- * repository is not overwritten with an older layout. Checked before anything is written. A missing,
- * unreadable or version 1–3 manifest passes: the other guards deal with those.
+ * `E-MANIFEST` when the folder's manifest declares a version this build does not read (above 3, RM-01
+ * § 1.4; or not 1, 2 or 3 at all), the same refusal as the reader's: a newer build's repository is
+ * not overwritten with an older layout. Checked before anything is written. A missing or unreadable
+ * manifest, or one without a numeric `version`, passes: the other guards deal with those.
  */
 async function assertKnownManifestVersion(dir: string): Promise<void> {
   const target = join(dir, MANIFEST_FILE);
@@ -1204,7 +1237,7 @@ async function assertKnownManifestVersion(dir: string): Promise<void> {
   } catch {
     return;
   }
-  if (isPlainObject(parsed) && typeof parsed.version === 'number' && parsed.version > 3) {
+  if (isPlainObject(parsed) && typeof parsed.version === 'number' && ![1, 2, 3].includes(parsed.version)) {
     throw new ProjectIOError(
       'E-MANIFEST',
       `"${MANIFEST_FILE}" declara la versión ${parsed.version}; esta versión de Lila Modeler entiende la 1, la 2 y la 3 y no la sobrescribe.`,
@@ -1264,8 +1297,8 @@ async function writeRepositoryFolder(
 
   const version3 = formatVersionOf(document) === 3;
   const processesDir = join(dir, PROCESSES_DIR);
-  // A version 3 process without an id gets a fresh one (as `encodeLila` does); `asVersion3` gives
-  // them to the document itself, which keeps them stable across saves.
+  // A version 3 process without an id gets a fresh one on every save, as in `encodeLila`; callers
+  // keep ids stable by giving them to the document first (`asVersion3`, which the app does).
   const processes = processesOf(document).map((p) => (version3 && p.id === undefined ? { ...p, id: newProcessId() } : p));
   const creatable = new Set<string>([processesDir]);
   await assertDirUsable(processesDir);
@@ -1331,7 +1364,9 @@ async function writeRepositoryFolder(
     }
   }
 
-  const catalog = version3 ? await catalogChanges(dir, document.catalog ?? [], creatable) : { writes: [], removals: [] };
+  const catalog = version3
+    ? await catalogChanges(dir, document.catalog ?? [], creatable)
+    : { writes: [], removals: [], kept: new Set<string>() };
 
   await assertNoExternalChanges(
     [...trackedWrites, ...catalog.writes, manifestWrite, ...removals, ...catalog.removals],
@@ -1382,19 +1417,27 @@ async function writeRepositoryFolder(
   for (const { dest } of [...trackedWrites, ...catalog.writes, manifestWrite, ...removals, ...catalog.removals]) {
     await rememberSnapshot(dest);
   }
+  // The object files now hold exactly the document's objects, written or kept: those are the ones a
+  // later save may remove, and an external change to them is `E-CAMBIO-EXTERNO`.
+  for (const path of catalog.kept) {
+    catalogObjectFiles.add(path);
+    await rememberSnapshot(path);
+  }
+  for (const { dest } of catalog.removals) catalogObjectFiles.delete(dest);
 }
 
 /**
  * What saving `objects` changes under `catalog/` (RM-01 § 2, § 5.3): a write for each object whose
- * file does not already hold it, and a removal for each object file this process read as an object
- * (`lastSeen`) whose object is no longer in the document. Adds the folders it needs to `creatable`.
+ * file does not already hold it, and a removal for each object file this process read or wrote as
+ * an object (`catalogObjectFiles`) whose object is no longer in the document; `kept` is the files of
+ * the document's objects. Adds the folders it needs to `creatable`.
  * `E-DOCUMENTO` for an object that is not one, or the same type and id twice.
  */
 async function catalogChanges(
   dir: string,
   objects: readonly CatalogObject[],
   creatable: Set<string>,
-): Promise<{ writes: PendingWrite[]; removals: PendingWrite[] }> {
+): Promise<{ writes: PendingWrite[]; removals: PendingWrite[]; kept: ReadonlySet<string> }> {
   const catalogDir = join(dir, CATALOG_DIR);
   const writes: PendingWrite[] = [];
   const kept = new Set<string>();
@@ -1414,20 +1457,19 @@ async function catalogChanges(
     writes.push({ dest, content: catalogObjectText(object) });
   }
   const removals: PendingWrite[] = [];
-  if (await isSymlink(catalogDir)) return { writes, removals };
+  if (await isSymlink(catalogDir)) return { writes, removals, kept };
   for (const type of await listDir(catalogDir)) {
     if (!isCatalogType(type.name) || !type.isDirectory()) continue;
     const typeDir = join(catalogDir, type.name);
     for (const entry of await listDir(typeDir)) {
       if (!entry.isFile() || !entry.name.endsWith(JSON_SUFFIX)) continue;
       const path = join(typeDir, entry.name);
-      if (kept.has(path) || !lastSeen.has(path)) continue;
-      // Only a file that still is the object it was: a broken file was never in the document.
-      const read = readCatalogObject(type.name, entry.name.slice(0, -JSON_SUFFIX.length), await readFile(path, 'utf8'));
-      if ('object' in read) removals.push({ dest: path, content: null });
+      // Only a file this process read or wrote as an object; if it changed since, whatever it holds
+      // now, `assertNoExternalChanges` refuses the save instead of deleting someone else's work.
+      if (!kept.has(path) && catalogObjectFiles.has(path)) removals.push({ dest: path, content: null });
     }
   }
-  return { writes, removals };
+  return { writes, removals, kept };
 }
 
 /**
