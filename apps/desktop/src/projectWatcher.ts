@@ -43,8 +43,9 @@ export interface ProjectWatcher {
 
 /**
  * The files of a project folder that make up the project (ADR-018, ADR-029), by their path
- * relative to it: `lila-project.json`, `model.bpmn` and `*.scenario.json` at the top, and
- * `model.bpmn` and `*.scenario.json` of `processes/<slug>/`. Nothing deeper or elsewhere: a copy
+ * relative to it: `lila-project.json`, `model.bpmn` and `*.scenario.json` at the top,
+ * `model.bpmn` and `*.scenario.json` of `processes/<slug>/`, and the catalog objects
+ * `catalog/<type>/<id>.json` of a version 3 repository (RM-01 § 1.1). Nothing deeper or elsewhere: a copy
  * the user keeps in a subfolder (`copia-vieja/model.bpmn`) is not the project. Also left out:
  * temporary files of an atomic write (`*.tmp-…`), hidden files, exports, and `runs/*.result.json`,
  * which the snapshot bookkeeping does not track and which Lila itself writes on every save.
@@ -56,7 +57,9 @@ export function relevantProjectFile(relative: string): boolean {
   if (name.startsWith('.')) return false;
   const modelOrScenario = name === 'model.bpmn' || name.endsWith('.scenario.json');
   if (parts.length === 1) return modelOrScenario || name === 'lila-project.json';
-  return parts.length === 3 && parts[0] === 'processes' && !parts[1]!.startsWith('.') && modelOrScenario;
+  if (parts.length !== 3 || parts[1]!.startsWith('.')) return false;
+  if (parts[0] === 'catalog') return /^[a-z][a-z0-9-]{0,31}$/.test(parts[1]!) && name.endsWith('.json') && name.length > '.json'.length;
+  return parts[0] === 'processes' && modelOrScenario;
 }
 
 export function watchProject(options: ProjectWatcherOptions): ProjectWatcher {

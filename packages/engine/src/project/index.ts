@@ -6,13 +6,14 @@ export type { ProcessDocument, ProjectDocument, ProjectModel, ProjectProblem, Sc
 export { isProcessSlug, processesOf, processIds, processSlug, withProcesses } from './repository.js';
 export { ProjectFormatError, readProjectDocument, runProblem } from './document.js';
 export type { ProjectErrorCode } from './document.js';
-export { decodeLila, decodeLilaArchive, encodeLila, lilaEntryNames, readLilaPreserved, readRepositoryManifest, repositoryManifestOf } from './lila.js';
+export { checkLimits, decodeLila, decodeLilaArchive, encodeLila, lilaEntryNames, readLilaPreserved, readRepositoryManifest, repositoryManifestOf, version3ManifestOf } from './lila.js';
 export type { DecodedLila, LilaPreserved, ProcessManifest, RepositoryManifest } from './lila.js';
 export {
   CATALOG_TYPES,
   canonicalCatalogObject,
   catalogObjectPath,
   catalogObjectProblem,
+  catalogObjectText,
   compareCatalogObjects,
   isAdoptableId,
   isCatalogId,
@@ -20,6 +21,9 @@ export {
   isKnownCatalogType,
   newCatalogId,
   newProcessId,
+  readCatalogObject,
+  repeatedCatalogIds,
+  sameCatalogObject,
 } from './catalog.js';
 export type { CatalogAttribute, CatalogObject, KnownCatalogType } from './catalog.js';
 export { asVersion3, formatVersionOf, upgradesToVersion3, withCatalog } from './upgrade.js';

@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, realpath, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { encodeLila } from '@lila-modeler/engine/project';
+import { encodeLila, withCatalog } from '@lila-modeler/engine/project';
 import type { ProjectDocument } from '@lila-modeler/engine/project';
 import { isOwnSnapshot, readLilaFile, writeLilaFile, writeProjectFolder } from '@lila-modeler/engine/project-fs';
 import { RELOAD_DEBOUNCE_MS, relevantProjectFile, watchProject } from './projectWatcher.js';
@@ -216,6 +216,45 @@ describe('watchProject on a project folder (#539)', () => {
     expect(relevantProjectFile('model.bpmn.tmp-1234')).toBe(false);
     expect(relevantProjectFile('.DS_Store')).toBe(false);
     expect(relevantProjectFile('diagrama.png')).toBe(false);
+  });
+
+  it('counts the catalog objects of a version 3 repository, not the litter beside them (#671)', () => {
+    expect(relevantProjectFile(join('catalog', 'role', 'role-7k2m9q4x1pzd.json'))).toBe(true);
+    expect(relevantProjectFile('catalog\\unit\\unit-b3r8w1c6k0qe.json')).toBe(true); // Windows separators.
+    expect(relevantProjectFile(join('catalog', 'role', '.DS_Store'))).toBe(false);
+    expect(relevantProjectFile(join('catalog', '.DS_Store'))).toBe(false);
+    expect(relevantProjectFile(join('catalog', 'role', 'role-7k2m9q4x1pzd.json.tmp-1234'))).toBe(false);
+    expect(relevantProjectFile(join('catalog', 'role', 'old', 'role-1.json'))).toBe(false);
+    expect(relevantProjectFile(join('catalog', '.hidden', 'role-1.json'))).toBe(false);
+    expect(relevantProjectFile(join('catalog', 'role-1.json'))).toBe(false);
+    expect(relevantProjectFile(join('catalog', 'Bad Type', 'x.json'))).toBe(false); // Not a type the reader reads.
+  });
+
+  it('reloads when someone else changes a catalog object, not for Lila\'s own save (#671)', async () => {
+    const dir = await realpath(await mkdtemp(join(tmpdir(), 'lila-watch-')));
+    const role = { type: 'role', id: 'role-7k2m9q4x1pzd', name: 'Receptionist', revision: 1 };
+    const v3 = withCatalog(documento(), [role]);
+    await writeProjectFolder(dir, v3);
+    const file = join('catalog', 'role', 'role-7k2m9q4x1pzd.json');
+    const fake = fakeWatch();
+    const onChange = vi.fn();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    watchProject({ target: dir, singleFile: false, isOwn: contado(isOwnSnapshot), onChange, watch: fake.watch });
+
+    fake.fire(file);
+    await settle();
+    expect(onChange).not.toHaveBeenCalled();
+
+    await writeFile(join(dir, file), `${JSON.stringify({ ...role, name: 'Front desk agent', revision: 2 }, null, 2)}\n`);
+    fake.fire(file);
+    await settle();
+    expect(onChange).toHaveBeenCalledTimes(1);
+
+    onChange.mockClear();
+    await writeFile(join(dir, 'catalog', 'role', '.DS_Store'), 'litter');
+    fake.fire(join('catalog', 'role', '.DS_Store'));
+    await settle();
+    expect(onChange).not.toHaveBeenCalled();
   });
 });
 
