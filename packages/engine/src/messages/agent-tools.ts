@@ -148,6 +148,19 @@ export interface AgentToolMessages {
   catalogAlreadyResolved: (key: string) => string;
   catalogEmptyRef: () => string;
   catalogUpgradeNote: () => string;
+  // `lila catalog` (#673)
+  catalogListHeader: (file: string, count: number, version: number) => string;
+  catalogObjectLine: (key: string, name: string, revision: number) => string;
+  catalogWrite: (kind: 'create' | 'update' | 'delete' | 'adopt', key: string, file: string, state: 'written' | 'dry-run' | 'no-change') => string;
+  catalogRewritten: (slug: string, references: number, removed: boolean) => string;
+  catalogAlsoUpdated: (key: string) => string;
+  catalogUses: (key: string, count: number) => string;
+  catalogUnresolvedUses: (id: string, count: number) => string;
+  catalogIndexUnresolved: (count: number) => string;
+  catalogDuplicateProcessId: (id: string, slugs: string) => string;
+  catalogInUseHint: () => string;
+  catalogEitherOption: (first: string, second: string) => string;
+  catalogBadLocale: (value: string, accepted: string) => string;
 }
 
 /** Extended-attribute element types (`appliesTo`), as the app's attribute dialog names them. */
@@ -338,6 +351,26 @@ const en: AgentToolMessages = {
   catalogEmptyRef: () => 'the reference to adopt is empty.',
   catalogUpgradeNote: () =>
     'This change saves the file as repository version 3 (it adds a catalog). Lila 1.0.0-beta.15 to 1.0.0-beta.28 and older builds cannot open it; the upgrade cannot be undone.',
+  catalogListHeader: (file, count, version) =>
+    `${file}, format version ${version}: ${count} catalog ${count === 1 ? 'object' : 'objects'}${count === 0 ? '.' : ':'}`,
+  catalogObjectLine: (key, name, revision) => `${key}  "${name}"  revision ${revision}`,
+  catalogWrite: (kind, key, file, state) => {
+    if (state === 'no-change') return `Nothing changes: ${key} already says this. Nothing was written.`;
+    const verb = { create: 'create', update: 'update', delete: 'delete', adopt: 'adopt' }[kind];
+    const done = { create: 'Created', update: 'Updated', delete: 'Deleted', adopt: 'Adopted' }[kind];
+    return state === 'dry-run' ? `Dry run: would ${verb} ${key} in ${file}. Nothing was written.` : `${done} ${key} in ${file}.`;
+  },
+  catalogRewritten: (slug, references, removed) =>
+    `  model of ${slug}: ${references} ${references === 1 ? 'reference' : 'references'} ${removed ? 'removed' : 'rewritten'}`,
+  catalogAlsoUpdated: (key) => `  also updated: ${key} (a reference field)`,
+  catalogUses: (key, count) => `${key}: ${count} ${count === 1 ? 'use' : 'uses'}${count === 0 ? '.' : ':'}`,
+  catalogUnresolvedUses: (id, count) =>
+    `"${id}" is not the id of any catalog object: ${count} unresolved ${count === 1 ? 'reference' : 'references'} to it${count === 0 ? '.' : ':'}`,
+  catalogIndexUnresolved: (count) => `${count} unresolved ${count === 1 ? 'reference' : 'references'}${count === 0 ? '.' : ':'}`,
+  catalogDuplicateProcessId: (id, slugs) => `BPMN process id ${id} is declared by more than one process: ${slugs}.`,
+  catalogInUseHint: () => 'From the CLI: --replace-with <id> (an object of the same type) or --remove-references.',
+  catalogEitherOption: (first, second) => `give ${first} or ${second}, not both.`,
+  catalogBadLocale: (value, accepted) => `--locale only accepts: ${accepted}; got "${value}".`,
 };
 
 const es: AgentToolMessages = {
@@ -520,6 +553,26 @@ const es: AgentToolMessages = {
   catalogEmptyRef: () => 'la referencia que se quiere adoptar está vacía.',
   catalogUpgradeNote: () =>
     'Este cambio guarda el archivo como repositorio versión 3 (añade un catálogo). Lila 1.0.0-beta.15 a 1.0.0-beta.28 y las versiones anteriores no pueden abrirlo; la actualización no se puede deshacer.',
+  catalogListHeader: (file, count, version) =>
+    `${file}, formato versión ${version}: ${count} ${count === 1 ? 'objeto' : 'objetos'} de catálogo${count === 0 ? '.' : ':'}`,
+  catalogObjectLine: (key, name, revision) => `${key}  "${name}"  revisión ${revision}`,
+  catalogWrite: (kind, key, file, state) => {
+    if (state === 'no-change') return `No cambia nada: ${key} ya dice esto. No se escribió nada.`;
+    const verb = { create: 'crearía', update: 'actualizaría', delete: 'borraría', adopt: 'adoptaría' }[kind];
+    const done = { create: 'Se creó', update: 'Se actualizó', delete: 'Se borró', adopt: 'Se adoptó' }[kind];
+    return state === 'dry-run' ? `Simulacro: se ${verb} ${key} en ${file}. No se escribió nada.` : `${done} ${key} en ${file}.`;
+  },
+  catalogRewritten: (slug, references, removed) =>
+    `  modelo de ${slug}: ${references} ${references === 1 ? 'referencia' : 'referencias'} ${removed ? (references === 1 ? 'quitada' : 'quitadas') : references === 1 ? 'reescrita' : 'reescritas'}`,
+  catalogAlsoUpdated: (key) => `  también se actualizó: ${key} (un campo de referencia)`,
+  catalogUses: (key, count) => `${key}: ${count} ${count === 1 ? 'uso' : 'usos'}${count === 0 ? '.' : ':'}`,
+  catalogUnresolvedUses: (id, count) =>
+    `"${id}" no es el id de ningún objeto del catálogo: ${count} ${count === 1 ? 'referencia sin resolver' : 'referencias sin resolver'} a él${count === 0 ? '.' : ':'}`,
+  catalogIndexUnresolved: (count) => `${count} ${count === 1 ? 'referencia sin resolver' : 'referencias sin resolver'}${count === 0 ? '.' : ':'}`,
+  catalogDuplicateProcessId: (id, slugs) => `El id de proceso BPMN ${id} lo declara más de un proceso: ${slugs}.`,
+  catalogInUseHint: () => 'Desde la CLI: --replace-with <id> (un objeto del mismo tipo) o --remove-references.',
+  catalogEitherOption: (first, second) => `indica ${first} o ${second}, no los dos.`,
+  catalogBadLocale: (value, accepted) => `--locale solo acepta: ${accepted}; llegó "${value}".`,
 };
 
 export const AGENT_TOOL_MESSAGES: Readonly<Record<Locale, AgentToolMessages>> = { en, es };
