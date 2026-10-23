@@ -20,7 +20,8 @@ cpSync(here('./manifest.webmanifest'), here('./public/manifest.webmanifest'));
 
 export default defineConfig({
   // The welcome's «What's new» paragraph (#425), from this version's CHANGELOG section.
-  define: { __LILA_NOVEDADES__: JSON.stringify(novedades(readFileSync(here('../../CHANGELOG.md'), 'utf8'), webVersion)) },
+  // #93: the running version, which the version 3 confirmation names.
+  define: { __LILA_NOVEDADES__: JSON.stringify(novedades(readFileSync(here('../../CHANGELOG.md'), 'utf8'), webVersion)), __LILA_VERSION__: JSON.stringify(webVersion) },
   plugins: [react(), {
     // #574: `sw.js` is written after everything else (the bundle and the public directory), so its
     // precache list is the build as shipped and its cache is named after this version.

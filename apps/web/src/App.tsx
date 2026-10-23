@@ -16,8 +16,11 @@ import { resolveExtends, resolveScenarioPath, type ResolvedScenario } from '@lil
 import { compare } from '@lila-modeler/engine';
 import { CompareView } from './CompareView';
 import { runMetaFrom } from './compareWarnings';
-import { changeToken, defaultElement, defaultScenarios, documentToken, encodeProject, escenariosDelProyecto, MODELO_PROYECTO, newModelXml, nextScenarioRevisions, procesoDelProyecto, projectStore, proyectoDeSuelto, readLila, readProject, repositoryToken, tokenPart, tomarAvisoRecuperacion } from './project';
-import { isCurrentRun, newProcessId, processesOf, processIds, processSlug, storedRun, withProcesses, type ProcessDocument } from '@lila-modeler/engine/project';
+import { catalogToken, changeToken, defaultElement, defaultScenarios, documentToken, encodeProject, escenariosDelProyecto, MODELO_PROYECTO, newModelXml, nextScenarioRevisions, procesoDelProyecto, projectStore, proyectoDeSuelto, readLila, readProject, repositoryToken, tokenPart, tomarAvisoRecuperacion } from './project';
+import { adoptReference, createCatalogObject, formatVersionOf, isCurrentRun, newProcessId, processesOf, processIds, processSlug, storedRun, withProcesses, type CatalogObject, type CatalogOperationResult, type ProcessDocument } from '@lila-modeler/engine/project';
+import { confirmUpgrade, type UpgradeQuestion } from './catalogUpgrade';
+import { recordCatalogChange, undoCatalogChange, type CatalogUndoEntry } from './catalogUndo';
+import type { CatalogoPanel } from './SelectorCatalogo';
 import { PestanasProcesos } from './PestanasProcesos';
 import type { ProcessIR, SimulationProgress } from '@lila-modeler/engine';
 import { Lienzo, type Alineacion, type EstadoLienzo, type EventoLienzo, type Modelador, type Servicios } from './Modeler';
@@ -418,6 +421,18 @@ function enfocarToggle(region: Region): void {
 const PROCESO_INICIAL = 'pedido';
 
 /** Escenarios de la sesión, por nombre de archivo (el que resuelve `extends`). */
+/** #92: what a document holds beyond its processes, which the app carries as it is (`extrasDelRepositorio`). */
+type ExtrasRepositorio = Pick<ProjectDocument, 'formatVersion' | 'catalog' | 'limits'>;
+
+/** The version 3 mark, the catalog and the `limits` of `doc`, the ones it has. */
+function extrasDe(doc: ExtrasRepositorio): ExtrasRepositorio {
+  return {
+    ...(doc.formatVersion !== undefined ? { formatVersion: doc.formatVersion } : {}),
+    ...(doc.catalog !== undefined ? { catalog: doc.catalog } : {}),
+    ...(doc.limits !== undefined ? { limits: doc.limits } : {}),
+  };
+}
+
 type Escenarios = Readonly<Record<string, Record<string, unknown>>>;
 
 /** Los dos del benchmark; el panel de escenario (LILA-061) añade copias a este mismo mapa. */
@@ -564,10 +579,20 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const slugsEnDisco = useRef(new Set<string>());
   /**
    * #92: what the opened document holds beyond its processes — the version 3 mark, the catalog and
-   * the manifest's `limits` — carried unchanged into every snapshot, so a save, the autosave and
-   * the browser mirror keep them. There is no catalog editor yet (#674).
+   * the manifest's `limits` — carried into every snapshot, so a save, the autosave and the browser
+   * mirror keep them. The catalog pickers change it (#93) through `fijarExtras`: the ref is what
+   * `snapshot` reads, the state is what the panel draws.
    */
-  const extrasDelRepositorio = useRef<Pick<ProjectDocument, 'formatVersion' | 'catalog' | 'limits'>>({});
+  const extrasDelRepositorio = useRef<ExtrasRepositorio>({});
+  const [extras, setExtras] = useState<ExtrasRepositorio>({});
+  function fijarExtras(siguiente: ExtrasRepositorio): void {
+    extrasDelRepositorio.current = siguiente;
+    setExtras(siguiente);
+  }
+  /** #93: `catalogToken` of the catalog as last opened or saved: the change token reads no catalog. */
+  const [catalogoGuardado, setCatalogoGuardado] = useState(() => catalogToken({}));
+  /** #93: «Undo last catalog change», one level (`catalogUndo.ts`); `null` when there is nothing to undo. */
+  const [deshacerCatalogo, setDeshacerCatalogo] = useState<CatalogUndoEntry | null>(null);
   /**
    * #92: the process id of each slug of a version 3 document, for the processes added in this
    * session: chosen once, so two saves (or a save and an autosave) write the same id.
@@ -841,7 +866,9 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     : changeToken(projectId, revision, scenarioRevisions, runs.map((r) => r.id));
   // A value still being typed in an extended attribute also counts as unsaved (#509).
   const borradorPendiente = useBorradorPendiente();
-  const dirty = currentToken !== savedToken || borradorPendiente;
+  // A catalog change (#93) is unsaved too: the version 3 mark and the objects are part of the file.
+  const marcaCatalogo = catalogToken(extras);
+  const dirty = currentToken !== savedToken || marcaCatalogo !== catalogoGuardado || borradorPendiente;
   const tokenRef = useRef(currentToken);
   tokenRef.current = currentToken;
   const latest = Object.keys(escenarios).flatMap((name) => {
@@ -907,6 +934,72 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     setConfirmarPerdida(null);
     resolver?.(acepta);
   }
+
+  /**
+   * #93: the document the catalog operations (#672) are given. They read and write the catalog and
+   * the version 3 mark only (create and adopt rewrite no BPMN), so the processes are left out: they
+   * stay on the canvas and in `procesos`, and `snapshot` gives them their ids once the document is
+   * version 3. Without them a version 2 project reads as version 1 here, which changes nothing:
+   * `wouldUpgrade` only asks whether it was version 3 already.
+   */
+  function documentoDelCatalogo(de: ExtrasRepositorio = extrasDelRepositorio.current): ProjectDocument {
+    return { version: 1, id: projectId, name: projectName, model: { id: procesoId, name: archivo, xml: '', revision: 0 },
+      scenarios: {}, scenarioRevisions: {}, runs: [], ...de };
+  }
+  /** #93: the version 3 confirmation (`catalogUpgrade.ts`), answered by the dialog below. */
+  const [preguntaMejora, setPreguntaMejora] = useState<UpgradeQuestion | null>(null);
+  const respuestaMejora = useRef<((acepta: boolean) => void) | null>(null);
+  const mejoraDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (preguntaMejora !== null && !mejoraDialog.current?.open) mejoraDialog.current?.showModal();
+  }, [preguntaMejora]);
+  function preguntarMejora(pregunta: UpgradeQuestion): Promise<boolean> {
+    respuestaMejora.current?.(false);
+    return new Promise<boolean>((resolve) => { respuestaMejora.current = resolve; setPreguntaMejora(pregunta); });
+  }
+  function responderMejora(acepta: boolean): void {
+    const resolver = respuestaMejora.current;
+    respuestaMejora.current = null;
+    mejoraDialog.current?.close();
+    setPreguntaMejora(null);
+    resolver?.(acepta);
+  }
+  /**
+   * #93: applies one catalog operation of the pickers: asks the version 3 question when it upgrades
+   * the document, keeps the document before it for «Undo last catalog change», and returns the
+   * object, or `null` when nothing changed. A project opened while the question was up is not
+   * touched.
+   */
+  async function cambiarCatalogo(operar: (doc: ProjectDocument) => CatalogOperationResult | Promise<CatalogOperationResult>): Promise<CatalogObject | null> {
+    const leidos = extrasDelRepositorio.current;
+    const antes = documentoDelCatalogo(leidos);
+    try {
+      const resultado = await confirmUpgrade(await operar(antes), __LILA_VERSION__, preguntarMejora);
+      if (resultado === null || extrasDelRepositorio.current !== leidos) return null;
+      // The pickers only offer changes that rewrite no BPMN (an adoptable id); one that would is
+      // refused rather than applied to a document that holds no processes (#675 rewrites them).
+      if (resultado.change.processes.length > 0) return null;
+      fijarExtras(extrasDe(resultado.document));
+      setDeshacerCatalogo(recordCatalogChange(antes, resultado));
+      return resultado.object;
+    } catch (e) {
+      setIoError(S.catalogo.error(e instanceof Error ? e.message : String(e)));
+      return null;
+    }
+  }
+  /** #93: «Undo last catalog change»: the catalog as it was before it; the version 3 mark stays. */
+  function deshacerCambioCatalogo(): void {
+    if (deshacerCatalogo === null) return;
+    fijarExtras(extrasDe(undoCatalogChange(documentoDelCatalogo(), deshacerCatalogo)));
+    setDeshacerCatalogo(null);
+  }
+  /** #93: the catalog the properties panel picks from. A loose diagram is no repository: it has none. */
+  const catalogoPanel: CatalogoPanel | undefined = suelto ? undefined : {
+    objetos: extras.catalog ?? [],
+    conCatalogo: formatVersionOf(documentoDelCatalogo(extras)) === 3,
+    crear: (tipo, nombre) => cambiarCatalogo((doc) => createCatalogObject(doc, { type: tipo, name: nombre })),
+    adoptar: (tipo, id) => cambiarCatalogo((doc) => adoptReference(doc, { type: tipo, ref: id })),
+  };
 
   /** The process on the canvas as it is now: the exported XML plus its scenarios and runs. */
   async function procesoActual(): Promise<ProcessDocument> {
@@ -1008,8 +1101,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         setProcesos((lista) => lista.map(procesoDelProyecto));
       }
       setSavedToken(token);
+      setCatalogoGuardado(catalogToken(doc));
       // B puede cerrar antes del siguiente efecto de React; publicar el dirty confirmado.
-      const unchanged = token === tokenRef.current && revisionGuardada === revisionRef.current;
+      const unchanged = token === tokenRef.current && revisionGuardada === revisionRef.current
+        && catalogToken(doc) === catalogToken(extrasDelRepositorio.current);
       adapter.setDirty?.(!unchanged);
       return unchanged ? 'saved' : previo !== null ? 'diagram-only' : 'cancelled';
     } catch (e) { setIoError(e instanceof Error ? e.message : String(e)); return 'failed'; }
@@ -1031,11 +1126,11 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     setProcesos(lista); setActivo(0); setOrigen(null); setAvisoLlamada(null);
     slugsBorrados.current.clear();
     setProjectProblems(doc.problems ?? []);
-    extrasDelRepositorio.current = {
-      ...(doc.formatVersion !== undefined ? { formatVersion: doc.formatVersion } : {}),
-      ...(doc.catalog !== undefined ? { catalog: doc.catalog } : {}),
-      ...(doc.limits !== undefined ? { limits: doc.limits } : {}),
-    };
+    const leidos = extrasDe(doc);
+    fijarExtras(leidos);
+    setCatalogoGuardado(catalogToken(leidos));
+    // #93: the catalog undo is in memory and belongs to the project being left.
+    setDeshacerCatalogo(null);
     idsDeProceso.current.clear();
     setSuelto(doc.loose === true);
     setCambioExterno(false); // A notice about the project being left, or the one just reloaded.
@@ -1202,7 +1297,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       void snapshotRef.current().then((doc) => window.lila?.writeRecovery?.(encodeProject(doc))).catch(() => {});
     };
     autoguardado.current = setTimeout(copiar, AUTOGUARDADO_MS);
-  }, [currentToken, dirty, modelador]);
+  }, [currentToken, marcaCatalogo, dirty, modelador]);
   useEffect(() => () => { if (autoguardado.current !== null) clearTimeout(autoguardado.current); }, []);
   const sessionRestored = useRef(false);
   useEffect(() => {
@@ -2061,6 +2156,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       cuando && { grupo: 'acciones', nombre: S.atajos[id], tecla: teclaDe(id), elegir: () => atajosRef.current[id]() };
     const acciones: (Comando | false)[] = [
       accion('nuevo', libre), accion('abrir', libre), accion('guardar', libre), accion('guardarComo', libre),
+      // #93: only while there is a catalog change to undo, as the menu entry is enabled.
+      deshacerCatalogo !== null && { grupo: 'acciones', nombre: S.catalogo.deshacer, elegir: deshacerCambioCatalogo },
       accion('imprimir', modelador !== null),
       accion('ejecutar', libre && !corriendo), accion('cancelar', corriendo),
       accion('zoomMas', conLienzo), accion('zoomMenos', conLienzo), accion('ajustarVista', conLienzo), accion('renombrar', conLienzo),
@@ -2917,6 +3014,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           <button className="boton" type="button" onClick={() => responderPerdida(false)}>{S.app.cancelar}</button>
         </div>
       </dialog>}
+      {preguntaMejora !== null && <dialog ref={mejoraDialog} className="confirmar-mejora" aria-labelledby="mejora-titulo" aria-describedby="mejora-texto" onCancel={(event) => { event.preventDefault(); responderMejora(false); }}>
+        <h2 id="mejora-titulo">{S.catalogo.mejoraTitulo}</h2>
+        <p id="mejora-texto">{S.catalogo.mejoraTexto(preguntaMejora.appVersion)}</p>
+        <div className="acciones">
+          <button className="boton primario" type="button" onClick={() => responderMejora(true)}>{S.catalogo.mejoraConfirmar}</button>
+          <button className="boton" type="button" onClick={() => responderMejora(false)}>{S.app.cancelar}</button>
+        </div>
+      </dialog>}
       {bienvenida && <Bienvenida
         recientes={recientes}
         temaNombre={tema?.name ?? S.app.temas[temaId as TemaId] ?? temaId}
@@ -3004,6 +3109,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               <button type="button" title={`${S.app.menuEscritorio.guardarComo}${atajo('guardarComo')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar(true)}>{S.app.menuEscritorio.guardarComo}</button>
               <button type="button" disabled={ioBusy || modelador === null} onClick={() => void guardar(true, true)}>{S.app.menuEscritorio.guardarComoCarpeta}</button>
               <hr />
+              <button type="button" disabled={deshacerCatalogo === null} onClick={deshacerCambioCatalogo}>{S.catalogo.deshacer}</button>
+              <hr />
               <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarSvg')}>{S.app.menuEscritorio.exportarSvg}</button>
               <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarPng')}>{S.app.menuEscritorio.exportarPng}</button>
               <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarPdf')}>{S.app.menuEscritorio.exportarPdf}</button>
@@ -3018,6 +3125,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               <button type="button" title={`${S.app.tituloAbrir}${atajo('abrir')}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('open')}>{S.app.abrir}</button>
               <button type="button" title={`${S.app.tituloGuardar}${atajo('guardar')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar()}>{S.app.guardar}</button>
               <button type="button" title={`${S.app.tituloGuardarComo}${atajo('guardarComo')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar(true)}>{S.app.guardarComo}</button>
+              <button type="button" disabled={deshacerCatalogo === null} onClick={deshacerCambioCatalogo}>{S.catalogo.deshacer}</button>
               {bpmnFilesEnabled && <>
                 <button type="button" disabled={ioBusy || modelador === null} onClick={() => void projectAction('bpmn')}>{S.app.importarBpmn}</button>
                 <button type="button" onClick={() => void exportar()}>{S.app.exportarBpmn}</button>
@@ -3502,6 +3610,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
             pestana={pestana}
             avisos={validacion.avisos}
             avanzado={avanzado}
+            catalogo={catalogoPanel}
             simulacion={{
               datos: (id) => {
                 const { resuelto, error } = escenarioResuelto(escenarioId, escenarios);

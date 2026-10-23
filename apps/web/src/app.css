@@ -1494,6 +1494,69 @@ body {
   flex: none;
   width: auto;
 }
+
+/* The catalog picker (#93): the field takes the row's free width, as the typed id did; its list
+   drops below it over the panel, and «Adopt» or the note sit beside or under it. */
+.selector-catalogo {
+  align-items: center;
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.selector-catalogo-campo {
+  flex: 1 1 8rem;
+  min-width: 0;
+  position: relative;
+}
+
+.campos .selector-catalogo input.no-resuelto {
+  border-color: var(--status-warning);
+  color: var(--fg-muted);
+}
+
+.selector-catalogo-lista {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.18);
+  left: 0;
+  list-style: none;
+  margin: 2px 0 0;
+  max-height: 14rem;
+  overflow-y: auto;
+  padding: 2px 0;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 20;
+}
+
+.selector-catalogo-lista [role='option'] {
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  padding: calc(5px * var(--espacio, 1)) 8px;
+}
+
+.selector-catalogo-lista [role='option'][aria-selected='true'] {
+  background: var(--bg-hover);
+  box-shadow: inset 2px 0 0 var(--accent-primary);
+}
+
+.selector-catalogo-lista .vacio {
+  color: var(--fg-disabled);
+  padding: calc(5px * var(--espacio, 1)) 8px;
+}
+
+.selector-catalogo .adoptar {
+  flex: none;
+}
+
+.selector-catalogo-nota {
+  color: var(--fg-muted);
+  flex-basis: 100%;
+}
 /* ---------- panel de escenario (LILA-061) ---------- */
 
 /* Todo el panel sale del JSON Schema, así que no hay una regla por campo: se estilan las tres
@@ -3018,9 +3081,9 @@ button.gcal-uso-fila:hover {
 
 .lienzo .lila-validacion-error { background: var(--diagram-marker-error); }
 
-.confirmar-reemplazo, .confirmar-perdida, .aviso-sistema, .ajustes { max-width: 32rem; padding: 24px; color: var(--fg-primary); background: var(--bg-elevated); border: 1px solid var(--border-strong); box-shadow: 0 6px 20px var(--shadow); }
-.confirmar-reemplazo::backdrop, .confirmar-perdida::backdrop, .aviso-sistema::backdrop, .ajustes::backdrop, .paleta-comandos::backdrop { background: rgb(0 0 0 / 50%); }
-.confirmar-reemplazo .acciones, .confirmar-perdida .acciones, .aviso-sistema .acciones, .ajustes .acciones { display: flex; gap: 8px; flex-wrap: wrap; }
+.confirmar-reemplazo, .confirmar-perdida, .confirmar-mejora, .aviso-sistema, .ajustes { max-width: 32rem; padding: 24px; color: var(--fg-primary); background: var(--bg-elevated); border: 1px solid var(--border-strong); box-shadow: 0 6px 20px var(--shadow); }
+.confirmar-reemplazo::backdrop, .confirmar-perdida::backdrop, .confirmar-mejora::backdrop, .aviso-sistema::backdrop, .ajustes::backdrop, .paleta-comandos::backdrop { background: rgb(0 0 0 / 50%); }
+.confirmar-reemplazo .acciones, .confirmar-perdida .acciones, .confirmar-mejora .acciones, .aviso-sistema .acciones, .ajustes .acciones { display: flex; gap: 8px; flex-wrap: wrap; }
 .confirmar-perdida ul { margin: 8px 0 16px; padding-left: 20px; overflow-wrap: anywhere; }
 
 /* ---------- ajustes (artboard 09, #407) ---------- */

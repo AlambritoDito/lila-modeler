@@ -2203,4 +2203,24 @@ export const en = {
     avisoTexto: 'It is limited: it only shows the processes. Use Lila Modeler from a computer for the full system.',
     avisoOk: 'Got it',
   },
+  /** #93: the catalog pickers of the properties panel, the version 3 confirmation and «Undo last catalog change». */
+  catalogo: {
+    /** What an empty picker field invites, by the catalog type it expects. */
+    pista: { role: 'Pick or create a role', unit: 'Pick or create a unit', system: 'Pick or create a system', document: 'Pick or create a document' },
+    /** A value that matches no object of a version 3 repository (RM-01 § 3.4): kept and shown with its id. */
+    noEnCatalogo: (id: string): string => `${id} — not in catalog`,
+    /** The listbox of a picker, named after its field («Role 1»). */
+    opciones: (campo: string): string => `${campo}: catalog`,
+    sinResultados: 'No matches',
+    crear: (nombre: string): string => `Create «${nombre}»`,
+    adoptar: 'Adopt',
+    adoptarDe: (campo: string, id: string): string => `Adopt ${id} into the catalog (${campo})`,
+    noAdoptable: (id: string): string => `${id} cannot be a catalog id: pick or create an object instead`,
+    mejoraTitulo: 'Upgrade this project for the catalog?',
+    mejoraTexto: (version: string): string =>
+      `Adding an object to the catalog saves this project as a version 3 repository. Lila versions earlier than ${version} cannot open it after that. You are asked only once for this project.`,
+    mejoraConfirmar: 'Upgrade and continue',
+    deshacer: 'Undo last catalog change',
+    error: (detalle: string): string => `The catalog was not changed: ${detalle}`,
+  },
 } as const;
