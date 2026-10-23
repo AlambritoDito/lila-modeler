@@ -51,11 +51,14 @@ afterAll(async () => {
 test('`lila mcp` sirve sus tools por stdio', async () => {
   const { tools } = await client.listTools();
   expect(tools.map((tool) => tool.name).sort()).toEqual([
+    'adopt_reference',
     'annotate_element',
     'compare_scenarios',
+    'create_catalog_object',
     'create_process',
     'create_project',
     'define_attribute',
+    'delete_catalog_object',
     'delete_process',
     'delete_scenario',
     'describe_process',
@@ -64,17 +67,21 @@ test('`lila mcp` sirve sus tools por stdio', async () => {
     'export_document',
     'export_results',
     'export_scenario_template',
+    'find_usages',
+    'get_catalog_object',
     'get_process_bpmn',
     'get_process_outline',
     'get_project',
     'get_raci_matrix',
     'get_scenario',
     'import_scenario_sheet',
+    'list_catalog',
     'patch_scenario',
     'put_process_bpmn',
     'rename_process',
     'rename_scenario',
     'run_simulation',
+    'update_catalog_object',
     'validate_bpmn',
   ]);
 }, 120_000);

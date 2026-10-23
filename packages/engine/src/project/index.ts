@@ -27,6 +27,19 @@ export {
 } from './catalog.js';
 export type { CatalogAttribute, CatalogObject, KnownCatalogType } from './catalog.js';
 export { asVersion3, formatVersionOf, upgradesToVersion3, withCatalog } from './upgrade.js';
+export { catalogKey, expectedTypeOf, REFERENCE_FIELDS, relationOf, usageIndex } from './usage.js';
+export type { CatalogUse, ObjectUse, ProcessUse, UnresolvedReference, UsageIndex } from './usage.js';
+export {
+  adoptReference,
+  CatalogError,
+  catalogNames,
+  createCatalogObject,
+  deleteCatalogObject,
+  getCatalogObject,
+  listCatalog,
+  updateCatalogObject,
+} from './catalog-ops.js';
+export type { CatalogChange, CatalogErrorCode, CatalogFields, CatalogOperationResult, CatalogProblem } from './catalog-ops.js';
 export { isCurrentRun, storedRun, withStoredRun } from './runs.js';
 export { DEFAULT_ARRIVALS, DEFAULT_PROCESSING_TIME, DEFAULT_RUN, defaultScenario } from './default-scenario.js';
 export type { StoredRunInput } from './runs.js';

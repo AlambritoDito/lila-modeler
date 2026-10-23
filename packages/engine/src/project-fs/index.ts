@@ -68,6 +68,17 @@ export type {
   SheetImportRequest,
   SheetImportResult,
 } from './agent-tools.js';
+export {
+  adoptLilaReference,
+  createLilaCatalogObject,
+  deleteLilaCatalogObject,
+  lilaCatalogList,
+  lilaCatalogObject,
+  lilaUsages,
+  updateLilaCatalogObject,
+} from './catalog.js';
+export type { LilaCatalogList, LilaCatalogTarget, LilaCatalogWrite, LilaObjectUsages } from './catalog.js';
+export { CATALOG_CODES } from './lilaFile.js';
 export { attributeDefinitionsOf, defineLilaAttribute, lilaAttributeList } from './attributes.js';
 export type { DefineAttributeRequest, DefineAttributeResult, LilaAttributeList, RemovedAttributeValue } from './attributes.js';
 export { editLilaProcess } from './edit.js';
