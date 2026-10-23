@@ -69,6 +69,7 @@ import { editLilaProcess } from './project-fs/edit.js';
 import type { NormalOutline } from './bpmn/outline.js';
 import { describeDistribution } from './xlsx-report.js';
 import { dispatchProcessTools, dispatchProjectTools, dispatchScenarioTools, isProcessToolSubcommand } from './cli-agent-tools.js';
+import { dispatchCatalogTools } from './cli-catalog.js';
 
 export { resolveLocale } from './locale.js';
 
@@ -1243,6 +1244,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     if (command === 'process' && isProcessToolSubcommand(args)) return await dispatchProcessTools(args, locale);
     if (command === 'scenario') return await dispatchScenarioTools(args, locale);
     if (command === 'project') return await dispatchProjectTools(args, locale);
+    if (command === 'catalog') return await dispatchCatalogTools(args, locale);
     if (command === 'mcp') return await dispatchMcp(args, locale);
     if (command === 'process') return await dispatchProcess(args, locale);
     console.error(C.unknownCommand(command));

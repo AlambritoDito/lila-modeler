@@ -79,6 +79,19 @@ const ES_USAGE = `Uso: lila validate <archivo.bpmn|proyecto.lila> [--process slu
      lila project show <proyecto.lila> [--json]
      lila project create <ruta.lila> --name nombre --bpmn <archivo.bpmn>
                          [--scenario nombre=archivo.json ...] [--force] [--allow-unsimulatable] [--json]
+     lila catalog list <proyecto.lila> [--type tipo] [--json]
+     lila catalog show <proyecto.lila> <id> [--type tipo] [--json]
+     lila catalog create <proyecto.lila> --type role|unit|system|document --name nombre
+                         [--description texto] [--attribute nombre=valor ...] [--unit-ref id]
+                         [--parent-ref id] [--owner-ref id] [--url url] [--dry-run] [--json]
+     lila catalog update <proyecto.lila> <id> --base-revision n [--type tipo] [--name nombre]
+                         [--description texto] [--attribute nombre=valor ...]
+                         [--clear-attributes] [--unit-ref id] [--parent-ref id]
+                         [--owner-ref id] [--url url] [--dry-run] [--json]
+     lila catalog delete <proyecto.lila> <id> [--type tipo] [--base-revision n]
+                         [--replace-with id|--remove-references] [--dry-run] [--json]
+     lila catalog usages <proyecto.lila> [<id>] [--type tipo] [--json]
+     lila catalog adopt <proyecto.lila> <ref> --type tipo [--name nombre] [--dry-run] [--json]
      lila mcp
 
 Comandos:
@@ -106,6 +119,8 @@ Comandos:
              sus corridas guardadas.
   project    show: lista los procesos de un .lila, sus escenarios y sus corridas guardadas. Solo lee.
              create: crea un .lila nuevo a partir de un .bpmn y escenarios opcionales.
+  catalog    list, show, create, update, delete, usages y adopt de los roles, unidades, sistemas
+             y documentos del catálogo de un .lila (las tools de catálogo del MCP). Ver docs/CLI.md.
   mcp        Arranca el servidor MCP por stdio (para Claude Code / Desktop). Ver docs/MCP.md.
 
 Un modelo puede ser un .bpmn o un proyecto .lila. Con un .lila, un escenario es una ruta .json o,

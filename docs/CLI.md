@@ -463,6 +463,102 @@ npx lila process delete examples/pedido.lila pedido --dry-run
 ```
 Exit code: `1`.
 
+## `catalog` (#673)
+
+The roles, units, systems and documents of a repository's catalog, from the terminal — the MCP
+catalog tools ([`docs/MCP.md`](MCP.md#the-catalog)), over the same engine functions and with the
+same rules. Every subcommand takes the `.lila` as its first positional:
+
+- `lila catalog list <project.lila>` lists the objects, by type then id (`--type t` for one type),
+  with the file's format version. `--json` prints `list_catalog`'s `{ file, formatVersion, objects }`.
+- `lila catalog show <project.lila> <id>` prints one object whole, with its revision (pass it as
+  `--base-revision` to `update`). `--json` prints `get_catalog_object`'s `{ file, object }`.
+- `lila catalog create <project.lila> --type role|unit|system|document --name <name>` creates an
+  object with a generated id (`<type>-` and 12 characters) and revision 1. `--description text`,
+  `--attribute name=value` (repeatable, in order), `--unit-ref id` (a role), `--parent-ref id` (a
+  unit), `--owner-ref id` and `--url url` (a system or a document) set its fields.
+- `lila catalog update <project.lila> <id> --base-revision n` renames it (`--name`) or changes the
+  fields given, with the options of `create`. An option left out keeps its field; `""` removes an
+  optional field (MCP's `null`); `--attribute` replaces the whole list and `--clear-attributes`
+  removes it. A revision other than the object's exits `1` with `E-REVISION`: read it again.
+- `lila catalog delete <project.lila> <id>` deletes an object nothing uses. One in use exits `1`
+  with `E-OBJETO-EN-USO` and the list of its uses, unless `--replace-with <id>` (another object of
+  the same type takes over every reference) or `--remove-references`. `--base-revision n` is
+  checked when given.
+- `lila catalog usages <project.lila> [<id>]` is "where used" (`find_usages`): the uses of that
+  object, each `slug element relation` or `object field`, or, when no object has that id, the
+  references to it that do not resolve. Without `<id>`: the uses of every object, every unresolved
+  reference and the BPMN process ids declared by more than one process.
+- `lila catalog adopt <project.lila> <ref> --type t` turns a reference typed by hand
+  (`roleRef="cajero"`, `systemRef="POS"`) into an object (`adopt_reference`): a value that is a
+  valid id becomes the object's id; any other gets a generated one, and every reference to it is
+  rewritten. `--name` defaults to the value.
+
+`--type` also picks the object when objects of several types share an id. A write saves the
+`.lila` atomically, under its lock (see [A `.lila` as input](#a-lila-as-input-466)); a rewritten
+model gets a new revision, so its saved runs go stale. `--dry-run` checks everything and writes
+nothing; an update that changes nothing writes nothing. A write prints what it did, the object, and
+one line per model it rewrote; `--json` prints the tool's result,
+`{ file, dryRun, changed, written, object, created, updated, deleted, processes, wouldUpgrade, note? }`.
+`--locale en|es` is the tools' `locale`, the same as the global `--lang`.
+
+**Version 3.** The first object created or adopted in a version 1 or 2 file saves it as repository
+version 3. The output, a dry run's too, ends with a warning: Lila 1.0.0-beta.15 to beta.28 and older
+builds cannot open the upgraded file. `--json` says `wouldUpgrade: true` and carries that `note`.
+
+```bash
+npx lila catalog list examples/pedido.lila --json
+```
+Exit code: `0`.
+
+```bash
+npx lila catalog create examples/pedido.lila --type role --name Cashier --dry-run
+```
+Exit code: `0`.
+
+```text
+Dry run: would create role/role-1do2zmmcwzfi in /…/examples/pedido.lila. Nothing was written.
+role/role-1do2zmmcwzfi  "Cashier"  revision 1
+warning This change saves the file as repository version 3 (it adds a catalog). Lila 1.0.0-beta.15 to 1.0.0-beta.28 and older builds cannot open it; the upgrade cannot be undone.
+```
+
+```bash
+npx lila catalog adopt examples/pedido.lila cajero --type role --dry-run --json
+```
+Exit code: `0`.
+
+```bash
+npx lila catalog usages examples/pedido.lila
+```
+Exit code: `0`.
+
+pedido has no catalog yet, so there is nothing to delete:
+
+```bash
+npx lila catalog delete examples/pedido.lila cajero
+```
+Exit code: `1`.
+
+The Receptionist of [`docs/MCP.md`](MCP.md#the-catalog), in a repository of your own (`hotel.lila`,
+three processes with a task `Task_1` each): create the role, use it, rename it, and delete it in
+favour of another.
+
+```text
+npx lila catalog create hotel.lila --type role --name Receptionist
+npx lila process annotate hotel.lila Task_1 --process check-in --responsibility R:role-4k9w2m7q1z8c
+npx lila catalog usages hotel.lila role-4k9w2m7q1z8c
+npx lila catalog update hotel.lila role-4k9w2m7q1z8c --base-revision 1 --name "Front desk agent"
+npx lila catalog delete hotel.lila role-4k9w2m7q1z8c
+npx lila catalog delete hotel.lila role-4k9w2m7q1z8c --replace-with role-p0x3n8d2r5ta
+```
+
+The first delete is refused while the role is in use:
+
+```text
+lila catalog delete: E-OBJETO-EN-USO: role/role-4k9w2m7q1z8c is in use (1 use: check-in Task_1 responsibility:R). Nothing was written; delete it with replaceWith (another object of the same type) or removeReferences.
+From the CLI: --replace-with <id> (an object of the same type) or --remove-references.
+```
+
 ## `mcp`
 
 Starts the MCP server (`@lila-modeler/mcp`) over stdio, for an MCP client to launch — not something you
@@ -621,7 +717,7 @@ Exit code: `0`.
 | Code | Meaning |
 | --- | --- |
 | `0` | The command ran; `validate` may still have printed warnings. |
-| `1` | Usage error, unknown command, a model/scenario validation error, an outline with problems or a process that already exists (`process create`), an edit that is refused (`process edit`), a scenario whose `model` does not match the file given, a `.lila` that cannot be opened or whose process or scenario cannot be found, an export with no run or over an existing file, or an uncaught error from the command (message on stderr). |
+| `1` | Usage error, unknown command, a model/scenario validation error, an outline with problems or a process that already exists (`process create`), an edit that is refused (`process edit`), a scenario whose `model` does not match the file given, a `.lila` that cannot be opened or whose process or scenario cannot be found, an export with no run or over an existing file, a catalog refusal (`E-OBJETO-EN-USO`, `E-REVISION`, an unknown id or bad fields), or an uncaught error from the command (message on stderr). |
 
 ## For agents
 

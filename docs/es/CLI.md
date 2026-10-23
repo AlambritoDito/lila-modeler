@@ -473,6 +473,106 @@ npx lila --lang es process delete examples/pedido.lila pedido --dry-run
 ```
 Código de salida: `1`.
 
+## `catalog` (#673)
+
+Los roles, unidades, sistemas y documentos del catálogo de un repositorio, desde la terminal — las
+tools MCP de catálogo ([`docs/es/MCP.md`](MCP.md#el-catálogo)), sobre las mismas funciones del motor
+y con las mismas reglas. Todos los subcomandos reciben el `.lila` como primer argumento posicional:
+
+- `lila catalog list <proyecto.lila>` lista los objetos, por tipo y luego por id (`--type t` para un
+  solo tipo), con la versión de formato del archivo. `--json` imprime lo de `list_catalog`,
+  `{ file, formatVersion, objects }`.
+- `lila catalog show <proyecto.lila> <id>` imprime un objeto entero, con su revisión (pásala como
+  `--base-revision` a `update`). `--json` imprime lo de `get_catalog_object`, `{ file, object }`.
+- `lila catalog create <proyecto.lila> --type role|unit|system|document --name <nombre>` crea un
+  objeto con un id generado (`<tipo>-` y 12 caracteres) y revisión 1. `--description texto`,
+  `--attribute nombre=valor` (repetible, en orden), `--unit-ref id` (un rol), `--parent-ref id` (una
+  unidad), `--owner-ref id` y `--url url` (un sistema o un documento) fijan sus campos.
+- `lila catalog update <proyecto.lila> <id> --base-revision n` lo renombra (`--name`) o cambia los
+  campos que se den, con las opciones de `create`. Una opción que no se da deja su campo como está;
+  `""` quita un campo opcional (el `null` del MCP); `--attribute` reemplaza la lista entera y
+  `--clear-attributes` la quita. Una revisión distinta de la del objeto sale con `1` y
+  `E-REVISION`: vuelve a leerlo.
+- `lila catalog delete <proyecto.lila> <id>` borra un objeto que nada usa. Uno en uso sale con `1`,
+  `E-OBJETO-EN-USO` y la lista de sus usos, salvo con `--replace-with <id>` (otro objeto del mismo
+  tipo se queda con cada referencia) o `--remove-references`. `--base-revision n` se comprueba si se
+  da.
+- `lila catalog usages <proyecto.lila> [<id>]` es «dónde se usa» (`find_usages`): los usos de ese
+  objeto, cada uno `slug elemento relación` u `objeto campo`, o, si ningún objeto tiene ese id, las
+  referencias a él que no se resuelven. Sin `<id>`: los usos de cada objeto, cada referencia sin
+  resolver y los ids de proceso BPMN que declara más de un proceso.
+- `lila catalog adopt <proyecto.lila> <ref> --type t` convierte una referencia escrita a mano
+  (`roleRef="cajero"`, `systemRef="POS"`) en un objeto (`adopt_reference`): un valor que es un id
+  válido pasa a ser el id del objeto; cualquier otro recibe uno generado, y cada referencia a él se
+  reescribe. `--name` vale por defecto el propio valor.
+
+`--type` también elige el objeto cuando objetos de varios tipos comparten un id. Una escritura
+guarda el `.lila` de forma atómica y con su candado (ver
+[Un `.lila` como entrada](#un-lila-como-entrada-466)); un modelo reescrito recibe una revisión
+nueva, así que sus corridas guardadas quedan obsoletas. `--dry-run` lo comprueba todo y no escribe
+nada; una actualización que no cambia nada no escribe nada. Una escritura imprime lo que hizo, el
+objeto y una línea por cada modelo que reescribió; `--json` imprime el resultado de la tool,
+`{ file, dryRun, changed, written, object, created, updated, deleted, processes, wouldUpgrade, note? }`.
+`--locale en|es` es el `locale` de las tools, lo mismo que el `--lang` global.
+
+**Versión 3.** El primer objeto que se crea o se adopta en un archivo de versión 1 o 2 lo guarda
+como repositorio versión 3. La salida, también la de un simulacro, termina con un aviso: Lila
+1.0.0-beta.15 a beta.28 y las versiones anteriores no pueden abrir el archivo actualizado. `--json`
+dice `wouldUpgrade: true` y lleva esa `note`.
+
+```bash
+npx lila catalog list examples/pedido.lila --json
+```
+Código de salida: `0`.
+
+```bash
+npx lila --lang es catalog create examples/pedido.lila --type role --name Cajero --dry-run
+```
+Código de salida: `0`.
+
+```text
+Simulacro: se crearía role/role-1do2zmmcwzfi en /…/examples/pedido.lila. No se escribió nada.
+role/role-1do2zmmcwzfi  "Cajero"  revisión 1
+aviso Este cambio guarda el archivo como repositorio versión 3 (añade un catálogo). Lila 1.0.0-beta.15 a 1.0.0-beta.28 y las versiones anteriores no pueden abrirlo; la actualización no se puede deshacer.
+```
+
+```bash
+npx lila catalog adopt examples/pedido.lila cajero --type role --dry-run --json
+```
+Código de salida: `0`.
+
+```bash
+npx lila --lang es catalog usages examples/pedido.lila
+```
+Código de salida: `0`.
+
+pedido todavía no tiene catálogo, así que no hay nada que borrar:
+
+```bash
+npx lila --lang es catalog delete examples/pedido.lila cajero
+```
+Código de salida: `1`.
+
+La recepcionista de [`docs/es/MCP.md`](MCP.md#el-catálogo), en un repositorio propio (`hotel.lila`,
+tres procesos con una tarea `Task_1` cada uno): crear el rol, usarlo, renombrarlo y borrarlo en
+favor de otro.
+
+```text
+npx lila catalog create hotel.lila --type role --name Recepcionista
+npx lila process annotate hotel.lila Task_1 --process check-in --responsibility R:role-4k9w2m7q1z8c
+npx lila catalog usages hotel.lila role-4k9w2m7q1z8c
+npx lila catalog update hotel.lila role-4k9w2m7q1z8c --base-revision 1 --name "Agente de recepción"
+npx lila catalog delete hotel.lila role-4k9w2m7q1z8c
+npx lila catalog delete hotel.lila role-4k9w2m7q1z8c --replace-with role-p0x3n8d2r5ta
+```
+
+El primer borrado se rechaza mientras el rol está en uso:
+
+```text
+lila catalog delete: E-OBJETO-EN-USO: role/role-4k9w2m7q1z8c está en uso (1 uso: check-in Task_1 responsibility:R). No se escribió nada; bórralo con replaceWith (otro objeto del mismo tipo) o removeReferences.
+Desde la CLI: --replace-with <id> (un objeto del mismo tipo) o --remove-references.
+```
+
 ## `mcp`
 
 Arranca el servidor MCP (`@lila-modeler/mcp`) por stdio, para que lo lance un cliente MCP, no algo que se
@@ -613,7 +713,7 @@ Código de salida: `0`.
 | Código | Significado |
 | --- | --- |
 | `0` | El comando corrió; `validate` puede haber impreso avisos igual. |
-| `1` | Error de uso, comando desconocido, un error de validación del modelo o del escenario, un esquema con problemas o un proceso que ya existe (`process create`), una edición rechazada (`process edit`), un escenario cuyo `model` no coincide con el archivo dado, un `.lila` que no se puede abrir o cuyo proceso o escenario no se encuentra, una exportación sin corrida o sobre un archivo existente, o un error no capturado del comando (mensaje por stderr). |
+| `1` | Error de uso, comando desconocido, un error de validación del modelo o del escenario, un esquema con problemas o un proceso que ya existe (`process create`), una edición rechazada (`process edit`), un escenario cuyo `model` no coincide con el archivo dado, un `.lila` que no se puede abrir o cuyo proceso o escenario no se encuentra, una exportación sin corrida o sobre un archivo existente, un rechazo del catálogo (`E-OBJETO-EN-USO`, `E-REVISION`, un id desconocido o campos inválidos), o un error no capturado del comando (mensaje por stderr). |
 
 ## Para agentes
 
