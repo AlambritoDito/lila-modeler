@@ -20,7 +20,8 @@ Schema del escenario como recursos, y el flujo de la guía como el prompt `inter
   silenciosa. Para un `.lila` con catálogo (versión 3) añade `catalogWarnings`: referencias que no
   coinciden con ningún objeto del catálogo y actividades sin rol Responsable
   (`W-REF-SIN-CATALOGO`, `W-ACTIVIDAD-SIN-RESPONSABLE`,
-  [SEMANTICS.md § 17](SEMANTICS.md#17-catálogo-de-errores-y-avisos)).
+  [SEMANTICS.md § 17](SEMANTICS.md#17-catálogo-de-errores-y-avisos)); lo omite cuando el modelo del
+  proceso no se puede leer sin perder contenido.
 - **`describe_process({ path | xml, process?, scenario?, locale? })`** — parsea un `.bpmn` (por ruta o XML inline,
   uno de los dos, con la misma regla que `validate_bpmn`) y devuelve su IR (`ProcessIR`)
   junto con un resumen legible (la clave `resumen`, en el idioma que diga `locale`): conteo de

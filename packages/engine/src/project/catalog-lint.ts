@@ -59,7 +59,9 @@ function isProcessUse(use: CatalogUse): use is ProcessUse {
 
 /**
  * The catalog warnings of `document`, in process order; inside a process, its unresolved references
- * in document order, then its activities without a Responsible in document order. `[]` for a
+ * in the order the usage index lists them, then its activities without a Responsible, each in the
+ * order the model is walked (flow elements, a sub-process's content right after it, then lanes).
+ * Every `bpmn:process` of the model counts, pools that are not simulated included. `[]` for a
  * version 1 or 2 document. `index` is `usageIndex(document)` when the caller already has it.
  * Throws `AnnotationContentLossError` where `usageIndex` would.
  */

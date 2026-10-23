@@ -29,7 +29,6 @@ import {
 } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 
-import { AnnotationContentLossError } from './bpmn/annotate.js';
 import { parseBpmn, type TargetingScenario } from './bpmn/parse.js';
 import { validateBpmnModel, type ValidatedBpmnModel } from './bpmn/validate-report.js';
 import type { ValidationResult } from './bpmn/validate.js';
@@ -38,6 +37,7 @@ import { eventLogCsvWriter } from './csv.js';
 import type { BaseTimeUnit } from './format.js';
 import { messages, type Locale } from './messages/index.js';
 import { lintCatalog, type CatalogWarning } from './project/catalog-lint.js';
+import { withProcesses } from './project/repository.js';
 import { formatVersionOf } from './project/upgrade.js';
 import { isLilaPath } from './project-fs/paths.js';
 import {
@@ -184,9 +184,11 @@ export function targetScenarios(
 
 /**
  * #95: the catalog warnings of the process of a `.lila` (`lintCatalog`), for `lila validate` and
- * `validate_bpmn`. `undefined`, so the report keeps its shape byte for byte, for a `.bpmn` or
- * inline XML, a version 1 or 2 project (RM-01 § 3.4), and a repository with a model the usage
- * index cannot read without losing content: a warning never makes validation fail.
+ * `validate_bpmn`. Only that process is read: its references resolve against the catalog alone, so
+ * the other processes' models cannot change the answer, and a broken one cannot break it.
+ * `undefined`, so the report keeps its shape byte for byte, for a `.bpmn` or inline XML, a version
+ * 1 or 2 project (RM-01 § 3.4), and a model the lint cannot read (content bpmn-moddle would lose,
+ * `AnnotationContentLossError`, or XML it cannot parse): a warning never makes validation fail.
  */
 export async function lilaCatalogWarnings(
   lila: LilaProcess | undefined,
@@ -194,11 +196,9 @@ export async function lilaCatalogWarnings(
 ): Promise<CatalogWarning[] | undefined> {
   if (lila === undefined || formatVersionOf(lila.document) !== 3) return undefined;
   try {
-    const warnings = await lintCatalog(lila.document, undefined, { locale });
-    return warnings.filter((warning) => warning.slug === lila.process.slug);
-  } catch (error) {
-    if (error instanceof AnnotationContentLossError) return undefined;
-    throw error;
+    return await lintCatalog(withProcesses(lila.document, [lila.process]), undefined, { locale });
+  } catch {
+    return undefined;
   }
 }
 

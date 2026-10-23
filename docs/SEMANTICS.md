@@ -1221,15 +1221,21 @@ travel in `warnings[]` or in `RunResult.warnings[]`, but in the additive `catalo
 repository with a catalog (version 3, `docs/REPOSITORY_CONTRACT.md` § 3.4). A `.bpmn`, inline XML
 and a version 1 or 2 project get no `catalogWarnings` at all, and neither code changes the exit code
 or `errors`/`warnings`. Each entry is `{ code, process, slug, element, message }`, with `process` the
-process id; only the process being validated is listed.
+repository's process id (`docs/REPOSITORY_CONTRACT.md` § 3.2, not the BPMN `process@id`) and `slug`
+its folder. Only the repository process being validated is linted, every `bpmn:process` of its model
+included (pools that are not simulated too). When that model cannot be read without losing content
+(the case `annotateElement` refuses) or cannot be parsed, `catalogWarnings` is left out, as for a
+version 1 or 2 project: a warning never makes validation fail.
 
 - `W-REF-SIN-CATALOGO`: a BPMN reference (`lila:responsibility roleRef`, or the `ref` of a
   `lila:*Ref`, `lila:input` or `lila:output`) whose id matches no object of the type it expects
   (`docs/REPOSITORY_CONTRACT.md` § 3.1; a `riskRef` resolves against a preserved `risk` object). One
-  per process, element, relation and id; the entry adds `relation`, `type` and `ref`. The reference
-  is kept as it is.
-- `W-ACTIVIDAD-SIN-RESPONSABLE`: a task (of any kind), sub-process (transactions and ad hoc ones
-  included) or call activity with no `lila:responsibility type="R"`, whether or not its role
+  per process, element, relation and id; the entry adds `relation`, `type` and `ref`. An empty or
+  missing `roleRef`/`ref` is an id like any other and matches nothing. The reference is kept as it
+  is.
+- `W-ACTIVIDAD-SIN-RESPONSABLE`: a task (of any kind), sub-process (event sub-processes,
+  transactions and ad hoc ones included) or call activity with no `lila:responsibility type="R"`
+  (an uppercase `R`, as written by the app and `annotate_element`), whether or not its role
   resolves. Events, gateways, lanes and pools never get it.
 
 ```

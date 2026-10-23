@@ -20,7 +20,8 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
   one of `path` and inline `xml`; supplying both is an error. For a `.lila` with a catalog
   (version 3) it adds `catalogWarnings`: references that match no catalog object and activities
   without a Responsible role (`W-REF-SIN-CATALOGO`, `W-ACTIVIDAD-SIN-RESPONSABLE`,
-  [SEMANTICS.md § 17](SEMANTICS.md#17-error-and-warning-catalog)).
+  [SEMANTICS.md § 17](SEMANTICS.md#17-error-and-warning-catalog)); it leaves it out when the
+  process's model cannot be read without losing content.
 - **`describe_process({ path | xml, process?, scenario?, locale? })`** returns the IR and a readable
   `resumen`: node counts, gateway outputs, lanes, flattened subprocesses, ignored processes
   and validation status. An optional scenario path resolves `extends` and adds referenced

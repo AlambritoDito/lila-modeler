@@ -1206,17 +1206,23 @@ de probabilidades y los avisos de tiempo ausente siguen aplicándose; no cambia 
 añaden para un repositorio con catálogo (versión 3, `docs/REPOSITORY_CONTRACT.md` § 3.4). Un `.bpmn`,
 el XML inline y un proyecto versión 1 o 2 no reciben `catalogWarnings`, y ninguno de los dos códigos
 cambia el código de salida ni `errors`/`warnings`. Cada entrada es
-`{ code, process, slug, element, message }`, con `process` el id de proceso; solo se lista el
-proceso que se valida.
+`{ code, process, slug, element, message }`, con `process` el id de proceso del repositorio
+(`docs/REPOSITORY_CONTRACT.md` § 3.2, no el `process@id` BPMN) y `slug` su carpeta. Solo se revisa el
+proceso del repositorio que se valida, con todos los `bpmn:process` de su modelo (también los pools
+que no se simulan). Si ese modelo no se puede leer sin perder contenido (el caso que
+`annotateElement` rechaza) o no se puede parsear, `catalogWarnings` se omite, igual que para un
+proyecto versión 1 o 2: un aviso nunca hace fallar la validación.
 
 - `W-REF-SIN-CATALOGO`: una referencia BPMN (`lila:responsibility roleRef`, o el `ref` de un
   `lila:*Ref`, `lila:input` o `lila:output`) cuyo id no coincide con ningún objeto del tipo que
   espera (`docs/REPOSITORY_CONTRACT.md` § 3.1; un `riskRef` se resuelve contra un objeto `risk`
   conservado). Una por proceso, elemento, relación e id; la entrada añade `relation`, `type` y
-  `ref`. La referencia se conserva tal cual.
-- `W-ACTIVIDAD-SIN-RESPONSABLE`: una tarea (de cualquier tipo), un subproceso (incluidos los de
-  transacción y los ad hoc) o una call activity sin ningún `lila:responsibility type="R"`, se
-  resuelva o no su rol. Eventos, gateways, lanes y pools nunca lo reciben.
+  `ref`. Un `roleRef`/`ref` vacío o ausente es un id como cualquier otro y no coincide con nada. La
+  referencia se conserva tal cual.
+- `W-ACTIVIDAD-SIN-RESPONSABLE`: una tarea (de cualquier tipo), un subproceso (incluidos los
+  subprocesos de evento, los de transacción y los ad hoc) o una call activity sin ningún
+  `lila:responsibility type="R"` (una `R` mayúscula, como la escriben la app y `annotate_element`),
+  se resuelva o no su rol. Eventos, gateways, lanes y pools nunca lo reciben.
 
 ```
 W-REF-SIN-CATALOGO: <element> (process <process>): the <relation> reference "<id>" matches no <type> object in the catalog; it is kept as it is.

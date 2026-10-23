@@ -660,6 +660,23 @@ describe('catalog lint in `lila validate` (#95)', () => {
     ]);
   });
 
+  test('a broken model in another process changes nothing; an unreadable validated one leaves catalogWarnings out', async () => {
+    const file = join(scratch, 'hotel.lila');
+    writeFileSync(file, hotelLila(2));
+    const { object } = await createLilaCatalogObject({ file, type: 'role', name: 'Receptionist' });
+    await annotateLilaElement({ file, process: 'check-in', elementId: 'Task_1', responsibilities: [{ type: 'R', roleRef: object.id }] });
+    const before = await validateJson(file, '--process', 'check-in');
+    expect(before.report.catalogWarnings).toEqual([]);
+
+    handEdit(file, 'check-out', '<bpmn:definitions ', '<bpmn:definitions');
+    const other = await validateJson(file, '--process', 'check-in');
+    expect(other).toEqual(before);
+
+    handEdit(file, 'check-in', 'id="End_1"', 'id="Task_1"');
+    const { report } = await validateJson(file, '--process', 'check-in');
+    expect(Object.keys(report)).toEqual(['ir', 'ignoredProcessIds', 'errors', 'warnings']);
+  });
+
   test('version 1 and 2 projects with typed ids: no catalogWarnings, same output and exit code', async () => {
     for (const version of [1, 2] as const) {
       const file = join(scratch, `v${version}.lila`);
