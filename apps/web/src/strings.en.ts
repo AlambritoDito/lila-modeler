@@ -2215,7 +2215,7 @@ export const en = {
     crear: (nombre: string): string => `Create «${nombre}»`,
     adoptar: 'Adopt',
     adoptarDe: (campo: string, id: string): string => `Adopt ${id} into the catalog (${campo})`,
-    noAdoptable: (id: string): string => `${id} cannot be a catalog id: pick or create an object instead`,
+    noAdoptable: (id: string): string => `${id} cannot be adopted as this field's catalog id: pick or create an object instead`,
     mejoraTitulo: 'Upgrade this project for the catalog?',
     mejoraTexto: (version: string): string =>
       `Adding an object to the catalog saves this project as a version 3 repository. Lila versions earlier than ${version} cannot open it after that. You are asked only once for this project.`,

@@ -1055,6 +1055,8 @@ function Documentacion({ elemento, escritor, refrescar, catalogo }: PropsPestana
               </select>
               {catalogo !== undefined ? (
                 <SelectorCatalogo
+                  // What is being typed belongs to this element: another selection starts afresh.
+                  key={elemento.id}
                   campo={S.propiedades.rol(i + 1)}
                   tipo="role"
                   valor={responsabilidad.roleRef}
@@ -1139,6 +1141,7 @@ function ListaDeReferencias({
         <div className="fila" key={i}>
           {catalogo !== undefined && tipoCatalogo !== null ? (
             <SelectorCatalogo
+              key={elemento.id}
               campo={S.propiedades.referenciaN(etiqueta, i + 1)}
               tipo={tipoCatalogo}
               valor={referencia.ref}

@@ -3404,6 +3404,18 @@ async function abrirDocumento(doc: ProjectDocument): Promise<void> {
   if (container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open === true) await click(T.app.descartar);
   // The pickers live in the Properties panel's tabs, not behind the scenario tab this suite starts on.
   await click(T.app.pestanas.documentacion);
+  await asentarReparse();
+}
+/**
+ * Lets the reparse of the opened model land (its 150 ms timer, then the parse and the seeding of
+ * #420, which can rewrite a scenario): a save before it would be followed by an unrelated edit.
+ */
+async function asentarReparse(): Promise<void> {
+  await act(async () => {
+    await new Promise((listo) => { setTimeout(listo, 250); });
+    await Promise.allSettled(mocks.reparses);
+    await new Promise((listo) => { setTimeout(listo, 0); });
+  });
 }
 /** Starts a catalog operation through the panel's catalog; the promise settles after the dialog, if any. */
 async function enCatalogo(operar: (c: NonNullable<typeof mocks.catalogo>) => Promise<unknown>): Promise<{ resultado: Promise<unknown> }> {
@@ -3419,6 +3431,7 @@ async function responderMejora(boton: string): Promise<void> {
 it('on a version 2 project the first catalog create asks once; Cancel changes nothing, Confirm makes it version 3 and unsaved (#93)', async () => {
   await abrirDocumento(proyecto('p30', 'Front office') as ProjectDocument);
   await nuevoProcesoConNombre('Billing');
+  await asentarReparse();
   await click(T.app.guardar);
   expect(container.textContent).toContain(T.app.guardado);
   expect(mocks.catalogo?.conCatalogo).toBe(false);
@@ -3519,6 +3532,19 @@ it('a version 3 project never asks; adopting an id keeps it as the object id; a 
   expect(dialogoMejora()?.open).toBe(true);
   await responderMejora(T.app.cancelar);
   expect(await otraVez.resultado).toBeNull();
+});
+
+it('a project opened while the version 3 question is up cancels it; nothing changes in either project (#93)', async () => {
+  await abrirDocumento(proyecto('p35', 'Front office') as ProjectDocument);
+  const pendiente = await enCatalogo((c) => c.crear('role', 'Receptionist'));
+  expect(dialogoMejora()?.open).toBe(true);
+  // As the desktop native menu or a double-clicked file would: straight to the open, dialog or not.
+  await abrirDocumento(proyecto('p36', 'Another') as ProjectDocument);
+  expect(await pendiente.resultado).toBeNull();
+  expect(dialogoMejora()).toBeNull();
+  expect(container.textContent).toContain('Another');
+  expect(mocks.catalogo?.objetos).toEqual([]);
+  expect(mocks.catalogo?.conCatalogo).toBe(false);
 });
 
 it('scopes Montana decoration to successfully applied built-in themes', async () => {

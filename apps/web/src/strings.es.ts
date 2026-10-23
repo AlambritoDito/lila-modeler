@@ -2155,7 +2155,7 @@ export const es: Strings = {
     crear: (nombre: string): string => `Crear «${nombre}»`,
     adoptar: 'Adoptar',
     adoptarDe: (campo: string, id: string): string => `Adoptar ${id} en el catálogo (${campo})`,
-    noAdoptable: (id: string): string => `${id} no puede ser un id del catálogo: elige o crea un objeto`,
+    noAdoptable: (id: string): string => `${id} no se puede adoptar como id del catálogo para este campo: elige o crea un objeto`,
     mejoraTitulo: '¿Actualizar este proyecto para el catálogo?',
     mejoraTexto: (version: string): string =>
       `Añadir un objeto al catálogo guarda este proyecto como repositorio de versión 3. Las versiones de Lila anteriores a ${version} ya no podrán abrirlo. Solo se pregunta una vez por proyecto.`,

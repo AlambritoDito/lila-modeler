@@ -74,10 +74,14 @@ export type Resolution =
    */
   | { readonly state: 'unresolved'; readonly id: string; readonly adoptable: boolean };
 
-/** Resolves `value` (a `roleRef` or `ref`, trimmed as the panel writes it) against the objects of `kind`. */
+/**
+ * Resolves `value` (a `roleRef` or `ref`) against the objects of `kind`, exactly as the engine's
+ * usage index and lint do: a hand-written `" role-1 "` is not `role-1`, and is not adoptable either.
+ * A value of spaces only is empty.
+ */
 export function resolveReference(catalog: readonly CatalogObject[], kind: KnownCatalogType, value: string | undefined): Resolution {
-  const id = (value ?? '').trim();
-  if (id === '') return { state: 'empty' };
+  const id = value ?? '';
+  if (id.trim() === '') return { state: 'empty' };
   const option = optionsOf(catalog, kind).find((o) => o.object.id === id);
   if (option !== undefined) return { state: 'object', object: option.object, label: option.label };
   return { state: 'unresolved', id, adoptable: isAdoptableId(id) && !catalog.some((o) => o.id === id) };

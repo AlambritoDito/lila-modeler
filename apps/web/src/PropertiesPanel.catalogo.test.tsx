@@ -247,6 +247,8 @@ describe('catalog pickers in the properties panel (#93)', () => {
     expect(campo(contenedor, T.propiedades.rol(2)).value).toBe('Head Cashier — not in catalog');
     expect(contenedor.querySelector(`button[aria-label="${T.catalogo.adoptarDe(T.propiedades.rol(2), 'Head Cashier')}"]`)).toBeNull();
     expect(contenedor.textContent).toContain(T.catalogo.noAdoptable('Head Cashier'));
+    const nota = contenedor.querySelector('.selector-catalogo-nota')!;
+    expect(campo(contenedor, T.propiedades.rol(2)).getAttribute('aria-describedby')).toBe(nota.id);
     expect(roles(b, 'Task_Charge')).toEqual(['cajero', 'Head Cashier']);
   });
 
@@ -335,6 +337,23 @@ describe('catalog pickers in the properties panel (#93)', () => {
     expect(rol().value).toBe('');
     act(() => { b.commandStack.undo(); });
     expect(roles(b, 'Task_Charge')).toEqual(['role-rec', 'Head Cashier']);
+
+    // Emptied and Enter: cleared too, although the open list shows every role under it.
+    teclear(rol(), '  ');
+    expect(filas(contenedor)).toEqual(['Receptionist']);
+    tecla(rol(), 'Enter');
+    expect(roles(b, 'Task_Charge')).toEqual(['', 'Head Cashier']);
+  });
+
+  it('a press on the list does not take the focus from the field', async () => {
+    const b = await banco();
+    const { contenedor } = montar(b.modelador, V3, nunca);
+    b.clic('Task_Receive');
+    teclear(campo(contenedor, T.propiedades.rol(1)), 'r');
+    const lista = contenedor.querySelector('[role="listbox"]')!;
+    const presion = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    act(() => { lista.dispatchEvent(presion); });
+    expect(presion.defaultPrevented).toBe(true);
   });
 
   it('keyboard: ↓ opens and moves, Enter chooses, Esc closes without writing; the combobox is wired for screen readers', async () => {

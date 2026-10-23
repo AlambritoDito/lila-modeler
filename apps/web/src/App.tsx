@@ -420,7 +420,6 @@ function enfocarToggle(region: Region): void {
 /** Id del benchmark que trae la app de serie; cualquier otro se elige al vuelo (ver `abrir`). */
 const PROCESO_INICIAL = 'pedido';
 
-/** Escenarios de la sesión, por nombre de archivo (el que resuelve `extends`). */
 /** #92: what a document holds beyond its processes, which the app carries as it is (`extrasDelRepositorio`). */
 type ExtrasRepositorio = Pick<ProjectDocument, 'formatVersion' | 'catalog' | 'limits'>;
 
@@ -433,6 +432,7 @@ function extrasDe(doc: ExtrasRepositorio): ExtrasRepositorio {
   };
 }
 
+/** Escenarios de la sesión, por nombre de archivo (el que resuelve `extends`). */
 type Escenarios = Readonly<Record<string, Record<string, unknown>>>;
 
 /** Los dos del benchmark; el panel de escenario (LILA-061) añade copias a este mismo mapa. */
@@ -974,11 +974,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     const leidos = extrasDelRepositorio.current;
     const antes = documentoDelCatalogo(leidos);
     try {
-      const resultado = await confirmUpgrade(await operar(antes), __LILA_VERSION__, preguntarMejora);
-      if (resultado === null || extrasDelRepositorio.current !== leidos) return null;
+      const operado = await operar(antes);
       // The pickers only offer changes that rewrite no BPMN (an adoptable id); one that would is
-      // refused rather than applied to a document that holds no processes (#675 rewrites them).
-      if (resultado.change.processes.length > 0) return null;
+      // refused, before asking anything, rather than applied to a document that holds no processes
+      // (#675 rewrites them).
+      if (operado.change.processes.length > 0) return null;
+      const resultado = await confirmUpgrade(operado, __LILA_VERSION__, preguntarMejora);
+      if (resultado === null || extrasDelRepositorio.current !== leidos) return null;
       fijarExtras(extrasDe(resultado.document));
       setDeshacerCatalogo(recordCatalogChange(antes, resultado));
       return resultado.object;
@@ -1129,8 +1131,10 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     const leidos = extrasDe(doc);
     fijarExtras(leidos);
     setCatalogoGuardado(catalogToken(leidos));
-    // #93: the catalog undo is in memory and belongs to the project being left.
+    // #93: the catalog undo is in memory and belongs to the project being left, and so does a
+    // version 3 question still up (the desktop menu can open a project behind it): it is cancelled.
     setDeshacerCatalogo(null);
+    if (respuestaMejora.current !== null) responderMejora(false);
     idsDeProceso.current.clear();
     setSuelto(doc.loose === true);
     setCambioExterno(false); // A notice about the project being left, or the one just reloaded.

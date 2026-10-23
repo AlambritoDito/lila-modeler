@@ -51,6 +51,9 @@ export function SelectorCatalogo({ campo, tipo, valor, catalogo, onElegir }: Pro
   const [activo, setActivo] = useState(0);
 
   const resolucion = resolveReference(catalogo.objetos, tipo, valor);
+  /** Why a value cannot be adopted, in a repository with a catalog only (RM-01 § 3.4). */
+  const nota = resolucion.state === 'unresolved' && !resolucion.adoptable && catalogo.conCatalogo;
+  const notaId = `${base}-nota`;
   const mostrado =
     resolucion.state === 'object' ? resolucion.label
       : resolucion.state === 'unresolved' ? (catalogo.conCatalogo ? S.catalogo.noEnCatalogo(resolucion.id) : resolucion.id)
@@ -97,6 +100,7 @@ export function SelectorCatalogo({ campo, tipo, valor, catalogo, onElegir }: Pro
           aria-expanded={abierto}
           aria-controls={listaId}
           aria-activedescendant={abierto && indice >= 0 ? filaId(indice) : undefined}
+          aria-describedby={nota ? notaId : undefined}
           className={resolucion.state === 'unresolved' && catalogo.conCatalogo ? 'no-resuelto' : undefined}
           placeholder={S.catalogo.pista[tipo]}
           value={consulta ?? mostrado}
@@ -113,8 +117,10 @@ export function SelectorCatalogo({ campo, tipo, valor, catalogo, onElegir }: Pro
               if (n > 0) setActivo((indice + (e.key === 'ArrowDown' ? 1 : n - 1)) % n);
             } else if (e.key === 'Enter') {
               e.preventDefault();
+              // An emptied field clears the reference, even with every object listed under it.
               const fila = filas[indice];
-              if (abierto && fila !== undefined) fila.elegir();
+              if (consulta !== null && consulta.trim() === '') confirmarVacio();
+              else if (abierto && fila !== undefined) fila.elegir();
               else confirmarVacio();
             } else if (e.key === 'Escape') {
               // Only when there is something to close: otherwise Esc is the panel's or the app's.
@@ -127,7 +133,9 @@ export function SelectorCatalogo({ campo, tipo, valor, catalogo, onElegir }: Pro
           onBlur={confirmarVacio}
         />
         {abierto && (
-          <ul className="selector-catalogo-lista" role="listbox" id={listaId} aria-label={S.catalogo.opciones(campo)}>
+          // The field keeps the focus: a press on the list (a row, its scrollbar) must not blur it
+          // first, which would close the list or, on an emptied field, clear the reference.
+          <ul className="selector-catalogo-lista" role="listbox" id={listaId} aria-label={S.catalogo.opciones(campo)} onMouseDown={(e) => e.preventDefault()}>
             {filas.length === 0 && <li className="vacio" role="presentation">{S.catalogo.sinResultados}</li>}
             {filas.map((fila, i) => (
               <li
@@ -135,8 +143,6 @@ export function SelectorCatalogo({ campo, tipo, valor, catalogo, onElegir }: Pro
                 id={filaId(i)}
                 role="option"
                 aria-selected={i === indice}
-                // The field keeps the focus: a click must not blur it first (that would close the list).
-                onMouseDown={(e) => e.preventDefault()}
                 onClick={fila.elegir}
               >
                 {fila.texto}
@@ -155,7 +161,7 @@ export function SelectorCatalogo({ campo, tipo, valor, catalogo, onElegir }: Pro
         >
           {S.catalogo.adoptar}
         </button>
-      ) : catalogo.conCatalogo && <small className="selector-catalogo-nota">{S.catalogo.noAdoptable(resolucion.id)}</small>)}
+      ) : nota && <small className="selector-catalogo-nota" id={notaId}>{S.catalogo.noAdoptable(resolucion.id)}</small>)}
     </div>
   );
 }

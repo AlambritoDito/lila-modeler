@@ -68,7 +68,8 @@ describe('createName', () => {
 describe('resolveReference', () => {
   it('resolves an id to its object and label', () => {
     expect(resolveReference(CATALOGO, 'role', 'role-rec')).toEqual({ state: 'object', object: CATALOGO[0], label: 'Receptionist' });
-    expect(resolveReference(CATALOGO, 'role', ' role-rec ')).toMatchObject({ state: 'object' });
+    // Spaces count, as in the engine's usage index: a hand-written « role-rec » is not role-rec.
+    expect(resolveReference(CATALOGO, 'role', ' role-rec ')).toEqual({ state: 'unresolved', id: ' role-rec ', adoptable: false });
   });
 
   it('an empty or absent value is empty', () => {
