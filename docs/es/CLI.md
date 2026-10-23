@@ -490,8 +490,8 @@ y con las mismas reglas. Todos los subcomandos reciben el `.lila` como primer ar
   unidad), `--owner-ref id` y `--url url` (un sistema o un documento) fijan sus campos.
 - `lila catalog update <proyecto.lila> <id> --base-revision n` lo renombra (`--name`) o cambia los
   campos que se den, con las opciones de `create`. Una opción que no se da deja su campo como está;
-  `""` quita un campo opcional (el `null` del MCP); `--attribute` reemplaza la lista entera y
-  `--clear-attributes` la quita. Una revisión distinta de la del objeto sale con `1` y
+  `""` quita un campo opcional (el `null` del MCP; en `create`, `""` se guarda tal cual, como lo
+  guarda el MCP); `--attribute` reemplaza la lista entera y `--clear-attributes` la quita. Una revisión distinta de la del objeto sale con `1` y
   `E-REVISION`: vuelve a leerlo.
 - `lila catalog delete <proyecto.lila> <id>` borra un objeto que nada usa. Uno en uso sale con `1`,
   `E-OBJETO-EN-USO` y la lista de sus usos, salvo con `--replace-with <id>` (otro objeto del mismo
@@ -511,7 +511,8 @@ guarda el `.lila` de forma atómica y con su candado (ver
 [Un `.lila` como entrada](#un-lila-como-entrada-466)); un modelo reescrito recibe una revisión
 nueva, así que sus corridas guardadas quedan obsoletas. `--dry-run` lo comprueba todo y no escribe
 nada; una actualización que no cambia nada no escribe nada. Una escritura imprime lo que hizo, el
-objeto y una línea por cada modelo que reescribió; `--json` imprime el resultado de la tool,
+objeto (no en un borrado), los demás objetos cuyo `unitRef`/`parentRef`/`ownerRef` cambió y una
+línea por cada modelo que reescribió; `--json` imprime el resultado de la tool,
 `{ file, dryRun, changed, written, object, created, updated, deleted, processes, wouldUpgrade, note? }`.
 `--locale en|es` es el `locale` de las tools, lo mismo que el `--lang` global.
 

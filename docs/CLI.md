@@ -479,8 +479,8 @@ same rules. Every subcommand takes the `.lila` as its first positional:
   unit), `--owner-ref id` and `--url url` (a system or a document) set its fields.
 - `lila catalog update <project.lila> <id> --base-revision n` renames it (`--name`) or changes the
   fields given, with the options of `create`. An option left out keeps its field; `""` removes an
-  optional field (MCP's `null`); `--attribute` replaces the whole list and `--clear-attributes`
-  removes it. A revision other than the object's exits `1` with `E-REVISION`: read it again.
+  optional field (MCP's `null`; in `create`, `""` is stored as given, as MCP stores it);
+  `--attribute` replaces the whole list and `--clear-attributes` removes it. A revision other than the object's exits `1` with `E-REVISION`: read it again.
 - `lila catalog delete <project.lila> <id>` deletes an object nothing uses. One in use exits `1`
   with `E-OBJETO-EN-USO` and the list of its uses, unless `--replace-with <id>` (another object of
   the same type takes over every reference) or `--remove-references`. `--base-revision n` is
@@ -497,8 +497,9 @@ same rules. Every subcommand takes the `.lila` as its first positional:
 `--type` also picks the object when objects of several types share an id. A write saves the
 `.lila` atomically, under its lock (see [A `.lila` as input](#a-lila-as-input-466)); a rewritten
 model gets a new revision, so its saved runs go stale. `--dry-run` checks everything and writes
-nothing; an update that changes nothing writes nothing. A write prints what it did, the object, and
-one line per model it rewrote; `--json` prints the tool's result,
+nothing; an update that changes nothing writes nothing. A write prints what it did, the object (not
+for a delete), the other objects whose `unitRef`/`parentRef`/`ownerRef` it changed, and one line
+per model it rewrote; `--json` prints the tool's result,
 `{ file, dryRun, changed, written, object, created, updated, deleted, processes, wouldUpgrade, note? }`.
 `--locale en|es` is the tools' `locale`, the same as the global `--lang`.
 

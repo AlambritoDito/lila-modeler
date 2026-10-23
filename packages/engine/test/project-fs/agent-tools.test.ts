@@ -793,6 +793,23 @@ describe('lila catalog (#673)', () => {
     const index = await lila('catalog', 'usages', file);
     expect(index.text).toContain(`unit/${unit}: 0 uses.`);
     expect(index.text).toContain('0 unresolved references.');
+
+    // A delete names the other objects whose reference fields it changes, and says when references go.
+    await lilaJson('catalog', 'update', file, 'cajero', '--base-revision', '3', '--unit-ref', unit);
+    const dropUnit = await lila('catalog', 'delete', file, unit, '--remove-references', '--dry-run');
+    expect(dropUnit.text).toContain('  also updated: role/cajero (a reference field)');
+    const posId = (await lilaJson('catalog', 'list', file, '--type', 'system')).objects[0].id as string;
+    const dropPos = await lila('catalog', 'delete', file, posId, '--remove-references');
+    expect(dropPos.text).toContain('model of check-in: 1 reference removed');
+    expect((await lila('catalog', 'delete', file, unit, '--remove-references', '--dry-run', '--locale', 'es')).text)
+      .toContain('  también se actualizó: role/cajero (un campo de referencia)');
+
+    // Attribute names are kept as written; a blank one is refused.
+    const spaced = await lilaJson('catalog', 'update', file, 'cajero', '--base-revision', '4', '--attribute', ' Shift =x');
+    expect(spaced.object.attributes).toEqual([{ name: ' Shift ', value: 'x' }]);
+    const blank = await lila('catalog', 'update', file, 'cajero', '--base-revision', '5', '--attribute', ' =v');
+    expect(blank.code).toBe(1);
+    expect(blank.text).toContain('--attribute takes key=value; got " =v".');
   });
 
   test('usage errors exit 1 and write nothing', async () => {
@@ -824,5 +841,7 @@ describe('lila catalog (#673)', () => {
     expect(readFileSync(file)).toEqual(original);
     expect((await lila('catalog', '--help')).code).toBe(0);
     expect(out.join('\n')).toContain('lila catalog adopt <project.lila> <ref> --type type');
+    expect(out.join('\n')).toContain('--locale en|es');
+    expect((await lila('catalog', '--help', '--locale', 'es')).text).toContain('lila catalog adopt <proyecto.lila> <ref> --type tipo');
   });
 });

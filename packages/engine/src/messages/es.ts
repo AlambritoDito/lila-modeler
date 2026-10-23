@@ -92,6 +92,7 @@ const ES_USAGE = `Uso: lila validate <archivo.bpmn|proyecto.lila> [--process slu
                          [--replace-with id|--remove-references] [--dry-run] [--json]
      lila catalog usages <proyecto.lila> [<id>] [--type tipo] [--json]
      lila catalog adopt <proyecto.lila> <ref> --type tipo [--name nombre] [--dry-run] [--json]
+                        (todo subcomando de lila catalog acepta también --locale en|es)
      lila mcp
 
 Comandos:

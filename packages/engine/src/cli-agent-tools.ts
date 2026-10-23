@@ -89,7 +89,7 @@ function responsibilityOf(value: string, locale: Locale): Responsibility {
 }
 
 /** `key=value` → `[key, value]`; the value may be empty. */
-export function pairOf(option: string, value: string, locale: Locale): [string, string] {
+function pairOf(option: string, value: string, locale: Locale): [string, string] {
   const equals = value.indexOf('=');
   if (equals < 1) throw new Error(agentToolMessages(locale).badPairArgument(option, value));
   return [value.slice(0, equals).trim(), value.slice(equals + 1)];

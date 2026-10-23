@@ -8,7 +8,6 @@
  */
 import { parseArgs, type ParseArgsConfig } from 'node:util';
 
-import { pairOf } from './cli-agent-tools.js';
 import { isLocale, LOCALE_LIST } from './locale.js';
 import { agentToolMessages, messages, type Locale } from './messages/index.js';
 import {
@@ -82,13 +81,18 @@ function revisionOf(raw: string | undefined, locale: Locale): number | undefined
   return value;
 }
 
-/** `--attribute name=value` (repeatable) → the object's `attributes`, in order. */
+/**
+ * `--attribute name=value` (repeatable) → the object's `attributes`, in order. The name is everything
+ * before the first `=`, kept as written (MCP stores it as given), and must not be blank.
+ */
 function attributesOf(values: Parsed['values'], locale: Locale): { name: string; value: string }[] | undefined {
   const list = values.attribute;
   if (!Array.isArray(list)) return undefined;
-  return list.map((value) => {
-    const [name, attribute] = pairOf('--attribute', String(value), locale);
-    return { name, value: attribute };
+  return list.map((raw) => {
+    const value = String(raw);
+    const equals = value.indexOf('=');
+    if (equals < 0 || value.slice(0, equals).trim() === '') throw new Error(agentToolMessages(locale).badPairArgument('--attribute', value));
+    return { name: value.slice(0, equals), value: value.slice(equals + 1) };
   });
 }
 
@@ -107,18 +111,24 @@ function printObject(object: CatalogObject, locale: Locale): void {
       console.log('  attributes:');
       for (const { name, value: attribute } of value as { name: string; value: string }[]) console.log(`    ${name}: ${attribute}`);
     } else {
-      console.log(`  ${field}: ${typeof value === 'string' ? value : JSON.stringify(value)}`);
+      console.log(`  ${field}: ${typeof value === 'string' ? value : JSON.stringify(value)}`.trimEnd());
     }
   }
 }
 
-/** What a write prints without `--json`: what happened, the models rewritten, and the upgrade note. */
-function printWrite(kind: 'create' | 'update' | 'delete' | 'adopt', result: LilaCatalogWrite, locale: Locale): void {
+/**
+ * What a write prints without `--json`: what happened, the object (not for a delete), the other
+ * objects whose reference fields it changed, the models it rewrote, and the upgrade note.
+ * `removed`: the references were removed (`--remove-references`), not rewritten.
+ */
+function printWrite(kind: 'create' | 'update' | 'delete' | 'adopt', result: LilaCatalogWrite, locale: Locale, removed = false): void {
   const T = agentToolMessages(locale);
   const state = !result.changed ? 'no-change' : result.dryRun ? 'dry-run' : 'written';
-  console.log(T.catalogWrite(kind, `${result.object.type}/${result.object.id}`, result.file, state));
+  const key = `${result.object.type}/${result.object.id}`;
+  console.log(T.catalogWrite(kind, key, result.file, state));
   if (kind !== 'delete') printObject(result.object, locale);
-  for (const { slug, references } of result.processes) console.log(T.catalogRewritten(slug, references));
+  for (const other of result.updated) if (other !== key) console.log(T.catalogAlsoUpdated(other));
+  for (const { slug, references } of result.processes) console.log(T.catalogRewritten(slug, references, removed));
   if (result.note !== undefined) console.log(`${messages(locale).cli.warningLabel()} ${result.note}`);
 }
 
@@ -234,7 +244,7 @@ async function deleteCommand(argv: readonly string[], locale: Locale): Promise<n
     console.error(T.catalogInUseHint());
     return 1;
   }
-  return output(values.json === true, result, () => printWrite('delete', result, lang));
+  return output(values.json === true, result, () => printWrite('delete', result, lang, removeReferences));
 }
 
 async function usagesCommand(argv: readonly string[], locale: Locale): Promise<number> {
@@ -276,7 +286,11 @@ async function adoptCommand(argv: readonly string[], locale: Locale): Promise<nu
 /** `lila catalog list|show|create|update|delete|usages|adopt`. */
 export async function dispatchCatalogTools(argv: readonly string[], locale: Locale): Promise<number> {
   if (argv.includes('--help') || argv.includes('-h')) {
-    console.log(messages(locale).cli.usage());
+    // The help in the `--locale` language too, when that is given and valid.
+    const at = argv.findIndex((token) => token === '--locale' || token.startsWith('--locale='));
+    const raw = at === -1 ? '' : argv[at] === '--locale' ? argv[at + 1] ?? '' : argv[at]!.slice('--locale='.length);
+    const tag = raw.toLowerCase().split(/[_.@-]/)[0] ?? '';
+    console.log(messages(isLocale(tag) ? tag : locale).cli.usage());
     return 0;
   }
   const [sub, ...rest] = argv;

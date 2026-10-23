@@ -152,7 +152,8 @@ export interface AgentToolMessages {
   catalogListHeader: (file: string, count: number, version: number) => string;
   catalogObjectLine: (key: string, name: string, revision: number) => string;
   catalogWrite: (kind: 'create' | 'update' | 'delete' | 'adopt', key: string, file: string, state: 'written' | 'dry-run' | 'no-change') => string;
-  catalogRewritten: (slug: string, references: number) => string;
+  catalogRewritten: (slug: string, references: number, removed: boolean) => string;
+  catalogAlsoUpdated: (key: string) => string;
   catalogUses: (key: string, count: number) => string;
   catalogUnresolvedUses: (id: string, count: number) => string;
   catalogIndexUnresolved: (count: number) => string;
@@ -359,7 +360,9 @@ const en: AgentToolMessages = {
     const done = { create: 'Created', update: 'Updated', delete: 'Deleted', adopt: 'Adopted' }[kind];
     return state === 'dry-run' ? `Dry run: would ${verb} ${key} in ${file}. Nothing was written.` : `${done} ${key} in ${file}.`;
   },
-  catalogRewritten: (slug, references) => `  model of ${slug}: ${references} ${references === 1 ? 'reference' : 'references'} rewritten`,
+  catalogRewritten: (slug, references, removed) =>
+    `  model of ${slug}: ${references} ${references === 1 ? 'reference' : 'references'} ${removed ? 'removed' : 'rewritten'}`,
+  catalogAlsoUpdated: (key) => `  also updated: ${key} (a reference field)`,
   catalogUses: (key, count) => `${key}: ${count} ${count === 1 ? 'use' : 'uses'}${count === 0 ? '.' : ':'}`,
   catalogUnresolvedUses: (id, count) =>
     `"${id}" is not the id of any catalog object: ${count} unresolved ${count === 1 ? 'reference' : 'references'} to it${count === 0 ? '.' : ':'}`,
@@ -559,12 +562,14 @@ const es: AgentToolMessages = {
     const done = { create: 'Se creó', update: 'Se actualizó', delete: 'Se borró', adopt: 'Se adoptó' }[kind];
     return state === 'dry-run' ? `Simulacro: se ${verb} ${key} en ${file}. No se escribió nada.` : `${done} ${key} en ${file}.`;
   },
-  catalogRewritten: (slug, references) => `  modelo de ${slug}: ${references} ${references === 1 ? 'referencia reescrita' : 'referencias reescritas'}`,
+  catalogRewritten: (slug, references, removed) =>
+    `  modelo de ${slug}: ${references} ${references === 1 ? 'referencia' : 'referencias'} ${removed ? (references === 1 ? 'quitada' : 'quitadas') : references === 1 ? 'reescrita' : 'reescritas'}`,
+  catalogAlsoUpdated: (key) => `  también se actualizó: ${key} (un campo de referencia)`,
   catalogUses: (key, count) => `${key}: ${count} ${count === 1 ? 'uso' : 'usos'}${count === 0 ? '.' : ':'}`,
   catalogUnresolvedUses: (id, count) =>
     `"${id}" no es el id de ningún objeto del catálogo: ${count} ${count === 1 ? 'referencia sin resolver' : 'referencias sin resolver'} a él${count === 0 ? '.' : ':'}`,
   catalogIndexUnresolved: (count) => `${count} ${count === 1 ? 'referencia sin resolver' : 'referencias sin resolver'}${count === 0 ? '.' : ':'}`,
-  catalogDuplicateProcessId: (id, slugs) => `el id de proceso BPMN ${id} lo declara más de un proceso: ${slugs}.`,
+  catalogDuplicateProcessId: (id, slugs) => `El id de proceso BPMN ${id} lo declara más de un proceso: ${slugs}.`,
   catalogInUseHint: () => 'Desde la CLI: --replace-with <id> (un objeto del mismo tipo) o --remove-references.',
   catalogEitherOption: (first, second) => `indica ${first} o ${second}, no los dos.`,
   catalogBadLocale: (value, accepted) => `--locale solo acepta: ${accepted}; llegó "${value}".`,
