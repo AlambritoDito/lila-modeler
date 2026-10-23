@@ -697,5 +697,12 @@ Exit code: `1`.
 lila run project.lila as-is --process pedido --seed 1 --replications 30 --json results/run.json
 ```
 
+**Catalog warnings (#95).** For a version 3 `.lila` (a repository with a catalog), `validate` also
+lists the process's references that match no catalog object (`W-REF-SIN-CATALOGO`) and its
+activities without a Responsible role (`W-ACTIVIDAD-SIN-RESPONSABLE`): in a `Catalog warnings (N):`
+section of the text output, when there are any, and in `catalogWarnings` with `--json`. They never
+change the exit code; a `.bpmn` and a version 1 or 2 project print exactly what they printed before
+([SEMANTICS.md § 17](SEMANTICS.md#17-error-and-warning-catalog)).
+
 The MCP tools accept a `.lila` the same way, and `patch_scenario` can write a scenario back into
 one (`docs/MCP.md`).

@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { strToU8, unzipSync } from 'fflate';
+import { strToU8, strFromU8, unzipSync, zipSync } from 'fflate';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { annotateElement, documentationHolder, parseBpmn, readAnnotations } from '../../src/bpmn/index.js';
@@ -585,6 +585,92 @@ describe('catalog tools (#672)', () => {
     expect((await failure(() => createLilaCatalogObject({ file, type: 'role', name: 'X', url: 'https://x.example' }))).message).toContain('its fields: unitRef');
     expect((await failure(() => createLilaCatalogObject({ file, type: 'system', name: 'X', url: 'javascript:alert(1)', locale: 'es' }))).message).toContain('quedaría inválido');
     expect(readFileSync(file)).toEqual(settled);
+  });
+});
+
+describe('catalog lint in `lila validate` (#95)', () => {
+  /** `lila validate … --json`: the exit code and the report. */
+  async function validateJson(...args: string[]): Promise<{ code: number; report: Record<string, unknown> }> {
+    out = [];
+    const code = await main(['validate', ...args, '--json']);
+    return { code, report: JSON.parse(out.join('\n')) as Record<string, unknown> };
+  }
+
+  /** Replaces `from` with `to` in the model of `slug`, by hand: the archive's entry, nothing else. */
+  function handEdit(file: string, slug: string, from: string, to: string): void {
+    const entries = unzipSync(readFileSync(file));
+    const name = `processes/${slug}/model.bpmn`;
+    const xml = strFromU8(entries[name]!);
+    expect(xml).toContain(from);
+    entries[name] = strToU8(xml.replace(from, to));
+    writeFileSync(file, zipSync(entries));
+  }
+
+  test('the Receptionist fixture: none, then one W-REF-SIN-CATALOGO after roleRef="ghost"; the exit code stays 0', async () => {
+    const file = join(scratch, 'hotel.lila');
+    writeFileSync(file, hotelLila(2));
+    const { object } = await createLilaCatalogObject({ file, type: 'role', name: 'Receptionist' });
+    for (const process of HOTEL_PROCESSES) {
+      await annotateLilaElement({ file, process: process.slug, elementId: 'Task_1', responsibilities: [{ type: 'R', roleRef: object.id }] });
+    }
+    const before = await validateJson(file, '--process', 'check-out');
+    expect(before.code).toBe(0);
+    expect(before.report.catalogWarnings).toEqual([]);
+
+    handEdit(file, 'check-out', `roleRef="${object.id}"`, 'roleRef="ghost"');
+    const processId = (await openLilaProcess(file, { process: 'check-out' })).process.id!;
+    const after = await validateJson(file, '--process', 'check-out');
+    expect(after.code).toBe(0);
+    expect(after.report.errors).toEqual(before.report.errors);
+    expect(after.report.warnings).toEqual(before.report.warnings);
+    expect(after.report.catalogWarnings).toEqual([
+      {
+        code: 'W-REF-SIN-CATALOGO',
+        process: processId,
+        slug: 'check-out',
+        element: 'Task_1',
+        relation: 'responsibility:R',
+        type: 'role',
+        ref: 'ghost',
+        message: `Task_1 (process ${processId}): the responsibility:R reference "ghost" matches no role object in the catalog; it is kept as it is.`,
+      },
+    ]);
+    // Only the process validated is listed: check-in still resolves.
+    expect((await validateJson(file, '--process', 'check-in')).report.catalogWarnings).toEqual([]);
+
+    out = [];
+    expect(await main(['--lang', 'es', 'validate', file, '--process', 'check-out'])).toBe(0);
+    expect(out.slice(-2)).toEqual([
+      'Avisos del catálogo (1):',
+      `aviso  W-REF-SIN-CATALOGO  Task_1 (proceso ${processId}): la referencia responsibility:R "ghost" no coincide con ningún objeto role del catálogo; se conserva tal cual.`,
+    ]);
+  });
+
+  test('an activity without an R gets W-ACTIVIDAD-SIN-RESPONSABLE in the text section', async () => {
+    const file = join(scratch, 'hotel.lila');
+    writeFileSync(file, hotelLila(2));
+    await createLilaCatalogObject({ file, type: 'role', name: 'Receptionist' });
+    out = [];
+    expect(await main(['validate', file, '--process', 'room-service'])).toBe(0);
+    const processId = (await openLilaProcess(file, { process: 'room-service' })).process.id!;
+    expect(out.slice(-3)).toEqual([
+      '',
+      'Catalog warnings (1):',
+      `warning  W-ACTIVIDAD-SIN-RESPONSABLE  Task_1 (process ${processId}): the activity has no Responsible role (lila:responsibility type="R").`,
+    ]);
+  });
+
+  test('version 1 and 2 projects with typed ids: no catalogWarnings, same output and exit code', async () => {
+    for (const version of [1, 2] as const) {
+      const file = join(scratch, `v${version}.lila`);
+      writeFileSync(file, hotelLila(version, { handTyped: true }));
+      const { code, report } = await validateJson(file, '--process', 'check-in');
+      expect(code).toBe(0);
+      expect(Object.keys(report)).toEqual(['ir', 'ignoredProcessIds', 'errors', 'warnings']);
+      out = [];
+      expect(await main(['validate', file, '--process', 'check-in'])).toBe(0);
+      expect(out.at(-1)).toBe('0 errors, 0 warnings.');
+    }
   });
 });
 

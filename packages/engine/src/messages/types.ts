@@ -72,6 +72,11 @@ export interface OuterCodeMessages {
 
   /* --- scenario.ts (schema) ----------------------------------------- */
   'E-CLAVE-DESCONOCIDA': (keys: string) => string;
+
+  /* --- project/catalog-lint.ts (#95) --------------------------------- */
+  /** `process` is the process id (its slug when it has none); `relation` as in the usage index. */
+  'W-REF-SIN-CATALOGO': (process: string, element: string, relation: string, ref: string, type: string) => string;
+  'W-ACTIVIDAD-SIN-RESPONSABLE': (process: string, element: string) => string;
 }
 
 export type CodeMessages = CoreCodeMessages & OuterCodeMessages;
@@ -147,6 +152,8 @@ export interface CliMessages {
   otherProcesses: (ids: string) => string;
   /** Closing line of `validate`; not pluralised, same as the CLI has always printed it. */
   problemCounts: (errors: number, warnings: number) => string;
+  /** #95: title of the catalog warnings of a version 3 `.lila`, printed only when there are some. */
+  catalogWarnings: (count: number) => string;
   errorLabel: () => string;
   warningLabel: () => string;
 

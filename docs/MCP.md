@@ -17,7 +17,10 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
 
 - **`validate_bpmn({ path | xml, process?, locale? })`** parses and validates BPMN and returns the same JSON
   as `lila validate --json`: IR, `ignoredProcessIds`, `errors` and `warnings`. Supply exactly
-  one of `path` and inline `xml`; supplying both is an error.
+  one of `path` and inline `xml`; supplying both is an error. For a `.lila` with a catalog
+  (version 3) it adds `catalogWarnings`: references that match no catalog object and activities
+  without a Responsible role (`W-REF-SIN-CATALOGO`, `W-ACTIVIDAD-SIN-RESPONSABLE`,
+  [SEMANTICS.md § 17](SEMANTICS.md#17-error-and-warning-catalog)).
 - **`describe_process({ path | xml, process?, scenario?, locale? })`** returns the IR and a readable
   `resumen`: node counts, gateway outputs, lanes, flattened subprocesses, ignored processes
   and validation status. An optional scenario path resolves `extends` and adds referenced

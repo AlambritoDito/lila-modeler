@@ -1114,7 +1114,7 @@ Since LILA-211 the texts of all these codes live in a catalog per language
 translation; both are normative, each for its own language, and this section gives both texts
 wherever it fixes them literally. The code (`E-…`, `W-…`) and the rule id (`R-…`) are **never**
 translated. A test (`packages/engine/test/messages.test.ts`) keeps this section, the catalog and
-the code in sync: the catalog's 61 codes are exactly the ones `packages/engine/src` emits, `en`
+the code in sync: the catalog's 64 codes are exactly the ones `packages/engine/src` emits, `en`
 and `es` declare the same entries, and no `"CODE: …"` literal lives outside the catalog.
 
 Errors (they abort; validation errors are returned in `errors[]`, runtime errors are thrown; the CLI exits with 1):
@@ -1213,6 +1213,37 @@ entry, or a diverging XOR/OR with neither `probability` nor nonempty `conditions
 outgoing flow. Explicit `probability: 0` counts as configuration. Ends, terminate, AND,
 event gateways and pass-through/merge gateways do not receive this warning. Specific
 probability rules and missing-time warnings still apply; simulation calculations do not change.
+
+**Catalog warnings (#95).** Two more warnings come from the catalog lint (`lintCatalog`,
+`packages/engine/src/project/catalog-lint.ts`), not from the validator or the run: they do not
+travel in `warnings[]` or in `RunResult.warnings[]`, but in the additive `catalogWarnings[]` that
+`lila validate <file.lila>` (`--json`, plus a text section) and `validate_bpmn({ path })` add for a
+repository with a catalog (version 3, `docs/REPOSITORY_CONTRACT.md` § 3.4). A `.bpmn`, inline XML
+and a version 1 or 2 project get no `catalogWarnings` at all, and neither code changes the exit code
+or `errors`/`warnings`. Each entry is `{ code, process, slug, element, message }`, with `process` the
+process id; only the process being validated is listed.
+
+- `W-REF-SIN-CATALOGO`: a BPMN reference (`lila:responsibility roleRef`, or the `ref` of a
+  `lila:*Ref`, `lila:input` or `lila:output`) whose id matches no object of the type it expects
+  (`docs/REPOSITORY_CONTRACT.md` § 3.1; a `riskRef` resolves against a preserved `risk` object). One
+  per process, element, relation and id; the entry adds `relation`, `type` and `ref`. The reference
+  is kept as it is.
+- `W-ACTIVIDAD-SIN-RESPONSABLE`: a task (of any kind), sub-process (transactions and ad hoc ones
+  included) or call activity with no `lila:responsibility type="R"`, whether or not its role
+  resolves. Events, gateways, lanes and pools never get it.
+
+```
+W-REF-SIN-CATALOGO: <element> (process <process>): the <relation> reference "<id>" matches no <type> object in the catalog; it is kept as it is.
+W-ACTIVIDAD-SIN-RESPONSABLE: <element> (process <process>): the activity has no Responsible role (lila:responsibility type="R").
+```
+
+```
+W-REF-SIN-CATALOGO: <element> (proceso <process>): la referencia <relation> "<id>" no coincide con ningún objeto <type> del catálogo; se conserva tal cual.
+W-ACTIVIDAD-SIN-RESPONSABLE: <element> (proceso <process>): la actividad no tiene ningún rol Responsable (lila:responsibility type="R").
+```
+
+As everywhere in this section, the code travels in its own field and the `message` is the text
+after `CODE: `; the CLI's text section prints both.
 
 `W-RECURSO-SATURADO` warns that a pool never reaches a steady state: more work arrives than it
 can dispatch, and its queue grows with the run's duration. Exact text, once per pool and per run:

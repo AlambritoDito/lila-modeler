@@ -29,6 +29,7 @@ import {
 } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 
+import { AnnotationContentLossError } from './bpmn/annotate.js';
 import { parseBpmn, type TargetingScenario } from './bpmn/parse.js';
 import { validateBpmnModel, type ValidatedBpmnModel } from './bpmn/validate-report.js';
 import type { ValidationResult } from './bpmn/validate.js';
@@ -36,6 +37,8 @@ import type { EventLogRow, RunResult } from './core/result.js';
 import { eventLogCsvWriter } from './csv.js';
 import type { BaseTimeUnit } from './format.js';
 import { messages, type Locale } from './messages/index.js';
+import { lintCatalog, type CatalogWarning } from './project/catalog-lint.js';
+import { formatVersionOf } from './project/upgrade.js';
 import { isLilaPath } from './project-fs/paths.js';
 import {
   findLilaScenario,
@@ -177,6 +180,26 @@ export function targetScenarios(
   given: readonly TargetingScenario[] = [],
 ): TargetingScenario[] {
   return [...given, ...Object.values(lila?.process.scenarios ?? {})];
+}
+
+/**
+ * #95: the catalog warnings of the process of a `.lila` (`lintCatalog`), for `lila validate` and
+ * `validate_bpmn`. `undefined`, so the report keeps its shape byte for byte, for a `.bpmn` or
+ * inline XML, a version 1 or 2 project (RM-01 § 3.4), and a repository with a model the usage
+ * index cannot read without losing content: a warning never makes validation fail.
+ */
+export async function lilaCatalogWarnings(
+  lila: LilaProcess | undefined,
+  locale: Locale = 'en',
+): Promise<CatalogWarning[] | undefined> {
+  if (lila === undefined || formatVersionOf(lila.document) !== 3) return undefined;
+  try {
+    const warnings = await lintCatalog(lila.document, undefined, { locale });
+    return warnings.filter((warning) => warning.slug === lila.process.slug);
+  } catch (error) {
+    if (error instanceof AnnotationContentLossError) return undefined;
+    throw error;
+  }
 }
 
 /**
