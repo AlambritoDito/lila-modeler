@@ -19,6 +19,7 @@ import {
   absolutePath,
   comparablePath,
   compareWarnings,
+  lilaCatalogWarnings,
   loadModelSource,
   loadResolvedScenario,
   loadValidatedModel,
@@ -711,7 +712,9 @@ export function createServer(options: ServerOptions = {}): McpServer {
         'Parses and validates a .bpmn file or one process of a .lila project (by path or inline ' +
         'XML, one of the two) and returns the ' +
         'same JSON as `lila validate --json`: the IR, the ignored processes, and structured ' +
-        'errors/warnings. A model with a non-empty `errors` cannot be simulated, but that is a ' +
+        'errors/warnings, plus `catalogWarnings` for a .lila repository with a catalog (version 3): ' +
+        'references that match no catalog object and activities without a Responsible role. ' +
+        'A model with a non-empty `errors` cannot be simulated, but that is a ' +
         'valid result of the tool: isError only marks that the tool failed (bad arguments, ' +
         'unreadable file, impenetrable XML).',
       inputSchema: z.object({
@@ -735,7 +738,10 @@ export function createServer(options: ServerOptions = {}): McpServer {
 
       try {
         // #546: in a `.lila`, the process its scenarios target, as `run_simulation` simulates it.
-        return textResult(await validateBpmnXml(read.xml, { locale: language, scenarios: targetScenarios(read.lila) }));
+        const report = await validateBpmnXml(read.xml, { locale: language, scenarios: targetScenarios(read.lila) });
+        // #95: the catalog warnings of a version 3 `.lila`, as `lila validate --json` adds them.
+        const catalogWarnings = await lilaCatalogWarnings(read.lila, language);
+        return textResult(catalogWarnings === undefined ? report : { ...report, catalogWarnings });
       } catch (error) {
         return errorResult(toolMessage('validate_bpmn', message(error)));
       }

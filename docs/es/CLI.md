@@ -59,7 +59,8 @@ npx lila validate packages/engine/test/fixtures/boundary-event.bpmn
 ```
 Código de salida: `1`.
 
-`--json` imprime el mismo reporte (`{ ir, ignoredProcessIds, errors, warnings }`) como un único
+`--json` imprime el mismo reporte (`{ ir, ignoredProcessIds, errors, warnings }`, más
+`catalogWarnings` para un `.lila` de versión 3, ver [Avisos del catálogo](#un-lila-como-entrada-466)) como un único
 documento JSON en vez del texto de arriba; la regla del código de salida es la misma.
 
 ## `run`
@@ -690,6 +691,14 @@ Código de salida: `1`.
 ```text
 lila run proyecto.lila as-is --process pedido --seed 1 --replications 30 --json results/run.json
 ```
+
+**Avisos del catálogo (#95).** Para un `.lila` de versión 3 (un repositorio con catálogo), `validate`
+también lista las referencias del proceso que no coinciden con ningún objeto del catálogo
+(`W-REF-SIN-CATALOGO`) y sus actividades sin rol Responsable (`W-ACTIVIDAD-SIN-RESPONSABLE`): en una
+sección `Avisos del catálogo (N):` de la salida de texto, cuando los hay, y en `catalogWarnings` con
+`--json`. Nunca cambian el código de salida; un `.bpmn` y un proyecto de versión 1 o 2 imprimen
+exactamente lo mismo que antes, y también se omiten cuando el modelo del proceso no se puede leer
+sin perder contenido ([SEMANTICS.md § 17](SEMANTICS.md#17-catálogo-de-errores-y-avisos)).
 
 Las tools MCP aceptan un `.lila` de la misma forma, y `patch_scenario` puede escribir un escenario
 dentro de uno (`docs/MCP.md`).

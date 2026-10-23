@@ -53,7 +53,7 @@ Todos (salvo `versionTag`, ver más abajo) van dentro de `bpmn:extensionElements
 
 | Elemento | Atributos | Qué documenta | Apunta a |
 |---|---|---|---|
-| `lila:responsibility` | `type` (`R`\|`A`\|`C`\|`I`), `roleRef` | Matriz RACI del elemento: una fila por combinación responsable/rol. Un elemento puede tener varios `lila:responsibility` (varios roles, o el mismo rol con distinto `type`): se acepta tal cual; hoy nada lo comprueba (un aviso puede llegar con LILA-095, #95). | `roleRef` → id de un objeto rol (`catalog/role/<id>.json`, ver [el contrato del repositorio](REPOSITORY_CONTRACT.md)). |
+| `lila:responsibility` | `type` (`R`\|`A`\|`C`\|`I`), `roleRef` | Matriz RACI del elemento: una fila por combinación responsable/rol. Un elemento puede tener varios `lila:responsibility` (varios roles, o el mismo rol con distinto `type`): se acepta tal cual. En un repositorio con catálogo (versión 3), una tarea, subproceso o call activity sin ningún `type="R"` recibe el aviso `W-ACTIVIDAD-SIN-RESPONSABLE` (#95). | `roleRef` → id de un objeto rol (`catalog/role/<id>.json`, ver [el contrato del repositorio](REPOSITORY_CONTRACT.md)). |
 | `lila:systemRef` | `ref` | Sistema/aplicación que interviene en el elemento. | id en el catálogo de sistemas. |
 | `lila:documentRef` | `ref` | Documento asociado al elemento (entrada, salida o solo referencia general). | id en el catálogo de documentos. |
 | `lila:riskRef` | `ref` | Riesgo asociado al elemento. | id en el catálogo de riesgos. |
@@ -63,7 +63,7 @@ Todos (salvo `versionTag`, ver más abajo) van dentro de `bpmn:extensionElements
 | `lila:output` | `ref` | Documento/dato que el elemento produce. | id en el catálogo de documentos. |
 | `lila:versionTag` | `value` | Ver sección 4 (clave de proceso). Único elemento que **no** cuelga de un elemento de flujo — cuelga de `bpmn:process`. | — (valor libre, no referencia catálogo). |
 
-Todas las referencias (`roleRef`, y los `ref` de `systemRef`/`documentRef`/`riskRef`/`controlRef`/`kpiRef`/`input`/`output`) apuntan a ids de objetos del catálogo. El catálogo vive fuera del `.bpmn`, un archivo por objeto, `catalog/<tipo>/<id>.json` (ADR-032, [el contrato del repositorio](REPOSITORY_CONTRACT.md)), no el `catalog.json` monolítico de ADR-013. Hoy no existe ningún catálogo y las referencias no se comprueban. Cuando llegue el catálogo (lote A1), una referencia cuyo id no coincida con ningún objeto se conserva tal cual y se informa como **warning** (LILA-095, #95): nunca un error y nunca se inventa; el catálogo puede completarse después del diagrama.
+Todas las referencias (`roleRef`, y los `ref` de `systemRef`/`documentRef`/`riskRef`/`controlRef`/`kpiRef`/`input`/`output`) apuntan a ids de objetos del catálogo. El catálogo vive fuera del `.bpmn`, un archivo por objeto, `catalog/<tipo>/<id>.json` (ADR-032, [el contrato del repositorio](REPOSITORY_CONTRACT.md)), no el `catalog.json` monolítico de ADR-013. En un repositorio con catálogo (versión 3), una referencia cuyo id no coincida con ningún objeto del tipo que espera se conserva tal cual y se informa como el **warning** `W-REF-SIN-CATALOGO` (LILA-095, #95): nunca un error y nunca se inventa; el catálogo puede completarse después del diagrama. `lila validate` y `validate_bpmn` listan estos avisos en `catalogWarnings` ([SEMANTICS.md § 17](SEMANTICS.md#17-catálogo-de-errores-y-avisos)). Un proyecto versión 1 o 2 no tiene catálogo y sus referencias no reciben avisos.
 
 `versionTag` va como hijo de `bpmn:extensionElements` de `bpmn:process` (no de `bpmn:definitions` ni de una tarea):
 
@@ -336,7 +336,7 @@ Notas de implementación (no normativas, se resuelven en el ticket que crea el a
 </bpmn:definitions>
 ```
 
-Correspondencia con el catálogo referenciado (un archivo por objeto, `catalog/<tipo>/<id>.json`, fuera de este documento — ver [el contrato del repositorio](REPOSITORY_CONTRACT.md)): `rol-1`, `rol-2`, `sys-crm`, `doc-solicitud`, `doc-solicitud-revisada` y `kpi-tiempo-revision` son ids de objetos del catálogo. Hoy no existe ningún catálogo y nada los comprueba; cuando llegue el catálogo (lote A1), cada uno que no coincida con ningún objeto se conserva y se informa como warning (LILA-095, #95), nunca un error y nunca se inventa.
+Correspondencia con el catálogo referenciado (un archivo por objeto, `catalog/<tipo>/<id>.json`, fuera de este documento — ver [el contrato del repositorio](REPOSITORY_CONTRACT.md)): `rol-1`, `rol-2`, `sys-crm`, `doc-solicitud`, `doc-solicitud-revisada` y `kpi-tiempo-revision` son ids de objetos del catálogo. En un repositorio con catálogo (versión 3), cada uno que no coincida con ningún objeto se conserva y se informa con el warning `W-REF-SIN-CATALOGO` (LILA-095, #95), nunca un error y nunca se inventa.
 
 ---
 

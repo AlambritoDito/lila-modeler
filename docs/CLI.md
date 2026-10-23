@@ -57,7 +57,8 @@ npx lila validate packages/engine/test/fixtures/boundary-event.bpmn
 ```
 Exit code: `1`.
 
-`--json` prints the same report (`{ ir, ignoredProcessIds, errors, warnings }`) as one JSON
+`--json` prints the same report (`{ ir, ignoredProcessIds, errors, warnings }`, plus
+`catalogWarnings` for a version 3 `.lila`, see [Catalog warnings](#a-lila-as-input-466)) as one JSON
 document instead of the text above; the exit code rule is the same.
 
 ## `run`
@@ -696,6 +697,14 @@ Exit code: `1`.
 ```text
 lila run project.lila as-is --process pedido --seed 1 --replications 30 --json results/run.json
 ```
+
+**Catalog warnings (#95).** For a version 3 `.lila` (a repository with a catalog), `validate` also
+lists the process's references that match no catalog object (`W-REF-SIN-CATALOGO`) and its
+activities without a Responsible role (`W-ACTIVIDAD-SIN-RESPONSABLE`): in a `Catalog warnings (N):`
+section of the text output, when there are any, and in `catalogWarnings` with `--json`. They never
+change the exit code; a `.bpmn` and a version 1 or 2 project print exactly what they printed before,
+and they are also left out when the process's model cannot be read without losing content
+([SEMANTICS.md § 17](SEMANTICS.md#17-error-and-warning-catalog)).
 
 The MCP tools accept a `.lila` the same way, and `patch_scenario` can write a scenario back into
 one (`docs/MCP.md`).
