@@ -259,10 +259,11 @@ describe('version 3 and the entries kept beside the document (#92, RM-01 § 1.4,
     expect(Object.keys(unzipSync(new Uint8Array(await readFile(file))))).not.toContain('notes.md');
   });
 
-  it('a version 3 project is not written to a folder until the folder adapter exists (#671)', async () => {
+  it('a version 3 project is written to a folder as version 3 (#671; the folder adapter is tested in projectIO.v3.test.ts)', async () => {
     const dir = await carpeta();
     const v3 = decodeLila(v3Fixture());
-    await expect(writeProjectFolder(dir, v3)).rejects.toMatchObject({ code: 'E-DOCUMENTO' });
-    expect(await readdir(dir)).toEqual([]);
+    await writeProjectFolder(dir, v3);
+    expect((await readdir(dir)).sort()).toEqual(['catalog', 'lila-project.json', 'processes']);
+    expect(JSON.parse(await readFile(join(dir, 'lila-project.json'), 'utf8')).version).toBe(3);
   });
 });

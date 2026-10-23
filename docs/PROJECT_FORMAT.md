@@ -185,9 +185,18 @@ catalog/<type>/<id>.json       one file per catalog object
   member is reported in `problems`.
 - **Older builds refuse it cleanly**: 1.0.0-beta.15 up to beta.28 with `LILA-MANIFEST` («declares
   version 3»), and the builds that only read version 1 with «no model.bpmn».
-- **Only as a `.lila` for now.** The folder form of version 3 is not written yet (#671): the folder
-  reader refuses a version 3 manifest (`E-MANIFEST`) and the desktop refuses to save a version 3
-  project as a folder (`E-DOCUMENTO`) instead of dropping its catalog.
+- **In a folder** (#671) version 3 is the same files, unzipped; the folder manifest has no `engine`,
+  as in versions 1 and 2. The first version 3 save of a version 1 folder moves its files into
+  `processes/<slug>/` in the same all-or-nothing commit version 2 uses, together with the catalog
+  objects: objects and process files first, then the manifest, then the files that leave the root.
+  A failure half-way restores the version 1 folder ([the repository contract](REPOSITORY_CONTRACT.md)
+  § 7). A save writes only the object files that changed: an object a file already holds, however
+  formatted, is not rewritten. The file of an object removed in the session is deleted, but only one
+  this build read as an object; a file someone else added meanwhile, or a broken one, stays. An
+  object file changed on disk since it was read is `E-CAMBIO-EXTERNO`, like a model or a scenario,
+  and the desktop reloads when another program changes a `catalog/` file. As in the archive, a
+  catalog or a non-empty folder of a reserved name (`maps/`…) found in a version 1 or 2 folder is
+  read as version 3, and the next save writes it.
 
 Entries are written manifest, processes (as in version 2), catalog objects sorted by type and then
 id, and last the entries kept as they were (below) sorted by name, with the same fixed timestamp:
@@ -197,8 +206,8 @@ two saves of the same repository are still the same bytes.
 
 `version` is `1`, `2` or `3`. Changes to this format may only **add optional fields**; anything that
 would make a reader misread a file takes a new `version`, and the reader refuses it instead of
-guessing — the current reader refuses a version 4 with `LILA-MANIFEST`, and the folder reader still
-refuses version 3 with `E-MANIFEST` until it learns it (#671).
+guessing — the current reader refuses a version 4 with `LILA-MANIFEST` (`E-MANIFEST` for a folder,
+whose writer also refuses to save over a manifest version it does not read, so nothing is written).
 There is no migration step and none is planned: the files are on the user's disk, not in a database
 anybody controls.
 
@@ -250,7 +259,8 @@ IPC boundary (`structuredClone`) and goes into the browser's `localStorage` mirr
   agent write.
 
 In the **folder** form those files are simply left alone, as before, because the writer only touches
-the files it owns.
+the files it owns: they are not reported. A non-empty folder of a reserved name still makes the
+repository version 3, as above.
 
 ## MIME type and extension
 

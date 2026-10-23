@@ -171,6 +171,62 @@ export function canonicalCatalogObject(object: CatalogObject): CatalogObject {
   return out as CatalogObject;
 }
 
+/** What a writer puts in `catalog/<type>/<id>.json` for `object`: canonical JSON, two spaces, final newline. */
+export function catalogObjectText(object: CatalogObject): string {
+  return `${JSON.stringify(canonicalCatalogObject(object), null, 2)}\n`;
+}
+
+/**
+ * Reads the text of the object file `catalog/<type>/<file>.json` (RM-01 § 2.4): the object, or why
+ * it is not one. `file` is the file name without `.json`, which must be an id and agree with the
+ * content. Shared by the archive (`lila.ts`) and the folder (`projectIO.ts`).
+ */
+export function readCatalogObject(type: string, file: string, text: string): { readonly object: CatalogObject } | { readonly problem: string } {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    const problem = isCatalogId(file)
+      ? catalogObjectProblem(parsed, { type, id: file })
+      : 'the file name is not an object id (^[a-z0-9][a-z0-9-]{0,63}$).';
+    return problem === null ? { object: parsed as CatalogObject } : { problem };
+  } catch (error) {
+    return { problem: (error as Error).message };
+  }
+}
+
+/**
+ * `true` when `text` (the bytes an object file holds) is `object` once both are written canonically,
+ * however the file is formatted: an object nobody changed keeps the bytes it was read with.
+ */
+export function sameCatalogObject(text: string, object: CatalogObject): boolean {
+  try {
+    return catalogObjectText(JSON.parse(text) as CatalogObject) === catalogObjectText(object);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The ids found under more than one type (RM-01 § 2.3), as one problem per repeated object of
+ * `sorted` (in catalog order): both objects stay loaded, and each typed reference resolves against
+ * the type it expects.
+ */
+export function repeatedCatalogIds(sorted: readonly CatalogObject[]): { readonly file: string; readonly message: string }[] {
+  const first = new Map<string, CatalogObject>();
+  const problems: { file: string; message: string }[] = [];
+  for (const object of sorted) {
+    const seen = first.get(object.id);
+    if (seen === undefined) {
+      first.set(object.id, object);
+      continue;
+    }
+    problems.push({
+      file: catalogObjectPath(object),
+      message: `the id ${JSON.stringify(object.id)} is also used by ${catalogObjectPath(seen)}; references resolve by the type they expect.`,
+    });
+  }
+  return problems;
+}
+
 /** Catalog order (RM-01 § 1.5): by type, then by id. */
 export function compareCatalogObjects(a: Pick<CatalogObject, 'type' | 'id'>, b: Pick<CatalogObject, 'type' | 'id'>): number {
   if (a.type !== b.type) return a.type < b.type ? -1 : 1;

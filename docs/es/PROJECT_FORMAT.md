@@ -190,9 +190,19 @@ catalog/<tipo>/<id>.json       un archivo por objeto de catálogo
   estaban; un miembro inválido se avisa en `problems`.
 - **Las versiones anteriores la rechazan limpiamente**: de la 1.0.0-beta.15 a la beta.28 con
   `LILA-MANIFEST` («declara la versión 3»), y las que solo leen la versión 1 con «falta model.bpmn».
-- **Por ahora, solo como `.lila`.** La forma de carpeta de la versión 3 todavía no se escribe
-  (#671): el lector de carpetas rechaza un manifiesto versión 3 (`E-MANIFEST`) y el escritorio se
-  niega a guardar un proyecto versión 3 como carpeta (`E-DOCUMENTO`) en vez de perder su catálogo.
+- **En una carpeta** (#671) la versión 3 son los mismos archivos, descomprimidos; el manifiesto de la
+  carpeta no lleva `engine`, como en las versiones 1 y 2. El primer guardado versión 3 de una carpeta
+  versión 1 mueve sus archivos a `processes/<slug>/` en el mismo commit de todo o nada que usa la
+  versión 2, junto con los objetos del catálogo: primero los objetos y los archivos de los procesos,
+  luego el manifiesto y al final los archivos que salen de la raíz. Un fallo a mitad de camino
+  devuelve la carpeta versión 1 ([el contrato del repositorio](REPOSITORY_CONTRACT.md) § 7). Un
+  guardado escribe solo los archivos de objetos que cambiaron: un objeto que su archivo ya tiene, con
+  el formato que sea, no se reescribe. El archivo de un objeto eliminado en la sesión se borra, pero
+  solo si esta versión lo leyó como objeto; un archivo que otro añadió mientras tanto, o uno roto, se
+  queda. Un archivo de objeto que cambió en disco desde que se leyó es `E-CAMBIO-EXTERNO`, como un
+  modelo o un escenario, y el escritorio recarga cuando otro programa cambia un archivo de
+  `catalog/`. Como en el archivo, un catálogo o una carpeta no vacía de un nombre reservado (`maps/`…)
+  que aparece en una carpeta versión 1 o 2 se lee como versión 3, y el siguiente guardado la escribe.
 
 Las entradas se escriben manifiesto, procesos (como en la versión 2), objetos de catálogo ordenados
 por tipo y luego por id, y al final las entradas que se conservan tal como estaban (abajo) ordenadas
@@ -202,8 +212,9 @@ por nombre, con la misma fecha fija: dos guardados del mismo repositorio siguen 
 
 `version` es `1`, `2` o `3`. Los cambios a este formato solo pueden **añadir campos opcionales**; lo
 que haría que un lector interpretara mal un archivo lleva una `version` nueva, y el lector la rechaza
-en vez de adivinar: el lector actual rechaza una versión 4 con `LILA-MANIFEST`, y el lector de carpetas
-sigue rechazando la versión 3 con `E-MANIFEST` hasta que la aprenda (#671). No hay paso de migración ni está previsto: los archivos están en el disco del usuario,
+en vez de adivinar: el lector actual rechaza una versión 4 con `LILA-MANIFEST` (`E-MANIFEST` en una
+carpeta, cuyo escritor tampoco guarda encima de un manifiesto de una versión que no lee, así que no
+se escribe nada). No hay paso de migración ni está previsto: los archivos están en el disco del usuario,
 no en una base de datos que alguien controle.
 
 Una versión de la app que solo lee la versión 1 (hasta la 1.0.0-beta.14) rechaza limpiamente un
@@ -258,7 +269,8 @@ ninguno de los dos lleva bytes con honestidad. Así que:
   recuperación y toda escritura de un agente.
 
 En la forma de **carpeta** esos archivos simplemente se dejan en paz, como antes, porque el escritor
-solo toca los archivos que son suyos.
+solo toca los archivos que son suyos: no se avisan. Una carpeta no vacía de un nombre reservado
+sigue haciendo del repositorio una versión 3, como arriba.
 
 ## Tipo MIME y extensión
 
