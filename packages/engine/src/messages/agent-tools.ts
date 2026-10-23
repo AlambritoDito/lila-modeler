@@ -1,8 +1,8 @@
 /**
- * Texts of the agent tools of #99, #403, #514, #628, #633, #634 and #635 (annotate an element, the
- * RACI matrix, a scenario sheet as a tool, creating a `.lila`, the read-only inventory, defining an
- * extended attribute, renaming and deleting processes and scenarios, patching a scenario from the
- * CLI), English and Spanish, shared by the CLI and the MCP server.
+ * Texts of the agent tools of #99, #403, #514, #628, #633, #634, #635 and #672 (annotate an element,
+ * the RACI matrix, a scenario sheet as a tool, creating a `.lila`, the read-only inventory, defining
+ * an extended attribute, renaming and deleting processes and scenarios, patching a scenario from the
+ * CLI, the catalog tools), English and Spanish, shared by the CLI and the MCP server.
  *
  * Their own file, like `sheets.ts`: none of them is an `E-*`/`W-*` code, and keeping them out of
  * `en.ts`/`es.ts` keeps the main catalog to the problems of a model or a scenario.
@@ -131,6 +131,23 @@ export interface AgentToolMessages {
   projectCreated: (name: string, file: string, processId: string) => string;
   projectLaidOut: () => string;
   projectScenario: (entry: string, runnable: boolean) => string;
+  // Catalog tools (#672)
+  catalogNoObject: (id: string, type: string | null, file: string) => string;
+  catalogAmbiguousId: (id: string, types: string) => string;
+  catalogRevision: (key: string, expected: number, actual: number) => string;
+  catalogInUse: (key: string, count: number, uses: string) => string;
+  catalogUseInProcess: (slug: string, element: string, relation: string) => string;
+  catalogUseInObject: (object: string, field: string) => string;
+  catalogUnknownType: (type: string, accepted: string) => string;
+  catalogReadOnly: (key: string) => string;
+  catalogUnknownField: (type: string, field: string, accepted: string) => string;
+  catalogInvalid: (detail: string) => string;
+  catalogReplaceAndRemove: () => string;
+  catalogReplaceSelf: (id: string) => string;
+  catalogReplaceType: (key: string, replaceWith: string, replaceType: string) => string;
+  catalogAlreadyResolved: (key: string) => string;
+  catalogEmptyRef: () => string;
+  catalogUpgradeNote: () => string;
 }
 
 /** Extended-attribute element types (`appliesTo`), as the app's attribute dialog names them. */
@@ -302,6 +319,25 @@ const en: AgentToolMessages = {
   projectCreated: (name, file, processId) => `Created project "${name}" (${file}), process ${processId}.`,
   projectLaidOut: () => 'The model had no diagram; one was drawn.',
   projectScenario: (entry, runnable) => `  ${entry}: ${runnable ? 'can run' : 'draft, cannot run yet:'}`,
+  catalogNoObject: (id, type, file) => `${file} has no catalog object ${type === null ? '' : `of type ${type} `}with the id "${id}".`,
+  catalogAmbiguousId: (id, types) => `"${id}" is the id of objects of several types (${types}); give the type.`,
+  catalogRevision: (key, expected, actual) =>
+    `${key} is at revision ${actual}, not ${expected}: it changed since it was read. Nothing was written; read it again.`,
+  catalogInUse: (key, count, uses) =>
+    `${key} is in use (${count} ${count === 1 ? 'use' : 'uses'}: ${uses}). Nothing was written; delete it with replaceWith (another object of the same type) or removeReferences.`,
+  catalogUseInProcess: (slug, element, relation) => `${slug} ${element} ${relation}`,
+  catalogUseInObject: (object, field) => `${object} ${field}`,
+  catalogUnknownType: (type, accepted) => `"${type}" is not a catalog type this build can create; accepted: ${accepted}.`,
+  catalogReadOnly: (key) => `${key} is of a type this build does not know: it is read-only.`,
+  catalogUnknownField: (type, field, accepted) => `a ${type} has no field "${field}"; its fields: ${accepted}.`,
+  catalogInvalid: (detail) => `the object would be invalid: ${detail}`,
+  catalogReplaceAndRemove: () => 'give replaceWith or removeReferences, not both.',
+  catalogReplaceSelf: (id) => `${id} cannot replace itself.`,
+  catalogReplaceType: (key, replaceWith, replaceType) => `${replaceWith} is a ${replaceType}: it cannot replace ${key}, which is of another type.`,
+  catalogAlreadyResolved: (key) => `${key} is already in the catalog: the reference resolves.`,
+  catalogEmptyRef: () => 'the reference to adopt is empty.',
+  catalogUpgradeNote: () =>
+    'This change saves the file as repository version 3 (it adds a catalog). Lila 1.0.0-beta.15 to 1.0.0-beta.28 and older builds cannot open it; the upgrade cannot be undone.',
 };
 
 const es: AgentToolMessages = {
@@ -465,6 +501,25 @@ const es: AgentToolMessages = {
   projectCreated: (name, file, processId) => `Se creó el proyecto "${name}" (${file}), proceso ${processId}.`,
   projectLaidOut: () => 'El modelo no tenía diagrama; se dibujó uno.',
   projectScenario: (entry, runnable) => `  ${entry}: ${runnable ? 'se puede correr' : 'borrador, todavía no se puede correr:'}`,
+  catalogNoObject: (id, type, file) => `${file} no tiene ningún objeto de catálogo ${type === null ? '' : `de tipo ${type} `}con el id "${id}".`,
+  catalogAmbiguousId: (id, types) => `"${id}" es el id de objetos de varios tipos (${types}); indica el tipo.`,
+  catalogRevision: (key, expected, actual) =>
+    `${key} está en la revisión ${actual}, no en la ${expected}: cambió desde que se leyó. No se escribió nada; vuelve a leerlo.`,
+  catalogInUse: (key, count, uses) =>
+    `${key} está en uso (${count} ${count === 1 ? 'uso' : 'usos'}: ${uses}). No se escribió nada; bórralo con replaceWith (otro objeto del mismo tipo) o removeReferences.`,
+  catalogUseInProcess: (slug, element, relation) => `${slug} ${element} ${relation}`,
+  catalogUseInObject: (object, field) => `${object} ${field}`,
+  catalogUnknownType: (type, accepted) => `"${type}" no es un tipo de catálogo que esta versión pueda crear; se aceptan: ${accepted}.`,
+  catalogReadOnly: (key) => `${key} es de un tipo que esta versión no conoce: es de solo lectura.`,
+  catalogUnknownField: (type, field, accepted) => `un ${type} no tiene el campo "${field}"; sus campos: ${accepted}.`,
+  catalogInvalid: (detail) => `el objeto quedaría inválido: ${detail}`,
+  catalogReplaceAndRemove: () => 'indica replaceWith o removeReferences, no los dos.',
+  catalogReplaceSelf: (id) => `${id} no puede reemplazarse a sí mismo.`,
+  catalogReplaceType: (key, replaceWith, replaceType) => `${replaceWith} es un ${replaceType}: no puede reemplazar a ${key}, que es de otro tipo.`,
+  catalogAlreadyResolved: (key) => `${key} ya está en el catálogo: la referencia se resuelve.`,
+  catalogEmptyRef: () => 'la referencia que se quiere adoptar está vacía.',
+  catalogUpgradeNote: () =>
+    'Este cambio guarda el archivo como repositorio versión 3 (añade un catálogo). Lila 1.0.0-beta.15 a 1.0.0-beta.28 y las versiones anteriores no pueden abrirlo; la actualización no se puede deshacer.',
 };
 
 export const AGENT_TOOL_MESSAGES: Readonly<Record<Locale, AgentToolMessages>> = { en, es };

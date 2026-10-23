@@ -11,7 +11,7 @@
 import { link, open, readFile, rename, stat, unlink, utimes, writeFile } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { decodeLila, encodeLila, ProjectFormatError, readLilaPreserved } from '../project/index.js';
-import type { LilaPreserved, ProjectDocument, ProjectErrorCode, ProjectProblem } from '../project/index.js';
+import type { CatalogErrorCode, LilaPreserved, ProjectDocument, ProjectErrorCode, ProjectProblem } from '../project/index.js';
 import {
   assertNotAnotherProject,
   assertPathsUnchanged,
@@ -50,6 +50,18 @@ const CODES: Record<ProjectErrorCode, { readonly code: string; readonly message:
     message: 'El "lila-project.json" del archivo es inválido o de una versión no soportada.',
   },
   'LILA-NO-MODEL': { code: 'E-NO-MODEL', message: 'Al archivo le falta "model.bpmn": no es un proyecto .lila.' },
+};
+
+/**
+ * The public code of a refused catalog operation (#672, ADR-032), explicit for the same reason as
+ * `CODES`: `null` means the refusal has no `E-…` code of its own (an unknown object id, a bad
+ * argument) and is reported as a plain message.
+ */
+export const CATALOG_CODES: Readonly<Record<CatalogErrorCode, string | null>> = {
+  'LILA-OBJECT-IN-USE': 'E-OBJETO-EN-USO',
+  'LILA-REVISION': 'E-REVISION',
+  'LILA-NO-OBJECT': null,
+  'LILA-CATALOG': null,
 };
 
 function asProjectIOError(error: unknown): never {

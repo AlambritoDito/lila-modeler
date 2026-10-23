@@ -44,6 +44,7 @@ import { toCsv } from '../csv.js';
 import { agentToolMessages, messages, type Locale } from '../messages/index.js';
 import { raciMatrix, type RaciMatrix } from '../process-document.js';
 import {
+  catalogNames,
   encodeLila,
   ProjectFormatError,
   processesOf,
@@ -322,6 +323,12 @@ export async function annotateLilaElement(request: AnnotateRequest): Promise<Ann
 export interface LilaRaciMatrix extends RaciMatrix {
   readonly file: string;
   readonly process: string;
+  /**
+   * #672: role id → the name of the catalog role it resolves to, for the roles of `roles` that
+   * resolve. Additive: the ids stay the keys of `roles` and `cells`; an id typed by hand that matches
+   * no role is left out.
+   */
+  readonly roleNames: Readonly<Record<string, string>>;
 }
 
 /**
@@ -340,7 +347,7 @@ export async function lilaRaciMatrix(target: LilaTarget): Promise<LilaRaciMatrix
   const matrix = raciMatrix({
     ir, annotations, subprocesses, lanes, nodeLanes, laneParents, pool, poolName, types, title: '', date: '', locale,
   });
-  return { file: lila.file, process: lila.process.slug, ...matrix };
+  return { file: lila.file, process: lila.process.slug, ...matrix, roleNames: catalogNames(lila.document, 'role', matrix.roles) };
 }
 
 /** The matrix as RFC 4180 CSV: `id`, `name`, `lane`, then one column per role. */

@@ -335,6 +335,87 @@ export async function annotateElement(
   return out;
 }
 
+/**
+ * One catalog reference of an element (RM-01 § 3.1): a `lila:responsibility` (`kind:
+ * 'responsibility'`, its RACI `type` and `roleRef` as `ref`) or a `lila:*Ref`/`lila:input`/
+ * `lila:output` (`kind` is the `RefKind`).
+ */
+export interface CatalogReference {
+  readonly elementId: string;
+  readonly kind: 'responsibility' | RefKind;
+  /** The RACI type of a responsibility (`R`, `A`, `C`, `I`); absent for the other kinds. */
+  readonly type?: string;
+  readonly ref: string;
+}
+
+/**
+ * Every catalog reference of the diagram (#672), in document order and, inside an element, in file
+ * order: what the usage index scans. Throws `AnnotationContentLossError` where `annotateElement` would.
+ */
+export async function readCatalogReferences(xml: string): Promise<CatalogReference[]> {
+  const out: CatalogReference[] = [];
+  await rewriteCatalogReferences(xml, (reference) => {
+    out.push(reference);
+    return undefined;
+  });
+  return out;
+}
+
+/**
+ * Rewrites the catalog references of the whole diagram (#672): `rewrite` gets each one and answers
+ * the id to write instead, `null` to remove the reference, or `undefined` to keep it. An element
+ * left with no extension elements loses its empty `bpmn:extensionElements`. Returns the new XML and
+ * how many references changed; with none, `xml` comes back **as given**, not reserialized, so a
+ * model nobody had to touch keeps its bytes. Throws `AnnotationContentLossError` where
+ * `annotateElement` would.
+ */
+export async function rewriteCatalogReferences(
+  xml: string,
+  rewrite: (reference: CatalogReference) => string | null | undefined,
+): Promise<{ readonly xml: string; readonly changed: number }> {
+  const moddle = BpmnModdle({ lila });
+  const { rootElement: root, warnings } = await moddle.fromXML(xml);
+  assertNoContentLoss(warnings);
+  let changed = 0;
+  const seen = new Set<ModdleElement>();
+  for (const el of walk(root)) {
+    const values = el.extensionElements?.values;
+    if (values === undefined || seen.has(el)) continue;
+    seen.add(el);
+    const removed = new Set<ModdleElement>();
+    const rewritten: ModdleElement[] = [];
+    /** What makes two references of one element the same: element type, RACI type and id. */
+    const signature = (value: ModdleElement): string =>
+      JSON.stringify([value.$type, value.type ?? '', (value.$type === RESPONSIBILITY_TYPE ? value.roleRef : value.ref) ?? '']);
+    for (const value of values) {
+      const responsibility = value.$type === RESPONSIBILITY_TYPE;
+      const kind = responsibility ? 'responsibility' : REF_TYPE_TO_KIND.get(value.$type);
+      if (kind === undefined) continue;
+      const ref: string = (responsibility ? value.roleRef : value.ref) ?? '';
+      const next = rewrite({ elementId: el.id, kind, ...(responsibility ? { type: value.type ?? '' } : {}), ref });
+      if (next === undefined || next === ref) continue;
+      changed++;
+      if (next === null) removed.add(value);
+      else {
+        if (responsibility) value.roleRef = next;
+        else value.ref = next;
+        rewritten.push(value);
+      }
+    }
+    // A rewrite that makes a reference repeat one the element already has (R r1 and R r2, r1
+    // replaced by r2) keeps one: the duplicate says nothing more.
+    const kept = new Set(values.filter((value) => !removed.has(value) && !rewritten.includes(value)).map(signature));
+    for (const value of rewritten) {
+      if (kept.has(signature(value))) removed.add(value);
+      else kept.add(signature(value));
+    }
+    if (removed.size > 0) keepExtensions(el, (value) => !removed.has(value));
+  }
+  if (changed === 0) return { xml, changed };
+  const { xml: out } = await moddle.toXML(root, { format: true });
+  return { xml: out, changed };
+}
+
 /** A `lila:attributeValue` and the id of the element that holds it. */
 export interface HeldAttributeValue extends AttributeValue {
   elementId: string;

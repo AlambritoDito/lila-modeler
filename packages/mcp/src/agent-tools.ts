@@ -3,7 +3,9 @@
  * `get_raci_matrix`, `import_scenario_sheet`, `export_scenario_template` and `create_project`, the
  * read-only inventory of #628: `get_project` and `get_scenario`, the raw BPMN of a process
  * (#632): `get_process_bpmn` and `put_process_bpmn`, and renaming and deleting processes and
- * scenarios (#634): `rename_process`, `delete_process`, `rename_scenario` and `delete_scenario`.
+ * scenarios (#634): `rename_process`, `delete_process`, `rename_scenario` and `delete_scenario`, and
+ * the catalog (#672): `list_catalog`, `get_catalog_object`, `create_catalog_object`,
+ * `update_catalog_object`, `delete_catalog_object`, `find_usages` and `adopt_reference`.
  * Thin layers over
  * `@lila-modeler/engine/project-fs`, like `lila process annotate|raci` and
  * `lila scenario import|template`; registered by `createServer` (`server.ts`).
@@ -30,6 +32,13 @@ import {
   renameLilaProcess,
   renameLilaScenario,
   writeExportFile,
+  adoptLilaReference,
+  createLilaCatalogObject,
+  deleteLilaCatalogObject,
+  lilaCatalogList,
+  lilaCatalogObject,
+  lilaUsages,
+  updateLilaCatalogObject,
 } from '@lila-modeler/engine/project-fs';
 import type { CallToolResult, McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
@@ -170,8 +179,9 @@ export function registerAgentTools(
       description:
         'The RACI matrix of a process of a .lila: `roles` (every roleRef, in order of appearance) ' +
         'and `rows`, one per element with responsibilities, in the order of the process document ' +
-        '(id, name, lane, the raw `responsibilities` and `cells`: role -> "R", "A, C"…). Like ' +
-        '`lila process raci --json`.',
+        '(id, name, lane, the raw `responsibilities` and `cells`: role -> "R", "A, C"…), and ' +
+        '`roleNames`: role id -> the name of the catalog role it resolves to (ids that match no ' +
+        'role are left out; the ids stay the keys). Like `lila process raci --json`.',
       inputSchema: z.object({ project: projectSchema, process: processSchema, locale: localeSchema }),
       annotations: { readOnlyHint: true },
     },
@@ -515,6 +525,237 @@ export function registerAgentTools(
         return textResult(await deleteLilaScenario({ file: project, process, scenario, dryRun, locale: localeOf(locale) }));
       } catch (error) {
         return failure('delete_scenario', error);
+      }
+    },
+  );
+
+  // Catalog (#672, RM-01). Folder projects wait for the version 3 folder adapter (#671).
+  const upgradeText =
+    'The first object created or adopted in a version 1 or 2 file saves it as repository version 3: ' +
+    'the result (a dry run too) says `wouldUpgrade: true` with a `note`, because Lila 1.0.0-beta.15 ' +
+    'to beta.28 and older cannot open the upgraded file.';
+  const catalogProjectSchema = z.string().describe('Path to the .lila, relative to the cwd of the server process.');
+  const typeSchema = z.string().describe('role, unit, system or document.');
+  const optionalTypeSchema = z
+    .string()
+    .optional()
+    .describe('The object\'s type; needed only when objects of several types share the id.');
+  const idSchema = z.string().describe('The object\'s id, e.g. "role-4k9w2m7q1z8c".');
+  const attributesSchema = z
+    .array(z.object({ name: z.string(), value: z.string() }))
+    .describe('Free extended attributes, { name, value } text pairs, in order.');
+  const fieldsShape = {
+    description: z.string().describe('Plain text.'),
+    unitRef: z.string().describe('role: the id of its unit.'),
+    parentRef: z.string().describe('unit: the id of its parent unit.'),
+    ownerRef: z.string().describe('system, document: the id of the owning role.'),
+    url: z.string().describe('system, document: an http or https URL, shown as a link, never fetched.'),
+  };
+
+  server.registerTool(
+    'list_catalog',
+    {
+      title: 'List catalog',
+      description:
+        'The catalog objects of a .lila (roles, units, systems, documents, and objects of types this ' +
+        'build only reads), by type then id, each whole: `type`, `id`, `name`, `revision`, and its ' +
+        'fields. `formatVersion` says whether the file is already a version 3 repository. Read-only.',
+      inputSchema: z.object({
+        project: catalogProjectSchema,
+        type: z.string().optional().describe('Only objects of this type.'),
+        locale: localeSchema,
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ project, type, locale }): Promise<CallToolResult> => {
+      try {
+        return textResult(await lilaCatalogList({ file: project, type, locale: localeOf(locale) }));
+      } catch (error) {
+        return failure('list_catalog', error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_catalog_object',
+    {
+      title: 'Get catalog object',
+      description:
+        'One catalog object of a .lila by id, whole, with its `revision`: pass that revision as ' +
+        '`baseRevision` to `update_catalog_object`. An unknown id is an error. Read-only.',
+      inputSchema: z.object({ project: catalogProjectSchema, id: idSchema, type: optionalTypeSchema, locale: localeSchema }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ project, id, type, locale }): Promise<CallToolResult> => {
+      try {
+        return textResult(await lilaCatalogObject({ file: project, id, type, locale: localeOf(locale) }));
+      } catch (error) {
+        return failure('get_catalog_object', error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'create_catalog_object',
+    {
+      title: 'Create catalog object',
+      description:
+        'Creates a catalog object (role, unit, system or document) in a .lila with a generated id ' +
+        '(`<type>-` and 12 characters) and revision 1, and saves the project atomically. Names are ' +
+        'not unique and never a key: refer to the object by the returned id (`annotate_element` ' +
+        'writes it in `responsibilities[].roleRef` or `refs`). ' + upgradeText +
+        ' Returns `{ file, dryRun, changed, written, object, created, updated, deleted, processes, wouldUpgrade, note? }`.',
+      inputSchema: z.object({
+        project: catalogProjectSchema,
+        type: typeSchema,
+        name: z.string().describe('What people read. Not empty.'),
+        description: fieldsShape.description.optional(),
+        attributes: attributesSchema.optional(),
+        unitRef: fieldsShape.unitRef.optional(),
+        parentRef: fieldsShape.parentRef.optional(),
+        ownerRef: fieldsShape.ownerRef.optional(),
+        url: fieldsShape.url.optional(),
+        dryRun: dryRunSchema,
+        locale: localeSchema,
+      }),
+    },
+    async ({ project, dryRun, locale, ...fields }): Promise<CallToolResult> => {
+      try {
+        return textResult(await createLilaCatalogObject({ file: project, dryRun, locale: localeOf(locale), ...fields }));
+      } catch (error) {
+        return failure('create_catalog_object', error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'update_catalog_object',
+    {
+      title: 'Update catalog object',
+      description:
+        'Renames a catalog object of a .lila or changes its fields, and saves the project atomically. ' +
+        'A rename writes only the object: no model changes, because models hold the id. ' +
+        '`baseRevision` is the revision you read (`get_catalog_object`); if the object changed since, ' +
+        'the call fails with E-REVISION and writes nothing. A field left out stays; null removes an ' +
+        'optional one. Its revision goes up by one; an update that changes nothing writes nothing. ' +
+        'Objects of types this build does not know are read-only. Returns what `create_catalog_object` returns.',
+      inputSchema: z.object({
+        project: catalogProjectSchema,
+        id: idSchema,
+        type: optionalTypeSchema,
+        baseRevision: z.number().int().describe('The revision you read.'),
+        name: z.string().optional().describe('The new name. Not empty.'),
+        description: fieldsShape.description.nullable().optional(),
+        attributes: attributesSchema.nullable().optional(),
+        unitRef: fieldsShape.unitRef.nullable().optional(),
+        parentRef: fieldsShape.parentRef.nullable().optional(),
+        ownerRef: fieldsShape.ownerRef.nullable().optional(),
+        url: fieldsShape.url.nullable().optional(),
+        dryRun: dryRunSchema,
+        locale: localeSchema,
+      }),
+    },
+    async ({ project, dryRun, locale, ...fields }): Promise<CallToolResult> => {
+      try {
+        return textResult(await updateLilaCatalogObject({ file: project, dryRun, locale: localeOf(locale), ...fields }));
+      } catch (error) {
+        return failure('update_catalog_object', error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'delete_catalog_object',
+    {
+      title: 'Delete catalog object',
+      description:
+        'Deletes a catalog object of a .lila and saves the project atomically. An object in use (in ' +
+        'a model, or in another object\'s unitRef/parentRef/ownerRef) is refused with E-OBJETO-EN-USO, ' +
+        'listing its uses, unless you say what happens to the references: `replaceWith` another ' +
+        'object of the same type (every reference is rewritten to it) or `removeReferences: true`. ' +
+        'Rewritten models get a new revision, so their saved runs become stale; `processes` lists ' +
+        'them. There is no forced delete that leaves broken references (references held by objects ' +
+        'of types this build does not know are not seen). Returns what ' +
+        '`create_catalog_object` returns; `object` is the deleted one.',
+      inputSchema: z.object({
+        project: catalogProjectSchema,
+        id: idSchema,
+        type: optionalTypeSchema,
+        baseRevision: z.number().int().optional().describe('The revision you read; when given, a changed object fails with E-REVISION.'),
+        replaceWith: z.string().optional().describe('The id of an object of the same type that takes over every reference.'),
+        removeReferences: z.boolean().optional().describe('Remove every reference to the object, then delete it.'),
+        dryRun: dryRunSchema,
+        locale: localeSchema,
+      }),
+      annotations: { destructiveHint: true },
+    },
+    async ({ project, id, type, baseRevision, replaceWith, removeReferences, dryRun, locale }): Promise<CallToolResult> => {
+      try {
+        return textResult(
+          await deleteLilaCatalogObject({ file: project, id, type, baseRevision, replaceWith, removeReferences, dryRun, locale: localeOf(locale) }),
+        );
+      } catch (error) {
+        return failure('delete_catalog_object', error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'find_usages',
+    {
+      title: 'Find usages',
+      description:
+        'Where catalog objects are used in a .lila. With `id`: the uses of that object, each ' +
+        '`{ process, slug, element, relation }` (relation `responsibility:R`, `systemRef`, `input`…; ' +
+        '`process` is the process id, absent in a version 1 or 2 file) ' +
+        'or `{ object, field }`; when no object has that id, `resolved: false` and the unresolved ' +
+        'references to it (what `adopt_reference` would adopt). Without `id`: `uses` of every object ' +
+        '(by `<type>/<id>`), every `unresolved` reference, and `duplicateProcessIds` (BPMN process ' +
+        'ids declared by more than one process). Derived from the models; read-only.',
+      inputSchema: z.object({
+        project: catalogProjectSchema,
+        id: z.string().optional().describe('An object id, or a reference value that matches no object.'),
+        type: z.string().optional().describe('The type, when several types share the id or to narrow unresolved references.'),
+        locale: localeSchema,
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ project, id, type, locale }): Promise<CallToolResult> => {
+      try {
+        return textResult(await lilaUsages({ file: project, id, type, locale: localeOf(locale) }));
+      } catch (error) {
+        return failure('find_usages', error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'adopt_reference',
+    {
+      title: 'Adopt reference',
+      description:
+        'Turns a reference typed by hand before the catalog existed (a roleRef "cashier", a ' +
+        'systemRef "POS") into a catalog object of `type`, and saves the project atomically. A value ' +
+        'that is a valid id (lowercase letters, digits, hyphens, at most 64), not a reserved Windows ' +
+        'name (con, nul…) and not the id of another object becomes the object\'s id, and no model is ' +
+        'rewritten; any other value gets a generated id, and every reference of that type ' +
+        'with that value, in every process, is rewritten to it (`processes` lists them). `name` ' +
+        'defaults to the value. ' + upgradeText +
+        ' Returns what `create_catalog_object` returns.',
+      inputSchema: z.object({
+        project: catalogProjectSchema,
+        type: typeSchema,
+        ref: z.string().describe('The reference as it is written in the models.'),
+        name: z.string().optional().describe('The object\'s name; defaults to `ref`.'),
+        dryRun: dryRunSchema,
+        locale: localeSchema,
+      }),
+    },
+    async ({ project, type, ref, name, dryRun, locale }): Promise<CallToolResult> => {
+      try {
+        return textResult(await adoptLilaReference({ file: project, type, ref, name, dryRun, locale: localeOf(locale) }));
+      } catch (error) {
+        return failure('adopt_reference', error);
       }
     },
   );
