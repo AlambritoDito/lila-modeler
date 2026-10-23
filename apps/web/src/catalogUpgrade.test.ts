@@ -10,7 +10,7 @@ import { confirmUpgrade, upgradeQuestion } from './catalogUpgrade';
 const proceso = (slug: string) => ({
   slug, name: slug, model: { id: `Process_${slug}`, name: 'model.bpmn', xml: '<x/>', revision: 0 }, scenarios: {}, scenarioRevisions: {}, runs: [],
 });
-const V1: ProjectDocument = { version: 1, id: 'p', name: 'Front office', ...proceso('a') };
+const V1: ProjectDocument = { ...proceso('a'), version: 1, id: 'p', name: 'Front office' };
 const V2: ProjectDocument = withProcesses(V1, [proceso('a'), proceso('b'), proceso('c')]);
 
 describe('upgradeQuestion', () => {

@@ -23,7 +23,7 @@ const xml = (rol: string): string => `<?xml version="1.0" encoding="UTF-8"?>
 const proceso = (slug: string, rol: string) => ({
   slug, name: slug, model: { id: 'P', name: 'model.bpmn', xml: xml(rol), revision: 2 }, scenarios: {}, scenarioRevisions: {}, runs: [],
 });
-const V2: ProjectDocument = withProcesses({ version: 1, id: 'p', name: 'Front office', ...proceso('a', 'cajero') }, [proceso('a', 'cajero'), proceso('b', 'cajero')]);
+const V2: ProjectDocument = withProcesses({ ...proceso('a', 'cajero'), version: 1, id: 'p', name: 'Front office' }, [proceso('a', 'cajero'), proceso('b', 'cajero')]);
 
 describe('catalog undo', () => {
   it('after a create, removes the object, leaves the document version 3', () => {
