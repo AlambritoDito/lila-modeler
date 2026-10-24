@@ -201,6 +201,15 @@ export function documentToken(doc: ProjectDocument): string {
     : changeToken(doc.id, doc.model.revision, doc.scenarioRevisions, doc.runs.map((r) => r.id));
 }
 
+/**
+ * The catalog part of a document's change state (#93): its version 3 mark and its catalog objects.
+ * The change token reads processes only, so the app compares this one beside it to tell that a
+ * catalog object was created, adopted or undone since the last save.
+ */
+export function catalogToken(doc: Pick<ProjectDocument, 'formatVersion' | 'catalog'>): string {
+  return JSON.stringify([doc.formatVersion ?? null, doc.catalog ?? null]);
+}
+
 /** The one model file of a project folder or `.lila`. */
 export const MODELO_PROYECTO = 'model.bpmn';
 
