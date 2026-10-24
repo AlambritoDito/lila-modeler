@@ -2205,8 +2205,8 @@ export const en = {
   },
   /** #93: the catalog pickers of the properties panel, the version 3 confirmation and «Undo last catalog change». */
   catalogo: {
-    /** What an empty picker field invites, by the catalog type it expects. */
-    pista: { role: 'Pick or create a role', unit: 'Pick or create a unit', system: 'Pick or create a system', document: 'Pick or create a document' },
+    /** What an empty picker field invites, by the catalog type it expects: short, it shares a row in a narrow panel. */
+    pista: { role: 'Pick a role', unit: 'Pick a unit', system: 'Pick a system', document: 'Pick a document' },
     /** A value that matches no object of a version 3 repository (RM-01 § 3.4): kept and shown with its id. */
     noEnCatalogo: (id: string): string => `${id} — not in catalog`,
     /** The listbox of a picker, named after its field («Role 1»). */

@@ -2148,7 +2148,7 @@ export const es: Strings = {
     avisoOk: 'Entendido',
   },
   catalogo: {
-    pista: { role: 'Elige o crea un rol', unit: 'Elige o crea una unidad', system: 'Elige o crea un sistema', document: 'Elige o crea un documento' },
+    pista: { role: 'Elige un rol', unit: 'Elige una unidad', system: 'Elige un sistema', document: 'Elige un documento' },
     noEnCatalogo: (id: string): string => `${id} — no está en el catálogo`,
     opciones: (campo: string): string => `${campo}: catálogo`,
     sinResultados: 'Sin coincidencias',
