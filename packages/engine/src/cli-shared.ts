@@ -36,6 +36,9 @@ import type { EventLogRow, RunResult } from './core/result.js';
 import { eventLogCsvWriter } from './csv.js';
 import type { BaseTimeUnit } from './format.js';
 import { messages, type Locale } from './messages/index.js';
+import { lintCatalog, type CatalogWarning } from './project/catalog-lint.js';
+import { withProcesses } from './project/repository.js';
+import { formatVersionOf } from './project/upgrade.js';
 import { isLilaPath } from './project-fs/paths.js';
 import {
   findLilaScenario,
@@ -177,6 +180,26 @@ export function targetScenarios(
   given: readonly TargetingScenario[] = [],
 ): TargetingScenario[] {
   return [...given, ...Object.values(lila?.process.scenarios ?? {})];
+}
+
+/**
+ * #95: the catalog warnings of the process of a `.lila` (`lintCatalog`), for `lila validate` and
+ * `validate_bpmn`. Only that process is read: its references resolve against the catalog alone, so
+ * the other processes' models cannot change the answer, and a broken one cannot break it.
+ * `undefined`, so the report keeps its shape byte for byte, for a `.bpmn` or inline XML, a version
+ * 1 or 2 project (RM-01 § 3.4), and a model the lint cannot read (content bpmn-moddle would lose,
+ * `AnnotationContentLossError`, or XML it cannot parse): a warning never makes validation fail.
+ */
+export async function lilaCatalogWarnings(
+  lila: LilaProcess | undefined,
+  locale: Locale = 'en',
+): Promise<CatalogWarning[] | undefined> {
+  if (lila === undefined || formatVersionOf(lila.document) !== 3) return undefined;
+  try {
+    return await lintCatalog(withProcesses(lila.document, [lila.process]), undefined, { locale });
+  } catch {
+    return undefined;
+  }
 }
 
 /**

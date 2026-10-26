@@ -29,6 +29,8 @@ export type { CatalogAttribute, CatalogObject, KnownCatalogType } from './catalo
 export { asVersion3, formatVersionOf, upgradesToVersion3, withCatalog } from './upgrade.js';
 export { catalogKey, expectedTypeOf, REFERENCE_FIELDS, relationOf, usageIndex } from './usage.js';
 export type { CatalogUse, ObjectUse, ProcessUse, UnresolvedReference, UsageIndex } from './usage.js';
+export { lintCatalog } from './catalog-lint.js';
+export type { CatalogWarning, CatalogWarningCode } from './catalog-lint.js';
 export {
   adoptReference,
   CatalogError,

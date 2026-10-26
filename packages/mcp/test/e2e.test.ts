@@ -16,6 +16,8 @@ import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { afterAll, beforeAll, expect, test, vi } from 'vitest';
 
+import { asVersion3, encodeLila, processesOf, withProcesses } from '../../engine/src/project/index.js';
+import { HOTEL_PROCESSES, hotelDocument, hotelModel } from '../../engine/test/project/fixtures/catalog-hotel.js';
 import { absoluteLinks } from '../src/resources.js';
 
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
@@ -361,6 +363,35 @@ test('compare_scenarios (#665): format "xlsx" is the workbook of `lila compare -
   const noTarget = await client.callTool({ name: 'compare_scenarios', arguments: { scenarios: [asIs, toBe], format: 'xlsx' } });
   expect(noTarget.isError).toBe(true);
   expect(textOf(noTarget)).toContain('saveTo');
+}, 120_000);
+
+test('validate_bpmn (#95): catalogWarnings for a version 3 .lila, as `lila validate --json`; none for v1 or inline XML', async () => {
+  const receptionist = { type: 'role', id: 'role-7k2m9q4x1pzd', name: 'Receptionist', revision: 1 };
+  const base = asVersion3({ ...hotelDocument(2), catalog: [receptionist] });
+  const processes = processesOf(base).map((p) => {
+    const spec = HOTEL_PROCESSES.find((h) => h.slug === p.slug)!;
+    const roleRef = p.slug === 'check-out' ? 'ghost' : receptionist.id;
+    return { ...p, model: { ...p.model, xml: hotelModel(spec.bpmnId, spec.name, spec.task, `<lila:responsibility type="R" roleRef="${roleRef}" />`) } };
+  });
+  const file = join(temp, 'hotel.lila');
+  writeFileSync(file, encodeLila(withProcesses(base, processes)));
+
+  const result = await client.callTool({ name: 'validate_bpmn', arguments: { path: file, process: 'check-out' } });
+  expect(result.isError ?? false).toBe(false);
+  const report = jsonOf(result);
+  expect(report.catalogWarnings.map((w: { code: string; element: string; ref: string }) => [w.code, w.element, w.ref])).toEqual([
+    ['W-REF-SIN-CATALOGO', 'Task_1', 'ghost'],
+  ]);
+  const cli = JSON.parse(execFileSync(process.execPath, [lilaBin, 'validate', file, '--process', 'check-out', '--json'], { cwd: repo, encoding: 'utf8' }));
+  expect(report).toEqual(cli);
+  const resolved = await client.callTool({ name: 'validate_bpmn', arguments: { path: file, process: 'check-in', locale: 'es' } });
+  expect(jsonOf(resolved).catalogWarnings).toEqual([]);
+
+  for (const args of [{ path: 'examples/pedido.lila' }, { xml: hotelModel('Process_X', 'X', 'Y', '<lila:responsibility type="A" roleRef="ghost" />') }]) {
+    const other = await client.callTool({ name: 'validate_bpmn', arguments: args });
+    expect(other.isError ?? false).toBe(false);
+    expect(Object.keys(jsonOf(other))).toEqual(['ir', 'ignoredProcessIds', 'errors', 'warnings']);
+  }
 }, 120_000);
 
 test('el servidor sobrevive a un error de tool y sigue respondiendo', async () => {

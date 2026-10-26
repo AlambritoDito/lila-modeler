@@ -1102,7 +1102,7 @@ Desde LILA-211 los textos de todos estos códigos viven en un catálogo por idio
 traducción; los dos son normativos, cada uno para su idioma, y esta sección da los dos textos donde
 los fija literalmente. El código (`E-…`, `W-…`) y el id de regla (`R-…`) **no** se traducen nunca.
 Un test (`packages/engine/test/messages.test.ts`) mantiene en paso esta sección, el catálogo y el
-código: los 61 códigos del catálogo son exactamente los que emite `packages/engine/src`, `en` y
+código: los 64 códigos del catálogo son exactamente los que emite `packages/engine/src`, `en` y
 `es` declaran las mismas entradas, y ningún literal `"CÓDIGO: …"` vive fuera del catálogo.
 
 Errores (abortan; los de validación se devuelven en `errors[]`, los de ejecución se lanzan; la CLI sale con 1):
@@ -1198,6 +1198,44 @@ temporizador o start, o la de un XOR/OR divergente sin `probability` ni `conditi
 en ninguna salida. Un `probability: 0` cuenta como configuración. No avisa por finales,
 terminate, AND, gateways de eventos ni gateways de paso/convergencia. Las reglas específicas
 de probabilidades y los avisos de tiempo ausente siguen aplicándose; no cambia ningún cálculo.
+
+**Avisos del catálogo (#95).** Dos avisos más salen del lint del catálogo (`lintCatalog`,
+`packages/engine/src/project/catalog-lint.ts`), no del validador ni de la corrida: no viajan en
+`warnings[]` ni en `RunResult.warnings[]`, sino en el arreglo aditivo `catalogWarnings[]` que
+`lila validate <archivo.lila>` (`--json`, más una sección de texto) y `validate_bpmn({ path })`
+añaden para un repositorio con catálogo (versión 3, `docs/REPOSITORY_CONTRACT.md` § 3.4). Un `.bpmn`,
+el XML inline y un proyecto versión 1 o 2 no reciben `catalogWarnings`, y ninguno de los dos códigos
+cambia el código de salida ni `errors`/`warnings`. Cada entrada es
+`{ code, process, slug, element, message }`, con `process` el id de proceso del repositorio
+(`docs/REPOSITORY_CONTRACT.md` § 3.2, no el `process@id` BPMN) y `slug` su carpeta. Solo se revisa el
+proceso del repositorio que se valida, con todos los `bpmn:process` de su modelo (también los pools
+que no se simulan). Si ese modelo no se puede leer sin perder contenido (el caso que
+`annotateElement` rechaza) o no se puede parsear, `catalogWarnings` se omite, igual que para un
+proyecto versión 1 o 2: un aviso nunca hace fallar la validación.
+
+- `W-REF-SIN-CATALOGO`: una referencia BPMN (`lila:responsibility roleRef`, o el `ref` de un
+  `lila:*Ref`, `lila:input` o `lila:output`) cuyo id no coincide con ningún objeto del tipo que
+  espera (`docs/REPOSITORY_CONTRACT.md` § 3.1; un `riskRef` se resuelve contra un objeto `risk`
+  conservado). Una por proceso, elemento, relación e id; la entrada añade `relation`, `type` y
+  `ref`. Un `roleRef`/`ref` vacío o ausente es un id como cualquier otro y no coincide con nada. La
+  referencia se conserva tal cual.
+- `W-ACTIVIDAD-SIN-RESPONSABLE`: una tarea (de cualquier tipo), un subproceso (incluidos los
+  subprocesos de evento, los de transacción y los ad hoc) o una call activity sin ningún
+  `lila:responsibility type="R"` (una `R` mayúscula, como la escriben la app y `annotate_element`),
+  se resuelva o no su rol. Eventos, gateways, lanes y pools nunca lo reciben.
+
+```
+W-REF-SIN-CATALOGO: <element> (process <process>): the <relation> reference "<id>" matches no <type> object in the catalog; it is kept as it is.
+W-ACTIVIDAD-SIN-RESPONSABLE: <element> (process <process>): the activity has no Responsible role (lila:responsibility type="R").
+```
+
+```
+W-REF-SIN-CATALOGO: <element> (proceso <process>): la referencia <relation> "<id>" no coincide con ningún objeto <type> del catálogo; se conserva tal cual.
+W-ACTIVIDAD-SIN-RESPONSABLE: <element> (proceso <process>): la actividad no tiene ningún rol Responsable (lila:responsibility type="R").
+```
+
+Como en todo este apartado, el código viaja en su propio campo y el `message` es el texto que
+sigue a `CÓDIGO: `; la sección de texto de la CLI imprime los dos.
 
 `W-RECURSO-SATURADO` avisa de que un pool nunca alcanza estado estacionario: llega más trabajo
 del que puede despachar y su cola crece con la duración de la corrida. Texto exacto, uno por pool

@@ -289,6 +289,11 @@ export const es: Catalog = {
       `${flowId} no declara probabilidad, pero ${gatewayId} tiene otras salidas que sí; el flujo sin declarar siempre se toma, porque la probabilidad ausente vale 1 (${path}).`,
 
     'E-CLAVE-DESCONOCIDA': (keys) => `clave no reconocida por el esquema: ${keys}.`,
+
+    'W-REF-SIN-CATALOGO': (process, element, relation, ref, type) =>
+      `${element} (proceso ${process}): la referencia ${relation} "${ref}" no coincide con ningún objeto ${type} del catálogo; se conserva tal cual.`,
+    'W-ACTIVIDAD-SIN-RESPONSABLE': (process, element) =>
+      `${element} (proceso ${process}): la actividad no tiene ningún rol Responsable (lila:responsibility type="R").`,
   },
   chrome: coreEs.chrome,
   constructions: {
@@ -372,6 +377,7 @@ export const es: Catalog = {
     defaultFlow: () => '(por defecto)',
     otherProcesses: (ids) => `Otros procesos del archivo, no simulados: ${ids}`,
     problemCounts: (errors, warnings) => `${errors} errores, ${warnings} avisos.`,
+    catalogWarnings: (count) => `Avisos del catálogo (${count}):`,
     errorLabel: () => 'error',
     warningLabel: () => 'aviso',
 
