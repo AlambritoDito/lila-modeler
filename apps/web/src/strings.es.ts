@@ -2147,4 +2147,20 @@ export const es: Strings = {
     avisoTexto: 'Está limitada: solo muestra los procesos. Usa Lila Modeler desde una computadora para el sistema completo.',
     avisoOk: 'Entendido',
   },
+  catalogo: {
+    pista: { role: 'Elige un rol', unit: 'Elige una unidad', system: 'Elige un sistema', document: 'Elige un documento' },
+    noEnCatalogo: (id: string): string => `${id} — no está en el catálogo`,
+    opciones: (campo: string): string => `${campo}: catálogo`,
+    sinResultados: 'Sin coincidencias',
+    crear: (nombre: string): string => `Crear «${nombre}»`,
+    adoptar: 'Adoptar',
+    adoptarDe: (campo: string, id: string): string => `Adoptar ${id} en el catálogo (${campo})`,
+    noAdoptable: (id: string): string => `${id} no se puede adoptar como id del catálogo para este campo: elige o crea un objeto`,
+    mejoraTitulo: '¿Actualizar este proyecto para el catálogo?',
+    mejoraTexto: (version: string): string =>
+      `Añadir un objeto al catálogo guarda este proyecto como repositorio de versión 3. Las versiones de Lila anteriores a ${version} ya no podrán abrirlo. Solo se pregunta una vez por proyecto.`,
+    mejoraConfirmar: 'Actualizar y continuar',
+    deshacer: 'Deshacer el último cambio del catálogo',
+    error: (detalle: string): string => `El catálogo no cambió: ${detalle}`,
+  },
 };

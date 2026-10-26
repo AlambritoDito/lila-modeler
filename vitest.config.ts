@@ -16,7 +16,7 @@ const onCi = CI !== undefined && CI !== '' && CI !== 'false';
 export default defineConfig({
   // Tests run with this config, not `apps/web/vite.config.ts`, so the welcome's build-time
   // constant (#425) is defined here too, from the same CHANGELOG section.
-  define: { __LILA_NOVEDADES__: JSON.stringify(novedades(leer('./CHANGELOG.md'), webVersion)) },
+  define: { __LILA_NOVEDADES__: JSON.stringify(novedades(leer('./CHANGELOG.md'), webVersion)), __LILA_VERSION__: JSON.stringify(webVersion) },
   test: {
     // Cada fork corre simulaciones de 30 réplicas de examples/pedido. Con `maxForks` por
     // defecto (un proceso por core) el runner del CI queda saturado, y de ahí salen los
