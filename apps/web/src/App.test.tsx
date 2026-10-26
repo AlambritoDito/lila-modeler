@@ -79,7 +79,9 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   soltar: vi.fn(),
   // The live reparse's `validateBpmnModel` calls (the gate is mocked, so they are only App's):
   // what `esperarReparse` waits on instead of guessing how long a real parse takes under CI load.
-  reparses: [] as Promise<unknown>[] }));
+  reparses: [] as Promise<unknown>[],
+  // #93: the catalog the shell hands the properties panel, to play the pickers' create, adopt and read.
+  catalogo: undefined as import('./SelectorCatalogo').CatalogoPanel | undefined }));
 /**
  * The canvas elements the command palette lists (#410), with no box, so the shape palette's
  * drop-target search (which wants a width and a height) still ignores them. Three named shapes,
@@ -130,7 +132,7 @@ vi.mock('./PanelResumen', async (real) => ({ ...(await real<object>()), PanelRes
 vi.mock('./VistaComparar', async (real) => ({ ...(await real<object>()), VistaComparar: ({ nombreRef, nombreOtro, onCerrar }: { nombreRef: string; nombreOtro: string; onCerrar: () => void }) =>
   <div><span data-mock="comparar">{nombreRef} vs {nombreOtro}</span><button type="button" onClick={onCerrar}>{`${T.c5.comparar.cerrar} ✕`}</button></div> }));
 vi.mock('./MapasComparados', () => ({ MapasComparados: ({ nombreRef, nombreOtro }: { nombreRef: string; nombreOtro: string }) => <div data-mock="mapas">{nombreRef} vs {nombreOtro}</div> }));
-vi.mock('./PropertiesPanel', async (real) => ({ ...(await real<object>()), PanelPropiedades: () => null }));
+vi.mock('./PropertiesPanel', async (real) => ({ ...(await real<object>()), PanelPropiedades: ({ catalogo }: { catalogo?: typeof mocks.catalogo }) => { mocks.catalogo = catalogo; return null; } }));
 // Animate (#419 test) mounts the replay controls, which drive a real bpmn-js; not this suite's business.
 vi.mock('./replay/Replay', () => ({ Replay: (props: { reproduciendo?: boolean }) => { mocks.replay = props; return <div data-mock="tiempo" data-reproduciendo={String(props.reproduciendo)} />; } }));
 vi.mock('./ScenarioPanel', async (importOriginal) => ({ problemasEscenario: () => mocks.problemas,
@@ -3390,6 +3392,159 @@ it('the desktop autosave of a version 3 project carries its catalog (#92)', asyn
     expect(copia.catalog).toEqual([RECEPCIONISTA]);
     expect(copia.process?.id).toBe(v3.process!.id);
   } finally { vi.useRealTimers(); }
+});
+
+// ---------- catalog pickers: version 3 confirmation and «Undo last catalog change» (#93) ----------
+
+const dialogoMejora = () => container.querySelector<HTMLDialogElement>('dialog.confirmar-mejora');
+const botonDeshacerCatalogo = () => [...container.querySelectorAll<HTMLButtonElement>('.menu-archivo button')].find((b) => b.textContent === T.catalogo.deshacer)!;
+async function abrirDocumento(doc: ProjectDocument): Promise<void> {
+  vi.mocked(session.openProject).mockResolvedValueOnce(readLila(encodeLila(doc)));
+  await click(T.app.abrir);
+  if (container.querySelector<HTMLDialogElement>('dialog.confirmar-reemplazo')?.open === true) await click(T.app.descartar);
+  // The pickers live in the Properties panel's tabs, not behind the scenario tab this suite starts on.
+  await click(T.app.pestanas.documentacion);
+  await asentarReparse();
+}
+/**
+ * Lets the reparse of the opened model land (its 150 ms timer, then the parse and the seeding of
+ * #420, which can rewrite a scenario): a save before it would be followed by an unrelated edit.
+ */
+async function asentarReparse(): Promise<void> {
+  await act(async () => {
+    await new Promise((listo) => { setTimeout(listo, 250); });
+    await Promise.allSettled(mocks.reparses);
+    await new Promise((listo) => { setTimeout(listo, 0); });
+  });
+}
+/** Starts a catalog operation through the panel's catalog; the promise settles after the dialog, if any. */
+async function enCatalogo(operar: (c: NonNullable<typeof mocks.catalogo>) => Promise<unknown>): Promise<{ resultado: Promise<unknown> }> {
+  let resultado!: Promise<unknown>;
+  await act(async () => { resultado = operar(mocks.catalogo!); });
+  // Wrapped: an async function would otherwise wait for the dialog's answer before returning.
+  return { resultado };
+}
+async function responderMejora(boton: string): Promise<void> {
+  await act(async () => { [...dialogoMejora()!.querySelectorAll('button')].find((b) => b.textContent === boton)!.click(); });
+}
+
+it('on a version 2 project the first catalog create asks once; Cancel changes nothing, Confirm makes it version 3 and unsaved (#93)', async () => {
+  await abrirDocumento(proyecto('p30', 'Front office') as ProjectDocument);
+  await nuevoProcesoConNombre('Billing');
+  await asentarReparse();
+  await click(T.app.guardar);
+  expect(container.textContent).toContain(T.app.guardado);
+  expect(mocks.catalogo?.conCatalogo).toBe(false);
+  expect(botonDeshacerCatalogo().disabled).toBe(true);
+
+  const cancelado = await enCatalogo((c) => c.crear('role', 'Receptionist'));
+  expect(dialogoMejora()?.open).toBe(true);
+  expect(dialogoMejora()!.textContent).toContain(T.catalogo.mejoraTexto(version));
+  await responderMejora(T.app.cancelar);
+  expect(await cancelado.resultado).toBeNull();
+  expect(dialogoMejora()).toBeNull();
+  expect(mocks.catalogo?.objetos).toEqual([]);
+  expect(container.textContent).toContain(T.app.guardado);
+  expect(botonDeshacerCatalogo().disabled).toBe(true);
+
+  const confirmado = await enCatalogo((c) => c.crear('role', 'Receptionist'));
+  await responderMejora(T.catalogo.mejoraConfirmar);
+  const recepcionista = await confirmado.resultado as { id: string; name: string };
+  expect(recepcionista).toMatchObject({ type: 'role', name: 'Receptionist', revision: 1 });
+  expect(mocks.catalogo?.objetos).toEqual([recepcionista]);
+  expect(mocks.catalogo?.conCatalogo).toBe(true);
+  expect(container.textContent).toContain(T.app.sinGuardar);
+  expect(botonDeshacerCatalogo().disabled).toBe(false);
+
+  // Version 3 in memory from now on: a second create does not ask.
+  const segundo = await enCatalogo((c) => c.crear('role', 'Temp'));
+  expect(dialogoMejora()).toBeNull();
+  expect(await segundo.resultado).toMatchObject({ name: 'Temp' });
+
+  await click(T.app.guardar);
+  const guardado = vi.mocked(session.saveProject).mock.calls.at(-1)![0];
+  expect(guardado.formatVersion).toBe(3);
+  expect(guardado.catalog?.map((o) => o.name)).toEqual(['Receptionist', 'Temp']);
+  expect(guardado.process?.id).toMatch(/^process-[0-9a-z]{12}$/);
+  expect(guardado.processes?.[0]?.id).toMatch(/^process-[0-9a-z]{12}$/);
+  expect(container.textContent).toContain(T.app.guardado);
+});
+
+it('«Undo last catalog change» from the File menu removes the object, keeps version 3 and disables itself; ⌘K lists it only while there is one (#93)', async () => {
+  await abrirDocumento(proyecto('p31', 'Front office') as ProjectDocument);
+  const creado = await enCatalogo((c) => c.crear('role', 'Temp'));
+  await responderMejora(T.catalogo.mejoraConfirmar);
+  await creado.resultado;
+  expect(mocks.catalogo?.objetos.map((o) => o.name)).toEqual(['Temp']);
+
+  await abrirConTeclado();
+  await escribir(T.catalogo.deshacer);
+  expect(opciones()).toEqual([T.catalogo.deshacer]);
+  await teclaPaleta('Escape');
+
+  await act(async () => { botonDeshacerCatalogo().click(); });
+  expect(mocks.catalogo?.objetos).toEqual([]);
+  expect(mocks.catalogo?.conCatalogo).toBe(true);
+  expect(botonDeshacerCatalogo().disabled).toBe(true);
+  await abrirConTeclado();
+  await escribir(T.catalogo.deshacer);
+  expect(opciones()).toEqual([]);
+  await teclaPaleta('Escape');
+
+  // Still version 3 and unsaved: the upgrade is never undone, and the file on disk is version 1.
+  expect(container.textContent).toContain(T.app.sinGuardar);
+  await click(T.app.guardar);
+  const guardado = vi.mocked(session.saveProject).mock.calls.at(-1)![0];
+  expect(guardado).toMatchObject({ formatVersion: 3, catalog: [] });
+
+  // The undo from ⌘K does the same; opening another project drops what there was to undo.
+  const otro = await enCatalogo((c) => c.crear('system', 'CRM'));
+  await otro.resultado;
+  await abrirConTeclado();
+  await escribir(T.catalogo.deshacer);
+  await teclaPaleta('Enter');
+  expect(mocks.catalogo?.objetos).toEqual([]);
+  const tercero = await enCatalogo((c) => c.crear('system', 'CRM'));
+  await tercero.resultado;
+  expect(botonDeshacerCatalogo().disabled).toBe(false);
+  await abrirDocumento(proyecto('p32', 'Another') as ProjectDocument);
+  expect(botonDeshacerCatalogo().disabled).toBe(true);
+});
+
+it('a version 3 project never asks; adopting an id keeps it as the object id; a discarded upgrade asks again on reopening (#93)', async () => {
+  const v3 = withCatalog(proyecto('p33', 'Recepción') as ProjectDocument, [RECEPCIONISTA]);
+  await abrirDocumento(v3);
+  expect(mocks.catalogo?.objetos).toEqual([RECEPCIONISTA]);
+  const adoptado = await enCatalogo((c) => c.adoptar('role', 'cajero'));
+  expect(dialogoMejora()).toBeNull();
+  expect(await adoptado.resultado).toEqual({ type: 'role', id: 'cajero', name: 'cajero', revision: 1 });
+  expect(container.textContent).toContain(T.app.sinGuardar);
+
+  // A version 1 project, upgraded and then discarded without saving, is version 1 on disk: it asks again.
+  const v1 = proyecto('p34', 'Front office') as ProjectDocument;
+  await abrirDocumento(v1);
+  const primero = await enCatalogo((c) => c.crear('role', 'Receptionist'));
+  await responderMejora(T.catalogo.mejoraConfirmar);
+  await primero.resultado;
+  await abrirDocumento(v1);
+  expect(mocks.catalogo?.objetos).toEqual([]);
+  const otraVez = await enCatalogo((c) => c.crear('role', 'Receptionist'));
+  expect(dialogoMejora()?.open).toBe(true);
+  await responderMejora(T.app.cancelar);
+  expect(await otraVez.resultado).toBeNull();
+});
+
+it('a project opened while the version 3 question is up cancels it; nothing changes in either project (#93)', async () => {
+  await abrirDocumento(proyecto('p35', 'Front office') as ProjectDocument);
+  const pendiente = await enCatalogo((c) => c.crear('role', 'Receptionist'));
+  expect(dialogoMejora()?.open).toBe(true);
+  // As the desktop native menu or a double-clicked file would: straight to the open, dialog or not.
+  await abrirDocumento(proyecto('p36', 'Another') as ProjectDocument);
+  expect(await pendiente.resultado).toBeNull();
+  expect(dialogoMejora()).toBeNull();
+  expect(container.textContent).toContain('Another');
+  expect(mocks.catalogo?.objetos).toEqual([]);
+  expect(mocks.catalogo?.conCatalogo).toBe(false);
 });
 
 it('scopes Montana decoration to successfully applied built-in themes', async () => {

@@ -29,6 +29,8 @@ import { atajoPorId, etiqueta, MAC } from './atajos';
 import { AtributosDelElemento } from './AtributosExtendidos';
 import { COLORES, colorComun, pintable, type ColorId, type ElementoColoreable } from './colores';
 import { iconoDeTipo } from './Paleta';
+import { pickerKindOf } from './catalogPicker';
+import { SelectorCatalogo, type CatalogoPanel } from './SelectorCatalogo';
 import { strings, useStrings } from './i18n';
 import type { PestanaId } from './ids';
 import type { Strings } from './strings.types';
@@ -281,7 +283,9 @@ export const raci = (): Strings['propiedades']['raci'] => strings().propiedades.
 
 /**
  * Los `lila:*Ref` que son una referencia suelta al catálogo, con su etiqueta y el texto de
- * ayuda del campo. El selector desde el catálogo es LILA-093; aquí el id se escribe a mano.
+ * ayuda del campo. With a catalog (`Props.catalogo`), the ones of a known catalog type get the
+ * picker (#93, `SelectorCatalogo`); risks, controls and KPIs, and every field without a catalog,
+ * keep the typed id.
  */
 export const referencias = (): Strings['propiedades']['referencias'] => strings().propiedades.referencias;
 
@@ -320,9 +324,14 @@ interface Props {
     datos: (id: string) => VistaRapidaDatos | null;
     onEditar: (paso: 'times' | 'resources' | 'routes') => void;
   };
+  /**
+   * #93: the project's catalog. With it, roles, systems and documents are picked from the catalog
+   * (`SelectorCatalogo`); without it (a loose diagram, bare benches) they are typed ids, as before.
+   */
+  catalogo?: CatalogoPanel | undefined;
 }
 
-export function PanelPropiedades({ modelador, pestana, avisos = 0, avanzado = false, simulacion }: Props): React.JSX.Element {
+export function PanelPropiedades({ modelador, pestana, avisos = 0, avanzado = false, simulacion, catalogo }: Props): React.JSX.Element {
   const S = useStrings();
   const [seleccion, setSeleccion] = useState<ElementoLienzo[]>([]);
   // El moddle no es estado de React: se lee en cada render. Este contador es lo que fuerza a
@@ -384,7 +393,7 @@ export function PanelPropiedades({ modelador, pestana, avisos = 0, avanzado = fa
       {pestana === 'propiedades' ? (
         <Propiedades elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} avanzado={avanzado} pintar={modelador.servicios.colores?.pintar} ancho={modelador.servicios.ancho} carriles={modelador.servicios.carriles} raiz={modelador.servicios.rootElement?.() as ElementoLienzo | undefined} />
       ) : (
-        <Documentacion elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} />
+        <Documentacion elemento={elemento} escritor={modelador.servicios} refrescar={refrescar} catalogo={catalogo} />
       )}
     </>
   );
@@ -974,7 +983,7 @@ function Colores({ elementos, pintar, refrescar }: {
   );
 }
 
-function Documentacion({ elemento, escritor, refrescar }: PropsPestana): React.JSX.Element {
+function Documentacion({ elemento, escritor, refrescar, catalogo }: PropsPestana & { catalogo?: CatalogoPanel | undefined }): React.JSX.Element {
   const S = useStrings();
   const proceso = procesoRelacionado(elemento);
   const documentado = proceso ?? elemento;
@@ -1044,16 +1053,31 @@ function Documentacion({ elemento, escritor, refrescar }: PropsPestana): React.J
                   </option>
                 ))}
               </select>
-              <input
-                type="text"
-                aria-label={S.propiedades.rol(i + 1)}
-                placeholder={S.propiedades.rolPista}
-                value={responsabilidad.roleRef ?? ''}
-                onChange={(e) => {
-                  editarExtension(escritor, elemento, responsabilidad, { roleRef: e.target.value });
-                  refrescar();
-                }}
-              />
+              {catalogo !== undefined ? (
+                <SelectorCatalogo
+                  // What is being typed belongs to this element: another selection starts afresh.
+                  key={elemento.id}
+                  campo={S.propiedades.rol(i + 1)}
+                  tipo="role"
+                  valor={responsabilidad.roleRef}
+                  catalogo={catalogo}
+                  onElegir={(id) => {
+                    editarExtension(escritor, elemento, responsabilidad, { roleRef: id });
+                    refrescar();
+                  }}
+                />
+              ) : (
+                <input
+                  type="text"
+                  aria-label={S.propiedades.rol(i + 1)}
+                  placeholder={S.propiedades.rolPista}
+                  value={responsabilidad.roleRef ?? ''}
+                  onChange={(e) => {
+                    editarExtension(escritor, elemento, responsabilidad, { roleRef: e.target.value });
+                    refrescar();
+                  }}
+                />
+              )}
               <button
                 type="button"
                 className="quitar"
@@ -1090,6 +1114,7 @@ function Documentacion({ elemento, escritor, refrescar }: PropsPestana): React.J
           elemento={elemento}
           escritor={escritor}
           refrescar={refrescar}
+          catalogo={catalogo}
         />
       ))}
     </div>
@@ -1103,25 +1128,41 @@ function ListaDeReferencias({
   elemento,
   escritor,
   refrescar,
-}: PropsPestana & { tipo: string; etiqueta: string; ayuda: string }): React.JSX.Element {
+  catalogo,
+}: PropsPestana & { tipo: string; etiqueta: string; ayuda: string; catalogo?: CatalogoPanel | undefined }): React.JSX.Element {
   const S = useStrings();
   const referencias = leerExtensiones(elemento, tipo);
+  const tipoCatalogo = catalogo === undefined ? null : pickerKindOf(tipo);
 
   return (
     <section className="grupo">
       <h3>{etiqueta}</h3>
       {referencias.map((referencia, i) => (
         <div className="fila" key={i}>
-          <input
-            type="text"
-            aria-label={S.propiedades.referenciaN(etiqueta, i + 1)}
-            placeholder={ayuda}
-            value={referencia.ref ?? ''}
-            onChange={(e) => {
-              editarExtension(escritor, elemento, referencia, { ref: e.target.value });
-              refrescar();
-            }}
-          />
+          {catalogo !== undefined && tipoCatalogo !== null ? (
+            <SelectorCatalogo
+              key={elemento.id}
+              campo={S.propiedades.referenciaN(etiqueta, i + 1)}
+              tipo={tipoCatalogo}
+              valor={referencia.ref}
+              catalogo={catalogo}
+              onElegir={(id) => {
+                editarExtension(escritor, elemento, referencia, { ref: id });
+                refrescar();
+              }}
+            />
+          ) : (
+            <input
+              type="text"
+              aria-label={S.propiedades.referenciaN(etiqueta, i + 1)}
+              placeholder={ayuda}
+              value={referencia.ref ?? ''}
+              onChange={(e) => {
+                editarExtension(escritor, elemento, referencia, { ref: e.target.value });
+                refrescar();
+              }}
+            />
+          )}
           <button
             type="button"
             className="quitar"

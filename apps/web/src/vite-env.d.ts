@@ -2,6 +2,8 @@
 
 /** Intro paragraph of this version's CHANGELOG section, English only (`novedades.ts`, #425). */
 declare const __LILA_NOVEDADES__: string;
+/** The app's version (`apps/web/package.json`), which the version 3 confirmation names (#93). */
+declare const __LILA_VERSION__: string;
 
 // `diagram-js-minimap` no publica tipos. Solo se usa como módulo de diagram-js
 // (`additionalModules`), así que basta con declararlo: el shell nunca lo toca.
