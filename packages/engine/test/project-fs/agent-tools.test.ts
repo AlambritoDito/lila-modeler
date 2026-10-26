@@ -697,3 +697,254 @@ function processesOfFile(file: string): string[] {
     .filter(([name]) => name.endsWith('model.bpmn'))
     .map(([, data]) => Buffer.from(data).toString('utf8'));
 }
+
+describe('lila catalog (#673)', () => {
+  function entriesOf(file: string): Record<string, string> {
+    return Object.fromEntries(Object.entries(unzipSync(readFileSync(file))).map(([name, data]) => [name, Buffer.from(data).toString('base64')]));
+  }
+
+  function changedEntries(before: Record<string, string>, after: Record<string, string>): string[] {
+    return [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((name) => before[name] !== after[name]).sort();
+  }
+
+  /** Ids drawn from a fixed byte sequence, so two runs of the same steps generate the same ids. */
+  function seededIds(): void {
+    let next = 0;
+    vi.spyOn(globalThis.crypto, 'getRandomValues').mockImplementation(<T extends ArrayBufferView | null>(array: T): T => {
+      const bytes = array as unknown as Uint8Array;
+      for (let i = 0; i < bytes.length; i++) bytes[i] = (next++ * 97 + 13) % 252;
+      return array;
+    });
+  }
+
+  /** `lila …` through `main()`: its exit code and what it printed. */
+  async function lila(...argv: string[]): Promise<{ code: number; text: string }> {
+    out.length = 0;
+    const code = await main(argv);
+    return { code, text: out.join('\n') };
+  }
+
+  /** `lila … --json`, which has to exit 0; its output parsed. */
+  async function lilaJson(...argv: string[]): Promise<Record<string, any>> {
+    const { code, text } = await lila(...argv, '--json');
+    expect(code, text).toBe(0);
+    return JSON.parse(text) as Record<string, any>;
+  }
+
+  /** One step of the Receptionist scenario: the CLI command and the call the MCP tool makes. */
+  interface Step {
+    readonly cli: (file: string, ids: Record<string, string>) => string[];
+    readonly mcp: (file: string, ids: Record<string, string>) => Promise<unknown>;
+    readonly id?: string;
+  }
+
+  const roleOf = (ids: Record<string, string>) => [{ type: 'R', roleRef: ids.receptionist! }];
+  const STEPS: readonly Step[] = [
+    { cli: (f) => ['catalog', 'create', f, '--type', 'role', '--name', 'Receptionist', '--dry-run'], mcp: (file) => createLilaCatalogObject({ file, type: 'role', name: 'Receptionist', dryRun: true }) },
+    { cli: (f) => ['catalog', 'create', f, '--type', 'role', '--name', 'Receptionist'], mcp: (file) => createLilaCatalogObject({ file, type: 'role', name: 'Receptionist' }), id: 'receptionist' },
+    { cli: (f) => ['catalog', 'create', f, '--type', 'role', '--name', 'Guest relations'], mcp: (file) => createLilaCatalogObject({ file, type: 'role', name: 'Guest relations' }), id: 'guest' },
+    ...HOTEL_PROCESSES.map((p): Step => ({
+      cli: (f, ids) => ['process', 'annotate', f, 'Task_1', '--process', p.slug, '--responsibility', `R:${ids.receptionist}`],
+      mcp: (file, ids) => annotateLilaElement({ file, process: p.slug, elementId: 'Task_1', responsibilities: roleOf(ids) }),
+    })),
+    { cli: (f, ids) => ['catalog', 'usages', f, ids.receptionist!], mcp: (file, ids) => lilaUsages({ file, id: ids.receptionist }) },
+    {
+      cli: (f, ids) => ['catalog', 'update', f, ids.receptionist!, '--base-revision', '1', '--name', 'Front desk agent'],
+      mcp: (file, ids) => updateLilaCatalogObject({ file, id: ids.receptionist!, baseRevision: 1, name: 'Front desk agent' }),
+    },
+    { cli: (f, ids) => ['catalog', 'show', f, ids.receptionist!], mcp: (file, ids) => lilaCatalogObject({ file, id: ids.receptionist! }) },
+    { cli: (f) => ['catalog', 'list', f, '--type', 'role'], mcp: (file) => lilaCatalogList({ file, type: 'role' }) },
+    {
+      cli: (f, ids) => ['catalog', 'delete', f, ids.receptionist!, '--replace-with', ids.guest!],
+      mcp: (file, ids) => deleteLilaCatalogObject({ file, id: ids.receptionist!, replaceWith: ids.guest }),
+    },
+    {
+      cli: (f, ids) => ['catalog', 'delete', f, ids.guest!, '--remove-references'],
+      mcp: (file, ids) => deleteLilaCatalogObject({ file, id: ids.guest!, removeReferences: true }),
+    },
+    {
+      cli: (f) => ['catalog', 'create', f, '--type', 'document', '--name', 'Registration card', '--url', 'https://intranet.example.com/card'],
+      mcp: (file) => createLilaCatalogObject({ file, type: 'document', name: 'Registration card', url: 'https://intranet.example.com/card' }),
+    },
+    { cli: (f) => ['catalog', 'usages', f], mcp: (file) => lilaUsages({ file }) },
+  ];
+
+  /** Runs the steps on a fresh version 2 hotel at `file`; each step's result and the entries it changed. */
+  async function receptionist(file: string, via: 'cli' | 'mcp'): Promise<{ results: unknown[]; changed: string[][] }> {
+    writeFileSync(file, hotelLila(2));
+    seededIds();
+    const ids: Record<string, string> = {};
+    const results: unknown[] = [];
+    const changed: string[][] = [];
+    for (const step of STEPS) {
+      const before = entriesOf(file);
+      // The MCP tool answers with `JSON.stringify` of what the function returns.
+      const result = via === 'cli' ? await lilaJson(...step.cli(file, ids)) : JSON.parse(JSON.stringify(await step.mcp(file, ids)));
+      if (step.id !== undefined) ids[step.id] = (result as { object: { id: string } }).object.id;
+      results.push(JSON.parse(JSON.stringify(result).replaceAll(file, '<file>')));
+      changed.push(changedEntries(before, entriesOf(file)));
+    }
+    vi.mocked(globalThis.crypto.getRandomValues).mockRestore();
+    return { results, changed };
+  }
+
+  test('the Receptionist scenario of #672 with `lila catalog` only gives what the MCP tools give', async () => {
+    const viaCli = join(scratch, 'cli.lila');
+    const viaMcp = join(scratch, 'mcp.lila');
+    const cli = await receptionist(viaCli, 'cli');
+    const mcp = await receptionist(viaMcp, 'mcp');
+    expect(cli.results).toEqual(mcp.results);
+    expect(cli.changed).toEqual(mcp.changed);
+    expect(readFileSync(viaCli)).toEqual(readFileSync(viaMcp));
+
+    // The same scenario, checked on its own terms.
+    const [dry, created, , , , , usages, renamed, shown, , replaced, removed] = cli.results as Record<string, any>[];
+    const id = created!.object.id as string;
+    expect(dry).toMatchObject({ dryRun: true, written: false, wouldUpgrade: true });
+    expect(cli.changed[0]).toEqual([]);
+    expect(created).toMatchObject({ written: true, wouldUpgrade: true, created: [`role/${id}`] });
+    expect(usages!.uses.map((u: { slug: string; relation: string }) => [u.slug, u.relation])).toEqual(HOTEL_PROCESSES.map((p) => [p.slug, 'responsibility:R']));
+    expect(renamed).toMatchObject({ updated: [`role/${id}`], processes: [] });
+    expect(cli.changed[7]).toEqual([`catalog/role/${id}.json`]);
+    expect(shown!.object).toMatchObject({ id, name: 'Front desk agent', revision: 2 });
+    expect(replaced!.processes.map((p: { slug: string }) => p.slug)).toEqual(HOTEL_PROCESSES.map((p) => p.slug));
+    expect(removed!.deleted).toHaveLength(1);
+  });
+
+  test('refusals exit 1 and write nothing: a stale --base-revision, a delete in use (with its uses), in both languages', async () => {
+    const file = join(scratch, 'hotel.lila');
+    writeFileSync(file, hotelLila(2));
+    const id = (await lilaJson('catalog', 'create', file, '--type', 'role', '--name', 'Receptionist')).object.id as string;
+    for (const p of HOTEL_PROCESSES) expect((await lila('process', 'annotate', file, 'Task_1', '--process', p.slug, '--responsibility', `R:${id}`)).code).toBe(0);
+    expect((await lila('catalog', 'update', file, id, '--base-revision', '1', '--name', 'Front desk agent')).code).toBe(0);
+    const settled = readFileSync(file);
+
+    const stale = await lila('catalog', 'update', file, id, '--base-revision', '1', '--name', 'Night auditor');
+    expect(stale.code).toBe(1);
+    expect(stale.text).toMatch(/^lila catalog: E-REVISION: /);
+
+    const inUse = await lila('catalog', 'delete', file, id);
+    expect(inUse.code).toBe(1);
+    expect(inUse.text).toMatch(/^lila catalog delete: E-OBJETO-EN-USO: role\/\S+ is in use \(3 uses: /);
+    for (const p of HOTEL_PROCESSES) expect(inUse.text).toContain(`${p.slug} Task_1 responsibility:R`);
+    expect(inUse.text).toContain('From the CLI: --replace-with <id>');
+    const inUseEs = await lila('catalog', 'delete', file, id, '--json', '--locale', 'es');
+    expect(inUseEs.code).toBe(1);
+    expect(inUseEs.text).toMatch(/E-OBJETO-EN-USO: .* está en uso \(3 usos: /);
+    expect(inUseEs.text).toContain('Desde la CLI');
+    expect(readFileSync(file)).toEqual(settled);
+
+    const other = (await lilaJson('catalog', 'create', file, '--type', 'role', '--name', 'Guest relations')).object.id as string;
+    const replaced = await lila('catalog', 'delete', file, id, '--replace-with', other);
+    expect(replaced.code, replaced.text).toBe(0);
+    expect(replaced.text).toContain(`Deleted role/${id} in ${file}.`);
+    for (const p of HOTEL_PROCESSES) expect(replaced.text).toContain(`model of ${p.slug}: 1 reference rewritten`);
+  });
+
+  test('create --dry-run on a version 2 file prints the upgrade note and writes nothing; --json carries wouldUpgrade', async () => {
+    const file = join(scratch, 'hotel.lila');
+    writeFileSync(file, hotelLila(2));
+    const original = readFileSync(file);
+    const dry = await lila('catalog', 'create', file, '--type', 'role', '--name', 'Receptionist', '--dry-run');
+    expect(dry.code).toBe(0);
+    expect(dry.text).toMatch(/^Dry run: would create role\/role-[0-9a-z]{12} in .*\. Nothing was written\./);
+    expect(dry.text).toContain('warning This change saves the file as repository version 3');
+    expect(dry.text).toContain('1.0.0-beta.15 to 1.0.0-beta.28');
+    const es = await lila('catalog', 'create', file, '--type', 'role', '--name', 'Recepcionista', '--dry-run', '--locale', 'es');
+    expect(es.text).toMatch(/^Simulacro: se crearía role\/role-/);
+    expect(es.text).toContain('aviso Este cambio guarda el archivo como repositorio versión 3');
+    expect((await lilaJson('catalog', 'adopt', file, 'cajero', '--type', 'role', '--dry-run'))).toMatchObject({ wouldUpgrade: true, written: false });
+    expect(readFileSync(file)).toEqual(original);
+
+    expect((await lilaJson('catalog', 'create', file, '--type', 'unit', '--name', 'Front office')).wouldUpgrade).toBe(true);
+    const second = await lila('catalog', 'create', file, '--type', 'role', '--name', 'Receptionist');
+    expect(second.text).not.toContain('version 3');
+    expect((await lilaJson('catalog', 'list', file)).formatVersion).toBe(3);
+  });
+
+  test('fields from the command line: attributes, refs, "" removes a field, adopt, text output', async () => {
+    const file = join(scratch, 'hand.lila');
+    writeFileSync(file, hotelLila(2, { handTyped: true }));
+    const adopted = await lilaJson('catalog', 'adopt', file, 'cajero', '--type', 'role', '--name', 'Cashier');
+    expect(adopted).toMatchObject({ object: { id: 'cajero', name: 'Cashier' }, processes: [] });
+    const unresolved = await lila('catalog', 'usages', file, 'POS');
+    expect(unresolved.text).toMatch(/^"POS" is not the id of any catalog object: 3 unresolved references to it:/);
+    const pos = await lila('catalog', 'adopt', file, 'POS', '--type', 'system', '--name', 'Point of sale');
+    expect(pos.text).toMatch(/^Adopted system\/system-[0-9a-z]{12} in /);
+    expect(pos.text).toContain('model of check-in: 1 reference rewritten');
+
+    const unit = (await lilaJson('catalog', 'create', file, '--type', 'unit', '--name', 'Front office')).object.id as string;
+    const updated = await lilaJson(
+      'catalog', 'update', file, 'cajero', '--base-revision', '1', '--unit-ref', unit,
+      '--description', 'Takes payments.', '--attribute', 'Shift=morning', '--attribute', 'Desk=A=1',
+    );
+    expect(updated.object).toEqual({
+      type: 'role', id: 'cajero', name: 'Cashier', description: 'Takes payments.', revision: 2,
+      attributes: [{ name: 'Shift', value: 'morning' }, { name: 'Desk', value: 'A=1' }], unitRef: unit,
+    });
+    const shown = await lila('catalog', 'show', file, 'cajero');
+    expect(shown.text.split('\n')).toEqual([
+      'role/cajero  "Cashier"  revision 2', '  description: Takes payments.', '  attributes:', '    Shift: morning', '    Desk: A=1', `  unitRef: ${unit}`,
+    ]);
+    const cleared = await lilaJson('catalog', 'update', file, 'cajero', '--base-revision', '2', '--description', '', '--unit-ref', '', '--clear-attributes');
+    expect(cleared.object).toEqual({ type: 'role', id: 'cajero', name: 'Cashier', revision: 3 });
+    const same = await lila('catalog', 'update', file, 'cajero', '--base-revision', '3', '--name', 'Cashier');
+    expect(same.text).toBe('Nothing changes: role/cajero already says this. Nothing was written.\nrole/cajero  "Cashier"  revision 3');
+
+    const list = await lila('catalog', 'list', file);
+    expect(list.text).toMatch(/format version 3: 3 catalog objects:\n {2}role\/cajero {2}"Cashier" {2}revision 3\n/);
+    const index = await lila('catalog', 'usages', file);
+    expect(index.text).toContain(`unit/${unit}: 0 uses.`);
+    expect(index.text).toContain('0 unresolved references.');
+
+    // A delete names the other objects whose reference fields it changes, and says when references go.
+    await lilaJson('catalog', 'update', file, 'cajero', '--base-revision', '3', '--unit-ref', unit);
+    const dropUnit = await lila('catalog', 'delete', file, unit, '--remove-references', '--dry-run');
+    expect(dropUnit.text).toContain('  also updated: role/cajero (a reference field)');
+    const posId = (await lilaJson('catalog', 'list', file, '--type', 'system')).objects[0].id as string;
+    const dropPos = await lila('catalog', 'delete', file, posId, '--remove-references');
+    expect(dropPos.text).toContain('model of check-in: 1 reference removed');
+    expect((await lila('catalog', 'delete', file, unit, '--remove-references', '--dry-run', '--locale', 'es')).text)
+      .toContain('  también se actualizó: role/cajero (un campo de referencia)');
+
+    // Attribute names are kept as written; a blank one is refused.
+    const spaced = await lilaJson('catalog', 'update', file, 'cajero', '--base-revision', '4', '--attribute', ' Shift =x');
+    expect(spaced.object.attributes).toEqual([{ name: ' Shift ', value: 'x' }]);
+    const blank = await lila('catalog', 'update', file, 'cajero', '--base-revision', '5', '--attribute', ' =v');
+    expect(blank.code).toBe(1);
+    expect(blank.text).toContain('--attribute takes key=value; got " =v".');
+  });
+
+  test('usage errors exit 1 and write nothing', async () => {
+    const file = join(scratch, 'hotel.lila');
+    writeFileSync(file, hotelLila(2));
+    const original = readFileSync(file);
+    const cases: [string[], string][] = [
+      [['catalog'], 'unknown subcommand ""; use list, show, create, update, delete, usages, adopt.'],
+      [['catalog', 'remove', file], 'unknown subcommand "remove"'],
+      [['catalog', 'create', file, '--name', 'X'], 'missing --type role|unit|system|document.'],
+      [['catalog', 'create', file, '--type', 'role'], 'missing --name <name>.'],
+      [['catalog', 'create', file, '--type', 'risk', '--name', 'X'], 'role, unit, system, document'],
+      [['catalog', 'create', file, '--type', 'role', '--name', 'X', '--url', 'https://x.example'], 'its fields: unitRef'],
+      [['catalog', 'create', file, '--type', 'role', '--name', 'X', '--attribute', 'novalue'], '--attribute takes key=value; got "novalue".'],
+      [['catalog', 'update', file, 'role-x'], 'missing --base-revision <n>.'],
+      [['catalog', 'update', file, 'role-x', '--base-revision', 'one'], '--base-revision requires an integer; got "one".'],
+      [['catalog', 'update', file, 'role-x', '--base-revision', '1', '--attribute', 'a=b', '--clear-attributes'], 'give --attribute or --clear-attributes, not both.'],
+      [['catalog', 'delete', file, 'role-x', '--replace-with', 'role-y', '--remove-references'], 'give --replace-with or --remove-references, not both.'],
+      [['catalog', 'delete', file, 'role-nothere00000'], 'has no catalog object with the id "role-nothere00000"'],
+      [['catalog', 'show', file], 'expected <project.lila> <id>.'],
+      [['catalog', 'list', file, '--locale', 'fr'], '--locale only accepts: en, es; got "fr".'],
+    ];
+    for (const [argv, message] of cases) {
+      const { code, text } = await lila(...argv);
+      expect(code, argv.join(' ')).toBe(1);
+      expect(text).toContain(message);
+    }
+    expect((await lila('catalog', 'show', file, 'role-nothere00000', '--locale', 'es_MX.UTF-8')).text).toContain('no tiene ningún objeto de catálogo');
+    expect(readFileSync(file)).toEqual(original);
+    expect((await lila('catalog', '--help')).code).toBe(0);
+    expect(out.join('\n')).toContain('lila catalog adopt <project.lila> <ref> --type type');
+    expect(out.join('\n')).toContain('--locale en|es');
+    expect((await lila('catalog', '--help', '--locale', 'es')).text).toContain('lila catalog adopt <proyecto.lila> <ref> --type tipo');
+  });
+});

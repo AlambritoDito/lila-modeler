@@ -221,3 +221,16 @@ describe('--lang / LILA_LANG / LANG', () => {
     expect(resolveLocale(explicit as string | undefined, env as Record<string, string>)).toBe(expected);
   });
 });
+
+test('`lila catalog` (#673): the help lists its seven subcommands in both languages; `--lang` applies to it', async () => {
+  for (const lang of ['en', 'es']) {
+    out = [];
+    expect(await main(['catalog', '--help', '--lang', lang])).toBe(0);
+    const help = out.join('\n');
+    for (const sub of ['list', 'show', 'create', 'update', 'delete', 'usages', 'adopt']) expect(help).toContain(`lila catalog ${sub} <`);
+    expect(help).toMatch(/\n {2}catalog {4}list, show, create, update, delete, usages/);
+  }
+  out = [];
+  expect(await main(['--lang', 'es', 'catalog', 'list'])).toBe(1);
+  expect(out.join('\n')).toBe('lila catalog list: se esperaba <project.lila>.');
+});
