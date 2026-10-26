@@ -10,8 +10,8 @@
  */
 import { link, open, readFile, rename, stat, unlink, utimes, writeFile } from 'node:fs/promises';
 import { basename } from 'node:path';
-import { decodeLila, encodeLila, ProjectFormatError, readLilaPreserved } from '../project/index.js';
-import type { CatalogErrorCode, LilaPreserved, ProjectDocument, ProjectErrorCode, ProjectProblem } from '../project/index.js';
+import { decodeLilaArchive, encodeLila, ProjectFormatError, readLilaPreserved } from '../project/index.js';
+import type { CatalogErrorCode, DecodedLila, LilaPreserved, ProjectDocument, ProjectErrorCode, ProjectProblem } from '../project/index.js';
 import {
   assertNotAnotherProject,
   assertPathsUnchanged,
@@ -76,10 +76,12 @@ function asProjectIOError(error: unknown): never {
  * Reads `file` as a `.lila`. Returns the same triple as `readProjectFolder` so both openers can
  * feed the identical IPC reply: `problems` carries the scenarios and runs the archive lost, and
  * `loose` is always `false` — a `.lila` is a project by construction, never a stray diagram.
+ * `preserved` is what the archive kept beside the document (`decodeLilaArchive`), for a later
+ * «Save as» to pass to `writeLilaFile` (#690).
  */
 export async function readLilaFile(
   file: string,
-): Promise<{ document: ProjectDocument; problems: readonly ProjectProblem[]; loose: boolean }> {
+): Promise<{ document: ProjectDocument; problems: readonly ProjectProblem[]; loose: boolean; preserved: LilaPreserved }> {
   let bytes: Buffer;
   try {
     bytes = await readFile(file);
@@ -89,16 +91,17 @@ export async function readLilaFile(
     }
     throw error;
   }
-  let document: ProjectDocument;
+  let decoded: DecodedLila;
   try {
-    document = decodeLila(new Uint8Array(bytes));
+    decoded = decodeLilaArchive(new Uint8Array(bytes));
   } catch (error) {
     asProjectIOError(error);
   }
+  const { document, preserved } = decoded;
   // El `.lila` acaba de verse tal y como está en disco: ese es el punto de partida de
   // `E-CAMBIO-EXTERNO` para el próximo guardado (mismo mapa que la carpeta, ver `projectIO.ts`).
   await rememberSnapshot(file);
-  return { document, problems: document.problems ?? [], loose: false };
+  return { document, problems: document.problems ?? [], loose: false, preserved };
 }
 
 /**

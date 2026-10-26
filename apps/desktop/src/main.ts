@@ -26,6 +26,7 @@ import { requireAuthorizedPath } from './authorizedPaths.js';
 import { e2eOverrides, type E2EOverrides } from './e2e.js';
 import { filtroExportacion, MAX_EXPORTACION, requireExportacion } from './exportacion.js';
 import { isTrustedSender, permiteVentanaHija } from './ipcGuards.js';
+import { readLilaKeeping, writeLilaKeeping, type KeptEntries } from './keptEntries.js';
 import { resolveDesktopLocale, type DesktopLocale } from './locale.js';
 import { menuTemplate, teclaDeVentanaHija } from './menu.js';
 import { findBpmnArg, isBpmnPath, isLilaPath, openPathRequest, withLilaExtension } from './openPath.js';
@@ -34,9 +35,7 @@ import {
   isRecordableProject,
   occupiedSlugs,
   ProjectIOError,
-  readLilaFile,
   readProjectFolder,
-  writeLilaFile,
   writeProjectFolder,
   type WriteProjectOptions,
 } from '@lila-modeler/engine/project-fs';
@@ -72,6 +71,12 @@ const webRoot = path.join(app.getAppPath(), 'dist', 'web');
 
 /** Carpetas que el usuario autorizó explícitamente vía `chooseFolder` (diálogo nativo). */
 const authorizedFolders = new Set<string>();
+
+/**
+ * What the last `.lila` read or written for each project keeps beside its document, for «Save as»
+ * (#690, `keptEntries.ts`). A folder read or write of the project forgets it.
+ */
+const keptEntries: KeptEntries = new Map();
 
 /**
  * Política de seguridad de contenido para las respuestas del protocolo `lila://` (issue #71,
@@ -634,8 +639,9 @@ function registerIpcHandlers(win: BrowserWindow): void {
       // IPC, otro contenedor. Lo decide la extensión de la ruta ya autorizada, no un argumento
       // nuevo del puente — el renderer guarda esa ruta y la devuelve tal cual al guardar.
       const { document, problems, loose } = isLilaPath(dir)
-        ? await readLilaFile(dir)
+        ? await readLilaKeeping(keptEntries, dir)
         : await readProjectFolder(dir);
+      if (!isLilaPath(dir)) keptEntries.delete(document.id);
       await recordRecent(dir, document.name);
       watchOpenProject(win, dir);
       return { ...document, problems, loose, ...(isLilaPath(dir) ? {} : { occupiedSlugs: await occupiedSlugs(dir) }) };
@@ -656,9 +662,12 @@ function registerIpcHandlers(win: BrowserWindow): void {
       try {
         // Mismas `options` que el escritor de carpeta: un `.lila` se guarda con las mismas
         // guardias (`E-CARPETA-OCUPADA`, `E-CAMBIO-EXTERNO`), no con menos (ADR-027).
-        const write = isLilaPath(dir) ? writeLilaFile(dir, document, options) : writeProjectFolder(dir, document, options);
+        const write = isLilaPath(dir)
+          ? writeLilaKeeping(keptEntries, dir, document, options)
+          : writeProjectFolder(dir, document, options);
         projectWrite = write.catch(() => {});
         await write;
+        if (!isLilaPath(dir)) keptEntries.delete(document.id);
         // «Save as» moves the project: the watcher follows it. A loose diagram's save writes only
         // its `.bpmn`, and only that file is watched (not the folder it happens to be in).
         watchOpenProject(win, options.diagramOnly === true && options.modelFile !== undefined
@@ -795,7 +804,7 @@ function registerIpcHandlers(win: BrowserWindow): void {
       // carpeta que recorrer, así que se ignora (`acceptOpenPath` manda el propio nombre del
       // archivo, que no es un `.bpmn` y `requireBpmnName` rechazaría).
       try {
-        const { document, problems, loose } = await readLilaFile(real);
+        const { document, problems, loose } = await readLilaKeeping(keptEntries, real);
         await recordRecent(real, document.name);
         watchOpenProject(win, real, dirArg);
         return { ...document, problems, loose };
@@ -807,6 +816,7 @@ function registerIpcHandlers(win: BrowserWindow): void {
     const file = requireBpmnName(real, fileArg);
     try {
       const { document, problems, loose } = await readProjectFolder(real, file);
+      keptEntries.delete(document.id);
       await recordRecentIfProject(real, document.name);
       // A loose `.bpmn` is watched alone: its folder may be `~/Downloads` (LILA-072).
       watchOpenProject(win, loose && file !== undefined ? path.join(real, file) : real, dirArg);
