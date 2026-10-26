@@ -21,6 +21,7 @@ import {
   assertReplaceableFile,
   comparablePath,
   compareWarnings,
+  lilaCatalogWarnings,
   loadModelSource,
   openEventLogSink,
   resolveScenarioArgument,
@@ -146,9 +147,11 @@ async function validateCommand(
   const report = await validateBpmnXml(xml, { locale, scenarios: targetScenarios(lila) });
   const { ir, ignoredProcessIds } = report;
   const validation: ValidationResult = { errors: report.errors, warnings: report.warnings };
+  // #95: additive; the exit code stays the model's.
+  const catalogWarnings = await lilaCatalogWarnings(lila, locale);
 
   if (json) {
-    console.log(JSON.stringify(report, null, 2));
+    console.log(JSON.stringify(catalogWarnings === undefined ? report : { ...report, catalogWarnings }, null, 2));
     return validation.errors.length > 0 ? 1 : 0;
   }
 
@@ -189,6 +192,12 @@ async function validateCommand(
   console.log('');
   printValidationProblems(validation, locale);
   console.log(C.problemCounts(validation.errors.length, validation.warnings.length));
+
+  if (catalogWarnings !== undefined && catalogWarnings.length > 0) {
+    console.log('');
+    console.log(C.catalogWarnings(catalogWarnings.length));
+    for (const warning of catalogWarnings) console.log(`${C.warningLabel()}  ${warning.code}  ${warning.message}`);
+  }
 
   return validation.errors.length > 0 ? 1 : 0;
 }

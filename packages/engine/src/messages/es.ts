@@ -300,6 +300,11 @@ export const es: Catalog = {
     'E-CAMPO-NO-APLICA/solo-error': (path) => `solo se admite en un evento de error adjunto (${path}).`,
 
     'E-CLAVE-DESCONOCIDA': (keys) => `clave no reconocida por el esquema: ${keys}.`,
+
+    'W-REF-SIN-CATALOGO': (process, element, relation, ref, type) =>
+      `${element} (proceso ${process}): la referencia ${relation} "${ref}" no coincide con ningún objeto ${type} del catálogo; se conserva tal cual.`,
+    'W-ACTIVIDAD-SIN-RESPONSABLE': (process, element) =>
+      `${element} (proceso ${process}): la actividad no tiene ningún rol Responsable (lila:responsibility type="R").`,
   },
   chrome: coreEs.chrome,
   constructions: {
@@ -385,6 +390,7 @@ export const es: Catalog = {
     defaultFlow: () => '(por defecto)',
     otherProcesses: (ids) => `Otros procesos del archivo, no simulados: ${ids}`,
     problemCounts: (errors, warnings) => `${errors} errores, ${warnings} avisos.`,
+    catalogWarnings: (count) => `Avisos del catálogo (${count}):`,
     errorLabel: () => 'error',
     warningLabel: () => 'aviso',
 

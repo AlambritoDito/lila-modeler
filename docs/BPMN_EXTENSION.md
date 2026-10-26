@@ -53,7 +53,7 @@ All of them (except `versionTag`, see below) go inside `bpmn:extensionElements` 
 
 | Element | Attributes | What it documents | Points to |
 |---|---|---|---|
-| `lila:responsibility` | `type` (`R`\|`A`\|`C`\|`I`), `roleRef` | The element's RACI matrix: one row per responsible-party/role combination. An element can have several `lila:responsibility` (several roles, or the same role with a different `type`): accepted as written; nothing checks it today (a warning may come with LILA-095, #95). | `roleRef` → id of a role object (`catalog/role/<id>.json`, see [the repository contract](REPOSITORY_CONTRACT.md)). |
+| `lila:responsibility` | `type` (`R`\|`A`\|`C`\|`I`), `roleRef` | The element's RACI matrix: one row per responsible-party/role combination. An element can have several `lila:responsibility` (several roles, or the same role with a different `type`): accepted as written. In a repository with a catalog (version 3), a task, sub-process or call activity with no `type="R"` gets the warning `W-ACTIVIDAD-SIN-RESPONSABLE` (#95). | `roleRef` → id of a role object (`catalog/role/<id>.json`, see [the repository contract](REPOSITORY_CONTRACT.md)). |
 | `lila:systemRef` | `ref` | System/application involved in the element. | id in the system catalog. |
 | `lila:documentRef` | `ref` | Document associated with the element (input, output, or just a general reference). | id in the document catalog. |
 | `lila:riskRef` | `ref` | Risk associated with the element. | id in the risk catalog. |
@@ -63,7 +63,7 @@ All of them (except `versionTag`, see below) go inside `bpmn:extensionElements` 
 | `lila:output` | `ref` | Document/data the element produces. | id in the document catalog. |
 | `lila:versionTag` | `value` | See section 4 (process key). The only element that does **not** hang off a flow element — it hangs off `bpmn:process`. | — (free-form value, no catalog reference). |
 
-All references (`roleRef`, and the `ref` of `systemRef`/`documentRef`/`riskRef`/`controlRef`/`kpiRef`/`input`/`output`) point to catalog object ids. The catalog lives outside the `.bpmn`, one file per object, `catalog/<type>/<id>.json` (ADR-032, [the repository contract](REPOSITORY_CONTRACT.md)), not the monolithic `catalog.json` of ADR-013. Today no catalog exists and references are not checked. Once the catalog lands (lot A1), a reference whose id matches no object is kept as it is and reported as a **warning** (LILA-095, #95) — never an error, and never invented: the catalog can be filled in after the diagram.
+All references (`roleRef`, and the `ref` of `systemRef`/`documentRef`/`riskRef`/`controlRef`/`kpiRef`/`input`/`output`) point to catalog object ids. The catalog lives outside the `.bpmn`, one file per object, `catalog/<type>/<id>.json` (ADR-032, [the repository contract](REPOSITORY_CONTRACT.md)), not the monolithic `catalog.json` of ADR-013. In a repository with a catalog (version 3), a reference whose id matches no object of the type it expects is kept as it is and reported as the **warning** `W-REF-SIN-CATALOGO` (LILA-095, #95) — never an error, and never invented: the catalog can be filled in after the diagram. `lila validate` and `validate_bpmn` list these warnings in `catalogWarnings` ([SEMANTICS.md § 17](SEMANTICS.md#17-error-and-warning-catalog)). A version 1 or 2 project has no catalog, and its references get no warnings.
 
 `versionTag` goes as a child of `bpmn:process`'s `bpmn:extensionElements` (not of `bpmn:definitions` nor of a task):
 
@@ -335,7 +335,7 @@ Implementation notes (not normative, resolved in the ticket that creates the rea
 </bpmn:definitions>
 ```
 
-Correspondence with the referenced catalog (one file per object, `catalog/<type>/<id>.json`, outside this document — see [the repository contract](REPOSITORY_CONTRACT.md)): `rol-1`, `rol-2`, `sys-crm`, `doc-solicitud`, `doc-solicitud-revisada`, and `kpi-tiempo-revision` are ids of catalog objects. Today no catalog exists and nothing checks them; once the catalog lands (lot A1), each one that matches no object is kept and reported as a warning (LILA-095, #95), never an error and never invented.
+Correspondence with the referenced catalog (one file per object, `catalog/<type>/<id>.json`, outside this document — see [the repository contract](REPOSITORY_CONTRACT.md)): `rol-1`, `rol-2`, `sys-crm`, `doc-solicitud`, `doc-solicitud-revisada`, and `kpi-tiempo-revision` are ids of catalog objects. In a repository with a catalog (version 3), each one that matches no object is kept and reported as the warning `W-REF-SIN-CATALOGO` (LILA-095, #95), never an error and never invented.
 
 ---
 

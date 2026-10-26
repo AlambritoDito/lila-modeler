@@ -295,6 +295,11 @@ export const en: Catalog = {
     'E-CAMPO-NO-APLICA/solo-error': (path) => `only accepted on an error boundary event (${path}).`,
 
     'E-CLAVE-DESCONOCIDA': (keys) => `key not recognised by the schema: ${keys}.`,
+
+    'W-REF-SIN-CATALOGO': (process, element, relation, ref, type) =>
+      `${element} (process ${process}): the ${relation} reference "${ref}" matches no ${type} object in the catalog; it is kept as it is.`,
+    'W-ACTIVIDAD-SIN-RESPONSABLE': (process, element) =>
+      `${element} (process ${process}): the activity has no Responsible role (lila:responsibility type="R").`,
   },
   chrome: coreEn.chrome,
   constructions: {
@@ -379,6 +384,7 @@ export const en: Catalog = {
     defaultFlow: () => '(default)',
     otherProcesses: (ids) => `Other processes in the file, not simulated: ${ids}`,
     problemCounts: (errors, warnings) => `${errors} errors, ${warnings} warnings.`,
+    catalogWarnings: (count) => `Catalog warnings (${count}):`,
     errorLabel: () => 'error',
     warningLabel: () => 'warning',
 
