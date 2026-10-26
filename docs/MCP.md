@@ -913,7 +913,13 @@ answer with a summary unless `detail: "full"`).
 | `delete_process` | `lila process delete` | `dryRun` is `--dry-run`. |
 | `rename_scenario` | `lila scenario rename` | `dryRun` is `--dry-run`. |
 | `delete_scenario` | `lila scenario delete` | `dryRun` is `--dry-run`. |
-| `list_catalog`, `get_catalog_object`, `create_catalog_object`, `update_catalog_object`, `delete_catalog_object`, `find_usages`, `adopt_reference` | none yet | The CLI commands come with #673. |
+| `list_catalog` | `lila catalog list` | |
+| `get_catalog_object` | `lila catalog show` | |
+| `create_catalog_object` | `lila catalog create` | `unitRef`, `parentRef`, `ownerRef` are `--unit-ref`, `--parent-ref`, `--owner-ref`; `attributes` are `--attribute name=value`. |
+| `update_catalog_object` | `lila catalog update` | `baseRevision` is `--base-revision`; `null` is `""`, and `--clear-attributes` for `attributes`. |
+| `delete_catalog_object` | `lila catalog delete` | `replaceWith` is `--replace-with`, `removeReferences` is `--remove-references`. |
+| `find_usages` | `lila catalog usages` | |
+| `adopt_reference` | `lila catalog adopt` | `ref` is a positional. |
 | Resources and the prompt | none | Part of the protocol; the CLI has `--help` and `docs/`. |
 
 ## Summary or full results

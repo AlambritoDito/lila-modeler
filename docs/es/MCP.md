@@ -941,7 +941,13 @@ completo en un archivo, como `saveTo` (las tools responden con un resumen salvo 
 | `delete_process` | `lila process delete` | `dryRun` es `--dry-run`. |
 | `rename_scenario` | `lila scenario rename` | `dryRun` es `--dry-run`. |
 | `delete_scenario` | `lila scenario delete` | `dryRun` es `--dry-run`. |
-| `list_catalog`, `get_catalog_object`, `create_catalog_object`, `update_catalog_object`, `delete_catalog_object`, `find_usages`, `adopt_reference` | ninguno todavía | Los comandos de la CLI llegan con #673. |
+| `list_catalog` | `lila catalog list` | |
+| `get_catalog_object` | `lila catalog show` | |
+| `create_catalog_object` | `lila catalog create` | `unitRef`, `parentRef`, `ownerRef` son `--unit-ref`, `--parent-ref`, `--owner-ref`; `attributes` son `--attribute nombre=valor`. |
+| `update_catalog_object` | `lila catalog update` | `baseRevision` es `--base-revision`; `null` es `""`, y `--clear-attributes` para `attributes`. |
+| `delete_catalog_object` | `lila catalog delete` | `replaceWith` es `--replace-with`, `removeReferences` es `--remove-references`. |
+| `find_usages` | `lila catalog usages` | |
+| `adopt_reference` | `lila catalog adopt` | `ref` es un argumento posicional. |
 | Los resources y el prompt | ninguno | Son parte del protocolo; la CLI tiene `--help` y `docs/`. |
 
 ## Resumen o resultado completo

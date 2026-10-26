@@ -75,6 +75,20 @@ const EN_USAGE = `Usage: lila validate <file.bpmn|project.lila> [--process slug]
        lila project show <project.lila> [--json]
        lila project create <path.lila> --name name --bpmn <file.bpmn> [--scenario name=file.json ...]
                            [--force] [--allow-unsimulatable] [--json]
+       lila catalog list <project.lila> [--type type] [--json]
+       lila catalog show <project.lila> <id> [--type type] [--json]
+       lila catalog create <project.lila> --type role|unit|system|document --name name
+                           [--description text] [--attribute name=value ...] [--unit-ref id]
+                           [--parent-ref id] [--owner-ref id] [--url url] [--dry-run] [--json]
+       lila catalog update <project.lila> <id> --base-revision n [--type type] [--name name]
+                           [--description text] [--attribute name=value ...]
+                           [--clear-attributes] [--unit-ref id] [--parent-ref id]
+                           [--owner-ref id] [--url url] [--dry-run] [--json]
+       lila catalog delete <project.lila> <id> [--type type] [--base-revision n]
+                           [--replace-with id|--remove-references] [--dry-run] [--json]
+       lila catalog usages <project.lila> [<id>] [--type type] [--json]
+       lila catalog adopt <project.lila> <ref> --type type [--name name] [--dry-run] [--json]
+                          (every lila catalog subcommand also takes --locale en|es)
        lila mcp
 
 Commands:
@@ -102,6 +116,8 @@ Commands:
              saved runs.
   project    show: lists the processes of a .lila, their scenarios and saved runs. Read only.
              create: makes a new .lila from a .bpmn and optional scenarios.
+  catalog    list, show, create, update, delete, usages and adopt the roles, units, systems
+             and documents of a .lila's catalog (the MCP catalog tools). See docs/CLI.md.
   mcp        Starts the MCP server over stdio (for Claude Code / Desktop). See docs/MCP.md.
 
 A model can be a .bpmn or a .lila project. With a .lila, a scenario is a .json path or, when no
