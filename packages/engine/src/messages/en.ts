@@ -265,6 +265,8 @@ export const en: Catalog = {
       `the resource selection only makes sense together with the task's resources (${path}).`,
     'E-CAMPO-NO-APLICA/solo-flujo-xor': (path) =>
       `only accepted on a sequence flow leaving a diverging exclusive gateway (${path}).`,
+    'E-CAMPO-NO-APLICA/solo-bucle': (path) =>
+      `only accepted on a task with a loop marker (${path}).`,
     'E-TIMER-RECURSO': (path) => `a timer is a delay and consumes no resources (${path}).`,
     'E-REC-DESCONOCIDO/recurso': (path, ref) =>
       `the resource ${ref} does not exist in the list of resources (${path}).`,
@@ -274,6 +276,8 @@ export const en: Catalog = {
       `the quantity ${quantity} exceeds the capacity ${capacity} of ${ref} (${path}).`,
     'E-XOR-SUMA-CERO': (path) =>
       `the probabilities of the XOR add up to 0; there is no possible route (${path}).`,
+    'E-BUCLE-SIN-SALIDA': (path) =>
+      `a loop with probability 1 and no loopMaximum never ends (${path}).`,
     'E-SIN-PARADA': (path) =>
       `a stopping condition is missing; declare the run duration or a maximum number of arrivals (${path}).`,
     'W-SIN-SEED': (path) =>
@@ -348,6 +352,7 @@ export const en: Catalog = {
     startInvalidOffset: (start, offset) =>
       `the start date ${start} does not have a valid offset; ${offset} is not a time offset.`,
     currencyIso: () => 'the currency must be an ISO 4217 code',
+    loopExactlyOne: () => 'declare exactly one of count or probability',
     intervalFrom: () => 'the start time of the interval must be "HH:MM"',
     intervalTo: () => 'the end time of the interval must be "HH:MM" ("24:00" is accepted)',
     intervalOrder: () =>

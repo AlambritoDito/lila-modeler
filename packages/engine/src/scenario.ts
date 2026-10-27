@@ -412,6 +412,14 @@ function buildSchemas(locale: Locale) {
     // ADR-033 § 5 (#702) — share of the host's completions that leave through this error boundary
     // (R-ERR-1…5). No `.min(0).max(1)` for the same reason as `probability`: `E-PROB-RANGO`.
     errorProbability: z.number().optional(),
+    // ADR-033 § 3 — standard loop marker (R-LOOP-1…6): exactly one of `count` and `probability`.
+    // As with `probability` above, its range is checked by `validateScenario` (`E-PROB-RANGO`).
+    loop: z
+      .strictObject({ count: z.int().min(1).optional(), probability: z.number().optional() })
+      .refine((loop) => (loop.count === undefined) !== (loop.probability === undefined), {
+        message: zod.loopExactlyOne(),
+      })
+      .optional(),
     // § 4 — reservados.
     priority: z.unknown().optional(),
     preempt: z.unknown().optional(),
@@ -531,6 +539,7 @@ export type ScenarioProblemCode =
   | 'E-TIMER-RECURSO'
   | 'E-SIN-PARADA'
   | 'E-XOR-SUMA-CERO'
+  | 'E-BUCLE-SIN-SALIDA'
   | 'W-SIN-SEED'
   | 'W-ELEMENTO-SIN-PARAMETROS'
   | 'W-XOR-NORMALIZADA'
@@ -953,6 +962,36 @@ export function validateScenario(
               ),
             });
           }
+        }
+      }
+    }
+
+    // ADR-033 § 3 — `loop` only on a task with a standard loop marker; its probability in [0, 1]
+    // (R-XOR-6's `E-PROB-RANGO`), and 1 only with a `loopMaximum` to stop it (R-LOOP-2).
+    if (element.loop !== undefined) {
+      if (node?.loop === undefined) {
+        problems.push({
+          code: 'E-CAMPO-NO-APLICA',
+          path: `elements.${id}.loop`,
+          severity: 'error',
+          message: M['E-CAMPO-NO-APLICA/solo-bucle'](`elements.${id}.loop`),
+        });
+      } else if (element.loop.probability !== undefined) {
+        const path = `elements.${id}.loop.probability`;
+        if (element.loop.probability < 0 || element.loop.probability > 1) {
+          problems.push({
+            code: 'E-PROB-RANGO',
+            path,
+            severity: 'error',
+            message: M['E-PROB-RANGO'](path, element.loop.probability),
+          });
+        } else if (element.loop.probability === 1 && node.loop.maximum === undefined) {
+          problems.push({
+            code: 'E-BUCLE-SIN-SALIDA',
+            path,
+            severity: 'error',
+            message: M['E-BUCLE-SIN-SALIDA'](path),
+          });
         }
       }
     }

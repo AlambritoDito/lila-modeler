@@ -51,6 +51,9 @@ export const coreEs: CoreCatalog = {
     'E-CAL-DESCONOCIDO': (subject, calendar) =>
       `${subject}: el calendario ${calendar} no existe.`,
 
+    'E-BUCLE-SIN-SALIDA/elemento': (nodeId) =>
+      `${nodeId}: un bucle con probabilidad 1 y sin loopMaximum nunca termina.`,
+
     'E-REC-LIBERACION': (requestId) => `${requestId} no tiene una asignación activa.`,
     'E-REC-SOLICITUD-DUPLICADA': (requestId) => `ya existe la solicitud ${requestId}.`,
     'E-REC-SIN-ASIGNACION': (requestId) => `${requestId}: falta un recurso.`,
@@ -89,6 +92,8 @@ export const coreEs: CoreCatalog = {
       `${nodeId}: sin tiempo de proceso; nunca dispara como rama de ${gatewayId}.`,
     'W-BORDE-SIN-TIEMPO': (nodeId, hostId) =>
       `${nodeId}: temporizador de borde sin tiempo de proceso; nunca dispara sobre ${hostId}.`,
+    'W-BUCLE-SIN-PARAMETROS': (nodeId) =>
+      `${nodeId}: marcador de bucle sin loop en el escenario; se ejecuta una vez.`,
     'W-OR-JOIN-SIN-FORK': (nodeId) =>
       `${nodeId}: llegó un token sin marca de división; se comporta como mezcla.`,
     'W-JOIN-BLOQUEADO': (nodeId, cases) =>

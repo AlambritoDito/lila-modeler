@@ -300,7 +300,9 @@ function unsupportedConstruction(
   if (el.loopCharacteristics?.$type === 'bpmn:MultiInstanceLoopCharacteristics') {
     return 'multiInstanceMarker';
   }
-  if (el.loopCharacteristics?.$type === 'bpmn:StandardLoopCharacteristics') {
+  // ADR-033 § 3: a task or call activity simulates its standard loop marker (R-LOOP-1); on an
+  // embedded sub-process the marker stays out of the profile.
+  if (el.loopCharacteristics?.$type === 'bpmn:StandardLoopCharacteristics' && !TASK_TYPES.has(el.$type)) {
     return 'loopMarker';
   }
   if (el.$type === 'bpmn:SubProcess' && el.triggeredByEvent === true) {
@@ -450,6 +452,8 @@ interface Collector {
   rawCancel: ReadonlyMap<string, string>;
   /** `id del event gateway -> literal en bruto de `instantiate``, leído del texto del XML. */
   rawInstantiate: ReadonlyMap<string, string>;
+  /** ADR-033 § 3: `host activity id -> raw `loopMaximum` literal` (`rawLoopMaximum`). */
+  rawLoopMaximum: ReadonlyMap<string, string>;
   unsupported: { at: number; element: UnsupportedElement }[];
 }
 
@@ -606,6 +610,12 @@ function walk(container: ModdleElement, subprocessId: string | undefined, c: Col
       incoming: [],
       outgoing: [],
     };
+    // ADR-033 § 3: the loop marker reaches the IR only on a task; `testBefore` and
+    // `loopCondition` are ignored, the scenario's `loop` decides (R-LOOP-2).
+    if (type === 'task' && el.loopCharacteristics?.$type === 'bpmn:StandardLoopCharacteristics') {
+      const maximum = loopMaximumOf(c.rawLoopMaximum.get(el.id));
+      c.nodes[id]!.loop = maximum === undefined ? {} : { maximum };
+    }
     if (el.$type === 'bpmn:BoundaryEvent' && el.attachedToRef !== undefined) {
       c.boundaryHosts.set(id, {
         el,
@@ -957,6 +967,52 @@ export function rawAttributeLiterals(xml: string, localName: string, attribute: 
   return literals;
 }
 
+/** Any opening or closing tag, with its prefix, local name and attributes (quote-aware). */
+const ANY_TAG = /<(\/?)(?:[\w.-]+:)?([\w.-]+)((?:[^>"']|"[^"]*"|'[^']*')*)>/g;
+
+/**
+ * ADR-033 § 3: `id of the enclosing activity -> raw `loopMaximum` literal` of every
+ * `<…standardLoopCharacteristics …>` in the **sanitized** XML. moddle reads `loopMaximum` (an
+ * `xsd:integer`) with `parseInt`, so `"3.5"`, `"+3"` and `"3abc"` arrive as `3`; the cap is read
+ * raw, as `cancelActivity` is (R-BND-10). The marker usually has no id of its own (bpmn-js writes
+ * none), so it is keyed by its parent element, found with a stack of the open tags.
+ */
+export function rawLoopMaximum(xml: string): Map<string, string> {
+  const literals = new Map<string, string>();
+  const open: (string | undefined)[] = [];
+  for (const [, closing, localName, attrs = ''] of xml.replace(NO_ES_MARKUP, ' ').matchAll(ANY_TAG)) {
+    if (closing === '/') {
+      open.pop();
+      continue;
+    }
+    let id: string | undefined;
+    let raw: string | undefined;
+    for (const [, name, dq, sq] of attrs.matchAll(ATTR)) {
+      if (name === 'id') id ??= dq ?? sq;
+      else if (name === 'loopMaximum') raw ??= dq ?? sq;
+    }
+    const host = open[open.length - 1];
+    if (localName === 'standardLoopCharacteristics' && host !== undefined && raw !== undefined) {
+      literals.set(host, raw);
+    }
+    if (!attrs.trimEnd().endsWith('/')) open.push(id);
+  }
+  return literals;
+}
+
+/**
+ * ADR-033 § 3: the loop cap from the raw `loopMaximum` literal. Only a trimmed decimal integer
+ * literal (`/^\d+$/`) of at least 1 caps the loop; absent, `0`, a sign, a fraction or any other
+ * text means no cap. So does a literal beyond `Number.MAX_SAFE_INTEGER`: no run reaches it, and
+ * reading it as no cap makes `probability: 1` an `E-BUCLE-SIN-SALIDA` instead of an endless run.
+ */
+function loopMaximumOf(raw: string | undefined): number | undefined {
+  const trimmed = raw?.trim();
+  if (trimmed === undefined || !/^\d+$/.test(trimmed)) return undefined;
+  const maximum = Number(trimmed);
+  return Number.isSafeInteger(maximum) && maximum >= 1 ? maximum : undefined;
+}
+
 /**
  * Apertura (con sus atributos capturados) o cierre de un `<…:process …>` **de BPMN**, con el
  * prefijo (o la ausencia de prefijo) que declare este archivo: un `<x:process>` de una extensión
@@ -1117,6 +1173,7 @@ export async function parseBpmn(xmlIn: string, options: ParseBpmnOptions = {}): 
     boundaryHosts: new Map(),
     rawCancel: rawAttributeLiterals(xml, 'boundaryEvent', 'cancelActivity'),
     rawInstantiate: rawAttributeLiterals(xml, 'eventBasedGateway', 'instantiate'),
+    rawLoopMaximum: rawLoopMaximum(xml),
     unsupported: [],
   };
 

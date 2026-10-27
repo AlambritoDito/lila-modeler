@@ -950,6 +950,9 @@ export const es: Strings = {
       points: 'Puntos',
       // ADR-028: conditions en un flujo que sale de un XOR divergente
       flowTaken: 'Flujo ya recorrido',
+      // ADR-033 § 3: el marcador de bucle de una tarea (#703 añade sus controles)
+      loop: 'Bucle',
+      count: 'Iteraciones',
       // reservados (§ 4)
       priority: 'Prioridad',
       preempt: 'Expulsión',

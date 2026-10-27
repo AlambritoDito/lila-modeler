@@ -244,7 +244,11 @@ export function buildReplay(
       enabledAt.set(activity.enabledAt, group);
     }
     type Source = { id: string; at: number; crossing: boolean };
-    const sources: Source[] = list.filter((a) => a.completed)
+    // ADR-033 R-LOOP-2/3: an iteration of a looping task that hands over to the next one at its
+    // end is not a token leaving; the token leaves once, after the last iteration.
+    const nextIteration = (a: Occurrence): boolean => ir.nodes[a.elementId]?.loop !== undefined
+      && list.some((b) => b !== a && b.elementId === a.elementId && b.enabledAt === a.endAt);
+    const sources: Source[] = list.filter((a) => a.completed && !nextIteration(a))
       .map((a) => ({ id: a.elementId, at: a.endAt, crossing: false }));
     const firstAt = Math.min(...list.map((a) => a.enabledAt));
     const starts = Object.keys(ir.nodes).filter((id) => ir.nodes[id]?.type === 'start'
