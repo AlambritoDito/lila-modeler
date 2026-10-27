@@ -75,9 +75,10 @@ describe('fieldsForKind (§ 2.5, columna «Applies to»)', () => {
         (c) => fieldsForKind(c)!,
       ),
     );
-    // ADR-033 § 1.7: `loop` is offered only on a task with a loop marker, which the class alone
-    // does not say; #703 adds that control. Until then no class offers it, and it must stay so.
-    const conMarcador = new Set(['loop']);
+    // ADR-033 § 1.7: `loop` and `instances` are offered only on a task with a loop or a
+    // multi-instance marker, which the class alone does not say; #703 adds those controls. Until
+    // then no class offers them, and it must stay so.
+    const conMarcador = new Set(['loop', 'instances']);
     for (const campo of ofrecidos) expect(delEsquema.has(campo)).toBe(true);
     for (const campo of conMarcador) {
       expect(delEsquema.has(campo)).toBe(true);

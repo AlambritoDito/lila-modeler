@@ -94,6 +94,8 @@ export const coreEs: CoreCatalog = {
       `${nodeId}: temporizador de borde sin tiempo de proceso; nunca dispara sobre ${hostId}.`,
     'W-BUCLE-SIN-PARAMETROS': (nodeId) =>
       `${nodeId}: marcador de bucle sin loop en el escenario; se ejecuta una vez.`,
+    'W-MULTI-SIN-CARDINALIDAD': (nodeId) =>
+      `${nodeId}: tarea multi-instancia sin instances en el escenario ni loopCardinality numérico; ejecuta una instancia.`,
     'W-OR-JOIN-SIN-FORK': (nodeId) =>
       `${nodeId}: llegó un token sin marca de división; se comporta como mezcla.`,
     'W-JOIN-BLOQUEADO': (nodeId, cases) =>

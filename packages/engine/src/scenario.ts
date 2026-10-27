@@ -420,6 +420,8 @@ function buildSchemas(locale: Locale) {
         message: zod.loopExactlyOne(),
       })
       .optional(),
+    // ADR-033 § 4 (#701): instances per entry of a multi-instance task, `floor(max(0, x) + 0.5)`.
+    instances: DistributionSchema.optional(),
     // § 4 — reservados.
     priority: z.unknown().optional(),
     preempt: z.unknown().optional(),
@@ -702,7 +704,7 @@ function checkElementDistributions(
   element: ElementSpec,
   locale: Locale,
 ): void {
-  for (const field of ['processingTime', 'interTriggerTimer'] as const) {
+  for (const field of ['processingTime', 'interTriggerTimer', 'instances'] as const) {
     const dist = element[field];
     if (dist === undefined) continue;
     for (const warning of checkDistribution(dist, locale)) {
@@ -1091,6 +1093,16 @@ export function validateScenario(
           message: M['E-PROB-RANGO'](`elements.${id}.errorProbability`, element.errorProbability),
         });
       }
+    }
+
+    // ADR-033 § 4 (#701) — `instances` only on a task with a multi-instance marker.
+    if (element.instances !== undefined && node?.multiInstance === undefined) {
+      problems.push({
+        code: 'E-CAMPO-NO-APLICA',
+        path: `elements.${id}.instances`,
+        severity: 'error',
+        message: M['E-CAMPO-NO-APLICA/solo-multi'](`elements.${id}.instances`),
+      });
     }
 
     // R14 — `selection` sin `resources` es error.

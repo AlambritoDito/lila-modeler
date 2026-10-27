@@ -223,13 +223,14 @@ usuarios, en [`docs/es/COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md).
 | Publicación de documentos (Word/PDF/web) | ✓ | ✓ documento del proceso en Word (.docx) o en un HTML imprimible de una página; sin plantillas ni repositorio compartido |
 | Compuerta basada en eventos (ramas de tiempo y de mensaje) | ✓ | ✓ gana la primera rama que vence |
 | Eventos de mensaje/señal/enlace sueltos | parcial | ✗ error de validación explícito |
-| Multi-instancia, compuerta compleja, coreografía | ✗ | ✗ fuera de alcance |
+| Tarea multi-instancia (paralela o secuencial) | ✗ | ✓ `N` instancias por entrada, desde `loopCardinality` o una distribución |
+| Compuerta compleja, coreografía | ✗ | ✗ fuera de alcance |
 
 ### Límites conocidos
 
 - **Perfil BPMN soportado**: start/end (none y terminate), timer intermedio, timer de borde
   (interruptor o no), compuerta basada en eventos con ramas de tiempo o de mensaje, tareas (todas
-  las variantes), call activity, subproceso embebido, compuertas XOR/OR/AND, lanes y pools. Lo demás es un error de validación explícito, nunca un fallo silencioso
+  las variantes), call activity, tarea o call activity multi-instancia, subproceso embebido, compuertas XOR/OR/AND, lanes y pools. Lo demás es un error de validación explícito, nunca un fallo silencioso
   ([`docs/es/SEMANTICS.md`](docs/es/SEMANTICS.md) §§ 2–3).
 - **Los calendarios conservan el offset UTC de `run.start`**: hay recurrencia semanal, mensual y
   anual y festivos, pero no zona horaria por calendario ni horario de verano (`timezone` es un

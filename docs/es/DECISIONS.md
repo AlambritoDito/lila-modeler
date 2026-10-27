@@ -869,7 +869,7 @@ un elemento sin marcador de bucle es `E-CAMPO-NO-APLICA`.
 - **Degradación.** Sin `loop`: exactamente una iteración, como si no hubiera marcador, más
   `W-BUCLE-SIN-PARAMETROS`.
 
-### 4. Tarea multi-instancia (#701)
+### 4. Tarea multi-instancia (#701, implementado)
 
 **Perfil e IR.** `multiInstanceLoopCharacteristics` en una tarea o call activity soportada (en un
 subproceso sigue siendo `E-NOSOP` `multiInstanceMarker`). El nodo de la tarea recibe

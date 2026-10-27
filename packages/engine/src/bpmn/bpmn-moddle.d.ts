@@ -42,6 +42,11 @@ declare module 'bpmn-moddle' {
     loopCharacteristics?: ModdleElement;
     startQuantity?: number;
     completionQuantity?: number;
+    /** `bpmn:MultiInstanceLoopCharacteristics` (ADR-033 § 4) */
+    isSequential?: boolean;
+    loopCardinality?: ModdleElement;
+    /** `bpmn:Expression` / `bpmn:FormalExpression` */
+    body?: string;
     /** `bpmn:SequenceFlow` (referencias ya resueltas por moddle) */
     sourceRef?: ModdleElement;
     targetRef?: ModdleElement;

@@ -79,6 +79,7 @@ defined semantics; everything else falls into section 3 of this document.
 | `bpmn:task` and all its variants (`userTask`, `serviceTask`, `sendTask`, `receiveTask`, `manualTask`, `scriptTask`, `businessRuleTask`) | `task` | work with duration and resources (§11) |
 | `bpmn:callActivity` | `task` | task with its own duration (§4) |
 | `bpmn:task` (any variant) or `bpmn:callActivity` with `standardLoopCharacteristics` | `task` with `loop` | repeats per the scenario's `loop` (§4.1, R-LOOP-1) |
+| `multiInstanceLoopCharacteristics` on a task or a call activity, with `isSequential` absent, `"false"`, `"0"`, `"true"` or `"1"` | `task` with `multiInstance` | `N` instances per entry, all at once or one after another (§4.2, R-MI-1…6) |
 | `bpmn:subProcess` embedded (`triggeredByEvent="false"`, no markers) | — | flattened (§4) |
 | `bpmn:exclusiveGateway` | `xor` | diverging: §6; converging: pass-through merge |
 | `bpmn:inclusiveGateway` | `or` | §7 |
@@ -158,7 +159,7 @@ failure. The text follows Bizagi's style ("not supported by the simulator").
 | `bpmn:intermediateThrowEvent` with a trigger other than *none* or a single message (signal, escalation, link, compensation…), or with several | `intermediateThrowEvent` | `intermediate throw event` | `evento intermedio de lanzamiento` |
 | `bpmn:eventBasedGateway` other than an exclusive, non-instantiating one whose every outgoing flow goes to a timer or message branch catch event: `instantiate="true"`, `eventGatewayType="Parallel"`, any other branch element, or no outgoing flow | `eventBasedGateway` | `event-based gateway` | `gateway basado en eventos` |
 | `bpmn:complexGateway` | `complexGateway` | `complex gateway` | `gateway complejo` |
-| `multiInstanceLoopCharacteristics` | `multiInstanceMarker` | `multi-instance marker` | `marcador de multi-instancia` |
+| `multiInstanceLoopCharacteristics` on a sub-process, or with an `isSequential` literal other than `true`, `1`, `false` or `0` (on a task or call activity it is in the profile, §4.2) | `multiInstanceMarker` | `multi-instance marker` | `marcador de multi-instancia` |
 | `standardLoopCharacteristics` on an embedded sub-process (on a task or call activity it is in the profile, §4.1) | `loopMarker` | `loop marker on the activity` | `marcador de bucle en la actividad` |
 | `bpmn:transaction` | `transactionSubProcess` | `transaction subprocess` | `subproceso transaccional` |
 | `bpmn:adHocSubProcess` | `adHocSubProcess` | `ad-hoc subprocess` | `subproceso ad-hoc` |
@@ -369,6 +370,66 @@ Degradation: a task with the marker and no `loop` in the scenario runs exactly o
 the marker were absent (same bytes), plus warning `W-BUCLE-SIN-PARAMETROS` naming the task each
 time a token reaches it (§17). A scenario that declares no `loop` draws nothing from `#loop`, so it
 keeps its results bit for bit (R-DET-3).
+
+### 4.2 Multi-instance task (ADR-033)
+
+A task or call activity with `multiInstanceLoopCharacteristics` runs `N` **instances** per entry
+of a token: all at once (parallel) or one after another (sequential), and the token leaves when
+all of them are done. Bizagi does not simulate this marker; Lila does from 1.0 by the owner's
+decision (ADR-033, `BIZAGI_PARITY.md`).
+
+The IR node is a `task` with `multiInstance: { sequential, cardinality? }`. `isSequential` is read
+from the raw XML literal, like `cancelActivity` (R-BND-10): absent, `"false"` or `"0"` is
+parallel, `"true"` or `"1"` sequential, and any other literal is `E-NOSOP` `multiInstanceMarker`.
+`cardinality` is the body of `loopCardinality` when, trimmed, it is a decimal integer literal
+(`/^\d+$/`, `0` included); a sign (`"+3"`, `"-2"`), an expression or an empty body leaves it
+absent. `completionCondition`, data inputs and outputs and `behavior` are ignored. On a
+sub-process the marker stays `E-NOSOP` (§3).
+
+- **R-MI-1 — Drawing N.** `N` comes from `elements[<task>].instances`, a distribution
+  (`SCENARIO_FORMAT.md` § 2.5), if the scenario declares it; else from `cardinality`; else
+  `N = 1` (degradation, below). With `instances`, one sample `x` is drawn per entry from the
+  derived stream `<taskId>#instances` (seeded like R-DET-2 with that key, ADR-033 § 1.3), before
+  any instance's duration, and
+  `N = floor(max(0, x) + 0.5)` (round half up). With `cardinality` or the default nothing is
+  drawn. There is no cap on `N`: like `triggerCount`, a huge value costs what it says. R-TOK-7
+  still counts events, so a parallel entry whose instances all end at the same instant aborts with
+  `E-LIMITE-SIN-AVANCE` once they exceed the per-case budget. `instances` on any element without the marker is `E-CAMPO-NO-APLICA`.
+  *(test: #701)*
+- **R-MI-2 — Parallel.** The `N` instances are enabled at the arrival instant in order `1…N`. Each
+  is an activity instance with its own `activityInstanceId` and its own `processingTime` sample
+  from the task's stream, drawn in that order. Each enabling takes its own place in the resource
+  queue, in instance order, so the requests share `enabledAt` and are still totally ordered by
+  `(enabledAt, seq)` (R-REC-3): no new tie-break. They compete with each other and with other
+  tokens. *(test: #701)*
+- **R-MI-3 — Sequential.** Instance 1 is enabled at the arrival instant and instance `k + 1` at the
+  instant `k` completes, after `k` releases its units, as a new enabling: it queues behind the
+  requests already waiting. Each duration is sampled when its instance is enabled. *(test: #701)*
+- **R-MI-4 — Completion.** The token leaves through the first outgoing flow, with its OR marks, at
+  the instant the last instance completes. With `N = 0` it leaves in the same instant: no
+  instance, no row, no `started`, no boundary event armed and no boundary draw; the flows still
+  count. *(test: #701)*
+- **R-MI-5 — Results.** `elements[task].started`/`completed` count instances (Bizagi's "Instances
+  started/completed"); `processing`, `resourceWait`, `offHoursWait` and `queueLength` are per
+  instance, and so are the event-log rows; `fixedCostTotal = fixedCost × completed instances`.
+  The case keeps one token in the task (R-TOK-2), so the incoming and outgoing flows count once
+  per entry. Hand-checked oracles, with a constant duration `d`: sequential `N = 3` with no
+  resources takes `3d`; parallel `N = 3` with one unit takes `3d`, with three units `d`.
+  *(test: #701)*
+- **R-MI-6 — Boundary events, terminate and stop.** The activity is open from the entry until the
+  token leaves, and that is what R-BND-4 checks. A boundary timer is armed once per entry, from
+  the entry instant and before any instance's `done`, so a deadline exactly as long as the work
+  interrupts (R-BND-7). Interrupting, it closes every open instance `interrupted` (granted units
+  released, queued requests dropped, R-BND-5) and sequential instances not yet enabled are never
+  created; non-interrupting, it fires at most once per entry (R-BND-11). An error boundary draws
+  per completed instance (R-ERR-1); on error every other open instance closes `interrupted`, no
+  further instance starts and the token leaves once, through the boundary (R-ERR-3). `terminate`,
+  the stop and the cancellation of an enclosing sub-process (R-BND-17) treat every open instance
+  as R-EVT-6 and R-ARR-5 say, and the remaining instances never run. *(test: #701)*
+- **Degradation.** Neither `instances` nor a numeric `loopCardinality`: one instance, exactly as if
+  the marker were absent, plus warning `W-MULTI-SIN-CARDINALIDAD` citing the task, emitted each
+  time a token reaches it and aggregated like any other warning (§17). Never an error and never
+  invented variability (R-DEG-5).
 
 ---
 
@@ -1296,7 +1357,7 @@ Since LILA-211 the texts of all these codes live in a catalog per language
 translation; both are normative, each for its own language, and this section gives both texts
 wherever it fixes them literally. The code (`E-…`, `W-…`) and the rule id (`R-…`) are **never**
 translated. A test (`packages/engine/test/messages.test.ts`) keeps this section, the catalog and
-the code in sync: the catalog's 64 codes are exactly the ones `packages/engine/src` emits, `en`
+the code in sync: the catalog's 67 codes are exactly the ones `packages/engine/src` emits, `en`
 and `es` declare the same entries, and no `"CODE: …"` literal lives outside the catalog.
 
 Errors (they abort; validation errors are returned in `errors[]`, runtime errors are thrown; the CLI exits with 1):
@@ -1326,7 +1387,7 @@ Errors (they abort; validation errors are returned in `errors[]`, runtime errors
 | `E-CAPACIDAD-Y-CALENDARIO` | `capacity` by intervals and the pool's `calendar` declared at the same time (R-CAL-11, R16 of `SCENARIO_FORMAT.md`) |
 | `E-REF-DESCONOCIDA` | `calendar` that does not exist in `calendars` (`validateScenario`'s lint), including that of each `capacity` slice |
 | `E-CAL-DESCONOCIDO` | the same, caught by `core/sim.ts`'s guard (see R-CAL-10 and R-CAL-11) |
-| `E-CAMPO-NO-APLICA` | field declared on an element that does not admit it (R4, R5, R14; `errorProbability` off an error boundary, §9.3) |
+| `E-CAMPO-NO-APLICA` | field declared on an element that does not admit it (R4, R5, R14; `errorProbability` off an error boundary, §9.3; `instances` off a multi-instance task, R-MI-1) |
 | `E-CAL-VACIO` | calendar with no intervals, a calendar whose every opening falls on one of its own holidays (R-CAL-14, cites `calendars.<name>`), or empty intersection of calendars (cites the task) |
 | `E-SIN-PARADA` | neither `run.duration` nor any `triggerCount` |
 | `E-BUCLE-SIN-SALIDA` | `loop.probability: 1` on a task whose loop marker has no `loopMaximum`: the loop never ends (R-LOOP-2); the lint cites `elements.<id>.loop.probability` and `core/` repeats the check before the first event |
@@ -1403,7 +1464,8 @@ no time, R-EVG-6: each case has its own text),
 a branch of an event-based gateway it never fires instead, R-EVG-5),
 `W-BORDE-SIN-TIEMPO` (boundary timer with no `processingTime`: it never
 fires on its host, interrupting or not, R-BND-8; the host may be a sub-process, R-BND-19),
-`W-ERROR-SIN-PROBABILIDAD` (error boundary with no `errorProbability`: it never fires, R-ERR-5), `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
+`W-ERROR-SIN-PROBABILIDAD` (error boundary with no `errorProbability`: it never fires, R-ERR-5), `W-MULTI-SIN-CARDINALIDAD` (multi-instance
+task with neither `instances` nor a numeric `loopCardinality`: it runs one instance, §4.2), `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
 `W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`, `W-COND-INALCANZABLE` (a `flowTaken` that cannot
 precede its gateway, R-COND-4), `W-OR-PROB-PARCIAL` (an OR with `probability` on some outgoing
 flows but not all, R-OR-2), `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
@@ -1602,6 +1664,7 @@ lint or the `core/` guard catches it (unifying them requires touching `core/`; s
 | R-PLAN-3 | sub-process has no time of its own | LILA-019 (`E-SUBPROC-PARAMETRO`: LILA-198) |
 | R-PLAN-4 | call activity = task with its own duration | LILA-019 |
 | R-LOOP-1 … R-LOOP-6 | standard loop marker on a task (ADR-033 § 3) | #700 (`packages/engine/test/loop-marker.test.ts`) |
+| R-MI-1 … R-MI-6 | multi-instance task, parallel and sequential (ADR-033) | #701 (`packages/engine/test/multi-instance.test.ts`) |
 | R-TOK-1 | clock in seconds since `run.start` | LILA-037 |
 | R-TOK-2 | case = set of tokens | LILA-026 |
 | R-TOK-3 | heap `(t, seq)` | LILA-023, LILA-030 |

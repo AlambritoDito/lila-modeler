@@ -90,6 +90,8 @@ export interface CoreCodeMessages {
   'W-BORDE-SIN-TIEMPO': (nodeId: string, hostId: string) => string;
   /** ADR-033 § 3: a task with a loop marker and no `loop` in the scenario runs once. */
   'W-BUCLE-SIN-PARAMETROS': (nodeId: string) => string;
+  /** ADR-033 § 4 (#701): a multi-instance task with no `instances` and no numeric `loopCardinality`. */
+  'W-MULTI-SIN-CARDINALIDAD': (nodeId: string) => string;
   'W-OR-JOIN-SIN-FORK': (nodeId: string) => string;
   'W-JOIN-BLOQUEADO': (nodeId: string, cases: number) => string;
   /** R-EVG-6: variant for the token an event-based gateway with no armable branch keeps. */

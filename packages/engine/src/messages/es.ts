@@ -272,6 +272,7 @@ export const es: Catalog = {
       `solo se admite en un flujo de secuencia que sale de una compuerta exclusiva divergente (${path}).`,
     'E-CAMPO-NO-APLICA/solo-bucle': (path) =>
       `solo se admite en una tarea con marcador de bucle (${path}).`,
+    'E-CAMPO-NO-APLICA/solo-multi': (path) => `solo se admite en una tarea multi-instancia (${path}).`,
     'E-TIMER-RECURSO': (path) => `un temporizador es un retardo y no consume recursos (${path}).`,
     'E-REC-DESCONOCIDO/recurso': (path, ref) =>
       `el recurso ${ref} no existe en la lista de recursos (${path}).`,

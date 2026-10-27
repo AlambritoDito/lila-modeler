@@ -11,7 +11,7 @@
 import { BpmnModdle, type ModdleElement, type ModdleWarning } from 'bpmn-moddle';
 import lila from './lila.moddle.json' with { type: 'json' };
 import { newId, sanitizeXmlIds } from './ids.js';
-import type { Flow, Node, NodeType, ProcessIR, SourceWarning, SubprocessIR } from '../core/ir.js';
+import type { Flow, MultiInstance, Node, NodeType, ProcessIR, SourceWarning, SubprocessIR } from '../core/ir.js';
 import type { ConstructionId } from '../messages/constructions.js';
 
 /** Toda variante de tarea se aplana a `task` (R-PERF-1); la call activity también (R-PLAN-4). */
@@ -128,6 +128,8 @@ interface ProfileContext {
   rawInstantiate: ReadonlyMap<string, string>;
   /** R-EVG-1: the supported event-based gateways and the branch catch events they arm. */
   inProfile: ReadonlySet<ModdleElement>;
+  /** ADR-033 § 4: `activity id -> raw isSequential literal` of its multi-instance marker. */
+  rawSequential: ReadonlyMap<string, string>;
 }
 
 const NO_CONTEXT: ProfileContext = {
@@ -136,6 +138,7 @@ const NO_CONTEXT: ProfileContext = {
   rawCancel: NO_RAW_LITERALS,
   rawInstantiate: NO_RAW_LITERALS,
   inProfile: new Set(),
+  rawSequential: NO_RAW_LITERALS,
 };
 
 /**
@@ -184,7 +187,7 @@ function boundaryHost(
     kind === undefined ||
     host === undefined ||
     !(TASK_TYPES.has(host.$type) || host.$type === 'bpmn:SubProcess') ||
-    unsupportedConstruction(host) !== undefined ||
+    unsupportedConstruction(host, ctx) !== undefined ||
     !ctx.hasOutgoing.has(el) ||
     // R-BND-1/R-BND-10: only the host may activate a boundary, never an incoming flow.
     (ctx.inDegree.get(el) ?? 0) !== 0 ||
@@ -297,7 +300,12 @@ function unsupportedConstruction(
   const byType = TYPE_CONSTRUCTIONS[el.$type];
   if (byType !== undefined) return byType;
 
-  if (el.loopCharacteristics?.$type === 'bpmn:MultiInstanceLoopCharacteristics') {
+  // ADR-033 § 4: a task or call activity simulates its multi-instance marker (R-MI-1…6); on a
+  // sub-process, or with an `isSequential` outside `xsd:boolean`, it stays out of the profile.
+  if (
+    el.loopCharacteristics?.$type === 'bpmn:MultiInstanceLoopCharacteristics' &&
+    multiInstanceOf(el, ctx.rawSequential) === undefined
+  ) {
     return 'multiInstanceMarker';
   }
   // ADR-033 § 3: a task or call activity simulates its standard loop marker (R-LOOP-1); on an
@@ -344,6 +352,32 @@ function isThrowInProfile(el: ModdleElement): boolean {
     definitions.length === 0 ||
     (definitions.length === 1 && definitions[0]!.$type === 'bpmn:MessageEventDefinition')
   );
+}
+
+/**
+ * ADR-033 § 4: the multi-instance marker of a task or call activity, or `undefined` when the
+ * element has none or the marker keeps it out of the profile: on any other element (a sub-process
+ * stays `E-NOSOP` `multiInstanceMarker`), or with an `isSequential` literal outside `xsd:boolean`.
+ * `isSequential` is read from the raw XML literal like `cancelActivity` (see `XSD_BOOLEAN`), since
+ * moddle collapses `"1"` into `false`. `cardinality` is the `loopCardinality` body only when,
+ * trimmed, it is a decimal integer literal (`0` included); a sign, an expression or an empty
+ * body leaves it absent. `completionCondition`, data inputs and outputs and `behavior` are ignored.
+ */
+function multiInstanceOf(
+  el: ModdleElement,
+  rawSequential: ReadonlyMap<string, string>,
+): MultiInstance | undefined {
+  const marker = el.loopCharacteristics;
+  if (marker?.$type !== 'bpmn:MultiInstanceLoopCharacteristics' || !TASK_TYPES.has(el.$type)) {
+    return undefined;
+  }
+  const raw = rawSequential.get(el.id);
+  const sequential = raw === undefined ? marker.isSequential === true : XSD_BOOLEAN.get(raw);
+  if (sequential === undefined) return undefined;
+  const body = marker.loopCardinality?.body?.trim();
+  return body !== undefined && /^\d+$/.test(body)
+    ? { sequential, cardinality: Number(body) }
+    : { sequential };
 }
 
 /** Tipo del IR para un elemento moddle, o `undefined` si está fuera del perfil soportado. */
@@ -454,6 +488,8 @@ interface Collector {
   rawInstantiate: ReadonlyMap<string, string>;
   /** ADR-033 § 3: `host activity id -> raw `loopMaximum` literal` (`rawLoopMaximum`). */
   rawLoopMaximum: ReadonlyMap<string, string>;
+  /** ADR-033 § 4: `activity id -> raw isSequential literal` (`rawMultiInstanceSequential`). */
+  rawSequential: ReadonlyMap<string, string>;
   unsupported: { at: number; element: UnsupportedElement }[];
 }
 
@@ -551,6 +587,7 @@ function walk(container: ModdleElement, subprocessId: string | undefined, c: Col
     rawCancel: c.rawCancel,
     rawInstantiate: c.rawInstantiate,
     inProfile: eventGatewayProfile(container, targets, inDegree, outDegree, c.rawInstantiate),
+    rawSequential: c.rawSequential,
   };
 
   for (const el of container.flowElements ?? []) {
@@ -616,6 +653,10 @@ function walk(container: ModdleElement, subprocessId: string | undefined, c: Col
       const maximum = loopMaximumOf(c.rawLoopMaximum.get(el.id));
       c.nodes[id]!.loop = maximum === undefined ? {} : { maximum };
     }
+    // ADR-033 § 4: only a task with the marker carries `multiInstance`; every other node keeps
+    // its exact shape.
+    const multiInstance = type === 'task' ? multiInstanceOf(el, c.rawSequential) : undefined;
+    if (multiInstance !== undefined) c.nodes[id]!.multiInstance = multiInstance;
     if (el.$type === 'bpmn:BoundaryEvent' && el.attachedToRef !== undefined) {
       c.boundaryHosts.set(id, {
         el,
@@ -978,23 +1019,39 @@ const ANY_TAG = /<(\/?)(?:[\w.-]+:)?([\w.-]+)((?:[^>"']|"[^"]*"|'[^']*')*)>/g;
  * none), so it is keyed by its parent element, found with a stack of the open tags.
  */
 export function rawLoopMaximum(xml: string): Map<string, string> {
+  return rawMarkerLiterals(xml, 'standardLoopCharacteristics', 'loopMaximum');
+}
+
+/**
+ * ADR-033 § 4: `id of the enclosing activity -> raw `isSequential` literal` of every
+ * `<…multiInstanceLoopCharacteristics …>`, for the same reasons: moddle collapses the
+ * `xsd:boolean` (`"1"` arrives as `false`) and the marker rarely has an id of its own.
+ */
+export function rawMultiInstanceSequential(xml: string): Map<string, string> {
+  return rawMarkerLiterals(xml, 'multiInstanceLoopCharacteristics', 'isSequential');
+}
+
+/**
+ * `id of the parent element -> raw literal of `attribute`` on every `<…localName …>` of the
+ * sanitized XML, keyed by the element that encloses it, found with a stack of the open tags.
+ * Markers that do not declare the attribute are not in the map ("absent").
+ */
+function rawMarkerLiterals(xml: string, localName: string, attribute: string): Map<string, string> {
   const literals = new Map<string, string>();
   const open: (string | undefined)[] = [];
-  for (const [, closing, localName, attrs = ''] of xml.replace(NO_ES_MARKUP, ' ').matchAll(ANY_TAG)) {
+  for (const [, closing, name, attrs = ''] of xml.replace(NO_ES_MARKUP, ' ').matchAll(ANY_TAG)) {
     if (closing === '/') {
       open.pop();
       continue;
     }
     let id: string | undefined;
     let raw: string | undefined;
-    for (const [, name, dq, sq] of attrs.matchAll(ATTR)) {
-      if (name === 'id') id ??= dq ?? sq;
-      else if (name === 'loopMaximum') raw ??= dq ?? sq;
+    for (const [, key, dq, sq] of attrs.matchAll(ATTR)) {
+      if (key === 'id') id ??= dq ?? sq;
+      else if (key === attribute) raw ??= dq ?? sq;
     }
     const host = open[open.length - 1];
-    if (localName === 'standardLoopCharacteristics' && host !== undefined && raw !== undefined) {
-      literals.set(host, raw);
-    }
+    if (name === localName && host !== undefined && raw !== undefined) literals.set(host, raw);
     if (!attrs.trimEnd().endsWith('/')) open.push(id);
   }
   return literals;
@@ -1174,6 +1231,7 @@ export async function parseBpmn(xmlIn: string, options: ParseBpmnOptions = {}): 
     rawCancel: rawAttributeLiterals(xml, 'boundaryEvent', 'cancelActivity'),
     rawInstantiate: rawAttributeLiterals(xml, 'eventBasedGateway', 'instantiate'),
     rawLoopMaximum: rawLoopMaximum(xml),
+    rawSequential: rawMultiInstanceSequential(xml),
     unsupported: [],
   };
 

@@ -847,7 +847,7 @@ Neither or both is a schema error. `probability` outside `[0, 1]` is `E-PROB-RAN
 - **Degradation.** No `loop`: exactly one iteration, as if the marker were absent, plus
   `W-BUCLE-SIN-PARAMETROS`.
 
-### 4. Multi-instance task (#701)
+### 4. Multi-instance task (#701, implemented)
 
 **Profile and IR.** `multiInstanceLoopCharacteristics` on a supported task or call activity (on a
 sub-process it stays `E-NOSOP` `multiInstanceMarker`). The task node gets

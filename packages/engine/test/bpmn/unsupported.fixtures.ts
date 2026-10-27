@@ -149,12 +149,14 @@ export const UNSUPPORTED_FIXTURES: UnsupportedFixture[] = [
     messages: [message('Gateway_Complex', 'bpmn:complexGateway', 'gateway complejo')],
   },
   {
+    // ADR-033 § 4 (#701): on a task or call activity the marker is in the profile; on a
+    // sub-process it still is this row.
     row: 'multiInstanceLoopCharacteristics',
     xml: processWith(
-      'Task_Multi',
-      `<bpmn:task id="Task_Multi"><bpmn:multiInstanceLoopCharacteristics id="Loop_Multi" /></bpmn:task>`,
+      'Sub_Multi',
+      `<bpmn:subProcess id="Sub_Multi"><bpmn:multiInstanceLoopCharacteristics id="Loop_Multi" /></bpmn:subProcess>`,
     ),
-    messages: [message('Task_Multi', 'bpmn:task', 'marcador de multi-instancia')],
+    messages: [message('Sub_Multi', 'bpmn:subProcess', 'marcador de multi-instancia')],
   },
   {
     // ADR-033 § 3: on a task the loop marker is simulated (#700); on a sub-process it stays out.

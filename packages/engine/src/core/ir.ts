@@ -59,10 +59,25 @@ export interface Node {
    * the raw literal is a decimal integer ≥ 1; absent means no cap.
    */
   loop?: { maximum?: number };
+  /**
+   * Only on a `task` with a multi-instance marker (ADR-033 § 4, R-MI-1…6). `sequential` is the raw
+   * `isSequential` literal read as an `xsd:boolean`; `cardinality` is the `loopCardinality` body
+   * when, trimmed, it is a decimal integer literal (`0` included), and absent otherwise. Absent on
+   * every other node, so an IR without the marker keeps its exact shape.
+   */
+  multiInstance?: MultiInstance;
   /** Ids de los flujos entrantes, en orden de aparición. */
   incoming: string[];
   /** Ids de los flujos salientes, en orden de aparición. */
   outgoing: string[];
+}
+
+/** Multi-instance marker of a task or call activity (ADR-033 § 4). */
+export interface MultiInstance {
+  /** `true`: instance `k + 1` starts when `k` completes (R-MI-3); `false`: all at once (R-MI-2). */
+  sequential: boolean;
+  /** Numeric `loopCardinality`, used when the scenario declares no `instances` (R-MI-1). */
+  cardinality?: number;
 }
 
 /** Sequence flow, keyed por su `id` BPMN en `ProcessIR.flows`. */

@@ -85,6 +85,8 @@ export const coreEn: CoreCatalog = {
       `${nodeId}: boundary timer without processingTime; it never fires on ${hostId}.`,
     'W-BUCLE-SIN-PARAMETROS': (nodeId) =>
       `${nodeId}: loop marker with no loop in the scenario; it runs once.`,
+    'W-MULTI-SIN-CARDINALIDAD': (nodeId) =>
+      `${nodeId}: multi-instance task with neither instances in the scenario nor a numeric loopCardinality; it runs one instance.`,
     'W-OR-JOIN-SIN-FORK': (nodeId) =>
       `${nodeId}: a token arrived without a fork mark; it behaves as a merge.`,
     'W-JOIN-BLOQUEADO': (nodeId, cases) =>

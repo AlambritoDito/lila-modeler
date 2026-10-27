@@ -106,8 +106,9 @@ export const CAMPOS_DE_PASO: Record<PasoId, readonly string[]> = {
   arrivals: ['interTriggerTimer', 'triggerCount'],
   // ADR-033 § 3: `loop` belongs to Times, but no class offers it yet: #703 offers it on a task
   // with a loop marker. Until then Times only draws a `loop` the scenario already has (as a
-  // generic fieldset) and is where a loop problem (`E-BUCLE-SIN-SALIDA`) lands.
-  times: ['processingTime', 'fixedCost', 'priority', 'preempt', 'batch', 'loop'],
+  // generic fieldset) and is where a loop problem (`E-BUCLE-SIN-SALIDA`) lands. The same holds
+  // for `instances` on a task with a multi-instance marker (ADR-033 § 4).
+  times: ['processingTime', 'fixedCost', 'priority', 'preempt', 'batch', 'loop', 'instances'],
   routes: ['probability', 'conditions', 'errorProbability'],
   resources: ['resources', 'selection'],
   calendars: ['calendar'],
