@@ -72,12 +72,12 @@ escenario, igual que cuando editas un campo a mano ([SCENARIO_FORMAT.md](SCENARI
 
 ### Elements
 
-Una fila por tarea, temporizador, evento de fin y flujo de salida de una compuerta.
+Una fila por tarea, temporizador, evento de fin, evento de error adjunto y flujo de salida de una compuerta.
 
 | Columna | Significado |
 |---|---|
 | `id`, `name` | Id y nombre BPMN del elemento. Basta con uno de los dos. |
-| `kind` | `task`, `timer`, `end`, `flow`… Solo informativa: la importación la ignora. |
+| `kind` | `task`, `timer`, `end`, `errorBoundary`, `flow`… Solo informativa: la importación la ignora. |
 | `distribution` | Distribución del tiempo de procesamiento (`processingTime`): `constant`, `uniform`, `triangular`, `exponential`, `normal`, `truncatedNormal`, `lognormal`, `gamma`, `erlang`, `weibull`, `beta`, `poisson`, `binomial` o `user`. También valen en español: `constante`, `uniforme`, `exponencial`, `normal truncada`, `usuario`. |
 | `unit` | Unidad de los tiempos de la fila: `s`, `min`, `h` o `day`. Vacía es `run.baseTimeUnit`, la unidad que muestra el panel. |
 | `value` … `p` | Una columna por parámetro de distribución: `value`, `min`, `mode`, `max`, `mean`, `sd`, `shape`, `scale`, `k`, `alpha`, `beta`, `n`, `p`. Rellena los de la distribución elegida y deja vacíos los demás. `value`, `min`, `mode`, `max`, `mean` y `sd` son tiempos en `unit`. |
@@ -86,9 +86,18 @@ Una fila por tarea, temporizador, evento de fin y flujo de salida de una compuer
 | `calendar` | Clave del calendario; tiene que existir en el escenario o en la hoja `Calendars`. |
 | `probability` | Para un flujo que sale de una compuerta: entre 0 y 1, o un porcentaje. |
 | `selection` | `and` u `or`, cuando la tarea usa varios grupos. |
+| `loopCount` | Para una tarea con marcador de bucle: cuántas veces se ejecuta, número entero ≥ 1 (`loop.count`). |
+| `loopProbability` | Para una tarea con marcador de bucle: la probabilidad de otra iteración tras cada una, entre 0 y 1 o un porcentaje (`loop.probability`). Rellena `loopCount` o `loopProbability`, no las dos: cualquiera de ellas sustituye el `loop` entero de la tarea. |
+| `instances` | Para una tarea multi-instancia: cuántas instancias se ejecutan por caso, un número ≥ 0 (un `instances` constante). Un `instances` con otra distribución queda vacío en la plantilla y se edita en el panel. |
+| `errorProbability` | Para un evento de error adjunto: la parte de las finalizaciones de su actividad que salen por él, entre 0 y 1 o un porcentaje. |
 
 Una distribución siempre necesita su tipo: parámetros sin `distribution` son un error, y también
 un parámetro que la distribución no tiene.
+
+`loopCount`, `loopProbability` e `instances` solo valen en una tarea con el marcador correspondiente
+en el diagrama, y `errorProbability` solo en un evento de error adjunto
+([SCENARIO_FORMAT.md](SCENARIO_FORMAT.md) § 2.5): en cualquier otro elemento la importación informa
+del error y Aplicar queda desactivado.
 
 ### Arrivals
 

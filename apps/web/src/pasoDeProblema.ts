@@ -69,6 +69,7 @@ function pasoDeClase(clase: ClaseElemento | null): PasoId | null {
     case 'xor':
     case 'or':
     case 'flow':
+    case 'errorBoundary':
       return 'routes';
     default:
       return null;
@@ -78,8 +79,13 @@ function pasoDeClase(clase: ClaseElemento | null): PasoId | null {
 /**
  * The step where the problem at `ruta` is fixed, or `null` when no step owns it (`extends`,
  * `model`, an unknown element): those go to the list at the foot of the panel.
+ *
+ * `codigo` covers the one problem whose path does not say where it is fixed: `E-PROB-ERROR-SUMA`
+ * cites the host (`elements.<hostId>`, ADR-033 § 1.6), and its error probabilities are set in
+ * Routes, on the host's error boundary events.
  */
-export function pasoDeProblema(ruta: string, ir: ProcessIR | null): PasoId | null {
+export function pasoDeProblema(ruta: string, ir: ProcessIR | null, codigo?: string): PasoId | null {
+  if (codigo === 'E-PROB-ERROR-SUMA') return 'routes';
   const raiz = /^[^.[]+/.exec(ruta)?.[0] ?? '';
   if (raiz === 'run') return 'run';
   if (raiz === 'calendars') return 'calendars';
@@ -131,11 +137,11 @@ export interface ProblemasPorPaso<P> {
   sinPaso: P[];
 }
 
-export function agruparPorPaso<P extends { ruta: string }>(problemas: readonly P[], ir: ProcessIR | null): ProblemasPorPaso<P> {
+export function agruparPorPaso<P extends { ruta: string; codigo?: string }>(problemas: readonly P[], ir: ProcessIR | null): ProblemasPorPaso<P> {
   const porPaso: Record<PasoId, P[]> = { arrivals: [], times: [], routes: [], resources: [], calendars: [], run: [] };
   const sinPaso: P[] = [];
   for (const problema of problemas) {
-    const paso = pasoDeProblema(problema.ruta, ir);
+    const paso = pasoDeProblema(problema.ruta, ir, problema.codigo);
     if (paso === null) sinPaso.push(problema);
     else porPaso[paso].push(problema);
   }

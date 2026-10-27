@@ -124,6 +124,29 @@ The lane action is the fastest way in: model your lanes as roles, then one actio
 replaces a dozen hand assignments. Lanes stay labels for the engine; the action only writes the
 per-task assignment for you.
 
+### Loops, multi-instance tasks and error events
+
+These BPMN elements run in the simulator since 1.0 ([ADR-033](DECISIONS.md)), and the Simulate
+steps offer their fields on the selected element, with the same validation as any other field:
+
+| In your diagram | Lila step | Field |
+|---|---|---|
+| Task with a standard loop marker | Times, «Loop»: a fixed number of times, or again after each iteration with a probability (capped by the diagram's `loopMaximum`) | `loop.count` or `loop.probability` |
+| Multi-instance task, parallel or sequential | Times, «Instances»: a number or a distribution per case; without it, the diagram's `loopCardinality`, or one | `instances` |
+| Interrupting error boundary event on a task or an embedded sub-process | Routes, «Error probability»: the share of the activity's completions that leave through it; Routes lists every error boundary event of the process | `errorProbability` |
+| Timer boundary event on an embedded sub-process | Times: its processing time is the deadline, from the moment a case enters the sub-process | `processingTime` |
+| Message start, message end, none or message intermediate throw event | Arrivals for the message start; the others take no parameter | — |
+
+Each iteration of a loop and each instance of a multi-instance task counts as one instance in the
+Process elements table. Bizagi Modeler does not simulate multi-instance tasks, and none of these
+elements has been compared against a published Bizagi run ([`BIZAGI_PARITY.md`](BIZAGI_PARITY.md)).
+The spreadsheet template carries them too, as the `loopCount`, `loopProbability`, `instances` and
+`errorProbability` columns of its Elements sheet ([`SCENARIO_SHEETS.md`](SCENARIO_SHEETS.md)).
+
+Signal and escalation events, error start, intermediate and end events, and boundary events other
+than a timer or an interrupting error still stop the run with `E-NOSOP`, and the canvas marks them
+while you model.
+
 ### Calendars
 
 | Bizagi | Lila |

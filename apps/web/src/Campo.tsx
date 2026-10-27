@@ -6,6 +6,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 
+import { CampoBucle, esBucle, formaBucle } from './CampoBucle.js';
 import { CampoCapacidadRecurso, esCapacidadRecurso } from './CampoCapacidadRecurso.js';
 import { CampoFestivos, CampoIntervalos, esFestivosCalendario, esIntervalosCalendario } from './CamposCalendario.js';
 import {
@@ -614,6 +615,12 @@ export function Campo({
   // calendarios ya declarados, no como el formulario genérico de un `{calendar, capacity}` suelto.
   if (esCapacidadRecurso(ruta, esquema)) {
     return <CampoCapacidadRecurso esquema={esquema} ruta={ruta} ctx={ctx} />;
+  }
+
+  // ADR-033 § 3 (#703): `loop` is exactly one of `count` and `probability`, which the schema the
+  // form reads cannot say; a `loop` of another shape falls through to the generic fieldset.
+  if (esBucle(ruta) && formaBucle(valor) !== null) {
+    return <CampoBucle ruta={ruta} etiqueta={etiqueta} ctx={ctx} />;
   }
 
   // ADR-028: `conditions` solo se edita donde el motor la acepta; en el resto de elementos es un

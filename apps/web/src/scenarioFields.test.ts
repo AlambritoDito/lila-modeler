@@ -17,6 +17,7 @@ import {
   CAMPOS_DE_PASO,
   fieldsForKind,
   fieldsForStep,
+  marcadoresDe,
   partesInstante,
   repartoXor,
 } from './scenarioFields';
@@ -48,8 +49,24 @@ describe('fieldsForKind (§ 2.5, columna «Applies to»)', () => {
     expect(fieldsForKind('terminate')).toEqual(['fixedCost']);
     // ADR-033 R-THR-2: an intermediate throw event is a milestone with no field of its own.
     expect(fieldsForKind('throw')).toEqual([]);
-    // ADR-033 § 5: an error boundary takes `errorProbability`, but its control is #703's.
-    expect(fieldsForKind('errorBoundary')).toEqual([]);
+    // ADR-033 § 5 (#703): an error boundary takes only `errorProbability`.
+    expect(fieldsForKind('errorBoundary')).toEqual(['errorProbability']);
+  });
+
+  it('ADR-033 § 1.7 (#703): a task offers loop and instances only with the marker that takes them', () => {
+    const sin = { bucle: false, multiInstancia: false };
+    expect(fieldsForKind('task', sin)).toEqual(fieldsForKind('task'));
+    expect(fieldsForKind('task', { bucle: true, multiInstancia: false })).toEqual([
+      'processingTime', 'loop', 'resources', 'selection', 'fixedCost', 'calendar',
+    ]);
+    expect(fieldsForKind('task', { bucle: false, multiInstancia: true })).toEqual([
+      'processingTime', 'instances', 'resources', 'selection', 'fixedCost', 'calendar',
+    ]);
+    // A marker means nothing on another class: a timer is never a loop.
+    expect(fieldsForKind('timer', { bucle: true, multiInstancia: true })).toEqual(fieldsForKind('timer'));
+    expect(marcadoresDe({ type: 'task', loop: {} })).toEqual({ bucle: true, multiInstancia: false });
+    expect(marcadoresDe({ type: 'task', multiInstance: { sequential: true } })).toEqual({ bucle: false, multiInstancia: true });
+    expect(marcadoresDe(undefined)).toEqual(sin);
   });
 
   it('una compuerta no tiene ningún campo de elemento; sus ramas se editan en su vista', () => {
@@ -68,24 +85,21 @@ describe('fieldsForKind (§ 2.5, columna «Applies to»)', () => {
     const delEsquema = new Set(Object.keys(ElementSchema.shape));
     // Los reservados de § 4 no los ofrece nadie a propósito: el motor los rechaza con error.
     const reservados = new Set(['priority', 'preempt', 'batch', 'conditions']);
-    // ADR-033 § 5: the engine takes `errorProbability` since #702; the panel offers it with #703.
-    const sinControlTodavia = new Set(['errorProbability']);
     const ofrecidos = new Set(
-      (['task', 'start', 'timer', 'end', 'terminate', 'flow'] as const).flatMap(
-        (c) => fieldsForKind(c)!,
+      (['task', 'start', 'timer', 'end', 'terminate', 'flow', 'errorBoundary'] as const).flatMap(
+        (c) => fieldsForKind(c, { bucle: true, multiInstancia: true })!,
       ),
     );
     // ADR-033 § 1.7: `loop` and `instances` are offered only on a task with a loop or a
-    // multi-instance marker, which the class alone does not say; #703 adds those controls. Until
-    // then no class offers them, and it must stay so.
+    // multi-instance marker, which the class alone does not say.
     const conMarcador = new Set(['loop', 'instances']);
     for (const campo of ofrecidos) expect(delEsquema.has(campo)).toBe(true);
     for (const campo of conMarcador) {
       expect(delEsquema.has(campo)).toBe(true);
-      expect(ofrecidos.has(campo)).toBe(false);
+      expect(fieldsForKind('task')).not.toContain(campo);
     }
     for (const campo of delEsquema) {
-      if (!reservados.has(campo) && !sinControlTodavia.has(campo) && !conMarcador.has(campo)) expect(ofrecidos.has(campo)).toBe(true);
+      if (!reservados.has(campo)) expect(ofrecidos.has(campo)).toBe(true);
     }
   });
 });
@@ -132,6 +146,16 @@ describe('fieldsForStep (#333/#396, Lote M: Llegadas, Tiempos, Rutas, Recursos, 
     expect(fieldsForStep('arrivals', 'task')).toEqual([]);
     expect(sinReservados(fieldsForStep('routes', 'task'))).toEqual([]);
     expect(fieldsForStep('run', 'task')).toEqual([]);
+  });
+
+  it('ADR-033 (#703): loop and instances go to Times with their marker, errorProbability to Routes', () => {
+    const ambos = { bucle: true, multiInstancia: true };
+    expect(sinReservados(fieldsForStep('times', 'task', ambos))).toEqual(['processingTime', 'fixedCost', 'loop', 'instances']);
+    expect(fieldsForStep('resources', 'task', ambos)).toEqual(['resources', 'selection']);
+    expect(sinReservados(fieldsForStep('routes', 'errorBoundary'))).toEqual(['errorProbability']);
+    for (const paso of ['arrivals', 'times', 'resources', 'calendars', 'run'] as const) {
+      expect(sinReservados(fieldsForStep(paso, 'errorBoundary'))).toEqual([]);
+    }
   });
 
   it('un temporizador tiene su tiempo en Tiempos', () => {

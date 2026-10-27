@@ -8,6 +8,8 @@
  *   (↑/↓ ±5, Escape restores, Enter leaves), a stacked bar that adds up to 100 and a status with
  *   the one-click fix («Set «No» to 30 %», «Split evenly»).
  * - A join gateway: a note, it takes no parameters.
+ * - Under the overview, the error boundary events (ADR-033 § 5, #703) with their `errorProbability`
+ *   (`ListaErrores`): they share the cases of their activity like a gateway shares its own.
  *
  * It replaces the gateway view of the old Parameters step (#332): same path
  * (`elements[flowId].probability`), same engine rules (`repartoRutas.ts` mirrors R-XOR/R-OR), and the
@@ -18,7 +20,8 @@ import { useState } from 'react';
 import type { ProcessIR } from '@lila-modeler/engine';
 
 import { Problemas } from './Campo.js';
-import { rutaTexto, type Contexto, type Ruta } from './escenarioModelo.js';
+import { leer, rutaTexto, type Contexto, type Ruta } from './escenarioModelo.js';
+import { ListaElementos, type PropsListaPaso } from './ListaElementos.js';
 import {
   aFraccion,
   compuertaDeSeleccion,
@@ -47,6 +50,26 @@ export interface PropsPasoRutas {
   onSeleccionar: (id: string | null) => void;
   /** Settings → «Advanced» (#447): ids next to the names. */
   avanzado?: boolean;
+}
+
+/** ADR-033 § 5 (#703): the error boundary events with their probability, or that one never fires. */
+export function ListaErrores({ ids, rotulo, resuelto, seleccion, onSeleccionar }: PropsListaPaso): React.JSX.Element | null {
+  const S = useStrings();
+  const probabilidad = (id: string): unknown => leer(resuelto, ['elements', id, 'errorProbability']);
+  return (
+    <ListaElementos
+      titulo={S.escenario.listaErrores}
+      ids={ids}
+      rotulo={rotulo}
+      resumen={(id) => {
+        const p = probabilidad(id);
+        return typeof p === 'number' ? String(p) : S.escenario.sinProbabilidadError;
+      }}
+      falta={(id) => typeof probabilidad(id) !== 'number'}
+      seleccion={seleccion}
+      onSeleccionar={onSeleccionar}
+    />
+  );
 }
 
 export function PasoRutas({ ctx, ir, seleccion, onSeleccionar, avanzado = false }: PropsPasoRutas): React.JSX.Element {

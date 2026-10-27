@@ -68,14 +68,14 @@ import { BotonElemento, type Rotulo } from './ListaElementos.js';
 import { PasoCalendarios } from './PasoCalendarios.js';
 import { FichaLlegada, ListaLlegadas } from './PasoLlegadas.js';
 import { PasoEjecucion } from './PasoEjecucion.js';
-import { PasoRutas } from './PasoRutas.js';
+import { ListaErrores, PasoRutas } from './PasoRutas.js';
 import { compuertaDeSeleccion, esCompuertaRepartible } from './repartoRutas.js';
 import { ListaTiempos, ResumenTiempo } from './PasoTiempos.js';
 import { agruparPorPaso, elementoDeProblema, tareasSinDuracion } from './pasoDeProblema.js';
 import { PasoRecursos, ListaRecursos } from './PasoRecursos.js';
 import { esEscenarioBase } from './RailEscenarios.js';
 import { entradasHuerfanas, sinHuerfanas } from './simulationGate.js';
-import { CAMPOS_DE_PASO, fieldsForStep, type ClaseElemento } from './scenarioFields.js';
+import { CAMPOS_DE_PASO, fieldsForStep, marcadoresDe, type ClaseElemento } from './scenarioFields.js';
 import { useLocale, useStrings } from './i18n';
 
 // The model, the controls and the element lists live in their own modules since the Lote M split;
@@ -249,6 +249,8 @@ function consejoDe(clase: ClaseElemento | null): { clave: string; paso: PasoId |
       return { clave: 'gateway', paso: 'routes' };
     case 'flow':
       return { clave: 'flow', paso: 'routes' };
+    case 'errorBoundary':
+      return { clave: 'errorBoundary', paso: 'routes' };
     case 'end':
     case 'terminate':
       return { clave: 'end', paso: null };
@@ -735,7 +737,9 @@ export function ScenarioPanel({
   function irAProblema(problema: Problema): void {
     const destino = pasoDeProblemaPanel(problema.ruta);
     if (destino !== null) setPaso(destino);
-    onSeleccionar(elementoDeProblema(problema.ruta, ir));
+    // `E-PROB-ERROR-SUMA` cites the host, but is fixed on its error boundaries: the Routes overview
+    // lists them, while the host selected in Routes would offer nothing.
+    onSeleccionar(problema.codigo === 'E-PROB-ERROR-SUMA' ? null : elementoDeProblema(problema.ruta, ir));
   }
   function pasoDeProblemaPanel(ruta: string): PasoId | null {
     for (const p of PASO_IDS) if (porPaso.porPaso[p].some((x) => x.ruta === ruta)) return p;
@@ -855,7 +859,9 @@ export function ScenarioPanel({
   const pista = `${etiqueta(atajoPorId('paso:arrivals'), MAC).replace(/1$/, '1…6')} · ${atajoSimular}`;
 
   /* --- What the step shows for the selected element (Lote M: only this step's parameters). --- */
-  const visibles = idSeleccionado === null || contenedor !== null ? [] : fieldsForStep(paso, clase);
+  // ADR-033 § 1.7: a task's loop or multi-instance marker is in its IR node, not in its class.
+  const marcadores = marcadoresDe(idSeleccionado === null ? undefined : ir?.nodes[idSeleccionado]);
+  const visibles = idSeleccionado === null || contenedor !== null ? [] : fieldsForStep(paso, clase, marcadores);
   const definidos = idSeleccionado === null ? [] : CAMPOS_DE_PASO[paso].filter((campo) => leer(resuelto, ['elements', idSeleccionado, campo]) !== undefined);
   const esCompuerta = clase === 'xor' || clase === 'or';
   /** Whether the selected element has anything to set in this step; if not, the panel says where. */
@@ -903,7 +909,12 @@ export function ScenarioPanel({
       case 'times':
         return <ListaTiempos ids={idsPorTipo(['task', 'timer'])} tareas={tareas} {...lista} />;
       case 'routes':
-        return <PasoRutas ctx={ctx} ir={ir} seleccion={null} onSeleccionar={onSeleccionar} avanzado={avanzado} />;
+        return (
+          <>
+            <PasoRutas ctx={ctx} ir={ir} seleccion={null} onSeleccionar={onSeleccionar} avanzado={avanzado} />
+            <ListaErrores ids={idsPorTipo(['errorBoundary'])} {...lista} />
+          </>
+        );
       case 'resources':
         return (
           <>

@@ -46,6 +46,17 @@ describe('pasoDeProblema', () => {
     expect(pasoDeProblema('elements.F1', ir)).toBe('routes');
   });
 
+  it('ADR-033 (#703): an error boundary is fixed in Routes, and so is the sum of its host', () => {
+    const conBorde = { ...ir, nodes: { ...ir.nodes, Err_1: { type: 'errorBoundary', name: '', outgoing: [], attachedTo: 'Task_1' } } } as unknown as ProcessIR;
+    expect(pasoDeProblema('elements.Err_1.errorProbability', conBorde)).toBe('routes');
+    expect(pasoDeProblema('elements.Err_1', conBorde)).toBe('routes');
+    expect(pasoDeProblema('elements.Task_1.loop.probability', conBorde)).toBe('times');
+    expect(pasoDeProblema('elements.Task_1.instances', conBorde)).toBe('times');
+    // `E-PROB-ERROR-SUMA` cites the host, a task, but its fix is on the error boundaries.
+    expect(pasoDeProblema('elements.Task_1', conBorde, 'E-PROB-ERROR-SUMA')).toBe('routes');
+    expect(agruparPorPaso([{ ruta: 'elements.Task_1', codigo: 'E-PROB-ERROR-SUMA' }], conBorde).porPaso.routes).toHaveLength(1);
+  });
+
   it('what no step owns answers null', () => {
     expect(pasoDeProblema('extends', ir)).toBeNull();
     expect(pasoDeProblema('model', ir)).toBeNull();
