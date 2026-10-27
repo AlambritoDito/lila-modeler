@@ -378,6 +378,24 @@ describe('degradation — neither `instances` nor a numeric `loopCardinality`', 
     }
   });
 
+  test('N = 1 gives the plain task\'s warnings in the same order (QA of #701)', async () => {
+    // A task and a boundary with no time (the end's time only makes the scenario declare one,
+    // so the task warns on its own, R-DEG-3): two warnings whose order depends on whether the
+    // duration is sampled before or after the boundary is armed.
+    const scenario = {
+      ...BASE,
+      elements: { Start: { triggerCount: 2 }, End: { processingTime: { type: 'constant', value: 0 } } },
+    };
+    const plain = run(await irOf(line(false, 'interrupting')), scenario);
+    const single = run(await irOf(line({ cardinality: '1' }, 'interrupting')), scenario);
+    expect(plain.warnings.map((warning) => warning.slice(0, warning.indexOf(':')))).toEqual([
+      'W-TAREA-SIN-TIEMPO',
+      'W-BORDE-SIN-TIEMPO',
+    ]);
+    expect(plain.warnings[0]).toContain('Task_Review: no processingTime');
+    expect(JSON.stringify(single)).toBe(JSON.stringify(plain));
+  });
+
   test('the warning in Spanish, once per replication run', async () => {
     const ir = await irOf(line({}));
     const parsed = ScenarioSchema.parse(oneCase());

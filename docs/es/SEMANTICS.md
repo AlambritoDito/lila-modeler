@@ -331,10 +331,12 @@ se ignoran. En un subproceso el marcador sigue siendo `E-NOSOP` (§3).
 - **R-MI-1 — Sorteo de N.** `N` sale de `elements[<tarea>].instances`, una distribución
   (`SCENARIO_FORMAT.md` § 2.5), si el escenario la declara; si no, de `cardinality`; si no,
   `N = 1` (degradación, abajo). Con `instances` se toma una muestra `x` por entrada del flujo
-  derivado `<taskId>#instances` (§16, ADR-033 § 1.3), antes de la duración de cualquier
-  instancia, y `N = floor(max(0, x) + 0.5)` (redondeo hacia arriba en el medio). Con
+  derivado `<taskId>#instances` (sembrado como en R-DET-2 con esa clave, ADR-033 § 1.3), antes
+  de la duración de cualquier instancia, y `N = floor(max(0, x) + 0.5)` (redondeo hacia arriba en el medio). Con
   `cardinality` o el valor por omisión no se sortea nada. `N` no tiene tope: como `triggerCount`,
-  un valor enorme cuesta lo que dice, y R-TOK-7 sigue contando eventos. `instances` en cualquier
+  un valor enorme cuesta lo que dice. R-TOK-7 sigue contando eventos, así que una entrada paralela
+  cuyas instancias terminan todas en el mismo instante aborta con `E-LIMITE-SIN-AVANCE` cuando
+  superan el presupuesto por caso. `instances` en cualquier
   elemento sin el marcador es `E-CAMPO-NO-APLICA`. *(prueba: #701)*
 - **R-MI-2 — Paralela.** Las `N` instancias se habilitan en el instante de llegada en orden
   `1…N`. Cada una es una instancia de actividad con su propio `activityInstanceId` y su propia

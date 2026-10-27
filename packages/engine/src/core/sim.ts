@@ -1122,10 +1122,14 @@ export function runReplication(
    * sample from the task's stream. Its enabling takes its own place in the resource queue, so
    * instances enabled at the same instant are ordered by `(enabledAt, seq)` (R-REC-3).
    */
-  const enableInstance = (entry: MultiInstanceEntry, node: Node, t: number): void => {
+  const enableInstance = (
+    entry: MultiInstanceEntry,
+    node: Node,
+    t: number,
+    duration = sampleDuration(entry.nodeId, node.type),
+  ): void => {
     entry.enabled += 1;
     if (isMeasuredCase(entry.caseId)) elements[entry.nodeId]!.started++;
-    const duration = sampleDuration(entry.nodeId, node.type);
     const activity = createActivity(node, entry.nodeId, entry.caseId, entry.marks, t, duration, entry);
     entry.open.add(activity.id);
     scheduleActivity(activity);
@@ -1171,10 +1175,13 @@ export function runReplication(
       closed: false,
     };
     entries.set(entry.id, entry);
+    // Instance 1's duration is sampled first, as on a plain task, so `N = 1` gives the plain
+    // task's warnings in the same order; the draws come from other streams either way.
+    const first = sampleDuration(nodeId, node.type);
     // R-MI-6: armed once per entry, from the entry instant, before any instance's `done`.
     armBoundaries(nodeId, caseId, t, { entryId: entry.id });
-    if (entry.sequential) enableInstance(entry, node, t);
-    else for (let k = 0; k < total; k++) enableInstance(entry, node, t);
+    enableInstance(entry, node, t, first);
+    if (!entry.sequential) for (let k = 1; k < total; k++) enableInstance(entry, node, t);
   };
 
   /**

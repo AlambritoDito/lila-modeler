@@ -216,13 +216,14 @@ not a claim of parity: the full checklist, with every documented difference and 
 | Document publishing (Word/PDF/web) | ✓ | ✓ process document in Word (.docx) or one printable HTML page; no templates or shared repository |
 | Event-based gateway (timer and message branches) | ✓ | ✓ the first branch to elapse takes the token |
 | Standalone message/signal/link events | partial | ✗ explicit validation error |
-| Multi-instance, complex gateway, choreography | ✗ | ✗ out of scope |
+| Multi-instance task (parallel or sequential) | ✗ | ✓ `N` instances per entry, from `loopCardinality` or a distribution |
+| Complex gateway, choreography | ✗ | ✗ out of scope |
 
 ### Known limitations
 
 - **Supported BPMN profile**: start/end (none and terminate), intermediate timer, boundary timer
   (interrupting and not), event-based gateway with timer or message branches, tasks (all
-  variants), call activity, embedded subprocess, XOR/OR/AND gateways, lanes and pools. Anything else is an explicit validation error, never a silent failure
+  variants), call activity, multi-instance task or call activity, embedded subprocess, XOR/OR/AND gateways, lanes and pools. Anything else is an explicit validation error, never a silent failure
   ([`docs/SEMANTICS.md`](docs/SEMANTICS.md) §§ 2–3).
 - **Calendars keep `run.start`'s UTC offset**: weekly, monthly and annual recurrence and holidays
   are supported, but there is no per-calendar timezone and no DST (`timezone` is a reserved field).

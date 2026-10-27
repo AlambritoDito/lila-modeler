@@ -337,10 +337,12 @@ sub-process the marker stays `E-NOSOP` (§3).
 - **R-MI-1 — Drawing N.** `N` comes from `elements[<task>].instances`, a distribution
   (`SCENARIO_FORMAT.md` § 2.5), if the scenario declares it; else from `cardinality`; else
   `N = 1` (degradation, below). With `instances`, one sample `x` is drawn per entry from the
-  derived stream `<taskId>#instances` (§16, ADR-033 § 1.3), before any instance's duration, and
+  derived stream `<taskId>#instances` (seeded like R-DET-2 with that key, ADR-033 § 1.3), before
+  any instance's duration, and
   `N = floor(max(0, x) + 0.5)` (round half up). With `cardinality` or the default nothing is
-  drawn. There is no cap on `N`: like `triggerCount`, a huge value costs what it says, and R-TOK-7
-  still counts events. `instances` on any element without the marker is `E-CAMPO-NO-APLICA`.
+  drawn. There is no cap on `N`: like `triggerCount`, a huge value costs what it says. R-TOK-7
+  still counts events, so a parallel entry whose instances all end at the same instant aborts with
+  `E-LIMITE-SIN-AVANCE` once they exceed the per-case budget. `instances` on any element without the marker is `E-CAMPO-NO-APLICA`.
   *(test: #701)*
 - **R-MI-2 — Parallel.** The `N` instances are enabled at the arrival instant in order `1…N`. Each
   is an activity instance with its own `activityInstanceId` and its own `processingTime` sample
