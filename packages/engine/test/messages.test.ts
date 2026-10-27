@@ -196,7 +196,7 @@ describe('catálogo de mensajes (LILA-211)', () => {
     );
     const público = CODES.filter((code) => !INTERNAL_CODES.has(code));
 
-    expect(público).toHaveLength(51);
+    expect(público).toHaveLength(53);
     expect(INTERNAL_CODES.size).toBe(11);
     expect(público.filter((code) => !documented.has(code))).toEqual([]);
     expect([...documented].filter((code) => !CODES.includes(code as ProblemCode))).toEqual([]);
