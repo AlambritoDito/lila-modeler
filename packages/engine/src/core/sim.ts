@@ -1494,13 +1494,13 @@ export function runReplication(
   };
 
   /**
-   * R-MI-6: every instance of `entry` still open closes `interrupted`, their requests are dropped
-   * together (as `terminate` does, so a unit freed by one is never granted to a sibling that is
+   * R-MI-6: every instance of `entry` still open closes `interrupted`, their requests (and, on an
+   * error, the units of the instance that just completed) are dropped together (as `terminate` does, so a unit freed by one is never granted to a sibling that is
    * being cancelled), and instances not yet enabled are never created.
    */
-  const interruptEntry = (entry: MultiInstanceEntry, t: number): void => {
+  const interruptEntry = (entry: MultiInstanceEntry, t: number, completedRequestId?: string): void => {
     closeEntry(entry);
-    const requestIds: string[] = [];
+    const requestIds: string[] = completedRequestId === undefined ? [] : [completedRequestId];
     for (const activityId of entry.open) {
       const activity = activities.get(activityId);
       if (activity === undefined || activity.closed) continue;
@@ -1562,7 +1562,8 @@ export function runReplication(
   };
 
   /**
-   * R-MI-3/R-MI-4/R-MI-6: an instance of `entry` completed at `t` (its units already released).
+   * R-MI-3/R-MI-4/R-MI-6: an instance of `entry` completed at `t` (its units already released,
+   * unless an error was drawn for it).
    * With an error drawn for it (R-ERR-1), every other open instance closes `interrupted` and the
    * token leaves once, through the boundary. Otherwise a sequential entry enables the next
    * instance as a new enabling, behind the requests already waiting, and the token leaves through
@@ -1570,14 +1571,14 @@ export function runReplication(
    */
   const completeInstance = (
     entry: MultiInstanceEntry,
-    activityId: string,
+    activity: ActivityState,
     node: Node,
     errorId: string | undefined,
     t: number,
   ): void => {
-    entry.open.delete(activityId);
+    entry.open.delete(activity.id);
     if (errorId !== undefined) {
-      interruptEntry(entry, t);
+      interruptEntry(entry, t, activity.requestId);
       countBoundaryFiring(errorId, entry.caseId);
       forward(ir.nodes[errorId]!, entry.caseId, entry.marks, t);
       return;
@@ -1801,17 +1802,22 @@ export function runReplication(
       if (activity === undefined || activity.closed) continue;
       if (isMeasuredCase(next.caseId)) counters.completed++;
       closeActivity(activity, next.t, 'completed');
-      if (activity.requestId !== undefined) {
-        startAllocations(resourceManager.release([activity.requestId], next.t));
-      }
       // ADR-033 R-LOOP-2 + R-ERR-1: each completed iteration decides its error first; on error the
       // loop ends without drawing `#loop` and the token leaves through the boundary with the host
       // token's OR marks. Otherwise another iteration is a new enabling of the same task at this
       // instant, pushed to the heap like any other; the token only leaves after the last one.
+      // The draw only reads `<taskId>#error`, so taking it before the release moves nothing else.
       const errorId = node.type === 'task' ? drawError(next.nodeId) : undefined;
+      if (activity.requestId !== undefined) {
+        // R-MI-6: on an error, a multi-instance instance gives its units back in the same batch
+        // as its siblings' (`interruptEntry`), so none of them starts on the freed unit.
+        if (activity.entry === undefined || errorId === undefined) {
+          startAllocations(resourceManager.release([activity.requestId], next.t));
+        }
+      }
       const loop = activity.loopEntry === undefined ? undefined : loops.get(activity.loopEntry);
       if (activity.entry !== undefined) {
-        completeInstance(activity.entry, activity.id, node, errorId, next.t);
+        completeInstance(activity.entry, activity, node, errorId, next.t);
       } else if (errorId === undefined && loop !== undefined && loopAgain(next.nodeId, node.loop?.maximum, loop.iteration)) {
         loop.iteration += 1;
         // R-BND-17: the next iteration carries the epoch of its sub-process, so a cancellation

@@ -547,20 +547,21 @@ describe('R-MI-6 with #702 — error boundaries and an enclosing sub-process', (
     <bpmn:endEvent id="End_Rejected" />`);
 
   test('an error drawn on a completed instance closes the other open ones; the token leaves once', async () => {
-    // One unit: instance 1 completes at 10 and the error fires; instance 2 (granted at 10 by the
-    // release) and instance 3 (queued) close `interrupted` and never complete.
+    // One unit with a fixed cost: instance 1 completes at 10 and the error fires. Instances 2 and
+    // 3 were still queued; the unit instance 1 frees is not granted to them, so they close
+    // `interrupted` with no start and no charge (QA of #701).
     const result = run(await irOf(withError), {
       ...oneCase({ resources: [{ ref: 'reviewer' }] }, { Error_Rejected: { errorProbability: 1 } }),
-      resources: { reviewer: { capacity: 1 } },
+      resources: { reviewer: { capacity: 1, fixedCost: 100 } },
     });
     expect(result.process).toMatchObject({ started: 1, completed: 1 });
     expect(result.process.cycleTime.mean).toBe(10);
     expect(result.elements.Task_Review).toMatchObject({ started: 3, completed: 1 });
     expect(result.elements.Error_Rejected).toMatchObject({ started: 1, completed: 1 });
-    expect(rowsOf(result, 'Task_Review').map((row) => [row.status, row.observedUntil])).toEqual([
-      ['completed', 10],
-      ['interrupted', 10],
-      ['interrupted', 10],
+    expect(rowsOf(result, 'Task_Review').map((row) => [row.status, row.startedAt, row.observedUntil, row.cost])).toEqual([
+      ['completed', 0, 10, 100],
+      ['interrupted', null, 10, 0],
+      ['interrupted', null, 10, 0],
     ]);
     expect(result.flows.Flow_Out!.count).toBe(0);
     expect(result.flows.Flow_Rejected!.count).toBe(1);
