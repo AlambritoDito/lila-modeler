@@ -1292,6 +1292,13 @@ export function runReplication(
         break;
       }
 
+      case 'throw':
+        // R-THR-1: a none or message throw is a milestone: it counts the pass and forwards the
+        // token in the same instant, with no time, no resource, no draw and no log row.
+        if (isMeasuredCase(next.caseId)) counters.completed++;
+        forward(node, next.caseId, next.marks, next.t);
+        break;
+
       case 'xor':
         if (isMeasuredCase(next.caseId)) counters.completed++;
         // R-PERF-2: un XOR convergente (una sola salida) es una mezcla sin espera.

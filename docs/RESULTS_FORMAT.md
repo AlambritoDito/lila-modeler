@@ -87,9 +87,9 @@ Operative definitions (all computed over the element's instances that **complete
 replication. That 0 is the numeric identity of the empty set, not an observed duration: `total = 0`
 is a true statement (nothing was processed), but `min`, `max` and `mean` describe no instance. In
 the same way, `sd` over a single instance is 0 because there is no spread to measure. With several
-replications neither enters the aggregate (section 8). Gateways, start, end and terminate events and
-boundary timers count `started`/`completed` but never produce durations: their zeros are exact and
-always enter.
+replications neither enters the aggregate (section 8). Gateways, start, end and terminate events,
+intermediate throw events (`SEMANTICS.md` R-THR-1) and boundary timers count `started`/`completed`
+but never produce durations: their zeros are exact and always enter.
 
 Bizagi Modeler does not distinguish `resourceWait` from `offHoursWait` (see section 3: "Off-hours wait kept separate from resource wait — Bizagi Modeler ✗ / Lila ✓"); it is an extra Lila metric.
 

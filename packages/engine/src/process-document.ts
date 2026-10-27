@@ -163,7 +163,7 @@ export function flowOrder(ir: ProcessIR): string[] {
 
 /** The extended-attribute element type of each IR node type, when the BPMN type is not known (#509). */
 const NODE_CATEGORY: Record<ProcessIR['nodes'][string]['type'], ElementCategory> = {
-  start: 'event', end: 'event', terminate: 'event', timer: 'event',
+  start: 'event', end: 'event', terminate: 'event', timer: 'event', throw: 'event',
   task: 'task',
   xor: 'gateway', or: 'gateway', and: 'gateway', eventGateway: 'gateway',
 };
