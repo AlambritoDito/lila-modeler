@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
@@ -9,6 +10,7 @@ import { describe, expect, test } from 'vitest';
 import { validateBpmnModel } from '../../src/bpmn/index.js';
 import { simulate } from '../../src/index.js';
 import { decodeLila, encodeLila, processesOf } from '../../src/project/index.js';
+import { lilaScenarioView } from '../../src/project-fs/index.js';
 import type { ProcessDocument, ProjectDocument } from '../../src/project/index.js';
 import { parseScenario, resolveExtends, validateScenario } from '../../src/scenario.js';
 
@@ -101,6 +103,19 @@ describe('frozen archives written by released versions (#699)', () => {
     await expectEveryScenarioRuns(reopened);
   }, 60_000);
 
+  test.each(['v1.lila', 'v2-two-processes.lila'] as const)('%s: today\'s writer gives back its entries byte for byte, but for the engine stamp', (name) => {
+    const frozen = unzipSync(fixture(name));
+    const saved = unzipSync(encodeLila(decodeLila(fixture(name))));
+    expect(Object.keys(saved)).toEqual(Object.keys(frozen));
+    for (const entry of Object.keys(frozen)) {
+      if (entry === 'lila-project.json') {
+        expect({ ...json(saved[entry]), engine: null }, entry).toEqual({ ...json(frozen[entry]), engine: null });
+      } else {
+        expect(saved[entry], entry).toEqual(frozen[entry]);
+      }
+    }
+  });
+
   test('a regular archive is read exactly as it is stored', () => {
     const entries = unzipSync(fixture('v1.lila'));
     const opened = decodeLila(fixture('v1.lila'));
@@ -159,14 +174,23 @@ describe('the legacy loose-diagram archive (#613, #699)', () => {
     );
   });
 
-  test('a manifest that names an entry the archive holds is not retargeted', async () => {
+  test('a scenario naming an entry the archive holds is not retargeted, on this open or the next', async () => {
     const bytes = rezip(fixture(LEGACY), (entries) => {
       entries[LEGACY_MODEL] = entries['model.bpmn'] as Uint8Array;
     });
     const opened = decodeLila(bytes);
-    expect(opened.model.name).toBe(LEGACY_MODEL);
+    // The model read is still the archive's `model.bpmn`; the extra entry is dropped.
+    expect(opened.model.name).toBe('model.bpmn');
     expect(opened.scenarios['as-is.scenario.json']?.['model']).toBe(LEGACY_MODEL);
     expect(opened.problems).toEqual([{ file: LEGACY_MODEL, message: expect.stringContaining('not part of the Lila project layout') }]);
+    await expect(runScenario(opened as unknown as ProcessDocument, 'as-is.scenario.json')).rejects.toThrow(
+      `the scenario points at ${LEGACY_MODEL}, but the active model is model.bpmn.`,
+    );
+    // Saved and opened again, without the entry: still refused, not quietly repaired.
+    const { problems: _problems, ...withoutProblems } = opened;
+    const again = decodeLila(encodeLila(withoutProblems));
+    expect(again).toEqual(withoutProblems);
+    await expect(runScenario(again as unknown as ProcessDocument, 'as-is.scenario.json')).rejects.toThrow(`the scenario points at ${LEGACY_MODEL}`);
   });
 
   test('a version 2 process with the legacy shape is read the same way, and only that process', async () => {
@@ -191,4 +215,20 @@ describe('the legacy loose-diagram archive (#613, #699)', () => {
     expect(serviceRequest?.scenarios['as-is.scenario.json']?.['model']).toBe('billing.bpmn');
     await expect(runScenario(serviceRequest as ProcessDocument, 'as-is.scenario.json')).rejects.toThrow('the scenario points at billing.bpmn');
   }, 60_000);
+
+  test('the CLI and the MCP server see AS IS and TO BE as runnable', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'lila-699-'));
+    try {
+      const file = join(dir, LEGACY);
+      copyFileSync(resolve(FIXTURES, LEGACY), file);
+      for (const scenario of ['as-is.scenario.json', 'to-be.scenario.json']) {
+        const view = await lilaScenarioView({ file, scenario, resolved: true });
+        expect(view, scenario).toMatchObject({ runnable: true, scenario: { model: 'model.bpmn' } });
+        expect(view.notes.filter((note) => note.startsWith('E-')), scenario).toEqual([]);
+      }
+      expect(readFileSync(file).equals(readFileSync(resolve(FIXTURES, LEGACY)))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

@@ -140,9 +140,10 @@ From 1.0.0 on, Lila promises:
   reader for every older one: an old file is migrated in memory when it opens, and nothing is
   written until you save. It also adds an archive written by the last release before the change to
   the frozen fixtures.
-- **Unknown entries are kept.** ADR-032 (§ 1.4 of [the repository contract](REPOSITORY_CONTRACT.md))
-  replaces the rule that drops them. Until the reader that keeps them ships, versions 1 and 2 still
-  report them and drop them on save ([below](#what-is-tolerated-and-what-is-not)).
+- **Unknown entries will be kept.** ADR-032 (§ 1.4 of [the repository
+  contract](REPOSITORY_CONTRACT.md)) replaces the rule that drops them, but the reader that keeps
+  them has not shipped yet. Until it does, versions 1 and 2 report unknown entries and drop them on
+  save ([below](#what-is-tolerated-and-what-is-not)).
 - **A shape a released writer got wrong is repaired on read**, not refused. There is one so far:
 
 **The loose-diagram project (#613, #699).** Up to 1.0.0-beta.23, «Save As» of a loose diagram
@@ -150,14 +151,15 @@ From 1.0.0 on, Lila promises:
 manifest's `model.name` and in the scenarios' `model`. Reopened, every run stopped with «The
 scenario points at ventas.bpmn, but the active model is model.bpmn». The reader now repairs it:
 
-- When a version 1 manifest, or a process of a version 2 one, names a model file that the archive
-  does not hold, the model is read as `model.bpmn`.
-- Every scenario whose `model` named that file is pointed at `model.bpmn`. A scenario that
-  `extends` it inherits the fix.
+- An archive's model is always its `model.bpmn`, so a version 1 manifest, or a process of a
+  version 2 one, that names another file is read as `model.bpmn`.
+- If the archive does not hold the file the manifest named, every scenario whose `model` is exactly
+  that name is pointed at `model.bpmn`. A scenario that `extends` it inherits the fix.
 - Nothing else changes, revisions included, so stored runs stay current. The next save writes the
   repaired names.
-- A scenario that names any other file is left as it is, and so is a manifest that names an entry
-  the archive does hold. «Run» still refuses a genuinely different model.
+- A scenario that names any other file is left as it is. So is one that names an entry the archive
+  does hold: that entry is outside the layout and is dropped. «Run» still refuses a genuinely
+  different model, now and after a save.
 
 The engine's `.lila` reader does this, so the browser, the desktop app, the CLI and the MCP server
 open such a file the same way. Project folders are read as they are.

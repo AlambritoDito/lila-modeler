@@ -242,22 +242,26 @@ function readManifest(raw: Uint8Array, problems: ProjectProblem[]): Manifest | n
  * diagram wrote the diagram as `model.bpmn` but kept the loose file's name in the manifest
  * (`"model": {"name": "ventas.bpmn"}`) and in the scenarios' `model`, so once reopened every run
  * stopped with «the scenario points at ventas.bpmn, but the active model is model.bpmn» (#613
- * fixed new saves). When the manifest names a file the archive does not hold, that name can only
- * mean the `model.bpmn` beside it: the process is read as `model.bpmn` and the scenarios whose
- * `model` named that file are retargeted, as `procesoDelProyecto` does on «Save As» in the web app.
- * A scenario naming anything else, and a manifest naming an entry the archive does hold, are left
- * alone, so a genuinely different model is still refused when it runs. Revisions are not bumped:
- * the scenarios describe the same model as before.
+ * fixed new saves). An archive's model is always its `model.bpmn` (that is the XML read), so the
+ * process is named `model.bpmn` whatever the manifest says. When the manifest names a file the
+ * archive does not hold, that name can only mean the `model.bpmn` beside it, so the scenarios whose
+ * `model` is exactly that name are retargeted too, as `procesoDelProyecto` does on «Save As» in the
+ * web app. A scenario naming anything else, or naming an entry the archive does hold (which is
+ * dropped as outside the layout), is left alone, so a genuinely different model is still refused
+ * when it runs, on this open and every later one. Revisions are not bumped: the scenarios describe
+ * the same model as before.
  */
 function projectModelOf<T extends { readonly model: { readonly name: string }; readonly scenarios: Readonly<Record<string, ScenarioDocument>> }>(
   process: T,
   isEntry: (name: string) => boolean,
 ): T {
-  const legacy = process.model.name;
-  if (legacy === MODEL_FILE || isEntry(legacy)) return process;
-  const scenarios = Object.fromEntries(
-    Object.entries(process.scenarios).map(([name, scenario]) => [name, scenario.model === legacy ? { ...scenario, model: MODEL_FILE } : scenario]),
-  );
+  const named = process.model.name;
+  if (named === MODEL_FILE) return process;
+  const scenarios = isEntry(named)
+    ? process.scenarios
+    : Object.fromEntries(
+        Object.entries(process.scenarios).map(([name, scenario]) => [name, scenario.model === named ? { ...scenario, model: MODEL_FILE } : scenario]),
+      );
   return { ...process, model: { ...process.model, name: MODEL_FILE }, scenarios };
 }
 

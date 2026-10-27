@@ -145,10 +145,10 @@ Desde la 1.0.0, Lila promete:
   un lector para cada una de las anteriores: un archivo viejo se migra en memoria al abrirlo y no se
   escribe nada hasta que guardas. También añade a los fixtures congelados un archivo escrito por la
   última versión publicada antes del cambio.
-- **Las entradas desconocidas se conservan.** El ADR-032 (§ 1.4 del [contrato del
-  repositorio](REPOSITORY_CONTRACT.md)) sustituye la regla que las descarta. Hasta que se publique
-  el lector que las conserva, las versiones 1 y 2 siguen avisándolas y descartándolas al guardar
-  ([abajo](#qué-se-tolera-y-qué-no)).
+- **Las entradas desconocidas se conservarán.** El ADR-032 (§ 1.4 del [contrato del
+  repositorio](REPOSITORY_CONTRACT.md)) sustituye la regla que las descarta, pero el lector que las
+  conserva todavía no se ha publicado. Hasta entonces, las versiones 1 y 2 avisan de las entradas
+  desconocidas y las descartan al guardar ([abajo](#qué-se-tolera-y-qué-no)).
 - **Una forma que un escritor publicado dejó mal se repara al leer**, no se rechaza. Por ahora hay
   una:
 
@@ -158,15 +158,16 @@ diagrama suelto (`ventas.bpmn`) como proyecto escribía el diagrama como `model.
 toda corrida se detenía con «El escenario apunta a ventas.bpmn, pero el modelo activo es
 model.bpmn». El lector ahora lo repara:
 
-- Cuando un manifiesto versión 1, o un proceso de uno versión 2, nombra un archivo de modelo que el
-  archivo no contiene, el modelo se lee como `model.bpmn`.
-- Cada escenario cuyo `model` nombraba ese archivo pasa a apuntar a `model.bpmn`. Un escenario que
-  lo `extends` hereda el arreglo.
+- El modelo de un `.lila` es siempre su `model.bpmn`, así que un manifiesto versión 1, o un proceso
+  de uno versión 2, que nombra otro archivo se lee como `model.bpmn`.
+- Si el `.lila` no contiene el archivo que nombraba el manifiesto, cada escenario cuyo `model` es
+  exactamente ese nombre pasa a apuntar a `model.bpmn`. Un escenario que lo `extends` hereda el
+  arreglo.
 - Nada más cambia, revisiones incluidas, así que las corridas guardadas siguen vigentes. El
   siguiente guardado escribe los nombres reparados.
-- Un escenario que nombra cualquier otro archivo se deja como está, igual que un manifiesto que
-  nombra una entrada que el archivo sí contiene. «Ejecutar» sigue rechazando un modelo de verdad
-  distinto.
+- Un escenario que nombra cualquier otro archivo se deja como está. También uno que nombra una
+  entrada que el `.lila` sí contiene: esa entrada está fuera de la disposición y se descarta.
+  «Ejecutar» sigue rechazando un modelo de verdad distinto, ahora y después de guardar.
 
 Lo hace el lector de `.lila` del motor, así que el navegador, la app de escritorio, la CLI y el
 servidor MCP abren ese archivo igual. Las carpetas de proyecto se leen tal como están.
