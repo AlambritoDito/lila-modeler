@@ -1,5 +1,6 @@
 /**
- * JSON Patch (RFC 6902) mínimo para `patch_scenario` (LILA-055): `add`/`replace`/`remove`/`test`
+ * JSON Patch (RFC 6902) mínimo para `patch_scenario` (LILA-055) y `lila scenario patch` (#635; se
+ * mudó aquí desde `packages/mcp` para que la CLI lo use sin importar el paquete MCP): `add`/`replace`/`remove`/`test`
  * sobre objetos y arrays planos, con punteros RFC 6901. Sin `move`/`copy` (ponytail): son las dos
  * operaciones que leen de una ubicación distinta a la que escriben, duplicarían la navegación, y
  * ningún caso de uso de `patch_scenario` las necesita — documentado en `docs/MCP.md`.
@@ -9,6 +10,8 @@
  * (mismo borrado que usa `extends`, `docs/SCENARIO_FORMAT.md` § 6) y un array tocado en cualquier
  * profundidad reemplazado entero (los arrays no se fusionan por índice en `extends`).
  */
+
+import { messages, type CliMessages, type Locale } from './messages/index.js';
 
 export interface JsonPatchOp {
   op: string;
@@ -32,16 +35,16 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  */
 const FORBIDDEN_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype']);
 
-function parsePointer(pointer: string): string[] {
-  if (pointer === '') throw new Error('json patch: la raíz del documento no se puede parchear.');
-  if (!pointer.startsWith('/')) throw new Error(`json patch: puntero inválido: ${pointer}`);
+function parsePointer(pointer: string, C: CliMessages): string[] {
+  if (pointer === '') throw new Error(C.patchRoot());
+  if (!pointer.startsWith('/')) throw new Error(C.patchBadPointer(pointer));
   return pointer
     .slice(1)
     .split('/')
     .map((segment) => {
       const key = segment.replaceAll('~1', '/').replaceAll('~0', '~');
       if (FORBIDDEN_SEGMENTS.has(key)) {
-        throw new Error(`json patch: segmento prohibido "${key}" en ${pointer}: escribiría en el prototipo del objeto.`);
+        throw new Error(C.patchForbiddenSegment(key, pointer));
       }
       return key;
     });
@@ -54,17 +57,17 @@ function parsePointer(pointer: string): string[] {
  * `extends`, dejando en disco un archivo con una clave que el motor ignora. Se rechaza igual que
  * el segmento: aquí el patch es una orden explícita del agente, no un archivo heredado.
  */
-function assertValueSinClavesDePrototipo(value: unknown, path: string): void {
+function assertValueSinClavesDePrototipo(value: unknown, path: string, C: CliMessages): void {
   if (Array.isArray(value)) {
-    for (const item of value) assertValueSinClavesDePrototipo(item, path);
+    for (const item of value) assertValueSinClavesDePrototipo(item, path, C);
     return;
   }
   if (!isPlainObject(value)) return;
   for (const [key, nested] of Object.entries(value)) {
     if (FORBIDDEN_SEGMENTS.has(key)) {
-      throw new Error(`json patch: clave prohibida "${key}" en el value de ${path}: escribiría en el prototipo del objeto.`);
+      throw new Error(C.patchForbiddenKey(key, path));
     }
-    assertValueSinClavesDePrototipo(nested, path);
+    assertValueSinClavesDePrototipo(nested, path, C);
   }
 }
 
@@ -81,51 +84,56 @@ function get(root: unknown, segments: readonly string[]): unknown {
 }
 
 /** Contenedor y clave del último segmento; lanza si algún tramo intermedio no existe. */
-function navigate(root: unknown, segments: string[]): { parent: Record<string, unknown> | unknown[]; key: string } {
+function navigate(
+  root: unknown,
+  segments: string[],
+  C: CliMessages,
+): { parent: Record<string, unknown> | unknown[]; key: string } {
   let cursor = root;
   for (const segment of segments.slice(0, -1)) {
     cursor = child(cursor, segment);
-    if (cursor === undefined) throw new Error(`json patch: no existe la ruta hasta "${segment}".`);
+    if (cursor === undefined) throw new Error(C.patchMissingSegment(segment));
   }
   if (!isPlainObject(cursor) && !Array.isArray(cursor)) {
-    throw new Error('json patch: la ruta no llega a un objeto o array.');
+    throw new Error(C.patchNotContainer());
   }
   return { parent: cursor, key: segments[segments.length - 1] ?? '' };
 }
 
-/** Aplica el patch a una copia profunda de `target`; nunca muta el original. */
-export function applyJsonPatch(target: unknown, patch: readonly JsonPatchOp[]): unknown {
+/**
+ * Aplica el patch a una copia profunda de `target`; nunca muta el original.
+ *
+ * Its errors come in `locale` (#645).
+ */
+export function applyJsonPatch(target: unknown, patch: readonly JsonPatchOp[], locale: Locale = 'en'): unknown {
+  const C = messages(locale).cli;
   const root = structuredClone(target);
   for (const op of patch) {
-    if (!SUPPORTED_OPS.has(op.op)) {
-      throw new Error(
-        `json patch: operación no soportada: "${op.op}" (solo add/replace/remove/test; move/copy no están implementadas).`,
-      );
-    }
+    if (!SUPPORTED_OPS.has(op.op)) throw new Error(C.patchUnsupportedOp(op.op));
     // RFC 6902 § 4: `add`, `replace` y `test` requieren `value`. Sin esto, un `add` sin `value`
     // escribía `undefined`, que `JSON.stringify` descarta: un borrado silencioso en vez de error.
     if (op.op !== 'remove' && op.value === undefined) {
-      throw new Error(`json patch: la operación "${op.op}" requiere "value" (${op.path}).`);
+      throw new Error(C.patchNeedsValue(op.op, op.path));
     }
-    if (op.op !== 'remove') assertValueSinClavesDePrototipo(op.value, op.path);
-    const segments = parsePointer(op.path);
+    if (op.op !== 'remove') assertValueSinClavesDePrototipo(op.value, op.path, C);
+    const segments = parsePointer(op.path, C);
 
     if (op.op === 'test') {
-      const { parent, key } = navigate(root, segments);
+      const { parent, key } = navigate(root, segments, C);
       if (JSON.stringify(child(parent, key)) !== JSON.stringify(op.value)) {
-        throw new Error(`json patch: test falló en ${op.path}.`);
+        throw new Error(C.patchTestFailed(op.path));
       }
       continue;
     }
 
-    const { parent, key } = navigate(root, segments);
+    const { parent, key } = navigate(root, segments, C);
     if (Array.isArray(parent)) {
       const index = key === '-' ? parent.length : Number(key);
       if (!Number.isInteger(index) || index < 0 || index > parent.length) {
-        throw new Error(`json patch: índice inválido en ${op.path}.`);
+        throw new Error(C.patchBadIndex(op.path));
       }
       if (op.op === 'add') parent.splice(index, 0, op.value);
-      else if (index >= parent.length) throw new Error(`json patch: no existe la ruta ${op.path}.`);
+      else if (index >= parent.length) throw new Error(C.patchMissingPath(op.path));
       else if (op.op === 'replace') parent[index] = op.value;
       else parent.splice(index, 1); // remove
     } else if (op.op === 'add') {
@@ -134,7 +142,7 @@ export function applyJsonPatch(target: unknown, patch: readonly JsonPatchOp[]): 
       if (op.op === 'replace') parent[key] = op.value;
       else delete parent[key]; // remove
     } else {
-      throw new Error(`json patch: no existe la ruta ${op.path}.`);
+      throw new Error(C.patchMissingPath(op.path));
     }
   }
   return root;
@@ -148,11 +156,13 @@ export function applyJsonPatch(target: unknown, patch: readonly JsonPatchOp[]): 
 export function buildPatchDelta(
   patch: readonly JsonPatchOp[],
   patchedRoot: Record<string, unknown>,
+  locale: Locale = 'en',
 ): Record<string, unknown> {
+  const C = messages(locale).cli;
   const delta: Record<string, unknown> = {};
   for (const op of patch) {
     if (op.op === 'test' || !SUPPORTED_OPS.has(op.op)) continue;
-    const segments = parsePointer(op.path);
+    const segments = parsePointer(op.path, C);
 
     let deltaCursor = delta;
     let patchedCursor: unknown = patchedRoot;

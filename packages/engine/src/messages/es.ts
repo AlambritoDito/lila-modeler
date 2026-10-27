@@ -42,6 +42,7 @@ const ES_USAGE = `Uso: lila validate <archivo.bpmn|proyecto.lila> [--process slu
      lila compare <modelo.bpmn|proyecto.lila> <a> <b> [...] [--process slug] [--seed n]
                   [--replications n] [--json resultado.json] [--xlsx libro.xlsx] [--all]
      lila export diagram <modelo.bpmn|proyecto.lila> [--process slug] [--out archivo.svg] [--force]
+                         [--overlay bottlenecks|heatmap] [--run id|latest] [--scenario nombre]
      lila export doc <proyecto.lila> --out archivo.docx|archivo.html [--format docx|html]
                      [--process slug] [--run id|latest] [--scenario nombre] [--force]
      lila export results <proyecto.lila> --out libro.xlsx|directorio [--format xlsx|csv]
@@ -64,11 +65,20 @@ const ES_USAGE = `Uso: lila validate <archivo.bpmn|proyecto.lila> [--process slu
                                    [--process slug] [--dry-run] [--json]
      lila process attribute define <proyecto.lila> --remove --id id|--name nombre --applies-to tipo
      lila process attribute list <proyecto.lila> [--process slug] [--json]
+     lila process rename <proyecto.lila> <slug> --name nombre [--dry-run] [--json]
+     lila process delete <proyecto.lila> <slug> [--dry-run] [--json]
      lila scenario import <proyecto.lila> <escenario> <hoja.xlsx|hoja.csv> [--process slug]
                           [--dry-run] [--json]
      lila scenario template <proyecto.lila> <escenario> --out hoja.xlsx [--process slug] [--force]
      lila scenario show <proyecto.lila> <escenario> [--process slug] [--resolved] [--json]
+     lila scenario patch <proyecto.lila> <escenario> --patch <ops.json> [--process slug]
+                         [--save-to nombre] [--extends-from nombre] [--name n] [--description d]
+                         [--dry-run] [--json]
+     lila scenario rename <proyecto.lila> <escenario> --name nombre [--process slug] [--dry-run] [--json]
+     lila scenario delete <proyecto.lila> <escenario> [--process slug] [--dry-run] [--json]
      lila project show <proyecto.lila> [--json]
+     lila project create <ruta.lila> --name nombre --bpmn <archivo.bpmn>
+                         [--scenario nombre=archivo.json ...] [--force] [--allow-unsimulatable] [--json]
      lila mcp
 
 Comandos:
@@ -85,10 +95,17 @@ Comandos:
              export-bpmn: imprime o escribe el BPMN de un proceso. import: añade un .bpmn como
              proceso nuevo de un .lila, o con --replace reemplaza el modelo de uno.
              attribute: define (o quita) un atributo extendido, o los lista.
+             rename: renombra un proceso (su slug no cambia). delete: borra un proceso con sus
+             escenarios y sus corridas guardadas.
   scenario   import: aplica una hoja de escenario (.xlsx/.csv) a un escenario del .lila, como
              Importar Excel/CSV de la app. template: escribe esa hoja, rellenada, para una persona.
              show: imprime un escenario como está guardado (o --resolved) con las notas del validador.
+             patch: aplica un JSON Patch a un escenario, en sitio o como un escenario nuevo que
+             hereda de él (--save-to); solo se escribe si el resultado valida.
+             rename: renombra un escenario (su archivo no cambia). delete: borra un escenario con
+             sus corridas guardadas.
   project    show: lista los procesos de un .lila, sus escenarios y sus corridas guardadas. Solo lee.
+             create: crea un .lila nuevo a partir de un .bpmn y escenarios opcionales.
   mcp        Arranca el servidor MCP por stdio (para Claude Code / Desktop). Ver docs/MCP.md.
 
 Un modelo puede ser un .bpmn o un proyecto .lila. Con un .lila, un escenario es una ruta .json o,
@@ -129,9 +146,12 @@ Opciones de export:
   --run id|latest   La corrida guardada: latest (por defecto) es la del modelo y escenario actuales;
                     el documento solo admite una corrida actual y, si no hay, va sin resultados.
   --scenario nombre Con latest, la corrida de ese escenario (necesario si varios tienen una).
+  --overlay c       diagram: lo colorea con una corrida guardada del .lila, como la app:
+                    bottlenecks (el corte de cuellos del lienzo) o heatmap (el mapa de calor).
   --force           Reemplaza archivos existentes; sin él no se sobrescribe nada.
-  El documento Word va sin diagrama y ningún documento lleva las gráficas de la corrida: el motor
-  no rasteriza. El documento HTML sí lleva el diagrama.
+  El documento Word va sin diagrama y sin las gráficas de la corrida: el motor no rasteriza. El
+  documento HTML lleva ambos, salvo el histograma del tiempo de ciclo (una corrida guardada no
+  conserva los tiempos por caso).
 Opciones de process:
   --outline archivo  create: el JSON del esquema (carriles y pasos; docs/MCP.md).
   -p, --project a    El .lila; create lo crea si no existe.
@@ -172,6 +192,23 @@ Opciones de process attribute define:
 
 Opciones de scenario import:
   --dry-run         Muestra los cambios previstos y las filas no aplicadas sin escribir.
+
+Opciones de scenario patch:
+  --patch archivo   La lista JSON de operaciones (RFC 6902 add/replace/remove/test).
+  --save-to nombre  Crea este escenario con extends y solo las claves que tocó el patch, en
+                    vez de parchear el escenario en sitio.
+  --extends-from n  Con --save-to: el padre de extends (por defecto, el escenario parcheado).
+  --name, --description  Del escenario resultante.
+  --dry-run         Valida todo y no escribe nada.
+
+Opciones de project create:
+  --name nombre     Nombre del proyecto.
+  --bpmn archivo    El modelo; un modelo con errores de validación se rechaza.
+  --scenario n=a    Un JSON de escenario que se guarda como n.scenario.json; repetible. Los
+                    borradores se guardan y se listan con lo que les falta.
+  --force           Reemplaza un archivo que ya existe.
+  --allow-unsimulatable  Guarda un modelo con errores de validación, como un diagrama que no
+                    simula; los errores se imprimen como notas.
 
 Opciones de mcp:
   Ninguna. Habla MCP por stdin/stdout; las rutas de las tools se resuelven contra el
@@ -361,6 +398,7 @@ export const es: Catalog = {
     xlsxSheetFlows: () => 'Flujos',
     xlsxSheetResources: () => 'Recursos',
     xlsxSheetParameters: () => 'Parámetros',
+    xlsxSheetPercentiles: () => 'Percentiles',
     xlsxSheetComparison: () => 'Comparación',
     xlsxColumnSection: () => 'Sección',
     xlsxColumnParameter: () => 'Parámetro',
@@ -412,10 +450,25 @@ export const es: Catalog = {
     docSubprocess: () => 'Subproceso',
     docAttachedTo: () => 'Adjunto a',
     docDocumentation: () => 'Descripción',
+    docNote: () => 'Nota',
     docResponsibilities: () => 'Responsabilidades (RACI)',
     docScenario: (name) => `Escenario: ${name}`,
     docResults: () => 'Resultados',
     docDiagramAlt: () => 'Diagrama del proceso',
+
+    chartUtilization: () => 'Utilización por recurso (%)',
+    chartInstances: () => 'Instancias iniciadas por tarea',
+    chartPercentiles: (unit) => `Percentiles de tiempo de ciclo y de espera (${unit})`,
+    chartCycle: () => 'Tiempo de ciclo',
+    chartWait: () => 'Tiempo de espera',
+    chartHistogram: (unit) => `Tiempo de ciclo por caso (${unit})`,
+    chartHistogramSub: (cases, replications) =>
+      replications > 1 ? `${cases} casos terminados de la réplica 1 de ${replications}` : `${cases} casos terminados`,
+    chartValue: (label, text) => `${label}: ${text}`,
+    chartNoValue: () => '-',
+    chartCases: (n) => (n === 1 ? '1 caso' : `${n} casos`),
+    chartCasesAxis: () => 'Casos',
+    chartUnit: (unit) => (unit === 'day' ? 'd' : unit),
 
     mixedTimeUnit: (unit, others) =>
       `los escenarios no comparten baseTimeUnit; toda la tabla usa ${unit}, la del escenario base. ` +
@@ -498,10 +551,20 @@ export const es: Catalog = {
       `la corrida "${id}" del proceso "${slug}" de ${file} es de un modelo o escenario anterior: el documento ` +
       'mezclaría el modelo de hoy con resultados viejos. Exporta sus resultados o vuelve a simular.',
     exportNoDiagram: () => 'El modelo no tiene diagrama (BPMN DI): el documento va sin él.',
+    exportDiagramNone: () =>
+      'el modelo no tiene diagrama (BPMN DI) que dibujar. Maquétalo con edit_process (layout: true, lila process edit) o dibújalo en un editor BPMN; put_process_bpmn y create_project maquetan un modelo que reciben sin él.',
+    exportDiagramUnreadable: (detail) =>
+      `el modelo no tiene diagrama (BPMN DI) que dibujar, y no se le puede maquetar uno: bpmn-moddle no puede leer el modelo entero (${detail}), así que maquetarlo perdería ese contenido. Añade el diagrama en un editor BPMN.`,
     exportDocxNoDiagram: () =>
       'El documento Word va sin diagrama: Word necesita un PNG y el motor no rasteriza. El documento HTML sí lo lleva.',
     exportDocumentNoRun: () => 'Sin corrida actual: el documento lleva el modelo y no los resultados.',
-    exportNoCharts: () => 'Las gráficas de la corrida quedan fuera: el motor no rasteriza.',
+    exportDocxNoCharts: () =>
+      'El documento Word va sin gráficas: Word necesita un PNG y el motor no rasteriza. El documento HTML sí las lleva.',
+    exportNoHistogram: () => 'El histograma del tiempo de ciclo queda fuera: una corrida guardada no conserva los tiempos por caso.',
+    exportPercentilesNotReproduced: () =>
+      'Los percentiles de espera por elemento quedan fuera: las entradas guardadas de la corrida no reproducen sus resultados guardados (una corrida cancelada, u otra versión del motor u otra plataforma, que puede cambiar el último dígito).',
+    exportPercentilesFailed: (reason) =>
+      `Los percentiles de espera por elemento quedan fuera: volver a simular las entradas guardadas de la corrida falló: ${reason}`,
     exportTargetExists: (target) => `${target} ya existe; no se escribió nada. Pasa --force (\`overwrite\` en MCP) para reemplazarlo.`,
     exportNotDirectory: (path) => `no se puede escribir dentro de ${path}: es un archivo, no un directorio.`,
     exportUnknownKind: (kind) => `exportación desconocida "${kind}": se espera diagram, doc o results.`,
@@ -514,6 +577,14 @@ export const es: Catalog = {
     exportFileNeeded: (path) => `"${path}" termina en barra; nombra el archivo que se escribe.`,
     exportRunAndScenario: () =>
       'el id de una corrida ya dice qué escenario: pasa --run <id> o --scenario (`run` o `scenario` en MCP), no los dos.',
+    exportOverlayNeedsLila: (file) =>
+      `${file} no es un proyecto .lila: una capa colorea el diagrama con una corrida guardada, y las corridas se guardan en un .lila.`,
+    exportOverlayNoRun: (overlay, detail) => `la capa "${overlay}" necesita una corrida guardada: ${detail}`,
+    exportRunNeedsOverlay: () =>
+      'una corrida (--run o --scenario, `run` o `scenario` en MCP) solo aplica al diagrama con una capa: pasa --overlay bottlenecks|heatmap.',
+    exportInvalidOverlay: (value) => `--overlay solo acepta: bottlenecks, heatmap; se recibió "${value}".`,
+    exportOverlayWait: (wait) => `Espera ${wait}`,
+    exportOverlayBottleneck: () => 'CUELLO',
     saveRunNeedsLila: () => 'guardar la corrida (--save, `saveRun` en MCP) necesita un modelo .lila.',
     saveRunNeedsArchiveScenario: (scenario) =>
       `guardar la corrida necesita un escenario del .lila, y "${scenario}" no lo es: nombra un escenario del proceso.`,
@@ -677,6 +748,8 @@ export const es: Catalog = {
     editLaneMoved: (lane, where, other) => `movido el carril "${lane}" ${where === 'before' ? 'encima de' : 'debajo de'} "${other}"`,
     editNoteAdded: (step, text, id) => `anotado "${step}": "${text}" (${id})`,
     editNoteExists: (step, text) => `"${step}" ya tiene la anotación de texto "${text}"; no cambió nada`,
+    editNoteNotStep: (id, type) =>
+      `"${id}" es un ${type}; una anotación de texto va en un paso (tarea, gateway, temporizador, mensaje o subproceso), el único lugar donde el esquema la relee como \`notes\`.`,
     editNoteRemoved: (step, text, ids) => `quitada la anotación de texto "${text}" de "${step}" (${ids})`,
     editDataAdded: (name, step, direction, id, created) =>
       `"${step}" ${direction === 'in' ? 'lee' : 'escribe'} el objeto de datos "${name}" (${id}${created ? ', nuevo' : ''})`,
@@ -694,6 +767,40 @@ export const es: Catalog = {
     editBadBetween: () => 'deben ser dos ids de paso: [from, to].',
     editDuplicateLane: (lane) => `ya hay un carril llamado "${lane}"; elige otro nombre.`,
     editLayoutFailed: (detail) => `el maquetado automático falló en el proceso editado (${detail}); no se cambió nada. Prueba con layout: false (--no-layout).`,
+    editNotACallActivity: (id, type) => `"${id}" es un ${type}, no una actividad de llamada (callActivity); solo una actividad de llamada llama a un proceso.`,
+    editCallNeedsLila: () =>
+      'setCalledProcess necesita un .lila: el proceso llamado se nombra por su slug entre los procesos del proyecto (edit_process, lila process edit).',
+    editCallUnknownProcess: (slug, slugs) =>
+      slugs === '' ? `el proyecto no tiene un proceso "${slug}", ni otro proceso al que llamar.` : `el proyecto no tiene un proceso "${slug}"; los procesos a los que una actividad de llamada puede llamar son: ${slugs}.`,
+    editCallSelf: (slug, processId) =>
+      `"${slug}" tiene el id de proceso BPMN ${processId}, el del proceso que se edita: una actividad de llamada no puede llamar a su propio proceso.`,
+    editCallShared: (slug, processId, others, count) =>
+      `"${slug}" tiene el id de proceso BPMN ${processId}, que ${others} ${count === 1 ? 'también declara' : 'también declaran'}: una actividad de llamada no puede distinguirlos; dale otro id a uno de ellos (put_process_bpmn con mode "replace").`,
+    editCallUnresolved: (slug, declared) =>
+      declared === ''
+        ? `el modelo de "${slug}" no declara ningún proceso BPMN, así que una actividad de llamada no puede nombrarlo.`
+        : `no se sabe a qué proceso BPMN de "${slug}" llamar: su modelo declara ${declared}, y ninguno es su id de modelo ni el proceso que simula.`,
+    editBadCalledProcess: () => 'debe ser el slug de un proceso del proyecto, o null para quitar el proceso llamado.',
+    editCalled: (id, name, slug) => `"${id}" ahora llama a ${name} (${slug})`,
+    editCallCleared: (id) => `"${id}" ya no llama a ningún proceso`,
+
+    extendsCycle: (chain) => `extends: ciclo en la cadena de herencia: ${chain}`,
+    scenarioNotObject: (file) => `${file}: el escenario debe ser un objeto JSON.`,
+    extendsNotPath: (file) => `${file}: extends debe ser una ruta a otro escenario.`,
+    patchRoot: () => 'json patch: la raíz del documento no se puede parchear.',
+    patchBadPointer: (pointer) => `json patch: puntero inválido: ${pointer}`,
+    patchForbiddenSegment: (key, pointer) =>
+      `json patch: segmento prohibido "${key}" en ${pointer}: escribiría en el prototipo del objeto.`,
+    patchForbiddenKey: (key, path) =>
+      `json patch: clave prohibida "${key}" en el value de ${path}: escribiría en el prototipo del objeto.`,
+    patchMissingSegment: (segment) => `json patch: no existe la ruta hasta "${segment}".`,
+    patchNotContainer: () => 'json patch: la ruta no llega a un objeto o array.',
+    patchUnsupportedOp: (op) =>
+      `json patch: operación no soportada: "${op}" (solo add/replace/remove/test; move/copy no están implementadas).`,
+    patchNeedsValue: (op, path) => `json patch: la operación "${op}" requiere "value" (${path}).`,
+    patchTestFailed: (path) => `json patch: test falló en ${path}.`,
+    patchBadIndex: (path) => `json patch: índice inválido en ${path}.`,
+    patchMissingPath: (path) => `json patch: no existe la ruta ${path}.`,
   },
   mcp: {
     nodeType: (type) => TIPOS_NODO[type] ?? type,
@@ -722,6 +829,9 @@ export const es: Catalog = {
     modelInvalid: (detail) => `el modelo no pasa la validación: ${detail}`,
     scenarioInvalid: (detail) => `escenario inválido: ${detail}`,
     atLeastTwoScenarios: () => 'hacen falta al menos dos escenarios.',
+    xlsxNeedsSaveTo: () => '`format: "xlsx"` necesita `saveTo`: el libro se escribe en un archivo, no se devuelve.',
+    allWithSummary: () => '`all: true` pide todas las filas y `detail: "summary"` un resumen: pasa solo uno de los dos.',
+    logToTaken: (target) => `\`logTo\` (${target}) es un archivo que esta llamada ya lee o escribe: elige otra ruta.`,
     patchNotAnObject: () => 'el patch no produjo un objeto de escenario.',
     invalidAfterPatchLabel: () => 'escenario inválido tras el patch:',
     patchedMissingModel: () => 'el escenario resultante no declara model.',

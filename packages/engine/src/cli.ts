@@ -11,7 +11,7 @@
  */
 
 import { mkdirSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import type { ValidationResult } from './bpmn/validate.js';
@@ -22,12 +22,14 @@ import {
   comparablePath,
   compareWarnings,
   loadModelSource,
+  openEventLogSink,
   resolveScenarioArgument,
   resultWithBoundaryWarnings,
   stageFile,
   targetScenarios,
   validatedModelOf,
   withRunOverrides,
+  writeBytesAtomic,
   writeJsonAtomic,
   type LoadedScenarioResult,
   type ParsedIr,
@@ -37,8 +39,6 @@ import {
   ELEMENT_COLUMNS,
   RESOURCE_COLUMNS,
   elementsCsv,
-  eventLogCsvHeader,
-  eventLogRowCsv,
   flowsCsv,
   processCsv,
   resourcesCsv,
@@ -46,7 +46,7 @@ import {
 } from './csv.js';
 import { compare, type CompareResult, type CompareScope } from './core/compare.js';
 import { compareWorkbook, resourceNamesOf, scenarioWorkbook } from './xlsx-report.js';
-import { exportDiagram, exportDocument, exportResults, writeExportDirectory, writeExportFile } from './project-fs/exports.js';
+import { DIAGRAM_OVERLAYS, exportDiagram, exportDocument, exportResults, writeExportDirectory, writeExportFile, type DiagramOverlay } from './project-fs/exports.js';
 import { saveSimulationRun } from './project-fs/save-run.js';
 import { simulate } from './core/run.js';
 import type { EventLogRow, RunResult } from './core/result.js';
@@ -445,23 +445,8 @@ function writeJson(file: string, data: unknown, locale: Locale): void {
   console.log(`JSON: ${writeJsonAtomic(file, data, locale)}`);
 }
 
-/**
- * Publica un `.xlsx` con la misma técnica atómica que el CSV y el JSON: temporal + `rename`, y
- * nada se escribe encima de un archivo que ya existía sin pasar por `assertReplaceableFile`.
- */
 function writeXlsx(file: string, bytes: Uint8Array, locale: Locale): void {
-  const target = absolutePath(file);
-  assertReplaceableFile(target, locale);
-  mkdirSync(dirname(target), { recursive: true });
-  const staged = stageFile(target, locale);
-  try {
-    staged.write(bytes);
-    staged.commit();
-  } catch (error) {
-    staged.abort();
-    throw error;
-  }
-  console.log(`XLSX: ${target}`);
+  console.log(`XLSX: ${writeBytesAtomic(file, bytes, locale)}`);
 }
 
 function writeCsvDirectory(
@@ -499,60 +484,6 @@ function writeCsvDirectory(
     for (const entry of staged) entry.file.abort();
     throw error;
   }
-}
-
-interface EventLogSink {
-  onEvent(row: EventLogRow): void;
-  close(): void;
-  commit(): void;
-  abort(): void;
-}
-
-/**
- * Escribe el log por bloques mientras corre `simulate`, sin retener todas las replicaciones.
- * El archivo temporal solo se publica como `log.csv` después de una corrida completa.
- *
- * ponytail: buffer de 1 MiB + `writeFileSync(fd, ...)` en vez de un `WriteStream`. `simulate` es
- * síncrona y no admite pausa, así que un stream asíncrono no podría aplicar backpressure: se
- * limitaría a acumular en memoria justo lo que este ticket quiere evitar. La escritura bloqueante
- * sí acota el pico al tamaño del buffer, y el `rename` del temporal conserva la publicación
- * atómica de LILA-046. Si algún día `simulate` se vuelve reanudable, aquí entra `once(s,'drain')`.
- */
-function openEventLogSink(directory: string, startMs: number, locale: Locale): EventLogSink {
-  const targetDirectory = absolutePath(directory);
-  mkdirSync(targetDirectory, { recursive: true });
-  const target = resolve(targetDirectory, 'log.csv');
-  assertReplaceableFile(target, locale);
-  const staged = stageFile(target, locale);
-  let buffer = eventLogCsvHeader(startMs);
-  let closed = false;
-
-  const flush = (): void => {
-    if (buffer === '') return;
-    staged.write(buffer);
-    buffer = '';
-  };
-  const close = (): void => {
-    if (closed) return;
-    flush();
-    staged.close();
-    closed = true;
-  };
-
-  return {
-    onEvent(row) {
-      buffer += eventLogRowCsv(row, startMs);
-      if (buffer.length >= 1_048_576) flush();
-    },
-    close,
-    commit() {
-      close();
-      staged.commit();
-    },
-    abort() {
-      staged.abort();
-    },
-  };
 }
 
 interface RunCommandOptions {
@@ -604,7 +535,7 @@ async function runCommand(
   const logSink =
     options.csv === undefined
       ? undefined
-      : openEventLogSink(options.csv, runStartMs(scenario.run.start), locale);
+      : openEventLogSink(resolve(absolutePath(options.csv), 'log.csv'), runStartMs(scenario.run.start), locale);
   try {
     const simulated = simulate(ir, scenario, {
       log: logSink !== undefined,
@@ -1022,6 +953,7 @@ async function dispatchExport(argv: readonly string[], locale: Locale): Promise<
       format: { type: 'string' },
       run: { type: 'string' },
       scenario: { type: 'string' },
+      overlay: { type: 'string' },
       force: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
     },
@@ -1040,7 +972,12 @@ async function dispatchExport(argv: readonly string[], locale: Locale): Promise<
   const source = { file, process: values.process, locale };
   const write = { overwrite: values.force === true, locale };
   if (kind === 'diagram') {
-    const { svg, file: from } = await exportDiagram(source);
+    const overlay = values.overlay as DiagramOverlay | undefined;
+    if (overlay !== undefined && !DIAGRAM_OVERLAYS.includes(overlay)) {
+      console.error(C.commandError('export', C.exportInvalidOverlay(overlay)));
+      return 1;
+    }
+    const { svg, file: from } = await exportDiagram({ ...source, run: values.run, scenario: values.scenario, overlay });
     if (values.out === undefined) process.stdout.write(`${svg}\n`);
     else console.log(`SVG: ${writeExportFile(values.out, svg, { ...write, source: from })}`);
     return 0;
@@ -1068,6 +1005,7 @@ async function dispatchExport(argv: readonly string[], locale: Locale): Promise<
   } else {
     for (const path of writeExportDirectory(values.out, results.data, { ...write, source: results.file })) console.log(`CSV: ${path}`);
   }
+  if (results.percentiles.note !== undefined) console.error(results.percentiles.note);
   return 0;
 }
 

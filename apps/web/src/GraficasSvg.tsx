@@ -11,6 +11,7 @@
  * Text wears the ink tokens, never a series color.
  */
 import { useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { barGeometry, legendRows, PAPER_PALETTE, ticksThatFit } from '@lila-modeler/engine/charts';
 import { escala, histograma, SERIES_CLARO, type Clase } from './graficas';
 import { formatDisplay } from './formatDisplay';
 import { useStrings } from './i18n';
@@ -34,14 +35,14 @@ export const PALETA_PANTALLA: Paleta = {
   fuente: 'var(--font-ui)',
 };
 
-/** The paper of `toHtml` in `process-document.ts`: its ink and border colors. */
+/** The paper of `toHtml` in `process-document.ts`: the engine's `PAPER_PALETTE` (#636). */
 export const PALETA_PAPEL: Paleta = {
-  series: SERIES_CLARO,
-  tinta: '#280838',
-  tenue: '#5c4470',
-  reja: '#c8c0d0',
-  fuente: 'Archivo, Inter, system-ui, -apple-system, "Segoe UI", sans-serif',
-  fondo: '#ffffff',
+  series: PAPER_PALETTE.series,
+  tinta: PAPER_PALETTE.ink,
+  tenue: PAPER_PALETTE.muted,
+  reja: PAPER_PALETTE.grid,
+  fuente: PAPER_PALETTE.font,
+  fondo: PAPER_PALETTE.background!,
 };
 
 /** Width the chart gets when nothing measured it (server render, the document). */
@@ -70,7 +71,8 @@ export function useAncho(): [RefObject<HTMLDivElement | null>, number] {
 }
 
 /* ------------------------------------------------------------------ *
- * Geometry shared by both forms
+ * Geometry shared by both forms: the layout functions are the engine's (`charts.ts`, #636), which
+ * draws the same charts for the process document; these constants are the same as its own.
  * ------------------------------------------------------------------ */
 
 const PAD = 8;
@@ -93,20 +95,7 @@ const ALTO_FILA_LEYENDA = 18;
 
 /** Where each legend entry goes: entries flow left to right and wrap, none past `ancho`. */
 export function filasLeyenda(nombres: readonly string[], ancho: number): { texto: string; x: number; fila: number }[] {
-  const disponible = ancho - 2 * PAD - 14;
-  let x = PAD;
-  let fila = 0;
-  return nombres.map((nombre) => {
-    const texto = recortar(nombre, Math.min(180, disponible));
-    const w = 14 + anchoTexto(texto);
-    if (x > PAD && x + w > ancho - PAD) {
-      x = PAD;
-      fila += 1;
-    }
-    const entrada = { texto, x, fila };
-    x += w + 16;
-    return entrada;
-  });
+  return legendRows(nombres, ancho).map(({ text, x, row }) => ({ texto: text, x, fila: row }));
 }
 
 /** Largest of `f` over `items`, at least `desde`; a loop, so no list is too long for it. */
@@ -189,24 +178,15 @@ export const PLOT_MINIMO = 150;
  * tooltip), and the plot keeps at least 40 px.
  */
 export function geometriaBarras(grupos: readonly Grupo[], W: number): { x0: number; anchoEtiqueta: number; anchoPlot: number } {
-  const valorNecesario = mayor(grupos, (g) => mayor(g.textos, (t) => anchoTexto(t, 11) + 8, 0), 24);
-  const anchoEtiqueta = Math.min(W * 0.3, mayor(grupos, (g) => anchoTexto(g.etiqueta) + 8, 40), Math.max(40, W - 2 * PAD - 40 - valorNecesario));
-  const anchoValor = Math.min(valorNecesario, W - 2 * PAD - anchoEtiqueta - 40);
-  const x0 = PAD + anchoEtiqueta;
-  return { x0, anchoEtiqueta, anchoPlot: Math.max(40, W - x0 - anchoValor - PAD) };
+  const { x0, labelWidth, plotWidth } = barGeometry(grupos.map((g) => ({ label: g.etiqueta, texts: g.textos })), W);
+  return { x0, anchoEtiqueta: labelWidth, anchoPlot: plotWidth };
 }
 
 /**
  * The axis ticks whose labels fit side by side at `pxPorUnidad`: every k-th one, from 0, with at
  * least 8 px between labels (the histogram does the same for its edges).
  */
-export function marcasQueCaben(marcas: readonly number[], pxPorUnidad: number): number[] {
-  if (marcas.length < 2) return [...marcas];
-  const paso = (marcas[1]! - marcas[0]!) * pxPorUnidad;
-  const etiqueta = mayor(marcas, (m) => anchoTexto(formatDisplay(m), 11), 0) + 8;
-  const cada = Math.max(1, Math.ceil(etiqueta / paso));
-  return marcas.filter((_, i) => i % cada === 0);
-}
+export const marcasQueCaben: (marcas: readonly number[], pxPorUnidad: number) => number[] = ticksThatFit;
 
 export function SvgBarras({
   titulo,

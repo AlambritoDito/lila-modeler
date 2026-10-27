@@ -124,4 +124,12 @@ test('#632: A.3.0 is refused as it is, and kept for documentation with allowUnsi
   const renamed = await call('put_process_bpmn', { project: 'docs.lila', process: 'escalations', mode: 'replace', bpmn: bizagi('A.1.0'), name: 'X', locale: 'es' });
   expect(renamed.isError).toBe(true);
   expect(renamed.text).toMatch(/^put_process_bpmn: con mode "replace" el proceso conserva su nombre/);
+
+  // #645: `mode` is an enum in the schema; a blank `bpmn` is not read as a path.
+  const badMode = await call('put_process_bpmn', { project: 'docs.lila', mode: 'append', bpmn: bizagi('A.1.0') });
+  expect(badMode.isError).toBe(true);
+  expect(badMode.text).toContain('mode');
+  const blank = await call('put_process_bpmn', { project: 'docs.lila', mode: 'add', bpmn: '' });
+  expect(blank.isError).toBe(true);
+  expect(blank.text).toMatch(/^put_process_bpmn: `bpmn` is empty/);
 }, 120_000);

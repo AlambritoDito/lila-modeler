@@ -12,10 +12,16 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { parseBpmn, renderSvg } from '../../src/bpmn/index.js';
 import { main } from '../../src/cli.js';
-import { elementsCsv } from '../../src/csv.js';
-import { decodeLila } from '../../src/project/index.js';
-import { exportDocument, exportResults } from '../../src/project-fs/index.js';
+import { elementsCsv, flowsCsv, processCsv, resourcesCsv } from '../../src/csv.js';
+import { RESOURCE_WAIT, elementPercentiles, elementSamples, type EventLogRow } from '../../src/index.js';
+import { decodeLila, encodeLila } from '../../src/project/index.js';
+import { bottleneckCut, heatMap, WAIT_LEVEL_COLOURS } from '../../src/bottleneck-levels.js';
+import type { RunResult } from '../../src/core/result.js';
+import { exportDiagram, exportDocument, exportResults } from '../../src/project-fs/index.js';
+import { chartsSvg } from '../../src/charts.js';
+import { parseScenario, type ResolvedScenario } from '../../src/scenario.js';
 import { readWorkbook } from '../../src/xlsx-read.js';
+import { resourceNamesOf, scenarioWorkbook } from '../../src/xlsx-report.js';
 import { EXAMPLE_LILA, pedidoWithRuns } from './export-fixture.js';
 
 let dir: string;
@@ -67,6 +73,94 @@ describe('lila export diagram', () => {
   });
 });
 
+/** `id → fill` of every element the overlay tinted (its first child takes a level colour). */
+function tinted(svg: string): Record<string, string> {
+  const colours = new Set(Object.values(WAIT_LEVEL_COLOURS));
+  const out: Record<string, string> = {};
+  for (const m of svg.matchAll(/<g data-element-id="([^"]*)"[^>]*><[a-z]+ [^>]*?fill="([^"]*)" stroke="([^"]*)"/g)) {
+    if (colours.has(m[2]!)) {
+      expect(m[3]).toBe(m[2]);
+      out[m[1]!] = m[2]!;
+    }
+  }
+  return out;
+}
+
+describe('lila export diagram --overlay (#669)', () => {
+  test('bottlenecks tints exactly the cut, heatmap every measured task, with the token colours; same bytes', async () => {
+    const file = join(dir, 'p.lila');
+    const [run] = await pedidoWithRuns(file, ['as-is.scenario.json']);
+    const result = run!.result as RunResult;
+    const { ir } = await parseBpmn(XML);
+    const cut = bottleneckCut(result);
+    expect(cut.length).toBeGreaterThan(0);
+
+    const bottlenecks = await exportDiagram({ file, overlay: 'bottlenecks' });
+    expect(bottlenecks.run).toEqual({ id: 'run-1', scenario: 'as-is.scenario.json', current: true });
+    const fileId = (id: string): string => ir.source.originalIds[id] ?? id;
+    expect(tinted(bottlenecks.svg)).toEqual(Object.fromEntries(cut.map((e) => [fileId(e.elementId), WAIT_LEVEL_COLOURS[e.level]])));
+    // One badge per tinted task: its mean wait and its resource's utilization.
+    expect(bottlenecks.svg.match(/<tspan x="4" /g)!.length).toBe(cut.length);
+    expect(bottlenecks.svg).toContain(`· ${Math.round(cut[0]!.utilization * 100)}%</tspan>`);
+
+    const heat = await exportDiagram({ file, overlay: 'heatmap' });
+    const tasks = Object.keys(ir.nodes).filter((id) => ir.nodes[id]!.type === 'task');
+    const map = heatMap(result, tasks);
+    const expected = Object.fromEntries(Object.entries(map).map(([id, e]) => [fileId(id), WAIT_LEVEL_COLOURS[e.level]]));
+    for (const e of cut) expected[fileId(e.elementId)] = WAIT_LEVEL_COLOURS[e.level];
+    expect(tinted(heat.svg)).toEqual(expected);
+    expect(Object.keys(expected).length).toBeGreaterThan(cut.length);
+    expect(heat.svg).toContain('>BOTTLENECK Wait ');
+    expect((await exportDiagram({ file, overlay: 'heatmap', locale: 'es' })).svg).toContain('>CUELLO Espera ');
+
+    // Same input, same bytes; without an overlay, the plain drawing.
+    expect((await exportDiagram({ file, overlay: 'bottlenecks' })).svg).toBe(bottlenecks.svg);
+    expect((await exportDiagram({ file, overlay: 'heatmap' })).svg).toBe(heat.svg);
+    expect((await exportDiagram({ file })).svg).toBe(await renderSvg(XML));
+
+    // The CLI writes the same SVG.
+    const target = join(dir, 'b.svg');
+    expect(await main(['export', 'diagram', file, '--overlay', 'bottlenecks', '--out', target])).toBe(0);
+    expect(readFileSync(target, 'utf8')).toBe(bottlenecks.svg);
+  });
+
+  test('an overlay without a run fails clearly (en/es); a run without an overlay, or another overlay, too', async () => {
+    const file = join(dir, 'p.lila');
+    await pedidoWithRuns(file, []);
+    await expect(exportDiagram({ file, overlay: 'bottlenecks' })).rejects.toThrow(/^overlay "bottlenecks" needs a stored run: process "pedido" of .* has no stored run/);
+    await expect(exportDiagram({ file, overlay: 'heatmap', locale: 'es' })).rejects.toThrow(/^la capa "heatmap" necesita una corrida guardada: .*no tiene corridas guardadas/);
+    expect(await main(['export', 'diagram', file, '--overlay', 'heatmap'])).toBe(1);
+    expect(err.join('\n')).toMatch(/overlay "heatmap" needs a stored run/);
+
+    const bpmn = join(dir, 'm.bpmn');
+    writeFileSync(bpmn, XML);
+    await expect(exportDiagram({ file: bpmn, overlay: 'heatmap' })).rejects.toThrow(/m\.bpmn is not a \.lila project: an overlay colours the diagram with a stored run/);
+    await expect(exportDiagram({ file: bpmn, overlay: 'heatmap', locale: 'es' })).rejects.toThrow(/no es un proyecto \.lila: una capa colorea/);
+
+    await pedidoWithRuns(file, ['as-is.scenario.json']);
+    await expect(exportDiagram({ file, run: 'run-1' })).rejects.toThrow(/only applies to the diagram with an overlay/);
+    await expect(exportDiagram({ file, scenario: 'as-is' })).rejects.toThrow(/only applies to the diagram with an overlay/);
+    expect(await main(['export', 'diagram', file, '--overlay', 'utilization'])).toBe(1);
+    expect(err.join('\n')).toMatch(/--overlay only accepts: bottlenecks, heatmap; got "utilization"/);
+  });
+
+  test('runs are selected as for the document; an older run by id is drawn, marked not current', async () => {
+    const file = join(dir, 'p.lila');
+    await pedidoWithRuns(file, ['as-is.scenario.json', 'to-be-3-cajeros.scenario.json']);
+    await expect(exportDiagram({ file, overlay: 'heatmap' })).rejects.toThrow(/^process "pedido" of .* has current runs of several scenarios/);
+    // A selection error is the selection's own message, not "needs a stored run".
+    await expect(exportDiagram({ file, overlay: 'heatmap', run: 'run-1', scenario: 'as-is' })).rejects.toThrow(/^a run id already says which scenario/);
+    expect((await exportDiagram({ file, overlay: 'heatmap', scenario: 'to-be-3-cajeros' })).run?.id).toBe('run-2');
+    expect((await exportDiagram({ file, overlay: 'heatmap', run: 'run-1' })).run?.id).toBe('run-1');
+    await expect(exportDiagram({ file, overlay: 'heatmap', run: 'nope' })).rejects.toThrow(/has no run "nope"/);
+
+    await pedidoWithRuns(file, ['as-is.scenario.json'], { stale: true });
+    await expect(exportDiagram({ file, overlay: 'bottlenecks' })).rejects.toThrow(/older runs: run-1/);
+    const old = await exportDiagram({ file, overlay: 'bottlenecks', run: 'run-1' });
+    expect(old.run).toEqual({ id: 'run-1', scenario: 'as-is.scenario.json', current: false });
+  });
+});
+
 describe('lila export doc', () => {
   test('HTML with the SVG diagram and the results of the current run', async () => {
     const file = join(dir, 'p.lila');
@@ -78,7 +172,41 @@ describe('lila export doc', () => {
     const svg = await renderSvg(XML);
     expect(html).toContain(`<img src="data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}"`);
     expect(html).toContain('<h2>Results</h2>');
-    expect(err).toEqual(['The charts of the run are left out: the engine has no rasteriser.']);
+    expect(err).toEqual(['The cycle time histogram is left out: a stored run keeps no per-case times.']);
+  });
+
+  test('HTML with the charts of the run as SVG, the same as chartsSvg, same bytes twice (#636)', async () => {
+    const file = join(dir, 'p.lila');
+    await pedidoWithRuns(file, ['as-is.scenario.json']);
+    const doc = await exportDocument({ file, format: 'html', date: '2026-10-19' });
+    const html = doc.data as string;
+    expect(doc.notes).toEqual(['The cycle time histogram is left out: a stored run keeps no per-case times.']);
+    // The charts of the stored run, drawn by the engine from the run's own scenario and model.
+    const lila = decodeLila(readFileSync(file));
+    const run = lila.runs[0]!;
+    const { ir } = await parseBpmn(lila.model.xml, { scenarios: [run.inputs.scenario] });
+    const scenario = parseScenario(run.inputs.scenario).data as ResolvedScenario;
+    const charts = chartsSvg({ ir, scenario, result: run.result as RunResult });
+    expect(charts.map((c) => c.alt.split('. ')[0])).toEqual([
+      'Utilization by resource (%)',
+      'Cycle and wait time percentiles (min)',
+      'Instances started by task',
+    ]);
+    // One SVG image per chart after the diagram, each with its alt text, in that order.
+    const images = [...html.matchAll(/<img src="data:image\/svg\+xml;base64,([^"]+)" alt="([^"]*)">/g)];
+    expect(images).toHaveLength(1 + charts.length);
+    images.slice(1).forEach((image, i) => {
+      expect(Buffer.from(image[1]!, 'base64').toString('utf8')).toBe(charts[i]!.svg);
+      expect(image[2]).toBe(charts[i]!.alt.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'));
+    });
+    // The charts sit at the top of the results.
+    expect(html.indexOf('<h2>Results</h2>')).toBeLessThan(html.indexOf(images[1]![0]));
+    // Same input, same bytes.
+    expect((await exportDocument({ file, format: 'html', date: '2026-10-19' })).data).toBe(html);
+    // Spanish titles from the engine catalog.
+    const es = (await exportDocument({ file, format: 'html', date: '2026-10-19', locale: 'es' })).data as string;
+    expect(es).toContain('alt="Utilización por recurso (%).');
+    expect(es).toContain('alt="Instancias iniciadas por tarea.');
   });
 
   test('Word: a .docx that unzips, with the results and without the diagram, in Spanish', async () => {
@@ -91,7 +219,12 @@ describe('lila export doc', () => {
     const body = strFromU8(parts['word/document.xml']!);
     expect(body).toContain('Resultados');
     expect(body).not.toContain('<w:drawing>');
-    expect(err).toContain('El documento Word va sin diagrama: Word necesita un PNG y el motor no rasteriza. El documento HTML sí lo lleva.');
+    expect(err).toEqual([
+      'El documento Word va sin diagrama: Word necesita un PNG y el motor no rasteriza. El documento HTML sí lo lleva.',
+      'El documento Word va sin gráficas: Word necesita un PNG y el motor no rasteriza. El documento HTML sí las lleva.',
+    ]);
+    // The SVG-only charts are skipped: no chart parts, no drawings.
+    expect(Object.keys(parts).filter((name) => name.startsWith('word/media/'))).toEqual([]);
   });
 
   test('without a current run the document goes without results; an older run by id is refused', async () => {
@@ -218,4 +351,160 @@ test('lila export with a wrong kind or arity says what it expects', async () => 
   expect(err.at(-1)).toBe('lila export: unknown export "pdf": expected diagram, doc or results.');
   expect(await main(['export'])).toBe(1);
   expect(err.at(-1)).toMatch(/expected diagram\|doc\|results and a <model.bpmn\|project.lila>/);
+});
+
+/** The rows of a `log.csv` (`lila run --csv`), back as `EventLogRow`s; pedido's ids need no quoting. */
+function readLogCsv(text: string): EventLogRow[] {
+  const [header, ...lines] = text.trimEnd().split('\r\n');
+  const columns = header!.split(',');
+  const numeric = (value: string): number | null => (value === '' ? null : Number(value));
+  return lines.map((line) => {
+    const cells = Object.fromEntries(line.split(',').map((value, index) => [columns[index]!, value]));
+    return {
+      replication: Number(cells.replication), caseId: cells.caseId!, activityInstanceId: cells.activityInstanceId!,
+      elementId: cells.elementId!, resourceId: cells.resourceId || null, allocationIndex: numeric(cells.allocationIndex!),
+      resourceQuantity: numeric(cells.resourceQuantity!), status: cells.status as EventLogRow['status'],
+      enabledAt: Number(cells.enabledAt), startedAt: numeric(cells.startedAt!), endedAt: numeric(cells.endedAt!),
+      observedUntil: Number(cells.observedUntil), resourceWait: Number(cells.resourceWait),
+      offHoursWait: Number(cells.offHoursWait), elementCost: Number(cells.elementCost),
+      resourceCost: Number(cells.resourceCost), cost: Number(cells.cost),
+    };
+  });
+}
+
+/** `percentiles.csv` as `id → [n, p50, p90, p95]`. */
+function readPercentilesCsv(text: string): Map<string, number[]> {
+  const [header, ...lines] = text.trimEnd().split('\r\n');
+  expect(header).toBe('Id,Name,n,p50,p90,p95');
+  return new Map(lines.map((line) => {
+    const cells = line.split(',');
+    return [cells[0]!, cells.slice(2).map(Number)];
+  }));
+}
+
+describe('per-element wait percentiles (#666)', () => {
+  test('a run saved by lila run --save: p50/p90/p95 equal elementPercentiles over the --csv log of the same inputs', async () => {
+    const file = join(dir, 'p.lila');
+    await pedidoWithRuns(file, []);
+    const args = ['run', file, 'as-is', '--seed', '42', '--replications', '2'];
+    expect(await main([...args, '--save'])).toBe(0);
+    expect(await main([...args, '--csv', join(dir, 'log')])).toBe(0);
+    const rows = readLogCsv(readFileSync(join(dir, 'log', 'log.csv'), 'utf8'));
+    expect(new Set(rows.map((row) => row.replication))).toEqual(new Set([0, 1]));
+    const warmup = decodeLila(readFileSync(file)).runs[0]!.inputs.scenario.run as { warmup: number };
+    expect(warmup.warmup).toBeGreaterThan(0);
+    const expected = elementPercentiles(rows, [0.5, 0.9, 0.95], { warmup: warmup.warmup, measure: RESOURCE_WAIT });
+    const sizes = elementSamples(rows, warmup.warmup, RESOURCE_WAIT);
+
+    const csv = await exportResults({ file, format: 'csv' });
+    expect(csv.percentiles).toEqual({ included: true });
+    const files = csv.data as Record<string, string>;
+    expect(Object.keys(files)).toEqual(['elements.csv', 'flows.csv', 'resources.csv', 'process.csv', 'percentiles.csv']);
+    const exported = readPercentilesCsv(files['percentiles.csv']!);
+    expect([...exported.keys()].sort()).toEqual([...expected.keys()].sort());
+    for (const [id, [n, ...ps]] of exported) {
+      expect(ps, id).toEqual(expected.get(id));
+      expect(n, id).toBe(sizes.get(id)!.length);
+    }
+    // n is the instances measured, over both replications.
+    const { ir } = await parseBpmn(XML);
+    const tasks = Object.keys(ir.nodes).filter((id) => ir.nodes[id]!.type === 'task');
+    expect(tasks.length).toBeGreaterThan(0);
+    for (const task of tasks) expect(exported.get(task)?.[0], task).toBeGreaterThan(0);
+
+    const xlsx = await exportResults({ file, format: 'xlsx' });
+    expect(xlsx.percentiles).toEqual({ included: true });
+    const sheets = readWorkbook(xlsx.data as Uint8Array);
+    expect(sheets.map((sheet) => sheet.name)).toEqual(['Summary', 'Elements', 'Flows', 'Resources', 'Parameters', 'Percentiles']);
+    const sheet = sheets.at(-1)!;
+    expect(sheet.rows[0]).toEqual(['Id', 'Name', 'n', 'p50', 'p90', 'p95']);
+    for (const [id, , n, ...ps] of sheet.rows.slice(1)) {
+      expect([n, ...ps], String(id)).toEqual(exported.get(String(id)));
+    }
+    // The Spanish workbook names the sheet from the catalog; the columns stay the same.
+    const es = readWorkbook((await exportResults({ file, format: 'xlsx', locale: 'es' })).data as Uint8Array);
+    expect(es.at(-1)!.name).toBe('Percentiles');
+    expect(es.at(-1)!.rows[0]).toEqual(['Id', 'Name', 'n', 'p50', 'p90', 'p95']);
+
+    // The CLI writes the fifth file and prints no note.
+    const target = join(dir, 'csv');
+    err.length = 0;
+    expect(await main(['export', 'results', file, '--out', target, '--format', 'csv'])).toBe(0);
+    expect(readFileSync(join(target, 'percentiles.csv'), 'utf8')).toBe(files['percentiles.csv']);
+    expect(err).toEqual([]);
+  }, 60_000);
+
+  test('the existing sheets and CSV files are byte-identical to the export without percentiles', async () => {
+    const file = join(dir, 'p.lila');
+    const [run] = await pedidoWithRuns(file, ['as-is.scenario.json'], { reproducible: true });
+    const { ir } = await parseBpmn(XML);
+    const scenario = run!.inputs.scenario as never;
+    const csv = await exportResults({ file, format: 'csv' });
+    expect(csv.percentiles.included).toBe(true);
+    const files = csv.data as Record<string, string>;
+    // What `exportResults` wrote before #666: the four files of `lila run --csv`.
+    const stored = decodeLila(readFileSync(file)).runs[0]!.result;
+    expect(files['elements.csv']).toBe(elementsCsv(ir, stored));
+    expect(files['flows.csv']).toBe(flowsCsv(ir, stored));
+    expect(files['resources.csv']).toBe(resourcesCsv(stored, resourceNamesOf(scenario)));
+    expect(files['process.csv']).toBe(processCsv(stored));
+
+    const before = unzipSync(scenarioWorkbook(ir, scenario, stored, resourceNamesOf(scenario)));
+    const after = unzipSync((await exportResults({ file, format: 'xlsx' })).data as Uint8Array);
+    const worksheets = Object.keys(before).filter((name) => name.startsWith('xl/worksheets/'));
+    expect(worksheets).toHaveLength(5);
+    for (const name of worksheets) expect(strFromU8(after[name]!), name).toBe(strFromU8(before[name]!));
+    expect(Object.keys(after).filter((name) => name.startsWith('xl/worksheets/'))).toEqual([...worksheets, 'xl/worksheets/sheet6.xml']);
+  });
+
+  test('a run whose re-simulation does not reproduce it is exported without percentiles, and the note says why', async () => {
+    const file = join(dir, 'p.lila');
+    await pedidoWithRuns(file, ['as-is.scenario.json'], { reproducible: true });
+    // As if it were saved on another platform: the last digit of one stored KPI differs.
+    const project = decodeLila(readFileSync(file));
+    const stored = project.runs[0]!;
+    const mean = stored.result.process.cycleTime.mean;
+    const tampered = { ...stored, result: { ...stored.result, process: { ...stored.result.process, cycleTime: { ...stored.result.process.cycleTime, mean: mean * (1 + Number.EPSILON) } } } };
+    expect(tampered.result.process.cycleTime.mean).not.toBe(mean);
+    writeFileSync(file, encodeLila({ ...project, runs: [tampered] }));
+
+    const note = /^The per-element wait percentiles are left out: the run's stored inputs do not reproduce its stored results/;
+    const csv = await exportResults({ file, format: 'csv' });
+    expect(csv.percentiles.included).toBe(false);
+    expect(csv.percentiles.note).toMatch(note);
+    expect(Object.keys(csv.data)).toEqual(['elements.csv', 'flows.csv', 'resources.csv', 'process.csv']);
+    const xlsx = await exportResults({ file, format: 'xlsx' });
+    expect(readWorkbook(xlsx.data as Uint8Array).map((sheet) => sheet.name)).toEqual(['Summary', 'Elements', 'Flows', 'Resources', 'Parameters']);
+    expect((await exportResults({ file, format: 'xlsx', locale: 'es' })).percentiles.note).toMatch(/^Los percentiles de espera por elemento quedan fuera: las entradas guardadas de la corrida no reproducen/);
+
+    // The CLI still writes the export, and prints the note on stderr.
+    expect(await main(['export', 'results', file, '--out', join(dir, 'r.xlsx')])).toBe(0);
+    expect(err.at(-1)).toMatch(note);
+
+    // The process KPIs alone can match while an element's wait drifts: the elements are compared too.
+    const wait = stored.result.elements;
+    const [task] = Object.keys(wait).filter((id) => wait[id]!.resourceWait.mean > 0);
+    expect(task).toBeDefined();
+    const elements = { ...wait, [task!]: { ...wait[task!]!, resourceWait: { ...wait[task!]!.resourceWait, mean: wait[task!]!.resourceWait.mean * (1 + Number.EPSILON) } } };
+    writeFileSync(file, encodeLila({ ...project, runs: [{ ...stored, result: { ...stored.result, elements } }] }));
+    expect((await exportResults({ file, format: 'csv' })).percentiles.note).toMatch(note);
+    // And the untouched run reproduces.
+    writeFileSync(file, encodeLila({ ...project, runs: [stored] }));
+    expect((await exportResults({ file, format: 'csv' })).percentiles).toEqual({ included: true });
+  });
+
+  test('a stored scenario with other replications than the result, or a cancelled run, is not re-simulated', async () => {
+    const file = join(dir, 'p.lila');
+    // Stored as the entry is written (30 replications) though one ran.
+    await pedidoWithRuns(file, ['as-is.scenario.json']);
+    expect((await exportResults({ file, format: 'csv' })).percentiles).toEqual({
+      included: false,
+      note: expect.stringMatching(/do not reproduce its stored results/) as unknown as string,
+    });
+    await pedidoWithRuns(file, ['as-is.scenario.json'], { reproducible: true });
+    const project = decodeLila(readFileSync(file));
+    const stored = project.runs[0]!;
+    writeFileSync(file, encodeLila({ ...project, runs: [{ ...stored, result: { ...stored.result, cancelled: true, completedReplications: 0 } }] }));
+    expect((await exportResults({ file, format: 'csv' })).percentiles.included).toBe(false);
+  });
 });

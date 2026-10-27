@@ -347,3 +347,47 @@ describe('a version 2 manifest that lists a single process (#517, items 4 and 5)
     expect(withProcesses(repo(), processesOf(repo()).slice(1), { repository: true }).process).toEqual({ slug: 'facturacion', name: 'Facturación' });
   });
 });
+
+describe('a manifest edited by hand that drops an open process (#517)', () => {
+  const repo = (): ProjectDocument => withProcesses(v1, [...processesOf(v1), facturacion]);
+
+  /** Saves the repository, then edits its manifest the way a person would: `facturacion` is gone. */
+  async function dropFacturacion(): Promise<void> {
+    await writeProjectFolder(dir, repo());
+    const path = join(dir, 'lila-project.json');
+    const manifest = JSON.parse(await readFile(path, 'utf8')) as { processes: { slug: string }[] };
+    manifest.processes = manifest.processes.filter((p) => p.slug !== 'facturacion');
+    await writeFile(path, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+  }
+
+  it('saving the open project is refused as an external change, not as an occupied folder, and writes nothing', async () => {
+    await dropFacturacion();
+    const before = await files(dir);
+    await expect(writeProjectFolder(dir, repo())).rejects.toMatchObject({ code: 'E-CAMBIO-EXTERNO' });
+    expect(await files(dir)).toEqual(before);
+  });
+
+  it('after reloading, the project is what the manifest lists, and save → reopen → compare holds', async () => {
+    await dropFacturacion();
+    const { document } = await readProjectFolder(dir);
+    expect(processesOf(document).map((p) => [p.slug, p.name])).toEqual([['pedido', 'Pedido']]);
+    // One process is saved as version 1, the way the app saves it (`withProcesses` without the option).
+    await writeProjectFolder(dir, withProcesses(document, processesOf(document)));
+    const saved = await files(dir);
+    const reopened = (await readProjectFolder(dir)).document;
+    expect(reopened).toEqual(v1);
+    await writeProjectFolder(dir, reopened);
+    expect(await files(dir)).toEqual(saved);
+  });
+
+  it('a new process on another process\'s folder is still refused as an occupied folder when nothing changed on disk', async () => {
+    await writeProjectFolder(dir, repo());
+    await mkdir(join(dir, 'processes/compras'));
+    await writeFile(join(dir, 'processes/compras/model.bpmn'), XML('Process_Ajeno'));
+    const before = await files(dir);
+    const compras: ProcessDocument = { ...facturacion, slug: 'compras', name: 'Compras', runs: [] };
+    await expect(writeProjectFolder(dir, withProcesses(repo(), [...processesOf(repo()), compras])))
+      .rejects.toMatchObject({ code: 'E-CARPETA-OCUPADA' });
+    expect(await files(dir)).toEqual(before);
+  });
+});

@@ -31,6 +31,19 @@ export interface RenderSvgOptions {
   readonly diagram?: string;
   /** Blank space around the drawing, in diagram units (default 20). */
   readonly margin?: number;
+  /**
+   * Colours (hex, `rgb()` or a CSS name) that replace an element's fill and stroke, by BPMN id
+   * as written in the file (#669: a run's overlay). Its label keeps its colour. A shape's `badge` is drawn as a tag just outside
+   * its bottom-right corner, where the app puts its overlay label.
+   */
+  readonly tint?: Readonly<Record<string, SvgTint>>;
+}
+
+/** One element of `RenderSvgOptions.tint`. */
+export interface SvgTint {
+  readonly fill: string;
+  readonly stroke: string;
+  readonly badge?: string | undefined;
 }
 
 /** Lila Light's diagram tokens on white paper. */
@@ -40,6 +53,10 @@ const THEME = {
   stroke: '#280838',
   label: '#280838',
   font: 'Archivo, Inter, system-ui, sans-serif',
+  /** `bg.elevated`, `border.strong` and `fg.primary`: the app's overlay label. */
+  badgeFill: '#F1E4F7',
+  badgeStroke: '#7028F0',
+  badgeText: '#280838',
 } as const;
 
 const FONT_SIZE = 12;
@@ -69,13 +86,18 @@ const CSS_COLOUR_NAMES = new Set(
   ('aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen').split(' '),
 );
 
-/** A DI colour, kept only when it is a hex, `rgb()`/`rgba()` or CSS colour name (nothing to escape). */
+/** A hex, `rgb()`/`rgba()` or CSS colour name: nothing to escape and nothing to fetch. */
+function isColour(value: string): boolean {
+  return /^(#[0-9a-f]{3}|#[0-9a-f]{4}|#[0-9a-f]{6}|#[0-9a-f]{8}|rgba?\([\d\s.,%]+\))$/i.test(value) || CSS_COLOUR_NAMES.has(value.toLowerCase());
+}
+
+/** A DI colour, kept only when it is one (`isColour`). */
 function diColour(di: ModdleElement | undefined, names: readonly string[]): string | undefined {
   for (const name of names) {
     const raw = di?.get?.(name) ?? di?.$attrs?.[name];
     if (typeof raw !== 'string') continue;
     const value = raw.trim();
-    if (/^(#[0-9a-f]{3}|#[0-9a-f]{4}|#[0-9a-f]{6}|#[0-9a-f]{8}|rgba?\([\d\s.,%]+\))$/i.test(value) || CSS_COLOUR_NAMES.has(value.toLowerCase())) return value;
+    if (isColour(value)) return value;
   }
   return undefined;
 }
@@ -494,6 +516,24 @@ function externalLabel(el: ModdleElement, di: ModdleElement, c: Colours): string
  * The drawing
  * ------------------------------------------------------------------ */
 
+const BADGE_FONT_SIZE = 11;
+
+/** A tag whose top-left corner sits 4 units right of and below the shape's bottom-right corner. */
+function badgeOf(text: string, bounds: Bounds): { svg: string; bounds: Bounds } {
+  const width = textWidth(text, BADGE_FONT_SIZE) + 8;
+  const height = BADGE_FONT_SIZE * LINE_HEIGHT + 2;
+  const x = bounds.x + bounds.width + 4;
+  const y = bounds.y + bounds.height + 4;
+  return {
+    svg:
+      `<g transform="translate(${n(x)} ${n(y)})"><rect x="0" y="0" width="${n(width)}" height="${n(height)}" ` +
+      `fill="${THEME.badgeFill}" stroke="${THEME.badgeStroke}" stroke-width="1"/>` +
+      `<text font-family="${THEME.font}" font-size="${BADGE_FONT_SIZE}" fill="${THEME.badgeText}">` +
+      `<tspan x="4" y="${n(1 + BADGE_FONT_SIZE * 0.9)}">${escapeXml(text)}</tspan></text></g>`,
+    bounds: { x, y, width, height },
+  };
+}
+
 /** Paint order: pools, lanes, expanded sub-processes, the rest of the shapes, edges, boundary events, groups. */
 function layerOf(di: ModdleElement, expanded: boolean): number {
   const type = di.bpmnElement?.$type ?? '';
@@ -560,6 +600,9 @@ export async function renderSvg(xmlIn: string, options: RenderSvgOptions = {}): 
   }
   const margin = options.margin ?? 20;
   if (!Number.isFinite(margin) || margin < 0) throw new RangeError(`The margin must be a finite number ≥ 0, not ${margin}.`);
+  for (const [id, tint] of Object.entries(options.tint ?? {})) {
+    if (!isColour(tint.fill) || !isColour(tint.stroke)) throw new RangeError(`The tint of "${id}" must be colours (hex, rgb() or a CSS name).`);
+  }
   const drawn = (diagram.plane?.planeElement ?? [])
     .filter(drawable);
   // A sub-process is expanded when its DI says so or its children are drawn on this plane
@@ -586,13 +629,22 @@ export async function renderSvg(xmlIn: string, options: RenderSvgOptions = {}): 
 
   const body: string[] = [];
   const labels: string[] = [];
+  const badges: string[] = [];
   for (const { di, expanded } of elements) {
     const el = di.bpmnElement!;
-    const c = coloursOf(di);
-    const id = escapeXml(sanitizedToOriginal.get(el.id) ?? el.id ?? '');
+    const original: string = sanitizedToOriginal.get(el.id) ?? el.id ?? '';
+    // `hasOwn`: an id such as `constructor` must not find `Object.prototype`'s.
+    const tint = options.tint !== undefined && Object.hasOwn(options.tint, original) ? options.tint[original] : undefined;
+    const c = tint === undefined ? coloursOf(di) : { ...coloursOf(di), fill: tint.fill, stroke: tint.stroke };
+    const id = escapeXml(original);
     if (di.bounds !== undefined) {
       const { x, y, width, height } = di.bounds;
       extend(di.bounds);
+      if (tint?.badge !== undefined && tint.badge !== '') {
+        const badge = badgeOf(tint.badge, di.bounds);
+        extend(badge.bounds);
+        badges.push(badge.svg);
+      }
       body.push(`<g data-element-id="${id}" transform="translate(${n(x)} ${n(y)})">${shapeBody(el, di, expanded, { width, height }, c)}</g>`);
     } else {
       const points = di.waypoint!;
@@ -622,6 +674,7 @@ export async function renderSvg(xmlIn: string, options: RenderSvgOptions = {}): 
     `<rect x="${n(x)}" y="${n(y)}" width="${n(width)}" height="${n(height)}" fill="${THEME.paper}"/>` +
     body.join('') +
     labels.join('') +
+    badges.join('') +
     '</svg>'
   );
 }

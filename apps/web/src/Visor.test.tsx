@@ -10,6 +10,7 @@ import { processesOf } from '@lila-modeler/engine/project';
 import { abrirVisor, AVISO_VISTO, pasoGesto, Visor } from './Visor';
 import { EJEMPLOS, proyectoDeEjemplo } from './ejemplos';
 import { en as T } from './strings.en';
+import { urlReporteActual } from './reportarProblema';
 
 vi.mock('bpmn-js/lib/NavigatedViewer', () => ({
   default: class {
@@ -73,4 +74,13 @@ it('the mobile notice opens on the first visit only', async () => {
   root = createRoot(container);
   await act(async () => root.render(<Visor inicial={null} />));
   expect(showModal).not.toHaveBeenCalled();
+});
+
+it('offers Report a problem with the same prefilled form as the editor (#645)', async () => {
+  await act(async () => root.render(<Visor inicial={null} />));
+  const enlace = [...container.querySelectorAll<HTMLAnchorElement>('.visor-barra a')].find((a) => a.textContent === T.app.reportarProblema)!;
+  expect(enlace.href).toBe(urlReporteActual());
+  expect(enlace.href).toContain('/issues/new?template=bug_report.yml&version=');
+  expect(enlace.target).toBe('_blank');
+  expect(enlace.rel).toBe('noopener noreferrer');
 });

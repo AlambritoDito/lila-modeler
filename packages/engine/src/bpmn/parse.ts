@@ -104,6 +104,15 @@ const XSD_BOOLEAN = new Map<string, boolean>([
 const NO_RAW_LITERALS: ReadonlyMap<string, string> = new Map();
 
 /**
+ * An `xsd:boolean` literal as BPMN reads it (`true`/`1`, `false`/`0`), `undefined` for any other.
+ * The outline reader (`bpmnToOutline`) reads `cancelActivity` and `instantiate` with it, by the
+ * same rule as the simulator (#645).
+ */
+export function xsdBoolean(raw: string): boolean | undefined {
+  return XSD_BOOLEAN.get(raw);
+}
+
+/**
  * What deciding the profile of one element needs from the container around it, gathered once per
  * `walk`: which elements have an outgoing flow and their incoming counts, the raw `xsd:boolean`
  * literals read from the XML text, and the elements a supported event-based gateway brings into
@@ -828,7 +837,7 @@ const ATTR = /([\w.:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
  * se puede recuperar del árbol — `$attrs` guarda los atributos desconocidos y `cancelActivity`
  * e `instantiate` están en el metamodelo, así que ahí tampoco quedan.
  */
-function rawAttributeLiterals(xml: string, localName: string, attribute: string): Map<string, string> {
+export function rawAttributeLiterals(xml: string, localName: string, attribute: string): Map<string, string> {
   const literals = new Map<string, string>();
   for (const [, attrs = ''] of xml.replace(NO_ES_MARKUP, ' ').matchAll(startTagRegex(localName))) {
     let id: string | undefined;

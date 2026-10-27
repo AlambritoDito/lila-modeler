@@ -11,7 +11,7 @@ import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { describe, expect, test } from 'vitest';
 
-import { BUNDLED_DOCS, section } from '../src/resources.js';
+import { absoluteLinks, BUNDLED_DOCS, DOCS_URL, section } from '../src/resources.js';
 import { createServer } from '../src/server.js';
 
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
@@ -46,8 +46,8 @@ describe.each(cases)('server language $locale', ({ locale, guide, format, outlin
         ['lila://scenario-format', 'text/markdown'],
         ['lila://scenario-schema', 'application/schema+json'],
       ]);
-      expect(await read(client, 'lila://guide')).toBe(doc(guide));
-      expect(await read(client, 'lila://scenario-format')).toBe(doc(format));
+      expect(await read(client, 'lila://guide')).toBe(absoluteLinks(doc(guide), guide));
+      expect(await read(client, 'lila://scenario-format')).toBe(absoluteLinks(doc(format), format));
       expect(await read(client, 'lila://scenario-schema')).toBe(doc('scenario.schema.json'));
       expect(JSON.parse(await read(client, 'lila://scenario-schema'))).toHaveProperty('$schema');
       const outlineFormat = await read(client, 'lila://outline-format');
@@ -56,6 +56,12 @@ describe.each(cases)('server language $locale', ({ locale, guide, format, outlin
       expect(outlineFormat).toContain('"steps"');
       // Each section ends before the next one of its level.
       expect(outlineFormat.split('\n').filter((line) => line.startsWith('## '))).toEqual([outline, rules]);
+      // #645: an MCP-only client cannot follow a relative link.
+      for (const uri of ['lila://guide', 'lila://outline-format', 'lila://scenario-format']) {
+        const links = [...(await read(client, uri)).matchAll(/\]\(([^()\s]+)\)/g)].map((match) => match[1]!);
+        expect(links.length, uri).toBeGreaterThan(0);
+        for (const link of links) expect(link, uri).toMatch(/^(https:|lila:)/);
+      }
     } finally {
       await client.close();
     }
@@ -92,6 +98,16 @@ test('section() stops at the next heading of its level or higher, and names a mi
   const markdown = '# T\n\n## A\n\ntext\n\n### A.1\n\nmore\n\n## B\n\nb';
   expect(section(markdown, '## A')).toBe('## A\n\ntext\n\n### A.1\n\nmore');
   expect(() => section(markdown, '## C')).toThrow('docs: no heading "## C"');
+});
+
+test('absoluteLinks() resolves relative links and anchors against the doc, and keeps links with a scheme', () => {
+  const markdown = '[a](SCENARIO_FORMAT.md) [b](#saving-a-run) [c](../MCP.md#installation) [d](https://example.com/x) [e](lila://guide)';
+  expect(absoluteLinks(markdown, 'es/MCP.md')).toBe(
+    `[a](${DOCS_URL}es/SCENARIO_FORMAT.md) [b](${DOCS_URL}es/MCP.md#saving-a-run) [c](${DOCS_URL}MCP.md#installation) ` +
+      '[d](https://example.com/x) [e](lila://guide)',
+  );
+  const fenced = '```md\n[x](MCP.md)\n```\n[y](MCP.md)';
+  expect(absoluteLinks(fenced, 'MCP.md')).toBe(`\`\`\`md\n[x](MCP.md)\n\`\`\`\n[y](${DOCS_URL}MCP.md)`);
 });
 
 test('every bundled doc exists', () => {

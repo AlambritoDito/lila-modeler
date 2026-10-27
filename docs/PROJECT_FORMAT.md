@@ -104,7 +104,8 @@ processes/<slug>/runs/<id>.result.json
   too, orphaned, and it never comes back: a new process never takes a slug that is listed on disk,
   that has a folder under `processes/`, or that was deleted in the session — «Cobro» becomes
   `cobro-2` — and the writer refuses (`E-CARPETA-OCUPADA`, deleting nothing) a new process whose
-  folder already holds another one's scenarios or runs. The
+  folder already holds another one's scenarios or runs. A manifest edited by hand since the app
+  read it (one that drops an open process, say) is refused as `E-CAMBIO-EXTERNO` first. The
   manifest is written after the process files, so a crash in the middle of that first save leaves
   the version 1 project intact.
 - **Scenarios and runs are per process.** The simulation runs one process at a time — the one on

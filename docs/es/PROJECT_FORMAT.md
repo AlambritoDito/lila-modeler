@@ -106,7 +106,9 @@ processes/<slug>/runs/<id>.result.json
   La carpeta de un proceso borrado también se queda, huérfana, y no vuelve: un proceso nuevo nunca
   toma un slug que esté listado en disco, que tenga carpeta en `processes/` o que se haya borrado
   en la sesión —«Cobro» pasa a `cobro-2`—, y el escritor rechaza (`E-CARPETA-OCUPADA`, sin borrar
-  nada) un proceso nuevo cuya carpeta ya tenga escenarios o corridas de otro. El manifiesto se escribe después de los
+  nada) un proceso nuevo cuya carpeta ya tenga escenarios o corridas de otro. Un manifiesto editado a
+  mano después de que la app lo leyera (uno que quita un proceso abierto, por ejemplo) se rechaza antes
+  como `E-CAMBIO-EXTERNO`. El manifiesto se escribe después de los
   archivos de los procesos, así que un cierre brusco a mitad de ese primer guardado deja intacto el
   proyecto versión 1.
 - **Los escenarios y las corridas son de cada proceso.** La simulación corre un proceso a la vez —el

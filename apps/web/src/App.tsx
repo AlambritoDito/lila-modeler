@@ -10,14 +10,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { failStartup, finishStartup, setStartupLocale } from './startup';
-import { parseBpmn, readAnnotations, validateBpmnModel, type ValidatedBpmnModel } from '@lila-modeler/engine/bpmn';
+import { parseBpmn, readAnnotations, readTextNotes, validateBpmnModel, type ValidatedBpmnModel } from '@lila-modeler/engine/bpmn';
 import { buildProcessDocument, DOCX_MIME_TYPE, toDocx, toHtml } from '@lila-modeler/engine/process-document';
 import { resolveExtends, resolveScenarioPath, type ResolvedScenario } from '@lila-modeler/engine/schema';
 import { compare } from '@lila-modeler/engine';
 import { CompareView } from './CompareView';
 import { runMetaFrom } from './compareWarnings';
-import { changeToken, defaultElement, defaultScenarios, documentToken, escenariosDelProyecto, MODELO_PROYECTO, newModelXml, nextScenarioRevisions, procesoDelProyecto, processIds, projectStore, proyectoDeSuelto, readLila, readProject, repositoryToken, tokenPart } from './project';
-import { encodeLila, isCurrentRun, processesOf, processSlug, storedRun, withProcesses, type ProcessDocument } from '@lila-modeler/engine/project';
+import { changeToken, defaultElement, defaultScenarios, documentToken, escenariosDelProyecto, MODELO_PROYECTO, newModelXml, nextScenarioRevisions, procesoDelProyecto, projectStore, proyectoDeSuelto, readLila, readProject, repositoryToken, tokenPart } from './project';
+import { encodeLila, isCurrentRun, processesOf, processIds, processSlug, storedRun, withProcesses, type ProcessDocument } from '@lila-modeler/engine/project';
 import { PestanasProcesos } from './PestanasProcesos';
 import type { ProcessIR, SimulationProgress } from '@lila-modeler/engine';
 import { Lienzo, type Alineacion, type EstadoLienzo, type EventoLienzo, type Modelador, type Servicios } from './Modeler';
@@ -54,7 +54,7 @@ import { abrirVentanaFlotante, geometriaDe, geometriaValida, VentanaFlotante, ty
 import { Bienvenida } from './Bienvenida';
 import { proyectoDeEjemplo, type EjemploId } from './ejemplos';
 import type { Recent } from '../../desktop/src/bridge.js';
-import { LOCALES, PREFERENCIAS, setLocale, strings, useLocale, useStrings, type Locale, type Preferencia } from './i18n';
+import { LOCALES, PREFERENCIAS, getLocale, setLocale, strings, useLocale, useStrings, type Locale, type Preferencia } from './i18n';
 import { ATAJOS, atajoPorId, coincide, etiqueta, MAC, tooltip, type AtajoId, type AtajoPropio } from './atajos';
 import { aPng, descargar, imprimirSvg, nombreArchivo } from './exportarDiagrama';
 import { DENSIDAD_IDS, MODO_IDS, PASO_IDS, PESTANA_IDS, type Densidad, type ModoId, type PasoId, type PestanaId, type VerboPerdida } from './ids';
@@ -445,7 +445,7 @@ function escenarioResuelto(archivo: string, escenarios: Escenarios): { resuelto:
       const encontrado = escenarios[ruta];
       if (encontrado === undefined) throw new Error(S.app.errorEscenarioDesconocido(ruta));
       return encontrado;
-    }) };
+    }, getLocale()) };
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e), resuelto: escenarios[archivo] ?? {} };
   }
@@ -2404,11 +2404,13 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       const run = corridaActual;
       // The diagram's XML and its picture, both read from the canvas in this same tick.
       const [xml, svg] = await Promise.all([modelador.exportar(), modelador.exportarSvg({ papel: true })]);
-      const [{ ir: modelo, subprocesses, lanes, nodeLanes, laneParents, pool, poolName, types }, annotations, png] = await Promise.all([
+      const [{ ir: modelo, subprocesses, lanes, nodeLanes, laneParents, pool, poolName, types }, annotations, textNotes, png] = await Promise.all([
         // #546: the process the run and the scenarios target, the one Run simulates.
         parseBpmn(xml, { scenarios: [run?.inputs.scenario, ...Object.values(escenarios)] }),
         // A file bpmn-moddle cannot rewrite still gets its document, without the descriptions.
         readAnnotations(xml).catch(() => ({})),
+        // #645: the text annotations, listed in the prose too.
+        readTextNotes(xml).catch(() => ({})),
         aPng(svg).then(async (blob) => new Uint8Array(await blob.arrayBuffer())),
       ]);
       const escenario = run !== undefined
@@ -2421,7 +2423,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         graficasDelDocumento({ ir: modelo, scenario: run.inputs.scenario as unknown as ResolvedScenario, result: run.result, log: logs.current.get(run.id) })
           .map(async ({ svg, alt }) => ({ alt, png: new Uint8Array(await (await aPng(svg)).arrayBuffer()) })),
       );
-      const doc = buildProcessDocument({ ir: modelo, annotations, subprocesses, lanes, nodeLanes, laneParents, pool, poolName, types, title: titulo, date, locale, png, charts, ...escenario });
+      const doc = buildProcessDocument({ ir: modelo, annotations, textNotes, subprocesses, lanes, nodeLanes, laneParents, pool, poolName, types, title: titulo, date, locale, png, charts, ...escenario });
       if (tipo === 'docx') {
         const datos = toDocx(doc);
         if (lila === undefined) descargar(new Blob([datos.slice()], { type: DOCX_MIME_TYPE }), `${nombre}.docx`);

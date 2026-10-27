@@ -52,11 +52,12 @@ accepts `locale: "en" | "es"`.
 
 ## Tools
 
-Twenty-one tools: `validate_bpmn`, `describe_process`, `run_simulation`, `compare_scenarios`,
+Twenty-five tools: `validate_bpmn`, `describe_process`, `run_simulation`, `compare_scenarios`,
 `patch_scenario`, `create_process`, `get_process_outline`, `edit_process`, `export_diagram`,
 `export_document`, `export_results`, `annotate_element`, `define_attribute`, `get_raci_matrix`,
 `import_scenario_sheet`, `export_scenario_template`, `create_project`, `get_project`,
-`get_scenario`, `get_process_bpmn`, `put_process_bpmn`.
+`get_scenario`, `get_process_bpmn`, `put_process_bpmn`, `rename_process`,
+`delete_process`, `rename_scenario`, `delete_scenario`.
 
 All file paths are read and written on the disk of the machine that runs the server; relative
 paths resolve against the server's working directory, so prefer absolute paths. Simulation answers

@@ -436,7 +436,7 @@ superficies que enseñan resultados y ninguna redefine un nombre por su cuenta:
 |---|---|---|
 | `lila run` (tablas de consola) | `columnHeader(scope, metric, unit)` | `baseTimeUnit`, con sufijo ` (min)` / ` (h)` … |
 | `lila compare` (columna *Metric*) | `columnLabel(scope, metric)` | la fila lleva la unidad; el rótulo no |
-| CSV de `csv.ts` (`elements.csv`, `flows.csv`, `resources.csv`, `process.csv`) | `columnLabel(scope, metric)` | **segundos** (sección 1), por eso el rótulo va desnudo: `Busy time`, no `Busy time (min)` |
+| CSV de `csv.ts` (`elements.csv`, `flows.csv`, `resources.csv`, `process.csv`, y `percentiles.csv` de `lila export results`, sección 12) | `columnLabel(scope, metric)` | **segundos** (sección 1), por eso el rótulo va desnudo: `Busy time`, no `Busy time (min)` |
 | `ResultsView` de la web | `columnLabel(...)` + ` (unidad)` en duraciones | `baseTimeUnit`, igual que la CLI |
 
 Es decir: el nombre es único y el sufijo de unidad lo añade solo quien convierte a `baseTimeUnit`.
@@ -656,6 +656,39 @@ Los formatos de número son solo presentación —la celda conserva el doble com
 
 `Utilization (%)` no es una celda de porcentaje: su valor ya viene multiplicado por 100 y el nombre
 de la columna lo dice, igual que en el CSV y en la consola.
+
+### `lila export results` / `export_results`: la hoja `Percentiles` *(#666)*
+
+Una corrida guardada no conserva el log de eventos, así que la exportación de resultados sin la app
+(`docs/es/CLI.md`, `docs/es/MCP.md`) reconstruye los percentiles por elemento **volviendo a simular
+las entradas guardadas de la propia corrida** (su modelo y su escenario resuelto, la misma semilla,
+todas las replicaciones). Las filas pasan al muestreador una a una y ninguna se conserva. La
+muestra solo cuenta cuando la nueva corrida devuelve exactamente las métricas de `process` y de
+`elements` guardadas; la corrida guardada nunca cambia.
+
+| Hoja / archivo | Columnas | Contenido |
+|---|---|---|
+| `Percentiles` (sexta hoja, tras `Parámetros`) / `percentiles.csv` | Id, Name, n, p50, p90, p95 | una fila por elemento con alguna instancia medida, en el orden de `Elementos`: `n` instancias y los p50/p90/p95 de su **espera por recurso** (`resourceWait`), en **segundos** |
+
+La población es la regla del dock de Simular y de la vista rápida de la app, con la misma función
+del motor (`elementPercentiles` en `packages/engine/src/element-percentiles.ts`): una muestra por
+instancia de actividad completada de la cohorte medida (casos que empezaron en o después de
+`run.warmup`), con interpolación lineal como `process.*.p50/p90/p95`. A diferencia del dock, que lee
+la replicación 0 de la muestra del log en memoria, la exportación cubre **todas las replicaciones**,
+juntas en una sola muestra: con varias replicaciones es un percentil de la muestra conjunta, no la
+media de los percentiles por replicación que dan `process.*.p50/p90/p95` y la hoja `Resumen`.
+Los nombres de columna son extras de Lila sin equivalente en Bizagi; pasan por
+`columnLabel('elements', 'resourceWait.p50')` y los demás.
+
+Cuando la nueva corrida no reproduce la guardada, la hoja y el archivo quedan fuera y la respuesta
+lleva una nota (`percentiles: { included: false, note }` en MCP, la nota por stderr en la CLI). Los
+resultados de punto flotante del motor pueden diferir en el último dígito entre arm64 y x64, así
+que una corrida guardada por la app en una plataforma y exportada en otra puede caer aquí. Es el
+comportamiento previsto, no un error. Una corrida cancelada, o un escenario guardado con otras
+replicaciones que las del resultado, no se vuelve a simular y recibe la misma nota. Las cinco hojas
+y los cuatro CSV son idénticos byte a byte en los dos casos. Con `--force` / `overwrite`, un
+`percentiles.csv` que una exportación anterior dejó en el directorio no se borra cuando esta no lo
+lleva.
 
 ### `compare --xlsx`: una hoja por escenario más `Comparación`
 

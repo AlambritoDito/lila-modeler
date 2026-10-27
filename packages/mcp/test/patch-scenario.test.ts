@@ -188,7 +188,7 @@ test('JSON Patch inválido: operación desconocida', async () => {
     arguments: { scenario: path, patch: [{ op: 'frobnicate', path: '/resources/cajero/capacity', value: 3 }] },
   });
   expect(result.isError).toBe(true);
-  expect(textOf(result)).toContain('no soportada');
+  expect(textOf(result)).toContain('json patch: unsupported operation: "frobnicate"');
 });
 
 test('JSON Patch inválido: replace sobre una ruta que no existe', async () => {
@@ -198,7 +198,7 @@ test('JSON Patch inválido: replace sobre una ruta que no existe', async () => {
     arguments: { scenario: path, patch: [{ op: 'replace', path: '/resources/cajero/noExiste', value: 1 }] },
   });
   expect(result.isError).toBe(true);
-  expect(textOf(result)).toContain('no existe la ruta');
+  expect(textOf(result)).toContain('json patch: the path /resources/cajero/noExiste does not exist.');
 });
 
 /* ------------------------------------------------------------------ *

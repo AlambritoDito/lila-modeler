@@ -38,7 +38,7 @@ export async function prepareSimulation(xml: string, file: string, scenarios: Re
     const raw = scenarios[path];
     if (raw === undefined) throw new Error(S.simulacion.errorEscenarioDesconocido(path));
     return raw;
-  }), { locale });
+  }, locale), { locale });
   if (!parsed.success) throw new Error(parsed.error.issues.map((i) => `${i.path.join('.') || '$'}: ${i.message}`).join('\n'));
   const scenario = parsed.data;
   // #546: the process the project's scenarios target is the one simulated, wherever its pool is:

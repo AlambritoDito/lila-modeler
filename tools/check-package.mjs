@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -72,12 +72,14 @@ const client = new Client({ name: 'lila-package-check', version: '0' });
 await client.connect(new StdioClientTransport({ command: process.execPath, args: [join(mcp, mcpManifest.bin['lila-mcp'])], cwd: consumer }));
 try {
   assert.equal(client.getServerVersion()?.version, manifest.version);
-  assert.equal((await client.listTools()).tools.length, 21);
+  assert.equal((await client.listTools()).tools.length, 25);
   const validated = await client.callTool({ name: 'validate_bpmn', arguments: { path: model } });
   assert.notEqual(validated.isError, true, JSON.stringify(validated));
   // #637: the resources come from the copies the package carries, and simulation runs in its worker.
   assert.deepEqual((await client.listResources()).resources.map((resource) => resource.uri).sort(), ['lila://guide', 'lila://outline-format', 'lila://scenario-format', 'lila://scenario-schema']);
-  assert.equal((await client.readResource({ uri: 'lila://guide' })).contents[0].text, readFileSync(join(root, 'docs/AGENT_GUIDE.md'), 'utf8'));
+  // #645: the served guide is the repository's, with its relative links made absolute.
+  const { absoluteLinks } = await import(pathToFileURL(join(mcp, 'dist/resources.js')).href);
+  assert.equal((await client.readResource({ uri: 'lila://guide' })).contents[0].text, absoluteLinks(readFileSync(join(root, 'docs/AGENT_GUIDE.md'), 'utf8'), 'AGENT_GUIDE.md'));
   const progress = [];
   const simulated = await client.callTool({ name: 'run_simulation', arguments: { scenario, seed: 42, replications: 3 } }, { onprogress: (p) => progress.push(p.progress) });
   assert.notEqual(simulated.isError, true, JSON.stringify(simulated));
@@ -85,4 +87,4 @@ try {
 } finally {
   await client.close();
 }
-console.log('Package consumer OK: runtime exports, JSON descriptor, Node16/Bundler types, English/Spanish CLI, identical simulation bytes, MCP server with 21 tools, its resources and a simulation in its worker.');
+console.log('Package consumer OK: runtime exports, JSON descriptor, Node16/Bundler types, English/Spanish CLI, identical simulation bytes, MCP server with 25 tools, its resources and a simulation in its worker.');

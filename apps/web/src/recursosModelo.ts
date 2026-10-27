@@ -24,8 +24,8 @@ export function claveNueva(existentes: readonly string[], prefijo: string): stri
 }
 
 /** What a resource reads in the list and the header: its `name`, or its key without one. */
-export function nombreRecurso(clave: string, recurso: Record<string, unknown> | undefined): string {
-  const nombre = recurso?.['name'];
+export function nombreRecurso(clave: string, recurso: { readonly name?: unknown } | undefined): string {
+  const nombre = recurso?.name;
   return typeof nombre === 'string' && nombre.trim() !== '' ? nombre : clave;
 }
 

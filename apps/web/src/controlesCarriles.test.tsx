@@ -285,6 +285,32 @@ describe('reordering lanes (#596)', () => {
   });
 });
 
+/** XML with the last lane (L3) split into two nested lanes. */
+const XML_ANIDADOS = XML
+  .replace('<bpmn:lane id="L3" name="Committee"><bpmn:flowNodeRef>T3</bpmn:flowNodeRef></bpmn:lane>',
+    '<bpmn:lane id="L3" name="Committee"><bpmn:flowNodeRef>T3</bpmn:flowNodeRef><bpmn:childLaneSet id="LS3">' +
+    '<bpmn:lane id="L3a" name="Chair"><bpmn:flowNodeRef>T3</bpmn:flowNodeRef></bpmn:lane><bpmn:lane id="L3b" name="Members" />' +
+    '</bpmn:childLaneSet></bpmn:lane>')
+  .replace('<bpmndi:BPMNShape id="T2_di"',
+    '<bpmndi:BPMNShape id="L3a_di" bpmnElement="L3a" isHorizontal="true"><dc:Bounds x="160" y="320" width="540" height="70" /></bpmndi:BPMNShape>' +
+    '<bpmndi:BPMNShape id="L3b_di" bpmnElement="L3b" isHorizontal="true"><dc:Bounds x="160" y="390" width="540" height="70" /></bpmndi:BPMNShape>' +
+    '<bpmndi:BPMNShape id="T2_di"');
+
+describe('the Tab order with nested lanes in the last lane (#645)', () => {
+  it('walks the nested lanes\' ⠿ before the pool\'s last «+», which stays on the last lane\'s corner', async () => {
+    const m = await montar(XML_ANIDADOS);
+    const enOrden = () => [...m.container.querySelectorAll<HTMLElement>('.djs-overlay-lila-carril button')].map((b) => b.dataset['lilaCarril']);
+    expect(enOrden()).toEqual(['mas:Pool:0', 'asa:L1', 'mas:Pool:1', 'asa:L2', 'mas:Pool:2', 'asa:L3', 'asa:L3a', 'asa:L3b', 'mas:Pool:3']);
+    // Same place as before: the bottom-left corner of L3 (x 130, bottom 460), now measured from the pool.
+    const overlays = m.modeler.get<{ get(f: { element: Forma; type: string }): Array<{ html: HTMLElement; position: { left?: number; bottom?: number } }> }>('overlays');
+    const ultimo = overlays.get({ element: m.el('Pool'), type: 'lila-carril' }).find((o) => o.html.querySelector('[data-lila-carril="mas:Pool:3"]'));
+    expect(ultimo?.position).toEqual({ left: 30, bottom: 0 });
+    // A reorder keeps it last.
+    m.carriles.moverA(m.el('L3'), 0);
+    expect(enOrden()).toEqual(['mas:Pool:0', 'asa:L3', 'asa:L3a', 'asa:L3b', 'mas:Pool:1', 'asa:L1', 'mas:Pool:2', 'asa:L2', 'mas:Pool:3']);
+  });
+});
+
 describe('the «+» and a selected lane\'s resize handles (#596)', () => {
   it('sets aside the «+» on the selected lane\'s corners, and brings it back when deselected', async () => {
     const m = await montar();
