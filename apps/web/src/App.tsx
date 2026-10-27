@@ -83,6 +83,7 @@ import './app.css';
 import './theme/montana.css';
 import { confirmarEdicionEnCurso, useBorradorPendiente } from './edicionEnCurso';
 import { abrirReporte } from './reportarProblema';
+import { storageKey } from './channel';
 
 /** `file` (LILA-072): el `.bpmn` pulsado, cuando no es el `model.bpmn` de la carpeta. */
 type ProjectAction = 'new' | 'open' | 'openFile' | 'bpmn' | { readonly recent: string; readonly file?: string } | { readonly ejemplo: EjemploId }
@@ -134,18 +135,18 @@ async function preferencias(): Promise<Ajustes> {
   // `tema` se quedaría en `undefined` para siempre, o sea sin lienzo (QA de #275).
   if (puente !== undefined) { try { return await puente.readSettings(); } catch { return {}; } }
   try {
-    const tema = localStorage.getItem('lila.tema');
-    const densidad = localStorage.getItem('lila.densidad');
-    const idioma = localStorage.getItem('lila.idioma');
+    const tema = localStorage.getItem(storageKey('tema'));
+    const densidad = localStorage.getItem(storageKey('densidad'));
+    const idioma = localStorage.getItem(storageKey('idioma'));
     // Empty or blank is "never saved" (320 by default), not 0 clamped up to 300 (QA of #390).
-    const panelAncho = Number(localStorage.getItem('lila.panelAncho')?.trim() || NaN);
+    const panelAncho = Number(localStorage.getItem(storageKey('panelAncho'))?.trim() || NaN);
     // Left column widths (#406), same "blank is never saved" rule.
-    const paletaAncho = Number(localStorage.getItem('lila.paletaAncho')?.trim() || NaN);
-    const railAncho = Number(localStorage.getItem('lila.railAncho')?.trim() || NaN);
+    const paletaAncho = Number(localStorage.getItem(storageKey('paletaAncho'))?.trim() || NaN);
+    const railAncho = Number(localStorage.getItem(storageKey('railAncho'))?.trim() || NaN);
     // Height of the Simulate dock (#394), same rule.
-    const dockAlto = Number(localStorage.getItem('lila.dockAlto')?.trim() || NaN);
+    const dockAlto = Number(localStorage.getItem(storageKey('dockAlto'))?.trim() || NaN);
     // «Advanced» (#447): '1' or absent, like `lila.paleta`; anything else reads as off.
-    const avanzado = localStorage.getItem('lila.avanzado') === '1';
+    const avanzado = localStorage.getItem(storageKey('avanzado')) === '1';
     // Los temas del usuario (LILA-114) van en su propia clave, y en escritorio en `ajustes.temas`:
     // es una lista, no un texto, así que aquí se guarda serializada. `saneaTemas` valida lo que
     // salga de cualquiera de los dos sitios, que son igual de ajenos.
@@ -154,21 +155,21 @@ async function preferencias(): Promise<Ajustes> {
     // que pasa por `JSON.parse`, y un valor corrupto ahí se llevaba por delante el tema elegido y
     // la densidad, que son texto y no pueden romperse.
     let temas: unknown = null;
-    try { temas = JSON.parse(localStorage.getItem('lila.temas') ?? 'null'); } catch { /* lista ilegible: se pierde solo ella */ }
+    try { temas = JSON.parse(localStorage.getItem(storageKey('temas')) ?? 'null'); } catch { /* lista ilegible: se pierde solo ella */ }
     // Following the system scheme (#472): two flags stored as '1'/'0' and the two theme slots.
-    const seguirSistema = localStorage.getItem('lila.seguirSistema');
-    const ranuraClara = localStorage.getItem('lila.temaClaro');
-    const ranuraOscura = localStorage.getItem('lila.temaOscuro');
-    const avisoSeguirSistema = localStorage.getItem('lila.avisoSeguirSistema');
+    const seguirSistema = localStorage.getItem(storageKey('seguirSistema'));
+    const ranuraClara = localStorage.getItem(storageKey('temaClaro'));
+    const ranuraOscura = localStorage.getItem(storageKey('temaOscuro'));
+    const avisoSeguirSistema = localStorage.getItem(storageKey('avisoSeguirSistema'));
     // Geometry of the detached scenario window (design 2c): same reasoning, its own `try`.
     let ventana: unknown = null;
-    try { ventana = JSON.parse(localStorage.getItem('lila.ventanaEscenario') ?? 'null'); } catch { /* se pierde solo ella */ }
+    try { ventana = JSON.parse(localStorage.getItem(storageKey('ventanaEscenario')) ?? 'null'); } catch { /* se pierde solo ella */ }
     // And of the detached Results window (#395).
     let ventanaResultados: unknown = null;
-    try { ventanaResultados = JSON.parse(localStorage.getItem('lila.ventanaResultados') ?? 'null'); } catch { /* only this one is lost */ }
+    try { ventanaResultados = JSON.parse(localStorage.getItem(storageKey('ventanaResultados')) ?? 'null'); } catch { /* only this one is lost */ }
     // Per-mode panel visibility (#412): its own `try` too; `sanearPaneles` checks the shape.
     let paneles: unknown = null;
-    try { paneles = JSON.parse(localStorage.getItem('lila.paneles') ?? 'null'); } catch { /* only this one is lost */ }
+    try { paneles = JSON.parse(localStorage.getItem(storageKey('paneles')) ?? 'null'); } catch { /* only this one is lost */ }
     return {
       ...(tema === null ? {} : { tema }),
       ...(densidad === null ? {} : { densidad }),
@@ -200,23 +201,23 @@ function recordar(ajustes: Ajustes): void {
     return;
   }
   try {
-    if (ajustes.tema !== undefined) localStorage.setItem('lila.tema', ajustes.tema);
-    if (ajustes.densidad !== undefined) localStorage.setItem('lila.densidad', ajustes.densidad);
-    if (ajustes.idioma !== undefined) localStorage.setItem('lila.idioma', ajustes.idioma);
-    if (ajustes.temas !== undefined) localStorage.setItem('lila.temas', JSON.stringify(ajustes.temas));
-    if (ajustes.seguirSistema !== undefined) localStorage.setItem('lila.seguirSistema', ajustes.seguirSistema ? '1' : '0');
-    if (ajustes.temaClaro !== undefined) localStorage.setItem('lila.temaClaro', ajustes.temaClaro);
-    if (ajustes.temaOscuro !== undefined) localStorage.setItem('lila.temaOscuro', ajustes.temaOscuro);
-    if (ajustes.avisoSeguirSistema !== undefined) localStorage.setItem('lila.avisoSeguirSistema', ajustes.avisoSeguirSistema ? '1' : '0');
-    if (ajustes.panelAncho !== undefined) localStorage.setItem('lila.panelAncho', String(ajustes.panelAncho));
-    if (ajustes.paletaAncho !== undefined) localStorage.setItem('lila.paletaAncho', String(ajustes.paletaAncho));
-    if (ajustes.railAncho !== undefined) localStorage.setItem('lila.railAncho', String(ajustes.railAncho));
-    if (ajustes.dockAlto !== undefined) localStorage.setItem('lila.dockAlto', String(ajustes.dockAlto));
-    if (ajustes.paneles !== undefined) localStorage.setItem('lila.paneles', JSON.stringify(ajustes.paneles));
-    if (ajustes.ventanaEscenario !== undefined) localStorage.setItem('lila.ventanaEscenario', JSON.stringify(ajustes.ventanaEscenario));
-    if (ajustes.ventanaResultados !== undefined) localStorage.setItem('lila.ventanaResultados', JSON.stringify(ajustes.ventanaResultados));
-    if (ajustes.avanzado === true) localStorage.setItem('lila.avanzado', '1');
-    else if (ajustes.avanzado === false) localStorage.removeItem('lila.avanzado');
+    if (ajustes.tema !== undefined) localStorage.setItem(storageKey('tema'), ajustes.tema);
+    if (ajustes.densidad !== undefined) localStorage.setItem(storageKey('densidad'), ajustes.densidad);
+    if (ajustes.idioma !== undefined) localStorage.setItem(storageKey('idioma'), ajustes.idioma);
+    if (ajustes.temas !== undefined) localStorage.setItem(storageKey('temas'), JSON.stringify(ajustes.temas));
+    if (ajustes.seguirSistema !== undefined) localStorage.setItem(storageKey('seguirSistema'), ajustes.seguirSistema ? '1' : '0');
+    if (ajustes.temaClaro !== undefined) localStorage.setItem(storageKey('temaClaro'), ajustes.temaClaro);
+    if (ajustes.temaOscuro !== undefined) localStorage.setItem(storageKey('temaOscuro'), ajustes.temaOscuro);
+    if (ajustes.avisoSeguirSistema !== undefined) localStorage.setItem(storageKey('avisoSeguirSistema'), ajustes.avisoSeguirSistema ? '1' : '0');
+    if (ajustes.panelAncho !== undefined) localStorage.setItem(storageKey('panelAncho'), String(ajustes.panelAncho));
+    if (ajustes.paletaAncho !== undefined) localStorage.setItem(storageKey('paletaAncho'), String(ajustes.paletaAncho));
+    if (ajustes.railAncho !== undefined) localStorage.setItem(storageKey('railAncho'), String(ajustes.railAncho));
+    if (ajustes.dockAlto !== undefined) localStorage.setItem(storageKey('dockAlto'), String(ajustes.dockAlto));
+    if (ajustes.paneles !== undefined) localStorage.setItem(storageKey('paneles'), JSON.stringify(ajustes.paneles));
+    if (ajustes.ventanaEscenario !== undefined) localStorage.setItem(storageKey('ventanaEscenario'), JSON.stringify(ajustes.ventanaEscenario));
+    if (ajustes.ventanaResultados !== undefined) localStorage.setItem(storageKey('ventanaResultados'), JSON.stringify(ajustes.ventanaResultados));
+    if (ajustes.avanzado === true) localStorage.setItem(storageKey('avanzado'), '1');
+    else if (ajustes.avanzado === false) localStorage.removeItem(storageKey('avanzado'));
   } catch { /* sin almacenamiento (modo privado): no persiste, no rompe */ }
 }
 /** Each system scheme's Lila theme: the slots' defaults (#472). */
@@ -703,7 +704,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const altoDock = Math.min(dockAlto, dockMax(altoVentana));
   /** Compact (icons only) palette; lifted from `Paleta` so the divider can snap to it (#406). */
   const [compacta, setCompacta] = useState(() => {
-    try { return localStorage.getItem('lila.paleta') === 'compacta'; } catch { return false; }
+    try { return localStorage.getItem(storageKey('paleta')) === 'compacta'; } catch { return false; }
   });
   /**
    * Which regions each mode shows (#412). Written by the toggles only, through the ref, and
@@ -2700,7 +2701,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
 
   /** The compact palette keeps its own `localStorage` key, as before #406 (web and desktop). */
   function guardarCompacta(activa: boolean): void {
-    try { localStorage.setItem('lila.paleta', activa ? 'compacta' : 'normal'); } catch { /* private mode: nothing persists, nothing breaks */ }
+    try { localStorage.setItem(storageKey('paleta'), activa ? 'compacta' : 'normal'); } catch { /* private mode: nothing persists, nothing breaks */ }
   }
   function cambiarCompacta(): void {
     guardarCompacta(!compacta);

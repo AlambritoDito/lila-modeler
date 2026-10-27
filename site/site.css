@@ -82,6 +82,8 @@ button { font-family: inherit; }
 .btn-ghost { background: none; border-color: transparent; color: var(--fg-muted); padding-inline: 6px; }
 .btn-ghost:hover { background: none; color: var(--accent-primary); }
 .btn-sm { font-size: 13px; padding: 7px 12px; border-radius: 6px; }
+.cta-ver { font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: inherit; opacity: 0.8; }
+.cta-ver:empty { display: none; }
 .chip {
   font-family: var(--font-mono); font-size: 11px; font-weight: 700; padding: 7px 9px; border-radius: 6px;
   border: 1px solid var(--border); background: var(--bg-surface); color: var(--fg-muted); cursor: pointer;

@@ -90,7 +90,8 @@ and Spanish catalogs so the early controller can use them without importing Reac
 
 ## Verification
 
-After `npm run build:pages`, `node tools/capture-branding.mjs` checks browser behavior
+After `npm run build:pages -- --stable-tag HEAD` (so `_site/app/` is the checked-out code, not
+the last Release), `node tools/capture-branding.mjs` checks browser behavior
 and writes review screenshots into `output/branding/review/`. After building web with
 the default base and desktop, `node tools/check-branding-desktop.mjs` uses a temporary
 profile to verify that file-open requests received during startup are preserved.

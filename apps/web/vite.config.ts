@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import { novedades } from './novedades';
 import { buildServiceWorker } from './serviceWorker';
+import { betaManifest, cachePrefix, channelOf } from './src/channel';
 
 // Stage local assets without moving theme sources or changing their public URLs.
 const here = (relative: string) => fileURLToPath(new URL(relative, import.meta.url));
@@ -15,8 +16,13 @@ mkdirSync(here('./public'), { recursive: true });
 cpSync(here('./src/theme/themes'), here('./public'), { recursive: true });
 cpSync(here('../../docs/design/branding/web'), here('./public/branding'), { recursive: true });
 // The web app manifest (#571, ADR-031): every URL in it is relative to its own, so the same file
-// works at `/` (dev, Electron) and at `/lila-modeler/app/` (Pages).
-cpSync(here('./manifest.webmanifest'), here('./public/manifest.webmanifest'));
+// works at `/` (dev, Electron) and at `/lila-modeler/app/` (Pages). Its `id` and `scope` resolve
+// against the base, so the beta at `/lila-modeler/beta/` is a separate installed app already;
+// it also gets its own name (#704, `src/channel.ts`).
+const base = process.env.LILA_WEB_BASE ?? '/';
+const beta = channelOf(base) === 'beta';
+const manifest = readFileSync(here('./manifest.webmanifest'), 'utf8');
+writeFileSync(here('./public/manifest.webmanifest'), beta ? betaManifest(manifest) : manifest);
 
 export default defineConfig({
   // The welcome's «What's new» paragraph (#425), from this version's CHANGELOG section.
@@ -28,11 +34,14 @@ export default defineConfig({
     apply: 'build',
     closeBundle() {
       const outDir = here('./dist');
-      writeFileSync(resolve(outDir, 'sw.js'), buildServiceWorker(here('./sw.js'), outDir, webVersion));
+      writeFileSync(resolve(outDir, 'sw.js'), buildServiceWorker(here('./sw.js'), outDir, webVersion, cachePrefix(base)));
     },
   }, {
     name: 'lila-branding',
-    transformIndexHtml: (html) => html.replaceAll('%LILA_APP_VERSION%', webVersion),
+    transformIndexHtml: (html) => {
+      const page = html.replaceAll('%LILA_APP_VERSION%', webVersion);
+      return beta ? page.replace('<title>Lila Modeler</title>', '<title>Lila Modeler Beta</title>') : page;
+    },
     configureServer(server) {
       // Preserve live theme editing: refreshing must read the edited source JSON.
       const sources = [
@@ -58,11 +67,11 @@ export default defineConfig({
   // The default `/` is what the desktop needs: Electron loads `lila://app/index.html`, so the
   // bundle has to keep referencing its assets from the root of that custom scheme. The GitHub
   // Pages demo (LILA-067) is served from a sub-path instead
-  // (`https://alambritodito.github.io/lila-modeler/app/`), and `.github/workflows/pages.yml`
-  // builds it with `LILA_WEB_BASE=/lila-modeler/app/`. Nothing else in the app hardcodes `/`:
+  // (`https://alambritodito.github.io/lila-modeler/app/`, and the beta at `…/beta/`, #704), and
+  // `tools/build-pages.mjs` builds each with its `LILA_WEB_BASE`. Nothing else in the app hardcodes `/`:
   // themes are fetched as `./<id>.json` (relative to the document) and the worker goes through
   // `new URL('./worker.ts', import.meta.url)`, which Vite rewrites with this same `base`.
-  base: process.env.LILA_WEB_BASE ?? '/',
+  base,
   // Ningún asset incrustado como `data:`: Vite inlinea por defecto lo que pesa menos de 4 KB y
   // los subconjuntos griego/cirílico de JetBrains Mono (#238) caen ahí, y el CSP de Electron
   // (`font-src 'self'`, `apps/desktop/src/main.ts`) los bloquea. Con archivos sueltos la CSP

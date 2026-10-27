@@ -44,7 +44,7 @@ root. Install Playwright in a separate tools directory so the repository lockfil
 
 ```bash
 npm ci
-npm run build:pages
+npm run build:pages -- --stable-tag HEAD
 capture_tools=$(mktemp -d)
 npm install --prefix "$capture_tools" playwright
 "$capture_tools/node_modules/.bin/playwright" install chromium
@@ -57,8 +57,9 @@ Alternatively use an already installed Playwright module and Chrome executable b
 ephemeral localhost port under `/lila-modeler/`, launches an isolated headless browser context,
 and closes both at the end. It does not touch an existing browser profile or publish anything.
 The PNGs come directly from CDP `Page.captureScreenshot` with `format: 'png'`; the script asserts
-PNG magic bytes and IHDR dimensions. Rebuild with `npm run build:pages` afterwards to copy the
-new images into `_site/img/`. Inspect every image at both sizes before committing.
+PNG magic bytes and IHDR dimensions. `--stable-tag HEAD` makes `_site/app/` the checked-out
+code rather than the last Release (#704). Rebuild the same way afterwards to copy the new images
+into `_site/img/`. Inspect every image at both sizes before committing.
 
 ## Data and acceptance
 

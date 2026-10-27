@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { buildHash, precacheList, serviceWorkerSource } from '../serviceWorker';
+import { cachePrefix } from './channel';
 
 const read = (path: string): Buffer => readFileSync(new URL(path, import.meta.url));
 interface Icon { src: string; sizes: string; type: string; purpose?: string }
@@ -99,7 +100,7 @@ describe('service worker (#574)', () => {
   });
 
   /** Runs the worker for `version` with in-memory caches (shared across versions, like a browser). */
-  function worker(version: string, files: string[], store = new Map<string, Map<string, string>>()) {
+  function worker(version: string, files: string[], store = new Map<string, Map<string, string>>(), scope = SCOPE, prefix?: string) {
     const listeners: Record<string, (event: unknown) => void> = {};
     /** The `cache` mode of every precache request. */
     const modos: RequestCache[] = [];
@@ -127,11 +128,11 @@ describe('service worker (#574)', () => {
       delete: async (name: string) => store.delete(name),
     };
     const self = {
-      registration: { scope: SCOPE },
+      registration: { scope },
       clients: { claim: vi.fn(async () => undefined) },
       addEventListener: (type: string, fn: (event: unknown) => void) => { listeners[type] = fn; },
     };
-    new Function('self', 'caches', 'fetch', serviceWorkerSource(template, version, files))(self, caches, fetchMock);
+    new Function('self', 'caches', 'fetch', serviceWorkerSource(template, version, files, undefined, prefix))(self, caches, fetchMock);
     const dispatch = async (type: string, extra: object = {}) => {
       let pending: Promise<unknown> | undefined;
       const event = { ...extra, waitUntil: (p: Promise<unknown>) => { pending = p; }, respondWith: (p: Promise<unknown>) => { pending = p; } };
@@ -158,6 +159,23 @@ describe('service worker (#574)', () => {
     await w.dispatch('activate');
     expect([...store.keys()].sort()).toEqual(['another-app', 'lila-modeler-1.0.0']);
     expect(w.self.clients.claim).toHaveBeenCalled();
+  });
+
+  // #704: the stable app and the beta share the origin, hence one Cache Storage.
+  it('the stable and beta workers never delete each other\'s cache', async () => {
+    const BETA = 'https://alambritodito.github.io/lila-modeler/beta/';
+    const store = new Map<string, Map<string, string>>();
+    const beta = worker('1.1.0', ['index.html'], store, BETA, cachePrefix('/lila-modeler/beta/'));
+    await beta.dispatch('install');
+    await beta.dispatch('activate');
+    const stable = worker('1.0.0', ['index.html'], store, SCOPE, cachePrefix('/lila-modeler/app/'));
+    await stable.dispatch('install');
+    await stable.dispatch('activate');
+    expect([...store.keys()].sort()).toEqual(['lila-modeler-1.0.0', 'lila[/lila-modeler/beta/]-1.1.0']);
+    const betaNueva = worker('1.2.0', ['index.html'], store, BETA, cachePrefix('/lila-modeler/beta/'));
+    await betaNueva.dispatch('install');
+    await betaNueva.dispatch('activate');
+    expect([...store.keys()].sort()).toEqual(['lila-modeler-1.0.0', 'lila[/lila-modeler/beta/]-1.2.0']);
   });
 
   it('serves hashed assets from the cache, and caches what was not precached on first use', async () => {

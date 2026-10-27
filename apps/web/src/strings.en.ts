@@ -2189,6 +2189,12 @@ export const en = {
     /** The end of the replay on the time bar: one word, with the whole sentence in its title. */
     finCorto: 'End',
   },
+  /** #704: the band over the beta build on Pages (`AvisoBeta.tsx`). */
+  canal: {
+    betaTexto: 'Beta: the preview built from the latest code on main. Projects here are kept apart from the stable app.',
+    irEstable: 'Open the stable app',
+    cerrar: 'Close the beta notice',
+  },
   /** #653: the read-only viewer for phones and tablets (`Visor.tsx`). */
   visor: {
     modo: 'Viewer mode',

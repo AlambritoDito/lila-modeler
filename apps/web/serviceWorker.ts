@@ -19,17 +19,23 @@ export function precacheList(files: readonly string[]): string[] {
     .sort();
 }
 
+const PREFIX_PLACEHOLDER = "/* __LILA_CACHE_PREFIX__ */ 'lila-modeler-'";
+
 /**
  * The template with the version and the precache list filled in. `build` (a hash of the built
  * files) goes into the cache name too, so a deploy without a version bump still replaces the cache.
+ * `cachePrefix` is `cachePrefix(base)` from `src/channel.ts` (#704); the default is the stable one.
  */
-export function serviceWorkerSource(template: string, version: string, files: readonly string[], build?: string): string {
-  if (!template.includes("'__LILA_VERSION__'") || !template.includes('/* __LILA_PRECACHE__ */ []')) {
+export function serviceWorkerSource(
+  template: string, version: string, files: readonly string[], build?: string, cachePrefix = 'lila-modeler-',
+): string {
+  if (!template.includes("'__LILA_VERSION__'") || !template.includes('/* __LILA_PRECACHE__ */ []') || !template.includes(PREFIX_PLACEHOLDER)) {
     throw new Error('sw.js template placeholders are missing');
   }
   return template
     .replace("'__LILA_VERSION__'", JSON.stringify(build === undefined ? version : `${version}-${build}`))
-    .replace('/* __LILA_PRECACHE__ */ []', JSON.stringify(precacheList(files)));
+    .replace('/* __LILA_PRECACHE__ */ []', JSON.stringify(precacheList(files)))
+    .replace(PREFIX_PLACEHOLDER, JSON.stringify(cachePrefix));
 }
 
 /** Every file under `dir`, as POSIX paths relative to it. */
@@ -49,7 +55,7 @@ export function buildHash(outDir: string, files: readonly string[]): string {
 }
 
 /** Reads the template, fills it in for `outDir` and returns the worker's source. */
-export function buildServiceWorker(templatePath: string, outDir: string, version: string): string {
+export function buildServiceWorker(templatePath: string, outDir: string, version: string, cachePrefix?: string): string {
   const files = listFiles(outDir);
-  return serviceWorkerSource(readFileSync(templatePath, 'utf8'), version, files, buildHash(outDir, files));
+  return serviceWorkerSource(readFileSync(templatePath, 'utf8'), version, files, buildHash(outDir, files), cachePrefix);
 }
