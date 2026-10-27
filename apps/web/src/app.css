@@ -92,12 +92,20 @@ body {
   font-size: 12px;
 }
 
+/* The text wraps and the link and × keep their width, so on a phone the × stays on screen. */
+.aviso-beta > span {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .aviso-beta a {
+  flex: none;
+  white-space: nowrap;
   color: var(--accent-primary);
 }
 
 .aviso-beta .cerrar {
-  margin-left: auto;
+  flex: none;
   background: none;
   border: 0;
   color: var(--fg-muted);
