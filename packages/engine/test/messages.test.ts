@@ -30,7 +30,7 @@ const SEMANTICS = readFileSync(
 );
 
 /**
- * Los 62 códigos que emite `packages/engine/src`. El tipo obliga a que estén **todos** y a que no
+ * Los 63 códigos que emite `packages/engine/src`. El tipo obliga a que estén **todos** y a que no
  * sobre ninguno: un código nuevo sin su fila aquí no compila, y una fila de un código que ya no
  * existe tampoco.
  */
@@ -79,6 +79,7 @@ const COVERAGE: Record<ProblemCode, true> = {
   'W-ELEMENTO-SIN-PARAMETROS': true,
   'W-JOIN-BLOQUEADO': true,
   'W-MSGFLOW': true,
+  'W-MULTI-SIN-CARDINALIDAD': true,
   'W-NORMAL-NEGATIVA': true,
   'W-OR-JOIN-SIN-FORK': true,
   'W-OR-PROB-PARCIAL': true,
@@ -121,13 +122,13 @@ function callWithDummies(fn: (...args: unknown[]) => string): string {
 }
 
 describe('catálogo de mensajes (LILA-211)', () => {
-  test('el catálogo cubre exactamente los 62 códigos del motor', () => {
-    expect(CODES).toHaveLength(62);
+  test('el catálogo cubre exactamente los 63 códigos del motor', () => {
+    expect(CODES).toHaveLength(63);
     const fromCatalog = new Set(Object.keys(en.codes).map(codeOf));
     expect([...fromCatalog].sort()).toEqual(CODES);
   });
 
-  test('los 62 códigos son los que aparecen en `packages/engine/src`', () => {
+  test('los 63 códigos son los que aparecen en `packages/engine/src`', () => {
     const found = new Set<string>();
     // `src/project-fs/` is the project disk IO that moved from the desktop (#466): its `E-*` codes
     // (`E-CAMBIO-EXTERNO`, `E-CARPETA-OCUPADA`, …) are the desktop bridge's own vocabulary
@@ -192,7 +193,7 @@ describe('catálogo de mensajes (LILA-211)', () => {
     );
     const público = CODES.filter((code) => !INTERNAL_CODES.has(code));
 
-    expect(público).toHaveLength(51);
+    expect(público).toHaveLength(52);
     expect(INTERNAL_CODES.size).toBe(11);
     expect(público.filter((code) => !documented.has(code))).toEqual([]);
     expect([...documented].filter((code) => !CODES.includes(code as ProblemCode))).toEqual([]);

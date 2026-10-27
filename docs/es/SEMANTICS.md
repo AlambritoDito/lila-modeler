@@ -75,6 +75,7 @@ definida; todo lo demás cae en la sección 3 de este documento.
 | `bpmn:intermediateCatchEvent` con `timerEventDefinition` o `messageEventDefinition`, como rama de ese gateway | `timer` | espera con el tiempo propio de la rama, sin recurso (§9.1) |
 | `bpmn:task` y todas sus variantes (`userTask`, `serviceTask`, `sendTask`, `receiveTask`, `manualTask`, `scriptTask`, `businessRuleTask`) | `task` | trabajo con duración y recursos (§11) |
 | `bpmn:callActivity` | `task` | tarea con tiempo global (§4) |
+| `multiInstanceLoopCharacteristics` en una tarea o call activity, con `isSequential` ausente, `"false"`, `"0"`, `"true"` o `"1"` | `task` con `multiInstance` | `N` instancias por entrada, todas a la vez o una tras otra (§4.2, R-MI-1…6) |
 | `bpmn:subProcess` embebido (`triggeredByEvent="false"`, sin marcadores) | — | aplanado (§4) |
 | `bpmn:exclusiveGateway` | `xor` | divergente: §6; convergente: mezcla pass-through |
 | `bpmn:inclusiveGateway` | `or` | §7 |
@@ -154,7 +155,7 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
 | `bpmn:intermediateThrowEvent` con un disparador que no sea *none* ni un único mensaje (señal, escalamiento, enlace, compensación…), o con varios | `intermediateThrowEvent` | `intermediate throw event` | `evento intermedio de lanzamiento` |
 | `bpmn:eventBasedGateway` que no sea exclusivo, sin instanciar y con cada flujo de salida hacia un evento de rama de tiempo o de mensaje: `instantiate="true"`, `eventGatewayType="Parallel"`, cualquier otro elemento de rama, o sin flujo de salida | `eventBasedGateway` | `event-based gateway` | `gateway basado en eventos` |
 | `bpmn:complexGateway` | `complexGateway` | `complex gateway` | `gateway complejo` |
-| `multiInstanceLoopCharacteristics` | `multiInstanceMarker` | `multi-instance marker` | `marcador de multi-instancia` |
+| `multiInstanceLoopCharacteristics` en un subproceso, o con un literal de `isSequential` distinto de `true`, `1`, `false` o `0` (en una tarea o call activity está en el perfil, §4.2) | `multiInstanceMarker` | `multi-instance marker` | `marcador de multi-instancia` |
 | `standardLoopCharacteristics` | `loopMarker` | `loop marker on the activity` | `marcador de bucle en la actividad` |
 | `bpmn:transaction` | `transactionSubProcess` | `transaction subprocess` | `subproceso transaccional` |
 | `bpmn:adHocSubProcess` | `adHocSubProcess` | `ad-hoc subprocess` | `subproceso ad-hoc` |
@@ -311,6 +312,63 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
 - **R-PLAN-5 — El aplanado no cambia los números.** Un proceso con subproceso embebido y el mismo
   proceso aplanado a mano producen el mismo `RunResult` salvo los ids de los nodos internos.
   *(prueba: LILA-019)*
+
+### 4.2 Tarea multi-instancia (ADR-033)
+
+Una tarea o call activity con `multiInstanceLoopCharacteristics` ejecuta `N` **instancias** por
+cada entrada de un token: todas a la vez (paralela) o una tras otra (secuencial), y el token sale
+cuando terminan todas. Bizagi no simula este marcador; Lila sí desde 1.0 por decisión del dueño
+(ADR-033, `BIZAGI_PARITY.md`).
+
+El nodo del IR es una `task` con `multiInstance: { sequential, cardinality? }`. `isSequential` se
+lee del literal en bruto del XML, como `cancelActivity` (R-BND-10): ausente, `"false"` o `"0"` es
+paralela, `"true"` o `"1"` secuencial, y cualquier otro literal es `E-NOSOP`
+`multiInstanceMarker`. `cardinality` es el cuerpo de `loopCardinality` cuando, recortado, es un
+literal entero decimal (`/^\d+$/`, `0` incluido); un signo (`"+3"`, `"-2"`), una expresión o un
+cuerpo vacío lo dejan ausente. `completionCondition`, las entradas y salidas de datos y `behavior`
+se ignoran. En un subproceso el marcador sigue siendo `E-NOSOP` (§3).
+
+- **R-MI-1 — Sorteo de N.** `N` sale de `elements[<tarea>].instances`, una distribución
+  (`SCENARIO_FORMAT.md` § 2.5), si el escenario la declara; si no, de `cardinality`; si no,
+  `N = 1` (degradación, abajo). Con `instances` se toma una muestra `x` por entrada del flujo
+  derivado `<taskId>#instances` (§16, ADR-033 § 1.3), antes de la duración de cualquier
+  instancia, y `N = floor(max(0, x) + 0.5)` (redondeo hacia arriba en el medio). Con
+  `cardinality` o el valor por omisión no se sortea nada. `N` no tiene tope: como `triggerCount`,
+  un valor enorme cuesta lo que dice, y R-TOK-7 sigue contando eventos. `instances` en cualquier
+  elemento sin el marcador es `E-CAMPO-NO-APLICA`. *(prueba: #701)*
+- **R-MI-2 — Paralela.** Las `N` instancias se habilitan en el instante de llegada en orden
+  `1…N`. Cada una es una instancia de actividad con su propio `activityInstanceId` y su propia
+  muestra de `processingTime` del flujo de la tarea, sorteadas en ese orden. Cada habilitación
+  toma su propio lugar en la cola de recursos, en orden de instancia, así que las solicitudes
+  comparten `enabledAt` y siguen totalmente ordenadas por `(enabledAt, seq)` (R-REC-3): no hay
+  desempate nuevo. Compiten entre sí y con los demás tokens. *(prueba: #701)*
+- **R-MI-3 — Secuencial.** La instancia 1 se habilita en el instante de llegada y la `k + 1` en el
+  instante en que termina la `k`, después de que `k` suelte sus unidades, como una habilitación
+  nueva: se forma detrás de las solicitudes que ya esperan. Cada duración se sortea al habilitar
+  su instancia. *(prueba: #701)*
+- **R-MI-4 — Fin.** El token sale por el primer flujo saliente, con sus marcas OR, en el instante
+  en que termina la última instancia. Con `N = 0` sale en el mismo instante: sin instancias, sin
+  filas, sin `started`, sin armar eventos de borde y sin sorteo de borde; los flujos sí cuentan.
+  *(prueba: #701)*
+- **R-MI-5 — Resultados.** `elements[tarea].started`/`completed` cuentan instancias ("Instances
+  started/completed" de Bizagi); `processing`, `resourceWait`, `offHoursWait` y
+  `queueLength` son por instancia, igual que las filas del log de eventos;
+  `fixedCostTotal = fixedCost × instancias completadas`. El caso conserva un solo token en la
+  tarea (R-TOK-2), así que los flujos de entrada y de salida cuentan una vez por entrada.
+  Oráculos comprobados a mano, con una duración constante `d`: secuencial `N = 3` sin recursos
+  tarda `3d`; paralela `N = 3` con una unidad tarda `3d`, con tres unidades `d`. *(prueba: #701)*
+- **R-MI-6 — Eventos de borde, terminate y parada.** La actividad está abierta desde la entrada
+  hasta que el token sale, y eso es lo que comprueba R-BND-4. Un temporizador de borde se arma una
+  vez por entrada, desde el instante de entrada y antes del `done` de cualquier instancia, así que
+  un plazo exactamente igual al trabajo interrumpe (R-BND-7). Si interrumpe, cierra todas las
+  instancias abiertas como `interrupted` (suelta las unidades concedidas y retira las solicitudes
+  en cola, R-BND-5) y las instancias secuenciales aún no habilitadas no se crean nunca; si no
+  interrumpe, dispara a lo sumo una vez por entrada (R-BND-11). `terminate` y la parada tratan
+  cada instancia abierta como dicen R-EVT-6 y R-ARR-5. *(prueba: #701)*
+- **Degradación.** Ni `instances` ni un `loopCardinality` numérico: una instancia, exactamente como
+  si el marcador no estuviera, más el aviso `W-MULTI-SIN-CARDINALIDAD` que cita la tarea, emitido
+  cada vez que un token llega a ella y agregado como cualquier otro aviso (§17). Nunca un error y
+  nunca variabilidad inventada (R-DEG-5).
 
 ---
 
@@ -1142,7 +1200,7 @@ Desde LILA-211 los textos de todos estos códigos viven en un catálogo por idio
 traducción; los dos son normativos, cada uno para su idioma, y esta sección da los dos textos donde
 los fija literalmente. El código (`E-…`, `W-…`) y el id de regla (`R-…`) **no** se traducen nunca.
 Un test (`packages/engine/test/messages.test.ts`) mantiene en paso esta sección, el catálogo y el
-código: los 61 códigos del catálogo son exactamente los que emite `packages/engine/src`, `en` y
+código: los 63 códigos del catálogo son exactamente los que emite `packages/engine/src`, `en` y
 `es` declaran las mismas entradas, y ningún literal `"CÓDIGO: …"` vive fuera del catálogo.
 
 Errores (abortan; los de validación se devuelven en `errors[]`, los de ejecución se lanzan; la CLI sale con 1):
@@ -1171,7 +1229,7 @@ Errores (abortan; los de validación se devuelven en `errors[]`, los de ejecuci�
 | `E-CAPACIDAD-Y-CALENDARIO` | `capacity` por intervalos y `calendar` del pool declarados a la vez (R-CAL-11, R16 de `SCENARIO_FORMAT.md`) |
 | `E-REF-DESCONOCIDA` | `calendar` que no existe en `calendars` (lint de `validateScenario`), incluido el de cada tramo de `capacity` |
 | `E-CAL-DESCONOCIDO` | lo mismo, cazado por el guardia de `core/sim.ts` (ver R-CAL-10 y R-CAL-11) |
-| `E-CAMPO-NO-APLICA` | campo declarado en un elemento que no lo admite (R4, R5, R14) |
+| `E-CAMPO-NO-APLICA` | campo declarado en un elemento que no lo admite (R4, R5, R14; `instances` fuera de una tarea multi-instancia, R-MI-1) |
 | `E-CAL-VACIO` | calendario sin intervalos, calendario cuyas aperturas caen todas en sus propios festivos (R-CAL-14, cita `calendars.<nombre>`), o intersección de calendarios vacía (cita la tarea) |
 | `E-SIN-PARADA` | ni `run.duration` ni ningún `triggerCount` |
 | `E-RESERVADO` | campo reservado (§15, texto exacto en R-RES-2) |
@@ -1225,7 +1283,9 @@ ramas no tienen tiempo, R-EVG-6: cada caso tiene su propio texto),
 `W-TIMER-SIN-TIEMPO` (un timer intermedio sin `processingTime` retarda 0 segundos, R-EVT-2; como
 rama de un gateway basado en eventos nunca dispara, R-EVG-5),
 `W-BORDE-SIN-TIEMPO` (temporizador de borde sin `processingTime`: nunca
-dispara sobre su host, interrumpa o no, R-BND-8), `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
+dispara sobre su host, interrumpa o no, R-BND-8), `W-MULTI-SIN-CARDINALIDAD` (tarea
+multi-instancia sin `instances` ni un `loopCardinality` numérico: ejecuta una instancia, §4.2),
+`W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
 `W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`, `W-COND-INALCANZABLE` (un `flowTaken` que no puede
 preceder a su gateway, R-COND-4), `W-OR-PROB-PARCIAL` (un OR con `probability` en algunas salidas
 pero no en todas, R-OR-2), `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
@@ -1398,6 +1458,7 @@ guardia de `core/` (unificarlos toca `core/`; ver R-CAL-10).
 | R-PLAN-1, R-PLAN-2, R-PLAN-5 | subproceso embebido aplanado | LILA-019 |
 | R-PLAN-3 | subproceso sin tiempo propio | LILA-019 (`E-SUBPROC-PARAMETRO`: LILA-198) |
 | R-PLAN-4 | call activity = tarea con tiempo global | LILA-019 |
+| R-MI-1 … R-MI-6 | tarea multi-instancia, paralela y secuencial (ADR-033) | #701 (`packages/engine/test/multi-instance.test.ts`) |
 | R-TOK-1 | reloj en segundos desde `run.start` | LILA-037 |
 | R-TOK-2 | caso = conjunto de tokens | LILA-026 |
 | R-TOK-3 | heap `(t, seq)` | LILA-023, LILA-030 |

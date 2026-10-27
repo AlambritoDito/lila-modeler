@@ -72,6 +72,8 @@ export interface SimElement {
    * en una salida de un XOR divergente; gana la primera entrada cuyo `flowTaken` esté recorrido.
    */
   conditions?: readonly { readonly flowTaken: string; readonly probability: number }[] | undefined;
+  /** ADR-033 § 4 (R-MI-1): instances per entry of a multi-instance task, `floor(max(0, x) + 0.5)`. */
+  instances?: Distribution | undefined;
 }
 
 /** Un tramo de `resources[pool].capacity` por intervalos: `capacity` unidades durante `calendar`. */
@@ -475,7 +477,18 @@ type SimEvent =
       readonly nodeId: string;
     }
   /** R-CAL-11: la capacidad del pool acaba de subir; hay que despertar su cola. */
-  | { readonly t: number; readonly kind: 'capacity'; readonly poolId: string };
+  | { readonly t: number; readonly kind: 'capacity'; readonly poolId: string }
+  /**
+   * R-MI-6: the boundary timer `nodeId` of a multi-instance task falls due over the whole entry
+   * `entryId`, not over one of its instances.
+   */
+  | {
+      readonly t: number;
+      readonly kind: 'multiBoundary';
+      readonly entryId: string;
+      readonly caseId: number;
+      readonly nodeId: string;
+    };
 
 interface ActivityState {
   readonly id: string;
@@ -490,6 +503,27 @@ interface ActivityState {
   requestId?: string;
   allocation?: ResourceAllocation;
   startedAt: number | null;
+  closed: boolean;
+  /** ADR-033 § 4: the multi-instance entry this activity is one instance of. */
+  readonly entry?: MultiInstanceEntry;
+}
+
+/**
+ * ADR-033 § 4: one entry of a token into a multi-instance task. The case keeps one token there
+ * (R-MI-5) until its last instance completes (R-MI-4) or a boundary interrupts it (R-MI-6).
+ */
+interface MultiInstanceEntry {
+  readonly id: string;
+  readonly caseId: number;
+  readonly nodeId: string;
+  readonly marks: readonly number[];
+  readonly sequential: boolean;
+  /** `N` of this entry (R-MI-1). */
+  readonly total: number;
+  /** Instances enabled so far; a sequential entry enables the next one as each completes. */
+  enabled: number;
+  /** Ids of the instances still open, in the order they were enabled. */
+  readonly open: Set<string>;
   closed: boolean;
 }
 
@@ -948,6 +982,218 @@ export function runReplication(
     if (flowId !== undefined) emit([flowId], caseId, marks, t);
   };
 
+  /* --- actividades: tareas y timers ------------------------------- */
+
+  /** R-EVT-1: timer sin recurso. R-DEG-3 / R-EVT-2: sin processingTime dura 0. */
+  const sampleDuration = (nodeId: string, type: Node['type']): number => {
+    const dist = spec[nodeId]?.processingTime;
+    if (dist === undefined) {
+      if (type === 'timer') {
+        warn(coded('W-TIMER-SIN-TIEMPO', M['W-TIMER-SIN-TIEMPO'](nodeId)));
+      } else if (tareasSinTiempo.length === 0) {
+        warn(coded('W-TAREA-SIN-TIEMPO', M['W-TAREA-SIN-TIEMPO/elemento'](nodeId)));
+      }
+      return 0;
+    }
+    return Math.max(0, sample(dist, rngFor(nodeId)));
+  };
+
+  /** Abre una instancia de actividad del caso, habilitada en `t`; no agenda nada todavía. */
+  const createActivity = (
+    node: Node,
+    nodeId: string,
+    caseId: number,
+    marks: readonly number[],
+    t: number,
+    duration: number,
+    entry?: MultiInstanceEntry,
+  ): ActivityState => {
+    const declaredResources = node.type === 'task' ? (spec[nodeId]?.resources ?? []) : [];
+    // R-REC-4 / R-REC-6: los requisitos conservan el orden declarado en el escenario. La
+    // adquisición AND es atómica en `ResourceManager` (no hay retención parcial que deshacer)
+    // y la selección OR concede una sola alternativa, la primera declarada que esté libre.
+    const requirements: ResourceRequirement[] = declaredResources.map((use) => ({
+      poolId: use.ref,
+      quantity: use.quantity ?? 1,
+    }));
+    // R-CAL-4: mientras la tarea espera no se sabe qué pool la atenderá, así que una OR
+    // arrastra solo el calendario del elemento; `startAllocations` lo afina al conceder. En
+    // AND y sin recursos la combinación ya es definitiva.
+    const calendar = hasCalendars
+      ? calendarFor(
+          nodeId,
+          spec[nodeId]?.selection === 'or' ? NO_POOLS : requirements.map((requirement) => requirement.poolId),
+        )
+      : undefined;
+    // R-CAL-5 / R-EVT-3: sin recursos (y en un timer) el trabajo arranca en la apertura.
+    const startedAt = requirements.length > 0
+      ? null
+      : calendar === undefined
+        ? t
+        : nextOpen(calendar, t);
+    const activity: ActivityState = {
+      id: String(nextActivityInstanceId++),
+      caseId,
+      nodeId,
+      marks,
+      enabledAt: t,
+      duration,
+      requirements,
+      calendar,
+      startedAt,
+      closed: false,
+      ...(entry === undefined ? {} : { entry }),
+    };
+    activities.set(activity.id, activity);
+    caseStates[caseId - 1]?.activityIds.add(activity.id);
+    return activity;
+  };
+
+  /**
+   * R-BND-2/3/7: el borde cuenta desde que la tarea queda habilitada, con su propio flujo
+   * de aleatorios (por eso las corridas sin bordes no cambian) y a reloj de pared salvo que
+   * el borde declare calendario. Se encola **antes** que el `done` para que, con el mismo
+   * instante, el desempate por orden de inserción lo gane el borde: interrumpa (R-BND-7) o
+   * no (R-BND-13, donde «ganar» es encontrar al host todavía abierto y disparar). On a
+   * multi-instance task it is armed once per entry, over the whole entry (R-MI-6).
+   */
+  const armBoundaries = (
+    hostId: string,
+    caseId: number,
+    t: number,
+    target: { readonly activityInstanceId: string } | { readonly entryId: string },
+  ): void => {
+    for (const boundaryId of boundariesByHost.get(hostId) ?? []) {
+      const boundaryDist = spec[boundaryId]?.processingTime;
+      // R-BND-8: sin tiempo no hay plazo que vencer; el borde nunca dispara.
+      if (boundaryDist === undefined) {
+        warn(coded('W-BORDE-SIN-TIEMPO', M['W-BORDE-SIN-TIEMPO'](boundaryId, hostId)));
+        continue;
+      }
+      const delay = Math.max(0, sample(boundaryDist, rngFor(boundaryId)));
+      const boundaryCalendar = hasCalendars ? calendarFor(boundaryId, NO_POOLS) : undefined;
+      const at = boundaryCalendar === undefined
+        ? t + delay
+        : addWorkingTime(boundaryCalendar, nextOpen(boundaryCalendar, t), delay);
+      heap.push(
+        'entryId' in target
+          ? { t: at, kind: 'multiBoundary', entryId: target.entryId, caseId, nodeId: boundaryId }
+          : { t: at, kind: 'boundary', activityInstanceId: target.activityInstanceId, caseId, nodeId: boundaryId },
+      );
+    }
+  };
+
+  /** Agenda el fin de una actividad sin recursos, o pone en cola su solicitud. */
+  const scheduleActivity = (activity: ActivityState): void => {
+    if (activity.requirements.length === 0) {
+      heap.push({
+        t: activity.calendar === undefined
+          ? activity.enabledAt + activity.duration
+          : addWorkingTime(activity.calendar, activity.startedAt!, activity.duration),
+        kind: 'done',
+        activityInstanceId: activity.id,
+        caseId: activity.caseId,
+        nodeId: activity.nodeId,
+      });
+      return;
+    }
+    activity.requestId = activity.id;
+    startAllocations(resourceManager.enqueue({
+      id: activity.id,
+      enabledAt: activity.enabledAt,
+      requirements: activity.requirements,
+      selection: spec[activity.nodeId]?.selection,
+    }, activity.enabledAt));
+    // R-CAL-11: si se quedó en cola, hay que despertarla cuando suba la capacidad de alguno
+    // de sus pools; sin capacidad variable no agenda nada.
+    if (activity.allocation === undefined) {
+      for (const requirement of activity.requirements) scheduleCapacityRise(requirement.poolId, activity.enabledAt);
+    }
+  };
+
+  /* --- multi-instance tasks (ADR-033 § 4) --------------------------- */
+
+  /** Open multi-instance entries by id; an entry leaves the map when it closes. */
+  const entries = new Map<string, MultiInstanceEntry>();
+  let nextEntryId = 1;
+
+  /**
+   * R-MI-2/R-MI-3: enables the next instance of `entry` at `t`, with its own `processingTime`
+   * sample from the task's stream. Its enabling takes its own place in the resource queue, so
+   * instances enabled at the same instant are ordered by `(enabledAt, seq)` (R-REC-3).
+   */
+  const enableInstance = (entry: MultiInstanceEntry, node: Node, t: number): void => {
+    entry.enabled += 1;
+    if (isMeasuredCase(entry.caseId)) elements[entry.nodeId]!.started++;
+    const duration = sampleDuration(entry.nodeId, node.type);
+    const activity = createActivity(node, entry.nodeId, entry.caseId, entry.marks, t, duration, entry);
+    entry.open.add(activity.id);
+    scheduleActivity(activity);
+  };
+
+  /**
+   * R-MI-1…R-MI-4: a token reaches a multi-instance task. `N` is one sample of `instances` from
+   * the derived stream `<taskId>#instances`, drawn before any instance's duration; with
+   * `cardinality` or the default nothing is drawn. With `N = 0` the token leaves in the same
+   * instant: no instance, no row, no `started` and no boundary armed.
+   */
+  const enterMultiInstance = (
+    node: Node,
+    nodeId: string,
+    caseId: number,
+    marks: readonly number[],
+    t: number,
+  ): void => {
+    const multiInstance = node.multiInstance!;
+    const instances = spec[nodeId]?.instances;
+    let total: number;
+    if (instances !== undefined) {
+      total = Math.floor(Math.max(0, sample(instances, rngFor(`${nodeId}#instances`))) + 0.5);
+    } else if (multiInstance.cardinality !== undefined) {
+      total = multiInstance.cardinality;
+    } else {
+      warn(coded('W-MULTI-SIN-CARDINALIDAD', M['W-MULTI-SIN-CARDINALIDAD'](nodeId)));
+      total = 1;
+    }
+    if (total === 0) {
+      forward(node, caseId, marks, t);
+      return;
+    }
+    const entry: MultiInstanceEntry = {
+      id: String(nextEntryId++),
+      caseId,
+      nodeId,
+      marks,
+      sequential: multiInstance.sequential,
+      total,
+      enabled: 0,
+      open: new Set(),
+      closed: false,
+    };
+    entries.set(entry.id, entry);
+    // R-MI-6: armed once per entry, from the entry instant, before any instance's `done`.
+    armBoundaries(nodeId, caseId, t, { entryId: entry.id });
+    if (entry.sequential) enableInstance(entry, node, t);
+    else for (let k = 0; k < total; k++) enableInstance(entry, node, t);
+  };
+
+  /**
+   * R-MI-3/R-MI-4: an instance of `entry` completed at `t` (its units already released). A
+   * sequential entry enables the next instance as a new enabling, behind the requests already
+   * waiting; the token leaves through the first outgoing flow when the last instance completes.
+   */
+  const completeInstance = (entry: MultiInstanceEntry, activityId: string, node: Node, t: number): void => {
+    entry.open.delete(activityId);
+    if (entry.enabled < entry.total) {
+      if (entry.sequential) enableInstance(entry, node, t);
+      return;
+    }
+    if (entry.open.size > 0) return;
+    entry.closed = true;
+    entries.delete(entry.id);
+    forward(node, entry.caseId, entry.marks, t);
+  };
+
   /* --- generadores de llegadas (R-PERF-5) --------------------------- */
 
   const emitted = new Map<string, number>();
@@ -1035,6 +1281,12 @@ export function runReplication(
     if (next.kind === 'boundary') {
       const pending = activities.get(next.activityInstanceId);
       if (pending === undefined || pending.closed) continue;
+    }
+    // R-MI-6: the same for the boundary of a multi-instance entry that already closed, or whose
+    // case a `terminate` killed.
+    if (next.kind === 'multiBoundary') {
+      const pending = entries.get(next.entryId);
+      if (pending === undefined || pending.closed || caseStates[next.caseId - 1]?.alive !== true) continue;
     }
     // R-EVT-5 / R-BND-9: el `done` de una actividad que ya cerró otro evento —el `terminate` que
     // mató el caso, o el borde que interrumpió al host— tampoco es un evento del modelo. Se
@@ -1134,7 +1386,8 @@ export function runReplication(
       // Completar una tarea incluye recorrer sus flujos salientes instantáneos (R-TOK-4).
       // Una cancelación activada por onEvent se observa después de cerrar esa transición
       // atómica, nunca entre el contador/row de la tarea y su forward.
-      forward(node, next.caseId, activity.marks, next.t);
+      if (activity.entry === undefined) forward(node, next.caseId, activity.marks, next.t);
+      else completeInstance(activity.entry, activity.id, node, next.t);
       if (isAborted()) {
         cancelled = true;
         stoppedAt = clock;
@@ -1182,6 +1435,51 @@ export function runReplication(
       continue;
     }
 
+    if (next.kind === 'multiBoundary') {
+      const entry = entries.get(next.entryId);
+      if (entry === undefined || entry.closed) continue;
+      // R-MI-6 / R-BND-6: one whole firing, with no log row of its own.
+      if (isMeasuredCase(next.caseId)) {
+        counters.started++;
+        counters.completed++;
+      }
+      if (node.interrupting === false) {
+        // R-BND-11/12: the entry keeps running and the firing adds a token with no OR marks.
+        if (node.outgoing[0] !== undefined) {
+          state.tokens += 1;
+          forward(node, next.caseId, NO_MARKS, next.t);
+        }
+      } else {
+        // R-MI-6 / R-BND-5: every open instance closes `interrupted`, their requests are dropped
+        // together (as `terminate` does, so a unit freed by one is never granted to a sibling
+        // that is being cancelled), and sequential instances not yet enabled are never created.
+        entry.closed = true;
+        entries.delete(entry.id);
+        const requestIds: string[] = [];
+        for (const activityId of entry.open) {
+          const activity = activities.get(activityId);
+          if (activity === undefined || activity.closed) continue;
+          closeActivity(activity, next.t, 'interrupted');
+          if (activity.requestId !== undefined) requestIds.push(activity.requestId);
+        }
+        entry.open.clear();
+        startAllocations(resourceManager.cancel(requestIds, next.t));
+        forward(node, next.caseId, entry.marks, next.t);
+      }
+      if (isAborted()) {
+        cancelled = true;
+        stoppedAt = clock;
+        break simulation;
+      }
+      continue;
+    }
+
+    // ADR-033 § 4: a multi-instance task counts its instances, not the token's entry (R-MI-5).
+    if (node.multiInstance !== undefined) {
+      enterMultiInstance(node, next.nodeId, next.caseId, next.marks, next.t);
+      continue;
+    }
+
     if (isMeasuredCase(next.caseId)) counters.started++;
 
     switch (node.type) {
@@ -1193,102 +1491,14 @@ export function runReplication(
 
       case 'task':
       case 'timer': {
-        // R-EVT-1: timer sin recurso. R-DEG-3 / R-EVT-2: sin processingTime dura 0.
-        const dist = spec[next.nodeId]?.processingTime;
-        if (dist === undefined) {
-          if (node.type === 'timer') {
-            warn(coded('W-TIMER-SIN-TIEMPO', M['W-TIMER-SIN-TIEMPO'](next.nodeId)));
-          } else if (tareasSinTiempo.length === 0) {
-            warn(coded('W-TAREA-SIN-TIEMPO', M['W-TAREA-SIN-TIEMPO/elemento'](next.nodeId)));
-          }
-        }
         // R-EVG-3: the winning branch of an event-based gateway arrives with its delay already
         // drawn — the very draw that won the race — so it is not sampled a second time here.
-        const duration =
-          next.duration ?? (dist === undefined ? 0 : Math.max(0, sample(dist, rngFor(next.nodeId))));
-        const declaredResources = node.type === 'task' ? (spec[next.nodeId]?.resources ?? []) : [];
-        // R-REC-4 / R-REC-6: los requisitos conservan el orden declarado en el escenario. La
-        // adquisición AND es atómica en `ResourceManager` (no hay retención parcial que deshacer)
-        // y la selección OR concede una sola alternativa, la primera declarada que esté libre.
-        const requirements: ResourceRequirement[] = declaredResources.map((use) => ({
-          poolId: use.ref,
-          quantity: use.quantity ?? 1,
-        }));
-        // R-CAL-4: mientras la tarea espera no se sabe qué pool la atenderá, así que una OR
-        // arrastra solo el calendario del elemento; `startAllocations` lo afina al conceder. En
-        // AND y sin recursos la combinación ya es definitiva.
-        const calendar = hasCalendars
-          ? calendarFor(
-              next.nodeId,
-              spec[next.nodeId]?.selection === 'or' ? NO_POOLS : requirements.map((requirement) => requirement.poolId),
-            )
-          : undefined;
-        // R-CAL-5 / R-EVT-3: sin recursos (y en un timer) el trabajo arranca en la apertura.
-        const startedAt = requirements.length > 0
-          ? null
-          : calendar === undefined
-            ? next.t
-            : nextOpen(calendar, next.t);
-        const activity: ActivityState = {
-          id: String(nextActivityInstanceId++),
-          caseId: next.caseId,
-          nodeId: next.nodeId,
-          marks: next.marks,
-          enabledAt: next.t,
-          duration,
-          requirements,
-          calendar,
-          startedAt,
-          closed: false,
-        };
-        activities.set(activity.id, activity);
-        state.activityIds.add(activity.id);
-        // R-BND-2/3/7: el borde cuenta desde que la tarea queda habilitada, con su propio flujo
-        // de aleatorios (por eso las corridas sin bordes no cambian) y a reloj de pared salvo que
-        // el borde declare calendario. Se encola **antes** que el `done` para que, con el mismo
-        // instante, el desempate por orden de inserción lo gane el borde: interrumpa (R-BND-7) o
-        // no (R-BND-13, donde «ganar» es encontrar al host todavía abierto y disparar).
-        for (const boundaryId of boundariesByHost.get(next.nodeId) ?? []) {
-          const boundaryDist = spec[boundaryId]?.processingTime;
-          // R-BND-8: sin tiempo no hay plazo que vencer; el borde nunca dispara.
-          if (boundaryDist === undefined) {
-            warn(coded('W-BORDE-SIN-TIEMPO', M['W-BORDE-SIN-TIEMPO'](boundaryId, next.nodeId)));
-            continue;
-          }
-          const delay = Math.max(0, sample(boundaryDist, rngFor(boundaryId)));
-          const boundaryCalendar = hasCalendars ? calendarFor(boundaryId, NO_POOLS) : undefined;
-          heap.push({
-            t: boundaryCalendar === undefined
-              ? next.t + delay
-              : addWorkingTime(boundaryCalendar, nextOpen(boundaryCalendar, next.t), delay),
-            kind: 'boundary',
-            activityInstanceId: activity.id,
-            caseId: next.caseId,
-            nodeId: boundaryId,
-          });
-        }
-        if (requirements.length === 0) {
-          heap.push({
-            t: calendar === undefined ? next.t + duration : addWorkingTime(calendar, startedAt!, duration),
-            kind: 'done',
-            activityInstanceId: activity.id,
-            caseId: activity.caseId,
-            nodeId: activity.nodeId,
-          });
-        } else {
-          activity.requestId = activity.id;
-          startAllocations(resourceManager.enqueue({
-            id: activity.id,
-            enabledAt: next.t,
-            requirements,
-            selection: spec[next.nodeId]?.selection,
-          }, next.t));
-          // R-CAL-11: si se quedó en cola, hay que despertarla cuando suba la capacidad de alguno
-          // de sus pools; sin capacidad variable no agenda nada.
-          if (activity.allocation === undefined) {
-            for (const requirement of requirements) scheduleCapacityRise(requirement.poolId, next.t);
-          }
-        }
+        const duration = next.duration ?? sampleDuration(next.nodeId, node.type);
+        const activity = createActivity(node, next.nodeId, next.caseId, next.marks, next.t, duration);
+        // R-BND-2/3/7: el borde cuenta desde que la tarea queda habilitada y se encola **antes**
+        // que el `done` (ver `armBoundaries`).
+        armBoundaries(next.nodeId, next.caseId, next.t, { activityInstanceId: activity.id });
+        scheduleActivity(activity);
         break;
       }
 
@@ -1433,6 +1643,11 @@ export function runReplication(
             if (activity === undefined || activity.closed) continue;
             closeActivity(activity, next.t, 'terminated');
             if (activity.requestId !== undefined) requestIds.push(activity.requestId);
+            // R-MI-6: an open entry always has an open instance, so this closes every one of them.
+            if (activity.entry !== undefined) {
+              activity.entry.closed = true;
+              entries.delete(activity.entry.id);
+            }
           }
           startAllocations(resourceManager.cancel(requestIds, next.t));
         }

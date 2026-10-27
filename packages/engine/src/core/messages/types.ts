@@ -84,6 +84,8 @@ export interface CoreCodeMessages {
   /** R-EVG-5: variant for a branch event of an event-based gateway, which never fires instead. */
   'W-TIMER-SIN-TIEMPO/rama': (nodeId: string, gatewayId: string) => string;
   'W-BORDE-SIN-TIEMPO': (nodeId: string, hostId: string) => string;
+  /** ADR-033 § 4 (#701): a multi-instance task with no `instances` and no numeric `loopCardinality`. */
+  'W-MULTI-SIN-CARDINALIDAD': (nodeId: string) => string;
   'W-OR-JOIN-SIN-FORK': (nodeId: string) => string;
   'W-JOIN-BLOQUEADO': (nodeId: string, cases: number) => string;
   /** R-EVG-6: variant for the token an event-based gateway with no armable branch keeps. */

@@ -66,6 +66,9 @@ describe('fieldsForKind (§ 2.5, columna «Applies to»)', () => {
     const delEsquema = new Set(Object.keys(ElementSchema.shape));
     // Los reservados de § 4 no los ofrece nadie a propósito: el motor los rechaza con error.
     const reservados = new Set(['priority', 'preempt', 'batch', 'conditions']);
+    // ADR-033 § 1.7: a task offers `instances` only when it has a multi-instance marker, and that
+    // control is #703's; until then the field is reachable only once declared (Times step).
+    const pendientes703 = new Set(['instances']);
     const ofrecidos = new Set(
       (['task', 'start', 'timer', 'end', 'terminate', 'flow'] as const).flatMap(
         (c) => fieldsForKind(c)!,
@@ -73,7 +76,7 @@ describe('fieldsForKind (§ 2.5, columna «Applies to»)', () => {
     );
     for (const campo of ofrecidos) expect(delEsquema.has(campo)).toBe(true);
     for (const campo of delEsquema) {
-      if (!reservados.has(campo)) expect(ofrecidos.has(campo)).toBe(true);
+      if (!reservados.has(campo) && !pendientes703.has(campo)) expect(ofrecidos.has(campo)).toBe(true);
     }
   });
 });

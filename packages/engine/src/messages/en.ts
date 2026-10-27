@@ -264,6 +264,7 @@ export const en: Catalog = {
       `the resource selection only makes sense together with the task's resources (${path}).`,
     'E-CAMPO-NO-APLICA/solo-flujo-xor': (path) =>
       `only accepted on a sequence flow leaving a diverging exclusive gateway (${path}).`,
+    'E-CAMPO-NO-APLICA/solo-multi': (path) => `only accepted on a multi-instance task (${path}).`,
     'E-TIMER-RECURSO': (path) => `a timer is a delay and consumes no resources (${path}).`,
     'E-REC-DESCONOCIDO/recurso': (path, ref) =>
       `the resource ${ref} does not exist in the list of resources (${path}).`,

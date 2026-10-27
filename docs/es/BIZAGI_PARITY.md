@@ -66,12 +66,12 @@ citan; no implica una promesa pública de paridad con Bizagi Modeler.
 | Temporizador de borde no interruptor sobre una tarea | ✓ | ✓ | — | Implementado (#81, segunda tajada: `SEMANTICS.md` R-BND-10…14) |
 | Event-based gateway (ramas de tiempo y de mensaje) | ✓ | ✓ | — | Implementado (#81, tercera rebanada: `SEMANTICS.md` R-EVG-1…7) |
 | Eventos de inicio y de fin de mensaje; eventos intermedios de lanzamiento (*none* y de mensaje) | no comprobado contra una corrida publicada | ✓ un inicio de mensaje es un inicio *none* (llegadas), un fin de mensaje un fin *none*, y un lanzamiento un hito que solo cuenta; el mensaje en sí no se simula | 1.0 | Implementado (#698: `SEMANTICS.md` R-MSG-1…2, R-THR-1…3; ADR-033) |
-| Marcador de bucle estándar y tarea multi-instancia (paralela o secuencial); evento de error adjunto a una tarea o a un subproceso; temporizador adjunto a un subproceso | no comprobado contra una corrida publicada (multi-instancia: ver la última fila) | bucle: un número de veces o una probabilidad de repetir; multi-instancia: N desde `loopCardinality` o una distribución; error: una probabilidad por finalización; temporizador del subproceso: un plazo sobre el subproceso aplanado | 1.0 | Especificado (ADR-033); implementación en #700, #701, #702 |
+| Marcador de bucle estándar; evento de error adjunto a una tarea o a un subproceso; temporizador adjunto a un subproceso | no comprobado contra una corrida publicada | bucle: un número de veces o una probabilidad de repetir; error: una probabilidad por finalización; temporizador del subproceso: un plazo sobre el subproceso aplanado | 1.0 | Especificado (ADR-033); implementación en #700, #702 |
 | Eventos de señal y de escalamiento, message catch y link events sueltos, boundary events que no son de tiempo ni de error interruptor, marcadores de bucle y de multi-instancia en un subproceso, event-based gateway paralelo o que instancia | parcial | error de validación explícito hasta que un usuario lo pida | — | No planificado (1.0: señal y escalamiento quedan fuera, #639) |
 | Parámetros desde event logs (Bizagi 4.0 process mining) | ✓ | fase minería (proceso Python separado) | — | No planificado (v1) |
 | **No** (Bizagi tampoco los simula) | | | | |
 | Complex gateway, choreography/conversation, transaccional, ad-hoc; leer `.bpm` propietario | ✗ | ✗ | — | Fuera de alcance |
-| Multi-instancia | ✗ | planificada para 1.0 aunque Bizagi no la simule (decisión del dueño, ADR-033) | 1.0 | Especificada (ADR-033); implementación en #701 |
+| Tarea multi-instancia (paralela o secuencial) | ✗ | ✓ aunque Bizagi no la simule (decisión del dueño, ADR-033): `N` instancias por entrada desde `loopCardinality` o la distribución `instances` del escenario; cada instancia cuenta en "Instances started/completed" | 1.0 | Implementada (#701: `SEMANTICS.md` R-MI-1…6; ADR-033) |
 
 ---
 

@@ -89,6 +89,8 @@ export const coreEs: CoreCatalog = {
       `${nodeId}: sin tiempo de proceso; nunca dispara como rama de ${gatewayId}.`,
     'W-BORDE-SIN-TIEMPO': (nodeId, hostId) =>
       `${nodeId}: temporizador de borde sin tiempo de proceso; nunca dispara sobre ${hostId}.`,
+    'W-MULTI-SIN-CARDINALIDAD': (nodeId) =>
+      `${nodeId}: tarea multi-instancia sin instances en el escenario ni loopCardinality numérico; ejecuta una instancia.`,
     'W-OR-JOIN-SIN-FORK': (nodeId) =>
       `${nodeId}: llegó un token sin marca de división; se comporta como mezcla.`,
     'W-JOIN-BLOQUEADO': (nodeId, cases) =>

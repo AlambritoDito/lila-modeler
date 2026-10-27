@@ -99,7 +99,9 @@ const RESERVADOS = new Set(['priority', 'preempt', 'batch', 'conditions']);
  */
 export const CAMPOS_DE_PASO: Record<PasoId, readonly string[]> = {
   arrivals: ['interTriggerTimer', 'triggerCount'],
-  times: ['processingTime', 'fixedCost', 'priority', 'preempt', 'batch'],
+  // `instances` (ADR-033 § 4) is shown here only when a scenario already declares it: no class
+  // offers it until #703 adds the control for a task with a multi-instance marker.
+  times: ['processingTime', 'fixedCost', 'instances', 'priority', 'preempt', 'batch'],
   routes: ['probability', 'conditions'],
   resources: ['resources', 'selection'],
   calendars: ['calendar'],

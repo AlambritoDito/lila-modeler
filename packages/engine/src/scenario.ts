@@ -409,6 +409,8 @@ function buildSchemas(locale: Locale) {
     conditions: z
       .array(z.strictObject({ flowTaken: z.string(), probability: z.number() }))
       .optional(),
+    // ADR-033 § 4 (#701): instances per entry of a multi-instance task, `floor(max(0, x) + 0.5)`.
+    instances: DistributionSchema.optional(),
     // § 4 — reservados.
     priority: z.unknown().optional(),
     preempt: z.unknown().optional(),
@@ -689,7 +691,7 @@ function checkElementDistributions(
   element: ElementSpec,
   locale: Locale,
 ): void {
-  for (const field of ['processingTime', 'interTriggerTimer'] as const) {
+  for (const field of ['processingTime', 'interTriggerTimer', 'instances'] as const) {
     const dist = element[field];
     if (dist === undefined) continue;
     for (const warning of checkDistribution(dist, locale)) {
@@ -1015,6 +1017,16 @@ export function validateScenario(
         path: `elements.${id}.calendar`,
         severity: 'error',
         message: M['E-REF-DESCONOCIDA'](`elements.${id}.calendar`, element.calendar),
+      });
+    }
+
+    // ADR-033 § 4 (#701) — `instances` only on a task with a multi-instance marker.
+    if (element.instances !== undefined && node?.multiInstance === undefined) {
+      problems.push({
+        code: 'E-CAMPO-NO-APLICA',
+        path: `elements.${id}.instances`,
+        severity: 'error',
+        message: M['E-CAMPO-NO-APLICA/solo-multi'](`elements.${id}.instances`),
       });
     }
 

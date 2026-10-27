@@ -269,6 +269,7 @@ export const es: Catalog = {
       `la selección de recursos solo tiene sentido junto con los recursos de la tarea (${path}).`,
     'E-CAMPO-NO-APLICA/solo-flujo-xor': (path) =>
       `solo se admite en un flujo de secuencia que sale de una compuerta exclusiva divergente (${path}).`,
+    'E-CAMPO-NO-APLICA/solo-multi': (path) => `solo se admite en una tarea multi-instancia (${path}).`,
     'E-TIMER-RECURSO': (path) => `un temporizador es un retardo y no consume recursos (${path}).`,
     'E-REC-DESCONOCIDO/recurso': (path, ref) =>
       `el recurso ${ref} no existe en la lista de recursos (${path}).`,

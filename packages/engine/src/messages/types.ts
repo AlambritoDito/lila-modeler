@@ -53,6 +53,8 @@ export interface OuterCodeMessages {
   'E-CAMPO-NO-APLICA/solo-tarea': (path: string) => string;
   'E-CAMPO-NO-APLICA/selection': (path: string) => string;
   'E-CAMPO-NO-APLICA/solo-flujo-xor': (path: string) => string;
+  /** ADR-033 § 4 (#701): `instances` on an element without a multi-instance marker. */
+  'E-CAMPO-NO-APLICA/solo-multi': (path: string) => string;
   'E-TIMER-RECURSO': (path: string) => string;
   'E-REC-DESCONOCIDO/recurso': (path: string, ref: string) => string;
   'E-REC-DUPLICADO/ref': (path: string, ref: string) => string;

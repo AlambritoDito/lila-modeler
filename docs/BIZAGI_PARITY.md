@@ -65,12 +65,12 @@ cite it; it does not imply a public promise that Lila matches Bizagi Modeler.
 | Non-interrupting boundary timer on a task | ✓ | ✓ | — | Implemented (#81, second slice: `SEMANTICS.md` R-BND-10…14) |
 | Event-based gateway (timer and message branches) | ✓ | ✓ | — | Implemented (#81, third slice: `SEMANTICS.md` R-EVG-1…7) |
 | Message start and end events; intermediate throw events (none and message) | not checked against a published run | ✓ a message start is a none start (arrivals), a message end a none end, and a throw event a milestone that only counts; the message itself is not simulated | 1.0 | Implemented (#698: `SEMANTICS.md` R-MSG-1…2, R-THR-1…3; ADR-033) |
-| Standard loop marker and multi-instance task (parallel or sequential); error boundary event on a task or a sub-process; boundary timer on a sub-process | not checked against a published run (multi-instance: see the last row) | loop: a count or a probability of repeating; multi-instance: N from `loopCardinality` or a distribution; error: a probability per completion; sub-process timer: a deadline over the flattened sub-process | 1.0 | Specified (ADR-033); implementation in #700, #701, #702 |
+| Standard loop marker; error boundary event on a task or a sub-process; boundary timer on a sub-process | not checked against a published run | loop: a count or a probability of repeating; error: a probability per completion; sub-process timer: a deadline over the flattened sub-process | 1.0 | Specified (ADR-033); implementation in #700, #702 |
 | Signal and escalation events, standalone message catch and link events, boundary events other than a timer or an interrupting error, loop and multi-instance markers on a sub-process, parallel or instantiating event-based gateway | partial | explicit validation error until a user asks for it | — | Not planned (1.0: signal and escalation stay out, #639) |
 | Parameters from event logs (Bizagi 4.0 process mining) | ✓ | mining phase (separate Python process) | — | Not planned (v1) |
 | **No** (Bizagi does not simulate these either) | | | | |
 | Complex gateway, choreography/conversation, transactional, ad-hoc; reading the proprietary `.bpm` | ✗ | ✗ | — | Out of scope |
-| Multi-instance | ✗ | planned for 1.0 although Bizagi does not simulate it (owner's decision, ADR-033) | 1.0 | Specified (ADR-033); implementation in #701 |
+| Multi-instance task (parallel or sequential) | ✗ | ✓ although Bizagi does not simulate it (owner's decision, ADR-033): `N` instances per entry from `loopCardinality` or the scenario's `instances` distribution; each instance counts in "Instances started/completed" | 1.0 | Implemented (#701: `SEMANTICS.md` R-MI-1…6; ADR-033) |
 
 ---
 
