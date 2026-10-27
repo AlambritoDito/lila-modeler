@@ -292,3 +292,50 @@ it('accepts the visual fixture through the browser simulation gate', async () =>
     { 'concurrent-boundary.scenario.json': boundaryScenario }, 'concurrent-boundary.bpmn', { locale: 'en' });
   expect(prepared.ir.nodes.Boundary?.interrupting).toBe(false);
 });
+
+describe('error boundary events (ADR-033 § 5, #702)', () => {
+  /** Start → W → [After →] End, with an interrupting timer TB → EndT and an error EB → [Fix →] EndE. */
+  const xml = (withEvidence: boolean) => `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="urn:lila:replay-test">
+    <bpmn:process id="P" isExecutable="true">
+      <bpmn:startEvent id="Start" />
+      <bpmn:sequenceFlow id="F_In" sourceRef="Start" targetRef="W" />
+      <bpmn:task id="W" />
+      <bpmn:sequenceFlow id="F_Ok" sourceRef="W" targetRef="${withEvidence ? 'After' : 'End'}" />
+      ${withEvidence ? '<bpmn:task id="After" /><bpmn:sequenceFlow id="F_After" sourceRef="After" targetRef="End" />' : ''}
+      <bpmn:endEvent id="End" />
+      <bpmn:boundaryEvent id="TB" attachedToRef="W"><bpmn:timerEventDefinition id="DT" /></bpmn:boundaryEvent>
+      <bpmn:sequenceFlow id="F_T" sourceRef="TB" targetRef="EndT" />
+      <bpmn:endEvent id="EndT" />
+      <bpmn:boundaryEvent id="EB" attachedToRef="W"><bpmn:errorEventDefinition id="DE" /></bpmn:boundaryEvent>
+      <bpmn:sequenceFlow id="F_E" sourceRef="EB" targetRef="${withEvidence ? 'Fix' : 'EndE'}" />
+      ${withEvidence ? '<bpmn:task id="Fix" /><bpmn:sequenceFlow id="F_Fix" sourceRef="Fix" targetRef="EndE" />' : ''}
+      <bpmn:endEvent id="EndE" />
+    </bpmn:process>
+  </bpmn:definitions>`;
+  const scenario = (elements: Record<string, unknown>) => ({
+    version: 1, name: 'Synthetic error boundary', run: { start: '2026-09-19T00:00:00Z', seed: 42, replications: 1 },
+    elements: { Start: { triggerCount: 1 }, W: { processingTime: seconds(10) }, After: { processingTime: seconds(1) }, Fix: { processingTime: seconds(1) }, ...elements },
+  });
+
+  it('an error boundary next to a timer does not hide the timer firing', async () => {
+    const data = await run(xml(false), scenario({ TB: { processingTime: seconds(4) } }));
+    count(data, ['Start', 'W', 'TB', 'EndT']);
+    expect(data.replay.moves.some((move) => move.flows.includes('F_T'))).toBe(true);
+  });
+
+  it('a completed host follows the error path only with evidence, and never invents the normal one', async () => {
+    const error = await run(xml(true), scenario({ TB: { processingTime: seconds(40) }, EB: { errorProbability: 1 } }));
+    expect(error.result.process.byEndEvent.EndE?.completed).toBe(1);
+    count(error, ['Start', 'W', 'EB', 'Fix', 'EndE']);
+    expect(error.replay.moves.some((move) => move.flows.includes('F_E'))).toBe(true);
+    expect(error.replay.moves.some((move) => move.flows.includes('F_Ok'))).toBe(false);
+
+    const normal = await run(xml(true), scenario({ TB: { processingTime: seconds(40) } }));
+    count(normal, ['Start', 'W', 'After', 'End']);
+    expect(normal.final.elements.EB?.completed ?? 0).toBe(0);
+
+    // Without an observable activity downstream, the replay draws neither way out.
+    const silent = await run(xml(false), scenario({ TB: { processingTime: seconds(40) }, EB: { errorProbability: 1 } }));
+    expect(silent.replay.moves.some((move) => move.flows.includes('F_Ok') || move.flows.includes('F_E'))).toBe(false);
+  });
+});

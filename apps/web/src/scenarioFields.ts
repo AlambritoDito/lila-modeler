@@ -33,6 +33,7 @@ export type ClaseElemento =
   | 'eventGateway'
   | 'timer'
   | 'throw'
+  | 'errorBoundary'
   | 'flow';
 
 /**
@@ -63,6 +64,9 @@ export function fieldsForKind(clase: ClaseElemento | null): readonly string[] | 
     // ADR-033 R-THR-2: a none or message intermediate throw event is a milestone with no field of
     // its own; its `fixedCost` would charge nothing, as on a start or an end.
     case 'throw':
+    // ADR-033 § 5: an error boundary takes `errorProbability`, whose control #703 adds; until then
+    // the panel offers nothing on it and a written value shows in Routes.
+    case 'errorBoundary':
     case 'xor':
     case 'or':
     case 'and':
@@ -104,7 +108,7 @@ export const CAMPOS_DE_PASO: Record<PasoId, readonly string[]> = {
   // with a loop marker. Until then Times only draws a `loop` the scenario already has (as a
   // generic fieldset) and is where a loop problem (`E-BUCLE-SIN-SALIDA`) lands.
   times: ['processingTime', 'fixedCost', 'priority', 'preempt', 'batch', 'loop'],
-  routes: ['probability', 'conditions'],
+  routes: ['probability', 'conditions', 'errorProbability'],
   resources: ['resources', 'selection'],
   calendars: ['calendar'],
   run: [],

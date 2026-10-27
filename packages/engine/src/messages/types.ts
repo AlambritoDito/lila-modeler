@@ -74,6 +74,11 @@ export interface OuterCodeMessages {
   /** R-OR-2, #398: one entry per undeclared flow of an OR that declares probability on some others. */
   'W-OR-PROB-PARCIAL': (path: string, flowId: string, gatewayId: string) => string;
 
+  /* --- scenario.ts (lint): error boundary events (ADR-033 § 5, #702) */
+  /** `sum` arrives already formatted as `String(Number(sum.toFixed(6)))`. */
+  'E-PROB-ERROR-SUMA/lint': (path: string, hostId: string, sum: string) => string;
+  'E-CAMPO-NO-APLICA/solo-error': (path: string) => string;
+
   /* --- scenario.ts (schema) ----------------------------------------- */
   'E-CLAVE-DESCONOCIDA': (keys: string) => string;
 }

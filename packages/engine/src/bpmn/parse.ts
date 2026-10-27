@@ -11,7 +11,7 @@
 import { BpmnModdle, type ModdleElement, type ModdleWarning } from 'bpmn-moddle';
 import lila from './lila.moddle.json' with { type: 'json' };
 import { newId, sanitizeXmlIds } from './ids.js';
-import type { Flow, Node, NodeType, ProcessIR, SourceWarning } from '../core/ir.js';
+import type { Flow, Node, NodeType, ProcessIR, SourceWarning, SubprocessIR } from '../core/ir.js';
 import type { ConstructionId } from '../messages/constructions.js';
 
 /** Toda variante de tarea se aplana a `task` (R-PERF-1); la call activity también (R-PLAN-4). */
@@ -152,37 +152,49 @@ function interruptingOf(
 }
 
 /**
- * Tarea a la que está adjunto un boundary event **dentro del perfil** (R-BND-1, R-BND-10), o
- * `undefined` si el boundary se queda fuera: no es de tiempo, trae más de un disparador, cuelga
- * de algo que no es una tarea soportada (un subproceso se aplana, así que no vale) o no tiene ni
- * un flujo de salida por el que continuar el token.
+ * Host of a boundary event **in the profile** (R-BND-1, R-BND-10) and whether it is a timer or an
+ * error boundary, or `undefined` if the boundary stays out: it is neither a timer nor an error
+ * event, it has more than one trigger, it hangs from something other than a supported task or an
+ * embedded sub-process in the profile, it has an incoming flow, or it has no outgoing flow to
+ * continue the token through.
  *
  * Interrumpir o no da igual aquí: las dos formas entran al perfil y se distinguen con
  * `node.interrupting`. El `"false"` (o `"0"`) explícito es el borde no interruptor y su ausencia
  * —como `"true"` o `"1"`— el interruptor; lo que sí deja al borde fuera es un `cancelActivity`
  * con cualquier otro literal (R-BND-10).
+ *
+ * ADR-033 § 5 and § 6: the host may also be an embedded sub-process in the profile, and an
+ * interrupting boundary with one `errorEventDefinition` enters too (`errorRef` is not read). A
+ * non-interrupting error boundary stays out. Whether a sub-process host has the entry and exit
+ * flows it needs is only known after flattening (`subprocessPassages`).
  */
-function boundaryTimerHost(
+function boundaryHost(
   el: ModdleElement,
   ctx: ProfileContext = NO_CONTEXT,
-): ModdleElement | undefined {
+): { host: ModdleElement; kind: 'timer' | 'error' } | undefined {
   const definitions = eventDefinitionsOf(el);
   const host = el.attachedToRef;
+  const definition = definitions[0]?.$type;
+  const kind =
+    definition === 'bpmn:TimerEventDefinition' ? 'timer' : definition === 'bpmn:ErrorEventDefinition' ? 'error' : undefined;
+  const interrupting = interruptingOf(el, ctx.rawCancel);
   if (
     el.parallelMultiple === true ||
     definitions.length !== 1 ||
-    definitions[0]?.$type !== 'bpmn:TimerEventDefinition' ||
+    kind === undefined ||
     host === undefined ||
-    !TASK_TYPES.has(host.$type) ||
+    !(TASK_TYPES.has(host.$type) || host.$type === 'bpmn:SubProcess') ||
     unsupportedConstruction(host) !== undefined ||
     !ctx.hasOutgoing.has(el) ||
     // R-BND-1/R-BND-10: only the host may activate a boundary, never an incoming flow.
     (ctx.inDegree.get(el) ?? 0) !== 0 ||
-    interruptingOf(el, ctx.rawCancel) === undefined
+    interrupting === undefined ||
+    // ADR-033 § 5: only an interrupting error boundary is in the profile.
+    (kind === 'error' && !interrupting)
   ) {
     return undefined;
   }
-  return host;
+  return { host, kind };
 }
 
 /**
@@ -261,7 +273,7 @@ function unsupportedConstruction(
   // profile, so neither the `eventBasedGateway` row nor the `messageEvent` one applies to them.
   if (ctx.inProfile.has(el)) return undefined;
   if (el.$type === 'bpmn:BoundaryEvent') {
-    return boundaryTimerHost(el, ctx) === undefined ? 'boundaryEvent' : undefined;
+    return boundaryHost(el, ctx) === undefined ? 'boundaryEvent' : undefined;
   }
   if (el.$type === 'bpmn:IntermediateThrowEvent') {
     return isThrowInProfile(el) ? undefined : 'intermediateThrowEvent';
@@ -357,10 +369,11 @@ function nodeTypeOf(el: ModdleElement): NodeType | undefined {
       )
         ? 'timer'
         : undefined;
-    // Solo llega aquí el boundary que ya pasó por `boundaryTimerHost` (R-BND-1): es un retardo
+    // Solo llega aquí el boundary que ya pasó por `boundaryHost` (R-BND-1): es un retardo
     // más, con la diferencia de que su token lo arma el host en vez de un flujo entrante.
+    // ADR-033 § 5: the error boundary that passed it is its own node type.
     case 'bpmn:BoundaryEvent':
-      return 'timer';
+      return hasEventDefinition(el, 'bpmn:ErrorEventDefinition') ? 'errorBoundary' : 'timer';
     default:
       return undefined;
   }
@@ -430,8 +443,11 @@ interface Collector {
   order: Map<ModdleElement, number>;
   /** Elementos fuera del perfil soportado, ya descartados del IR. */
   unsupportedEls: Set<ModdleElement>;
-  /** `id del boundary -> host moddle y si interrumpe`, para resolver `attachedTo` tras el recorrido. */
-  boundaryHosts: Map<string, { host: ModdleElement; interrupting: boolean }>;
+  /**
+   * `id del boundary -> host moddle y si interrumpe`, para resolver `attachedTo` tras el recorrido;
+   * `el` is the boundary itself, which `subprocessPassages` may still send to `unsupported`.
+   */
+  boundaryHosts: Map<string, { el: ModdleElement; host: ModdleElement; interrupting: boolean }>;
   /** `id del boundary -> literal en bruto de `cancelActivity``, leído del texto del XML. */
   rawCancel: ReadonlyMap<string, string>;
   /** `id del event gateway -> literal en bruto de `instantiate``, leído del texto del XML. */
@@ -602,6 +618,7 @@ function walk(container: ModdleElement, subprocessId: string | undefined, c: Col
     }
     if (el.$type === 'bpmn:BoundaryEvent' && el.attachedToRef !== undefined) {
       c.boundaryHosts.set(id, {
+        el,
         host: el.attachedToRef,
         interrupting: interruptingOf(el, c.rawCancel) !== false,
       });
@@ -653,6 +670,68 @@ function flattenBox(box: SubprocessBox, c: Collector): void {
   for (const [id, flow] of Object.entries(c.flows)) {
     if (flow.from === box.id || flow.to === box.id) delete c.flows[id];
   }
+}
+
+/**
+ * ADR-033 § 6: the entry and exit flows of every embedded sub-process, once flattening is done,
+ * or `undefined` when no boundary event is attached to a sub-process (the IR then stays as it
+ * was). A flow enters a sub-process when its target is inside it and its source is not, and
+ * leaves it the other way round; "inside" follows `parent` (R-BND-15). Read from the flattened
+ * flows rather than from the redirections themselves because flattening a nested sub-process
+ * first rewires a flow that the outer flattening later deletes.
+ *
+ * A boundary whose sub-process has no entry or no exit flow leaves the profile here, as
+ * `E-NOSOP` `boundaryEvent`, with its outgoing flows (§ 3), exactly as if `boundaryHost` had
+ * refused it.
+ */
+function subprocessPassages(c: Collector): Record<string, SubprocessIR> | undefined {
+  const onSubprocess = [...c.boundaryHosts.keys()].filter((id) => {
+    const host = c.nodes[id]?.attachedTo;
+    return host !== undefined && c.boxIds.has(host);
+  });
+  if (onSubprocess.length === 0) return undefined;
+
+  const chainOf = (nodeId: string): Set<string> => {
+    const chain = new Set<string>();
+    for (let s = c.nodes[nodeId]?.subprocessId; s !== undefined && !chain.has(s); s = c.subprocesses[s]?.parent) chain.add(s);
+    return chain;
+  };
+  const passages = (): Record<string, SubprocessIR> => {
+    const out: Record<string, SubprocessIR> = {};
+    for (const [id, info] of Object.entries(c.subprocesses)) {
+      out[id] = { ...(info.parent === undefined ? {} : { parent: info.parent }), entryFlows: [], exitFlows: [] };
+    }
+    for (const [flowId, flow] of Object.entries(c.flows)) {
+      const from = chainOf(flow.from);
+      const to = chainOf(flow.to);
+      for (const s of to) if (!from.has(s)) out[s]?.entryFlows.push(flowId);
+      for (const s of from) if (!to.has(s)) out[s]?.exitFlows.push(flowId);
+    }
+    return out;
+  };
+
+  const before = passages();
+  let dropped = false;
+  for (const id of onSubprocess) {
+    const passage = before[c.nodes[id]!.attachedTo!];
+    if (passage !== undefined && passage.entryFlows.length > 0 && passage.exitFlows.length > 0) continue;
+    const { el } = c.boundaryHosts.get(id)!;
+    delete c.nodes[id];
+    addUnsupported(el, 'boundaryEvent', c);
+    for (const flow of c.sequenceFlows) {
+      if (flow.sourceRef !== el) continue;
+      const flowId = c.idOf.get(flow);
+      if (flowId !== undefined) delete c.flows[flowId];
+      c.unsupported.push({
+        at: c.order.get(flow) ?? c.order.size,
+        element: { id: flow.id, qname: flow.$type, name: flow.name ?? '' },
+      });
+    }
+    dropped = true;
+  }
+  if (!dropped) return before;
+  const remaining = onSubprocess.some((id) => c.nodes[id] !== undefined);
+  return remaining ? passages() : undefined;
 }
 
 /** A scenario as far as choosing the process goes: only its `elements` keys count. */
@@ -1139,11 +1218,13 @@ export async function parseBpmn(xmlIn: string, options: ParseBpmnOptions = {}): 
   // `validate` lo marca inalcanzable, que es exactamente el diagnóstico que toca.
   for (const [id, { host, interrupting }] of c.boundaryHosts) {
     const hostId = c.idOf.get(host);
-    if (hostId === undefined || c.nodes[hostId] === undefined) continue;
+    // ADR-033 § 6: a flattened sub-process is no node, but it is still a host.
+    if (hostId === undefined || (c.nodes[hostId] === undefined && !c.boxIds.has(hostId))) continue;
     c.nodes[id]!.attachedTo = hostId;
     // R-BND-10: solo el borde no interruptor lo lleva; ausente es interruptor, como en BPMN.
     if (!interrupting) c.nodes[id]!.interrupting = false;
   }
+  const subprocesses = subprocessPassages(c);
 
   // `incoming`/`outgoing` se derivan al final, con los flujos ya recableados, en orden de
   // aparición en el documento.
@@ -1163,6 +1244,7 @@ export async function parseBpmn(xmlIn: string, options: ParseBpmnOptions = {}): 
       name: main.name ?? '',
       nodes: c.nodes,
       flows: c.flows,
+      ...(subprocesses === undefined ? {} : { subprocesses }),
       source: {
         exporter: definitions.exporter ?? '',
         exporterVersion: definitions.exporterVersion ?? '',

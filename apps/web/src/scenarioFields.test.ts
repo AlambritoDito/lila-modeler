@@ -48,6 +48,8 @@ describe('fieldsForKind (§ 2.5, columna «Applies to»)', () => {
     expect(fieldsForKind('terminate')).toEqual(['fixedCost']);
     // ADR-033 R-THR-2: an intermediate throw event is a milestone with no field of its own.
     expect(fieldsForKind('throw')).toEqual([]);
+    // ADR-033 § 5: an error boundary takes `errorProbability`, but its control is #703's.
+    expect(fieldsForKind('errorBoundary')).toEqual([]);
   });
 
   it('una compuerta no tiene ningún campo de elemento; sus ramas se editan en su vista', () => {
@@ -66,6 +68,8 @@ describe('fieldsForKind (§ 2.5, columna «Applies to»)', () => {
     const delEsquema = new Set(Object.keys(ElementSchema.shape));
     // Los reservados de § 4 no los ofrece nadie a propósito: el motor los rechaza con error.
     const reservados = new Set(['priority', 'preempt', 'batch', 'conditions']);
+    // ADR-033 § 5: the engine takes `errorProbability` since #702; the panel offers it with #703.
+    const sinControlTodavia = new Set(['errorProbability']);
     const ofrecidos = new Set(
       (['task', 'start', 'timer', 'end', 'terminate', 'flow'] as const).flatMap(
         (c) => fieldsForKind(c)!,
@@ -80,7 +84,7 @@ describe('fieldsForKind (§ 2.5, columna «Applies to»)', () => {
       expect(ofrecidos.has(campo)).toBe(false);
     }
     for (const campo of delEsquema) {
-      if (!reservados.has(campo) && !conMarcador.has(campo)) expect(ofrecidos.has(campo)).toBe(true);
+      if (!reservados.has(campo) && !sinControlTodavia.has(campo) && !conMarcador.has(campo)) expect(ofrecidos.has(campo)).toBe(true);
     }
   });
 });

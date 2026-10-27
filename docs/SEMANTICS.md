@@ -72,6 +72,8 @@ defined semantics; everything else falls into section 3 of this document.
 | `bpmn:intermediateCatchEvent` with `timerEventDefinition` | `timer` | delay with no resource (§9) |
 | `bpmn:boundaryEvent` interrupting, with a single `timerEventDefinition`, attached to a task and with an outgoing flow | `timer` with `attachedTo` | deadline that cuts the task short (§9) |
 | `bpmn:boundaryEvent` non-interrupting (`cancelActivity="false"` or `"0"`), with a single `timerEventDefinition`, attached to a task and with an outgoing flow | `timer` with `attachedTo` and `interrupting: false` | deadline that spawns a parallel token and leaves the task running (§9) |
+| The same timer `bpmn:boundaryEvent`, interrupting or not, attached to an embedded sub-process with at least one entry and one exit flow | `timer` with `attachedTo` = the sub-process | deadline over the sub-process; interrupting, it cancels the work inside (§9, R-BND-15…19) |
+| `bpmn:boundaryEvent` interrupting, with a single `errorEventDefinition`, attached to a task or to an embedded sub-process with an entry and an exit flow, and with an outgoing flow | `errorBoundary` with `attachedTo` | a share of the host's completions leaves through it (§9.3, R-ERR-1…5) |
 | `bpmn:eventBasedGateway` exclusive and non-instantiating, every outgoing flow going to a branch catch event | `eventGateway` | races its branches; the first delay to elapse takes the token (§9.1) |
 | `bpmn:intermediateCatchEvent` with `timerEventDefinition` or `messageEventDefinition`, as a branch of that gateway | `timer` | wait with the branch's own time, with no resource (§9.1) |
 | `bpmn:task` and all its variants (`userTask`, `serviceTask`, `sendTask`, `receiveTask`, `manualTask`, `scriptTask`, `businessRuleTask`) | `task` | work with duration and resources (§11) |
@@ -143,7 +145,7 @@ failure. The text follows Bizagi's style ("not supported by the simulator").
 
 | Detected construct | `id` | `{construction}` (`en`) | `{construcción}` (`es`) |
 |---|---|---|---|
-| `bpmn:boundaryEvent` other than a timer with one outgoing flow attached to a task, interrupting or not: message/error/signal/…, on a sub-process, or with no outgoing flow | `boundaryEvent` | `event attached to an activity (boundary event)` | `evento adjunto a actividad (boundary event)` |
+| `bpmn:boundaryEvent` other than a timer (interrupting or not) or an interrupting error event attached to a task or to an embedded sub-process with an outgoing flow: message/signal/…, a non-interrupting error event, on a sub-process with no entry or no exit flow, or with no outgoing flow | `boundaryEvent` | `event attached to an activity (boundary event)` | `evento adjunto a actividad (boundary event)` |
 | `messageEventDefinition` in an intermediate catch event that is not a branch catch event of a supported event-based gateway (§9.1); with that single trigger a start, an end or an intermediate throw event is in the profile (§9.2) | `messageEvent` | `message event` | `evento de mensaje` |
 | `signalEventDefinition` | `signalEvent` | `signal event` | `evento de señal` |
 | `linkEventDefinition` | `linkEvent` | `link event` | `evento de enlace` |
@@ -310,6 +312,8 @@ failure. The text follows Bizagi's style ("not supported by the simulator").
   sub-process, so with nested sub-processes the lint recognizes only the innermost one; declaring
   parameters on an outer one today comes out as `E-ELEMENTO-DESCONOCIDO`. Closing that gap
   requires carrying the full chain into the IR (`bpmn/parse.ts`), which is a separate ticket.
+  When a boundary event is attached to a sub-process the IR already carries every sub-process
+  (`subprocesses`, §9 before R-BND-15), and then the outer ones are recognized too.
   *(test: LILA-019, LILA-198)*
 - **R-PLAN-4 — Call activity = task with its own duration.** A `bpmn:callActivity` is translated
   to `task` and the called process is **not** expanded, even if it is present in the file. Its
@@ -569,11 +573,12 @@ pair), without introducing case variables or an expression language.
   statistics. *(test: LILA-026, LILA-028)*
 - **R-BND-1 — Interrupting boundary timer.** A `bpmn:boundaryEvent` with exactly one
   `timerEventDefinition`, interrupting (`cancelActivity` absent or `true`), attached to a
-  supported task — never to an embedded sub-process, which is flattened away (§4) — and with at
+  supported task — or, since ADR-033, to an embedded sub-process (R-BND-15…19) — and with at
   least one outgoing flow, enters the profile as a `timer` node with `attachedTo` = the host's
   id and **no** `incoming`: its token is created by the host, not by a flow. It is reachable
-  exactly when its host is, so it is never `E-INALCANZABLE` on its own. Any other boundary event
-  stays `E-NOSOP` with construction `boundaryEvent` (§3). *(test: #81)*
+  exactly when its host is, so it is never `E-INALCANZABLE` on its own. Any other boundary event,
+  except the interrupting error boundary of §9.3, stays `E-NOSOP` with construction
+  `boundaryEvent` (§3). *(test: #81)*
 - **R-BND-2 — The deadline starts when the host is enabled.** It is measured from the host
   activity's `enabledAt`, not from the instant it acquires its resources: a token queuing for a
   busy pool is already burning its deadline. *(test: #81)*
@@ -643,6 +648,47 @@ pair), without introducing case variables or an expression language.
   incoming flow (R-AND-2) — which is how a boundary branch rejoins the host's — and an OR join
   counts by activation mark (R-OR-5, R-BND-12). A token still travelling when the run stops
   leaves the case `inFlight`, as any other token would (R-OR-8, R-AND-4). *(test: #81)*
+
+The next five rules put the same boundary timer on an embedded sub-process (ADR-033 § 6). The
+sub-process is flattened (§4) and is no node, so the boundary is a `timer` with `attachedTo` = the
+sub-process id, and the IR gains `subprocesses`: for every embedded sub-process of the process, its
+`parent` and its entry and exit flows. A flow **enters** a sub-process when its target is inside it
+and its source is not, and **leaves** it the other way round; a node is inside a sub-process when
+its `subprocessId` is that sub-process or one nested in it. One flow can leave or enter several
+nested sub-processes at once: they are left innermost first and entered outermost first, and a flow
+that leaves one sub-process and enters the next (two in a row) leaves first. `subprocesses` is only
+written when a boundary event (timer or error, §9.3) is attached to a sub-process, so every other
+IR, and every result, stays as it was. A boundary on a sub-process with no entry flow or no exit
+flow stays `E-NOSOP` `boundaryEvent` (§3), together with its outgoing flows.
+
+- **R-BND-15 — The sub-process instance.** Per case: an instance opens when a token of the case
+  crosses an entry flow while the case has no open instance of that sub-process; a token crossing
+  one while it is open joins it. It stays open while at least one token of the case is inside — at
+  a node inside, held by an activity or a join inside, or travelling on a flow whose target is
+  inside — and closes when the last one leaves through an exit flow (or is consumed inside), or
+  when the case dies. *(test: #702)*
+- **R-BND-16 — The deadline.** It is armed when the instance opens, with one `processingTime`
+  sample from the boundary's own stream, 24×7 unless the boundary declares `calendar` (R-BND-3),
+  and it fires only while that instance is still open (R-BND-4); a dead deadline does not move the
+  clock (R-BND-9). Its event is queued at the opening, before the enabling of the token that opened
+  it, so a deadline exactly as long as the work inside fires (R-BND-7, R-BND-13). *(test: #702)*
+- **R-BND-17 — Interrupting: everything inside is cancelled.** At the firing instant, everything of
+  the case inside the sub-process is cancelled: every open activity instance closes `interrupted`
+  with R-BND-5's accounting (granted units released and queued requests dropped, hourly cost up to
+  that instant, no `fixedCost`, `started` without `completed`); pending enablings of nodes inside
+  are discarded; AND/OR join counters and blocked event-based gateways inside are discarded; nested
+  sub-process instances close and their deadlines are discarded. The case loses those tokens, and
+  one token leaves through the boundary's first outgoing flow carrying the OR marks of the token
+  that opened the instance. Each row's busy time ends at its `observedUntil`, so nothing is
+  counted twice in costs or utilization. *(test: #702)*
+- **R-BND-18 — Non-interrupting.** It fires at most once per instance and adds a token with no OR
+  marks (R-BND-11, R-BND-12); the sub-process keeps running and the case ends with its last token
+  (R-BND-14). *(test: #702)*
+- **R-BND-19 — Results.** As R-BND-6: the boundary counts one `started` and one `completed` per
+  firing and emits no row; the cancelled instances keep their own rows with `status =
+  "interrupted"`. `elements[<sub-process>]` still takes no parameter (`E-SUBPROC-PARAMETRO`,
+  R-PLAN-3); the boundary is its own id. Without `processingTime` on the boundary it never fires,
+  with `W-BORDE-SIN-TIEMPO` naming the sub-process as host (R-BND-8). *(test: #702)*
 
 ### 9.1 Event-based gateway
 
@@ -743,6 +789,55 @@ profile (§3, #639).
   queue or join at that exact instant, the two can swap places, and with them which case gets
   which draw of that element's stream; without such a tie every other number stays the same.
   *(test: #698)*
+
+### 9.3 Error boundary event (ADR-033)
+
+Lila does not simulate thrown errors, error codes or error end events: the error is a probability
+on the boundary, drawn when the host's work completes. An interrupting `bpmn:boundaryEvent` with
+exactly one `errorEventDefinition` (any or no `errorRef`), attached to a supported task or to an
+embedded sub-process with an entry and an exit flow (§9, before R-BND-15), with at least one
+outgoing flow and no incoming one, is an `errorBoundary` node with `attachedTo` = the host. It is
+reachable exactly when its host is. Anything else (non-interrupting, another `cancelActivity`
+literal, no outgoing flow) stays `E-NOSOP` `boundaryEvent` (§3).
+
+Its scenario field is `elements[<boundary>].errorProbability`, a number in `[0, 1]`
+(`E-PROB-RANGO`); on any other element it is `E-CAMPO-NO-APLICA`. The declared values of one
+host's error boundaries add up to at most 1 (`E-PROB-ERROR-SUMA` above `1 + 1e-9`, from the lint
+and again from `core/` before the first event). `resources` on the boundary is
+`E-CAMPO-NO-APLICA` (R-REC-10); `processingTime`, `calendar` and `fixedCost` are accepted and change
+nothing, as on a throw event (R-THR-2); `W-ELEMENTO-SIN-PARAMETROS` does not apply to it.
+
+- **R-ERR-1 — When the error is decided.** On a task host, at each **completion** of one of its
+  activity instances; an instance that is interrupted, terminated or still in flight decides
+  nothing. On a sub-process host, each time a token of the case leaves it through an exit flow.
+  *(test: #702)*
+- **R-ERR-2 — One draw per decision.** If at least one of the host's error boundaries declares
+  `errorProbability`, one uniform `u` is drawn from the derived stream `<hostId>#error` (ADR-033 § 1.3) per
+  decision; the boundaries are walked in document order and the first whose cumulative
+  `errorProbability` exceeds `u` fires; if none does, the token follows its normal path. One draw
+  however many boundaries the host has. When the declared values add up to 1 within `1e-9` and
+  rounding leaves `u` above the last cumulative sum, the last boundary with `errorProbability > 0`
+  fires (R-XOR-7's rounding rule). If no boundary of the host declares the field, nothing is drawn.
+  *(test: #702)*
+- **R-ERR-3 — Error on a task.** The instance did its work: it counts `completed`, closes with
+  `status = "completed"`, enters the duration statistics, charges its `fixedCost` and releases its
+  units at its end, as always. The token leaves through the boundary's first outgoing flow instead
+  of the host's (the host's outgoing flow does not count), carrying the host token's OR marks
+  (R-BND-6). *(test: #702)*
+- **R-ERR-4 — Error on a sub-process.** The exiting token goes to the boundary instead of to the
+  exit's target; the exit flow itself counts, because the token did reach the inner end.
+  Everything of the case still inside the sub-process is cancelled as R-BND-17 says, and the token
+  that leaves through the boundary keeps the exiting token's OR marks. When the flow also leaves
+  enclosing sub-processes, the innermost decides first, and a token sent to its error boundary has
+  not left the others; a flow that also enters the next sub-process enters it only if the token was
+  not sent to an error boundary. Other flows of the same split that had not been followed yet are
+  cancelled with the rest and do not count. *(test: #702)*
+- **R-ERR-5 — Results.** The boundary counts one `started` and one `completed` per firing, in the
+  same instant, and emits no event-log row; like a boundary timer it is not subject to
+  `W-REPLICACIONES-SIN-OBSERVACIONES`. Without `errorProbability` it never fires (probability 0)
+  and the engine warns `W-ERROR-SIN-PROBABILIDAD` each time a token enters its host (a task's
+  enabling, a sub-process instance's opening), aggregated like any other warning (§17).
+  *(test: #702)*
 
 ---
 
@@ -867,8 +962,8 @@ calendar }`. On the task: `resources: [{ ref, quantity }]` and `selection: "and"
   structure document: `resourceWait = started − enabled`. *(test: LILA-036, LILA-041)*
 - **R-REC-9 — The same pool is never requested twice.** Two entries with the same `ref` on a task
   is error `E-REC-DUPLICADO`: the amount is expressed with `quantity`. *(test: LILA-013)*
-- **R-REC-10 — Elements with no resources.** `start`, `end`, `terminate`, `throw`, gateways and
-  `timer` never consume resources. Only `task` (and therefore `callActivity`) admits `resources`.
+- **R-REC-10 — Elements with no resources.** `start`, `end`, `terminate`, `throw`,
+  `errorBoundary`, gateways and `timer` never consume resources. Only `task` (and therefore `callActivity`) admits `resources`.
   *(test: LILA-021, LILA-026)*
 - **R-REC-11 — Rows per assignment.** Every effective pool assignment produces a flat row with
   `resourceId` and `resourceQuantity`; an activity with no pool produces exactly one sentinel row
@@ -1201,7 +1296,7 @@ Since LILA-211 the texts of all these codes live in a catalog per language
 translation; both are normative, each for its own language, and this section gives both texts
 wherever it fixes them literally. The code (`E-…`, `W-…`) and the rule id (`R-…`) are **never**
 translated. A test (`packages/engine/test/messages.test.ts`) keeps this section, the catalog and
-the code in sync: the catalog's 61 codes are exactly the ones `packages/engine/src` emits, `en`
+the code in sync: the catalog's 64 codes are exactly the ones `packages/engine/src` emits, `en`
 and `es` declare the same entries, and no `"CODE: …"` literal lives outside the catalog.
 
 Errors (they abort; validation errors are returned in `errors[]`, runtime errors are thrown; the CLI exits with 1):
@@ -1218,7 +1313,8 @@ Errors (they abort; validation errors are returned in `errors[]`, runtime errors
 | `E-SIN-START` / `E-SIN-END` | process with no start, or with neither `end` nor `terminate` |
 | `E-ELEMENTO-DESCONOCIDO` | `elements` key that does not exist in the IR |
 | `E-CLAVE-DESCONOCIDA` | key not recognized by the schema |
-| `E-PROB-RANGO` | `probability` outside `[0,1]` |
+| `E-PROB-RANGO` | `probability` (or `errorProbability`, §9.3) outside `[0,1]` |
+| `E-PROB-ERROR-SUMA` | the declared `errorProbability` of one host's error boundaries add up to more than 1 (§9.3); the lint cites `elements.<hostId>`, `core/`'s guard the host id |
 | `E-PROB-EN-NODO` | `probability` declared on a node |
 | `E-XOR-SUMA-CERO` | XOR whose probabilities add up to 0 |
 | `E-SUBPROC-PARAMETRO` | `processingTime`/`resources`/`fixedCost` on an embedded sub-process |
@@ -1230,7 +1326,7 @@ Errors (they abort; validation errors are returned in `errors[]`, runtime errors
 | `E-CAPACIDAD-Y-CALENDARIO` | `capacity` by intervals and the pool's `calendar` declared at the same time (R-CAL-11, R16 of `SCENARIO_FORMAT.md`) |
 | `E-REF-DESCONOCIDA` | `calendar` that does not exist in `calendars` (`validateScenario`'s lint), including that of each `capacity` slice |
 | `E-CAL-DESCONOCIDO` | the same, caught by `core/sim.ts`'s guard (see R-CAL-10 and R-CAL-11) |
-| `E-CAMPO-NO-APLICA` | field declared on an element that does not admit it (R4, R5, R14) |
+| `E-CAMPO-NO-APLICA` | field declared on an element that does not admit it (R4, R5, R14; `errorProbability` off an error boundary, §9.3) |
 | `E-CAL-VACIO` | calendar with no intervals, a calendar whose every opening falls on one of its own holidays (R-CAL-14, cites `calendars.<name>`), or empty intersection of calendars (cites the task) |
 | `E-SIN-PARADA` | neither `run.duration` nor any `triggerCount` |
 | `E-BUCLE-SIN-SALIDA` | `loop.probability: 1` on a task whose loop marker has no `loopMaximum`: the loop never ends (R-LOOP-2); the lint cites `elements.<id>.loop.probability` and `core/` repeats the check before the first event |
@@ -1262,6 +1358,24 @@ by the zod schema with its generic message, and `E-REC-CAPACIDAD` is `core/`'s g
 builds the scenario by hand. It is the only mismatch that remains; see this section's final
 paragraph.
 
+Exact texts of the error boundary's codes (ADR-033 § 1.6, §9.3): the lint's message, `core/`'s
+guard, the engine warning and the `E-CAMPO-NO-APLICA` variant, in `en` and in `es`. The sum is
+printed as `String(Number(sum.toFixed(6)))` in both languages:
+
+```
+the error probabilities of the boundary events on <hostId> add up to <sum>, more than 1 (elements.<hostId>).
+E-PROB-ERROR-SUMA: <hostId>: the error probabilities of its boundary events add up to <sum>, more than 1.
+W-ERROR-SIN-PROBABILIDAD: <nodeId>: error boundary event without errorProbability; it never fires on <hostId>.
+only accepted on an error boundary event (elements.<id>.errorProbability).
+```
+
+```
+las probabilidades de error de los eventos adjuntos a <hostId> suman <sum>, más de 1 (elements.<hostId>).
+E-PROB-ERROR-SUMA: <hostId>: las probabilidades de error de sus eventos adjuntos suman <sum>, más de 1.
+W-ERROR-SIN-PROBABILIDAD: <nodeId>: evento de error adjunto sin errorProbability; nunca dispara sobre <hostId>.
+solo se admite en un evento de error adjunto (elements.<id>.errorProbability).
+```
+
 `E-LIMITE-SIN-AVANCE` is a runtime error; it can occur after callbacks have run.
 Other errors in the table come from the lint (`validateScenario`) or from the IR validator,
 except `E-CLAVE-DESCONOCIDA`, which is caught by the closed schema before the lint: the code goes
@@ -1288,7 +1402,8 @@ no time, R-EVG-6: each case has its own text),
 `W-TIMER-SIN-TIEMPO` (an intermediate timer with no `processingTime` delays 0 seconds, R-EVT-2; as
 a branch of an event-based gateway it never fires instead, R-EVG-5),
 `W-BORDE-SIN-TIEMPO` (boundary timer with no `processingTime`: it never
-fires on its host, interrupting or not, R-BND-8), `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
+fires on its host, interrupting or not, R-BND-8; the host may be a sub-process, R-BND-19),
+`W-ERROR-SIN-PROBABILIDAD` (error boundary with no `errorProbability`: it never fires, R-ERR-5), `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
 `W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`, `W-COND-INALCANZABLE` (a `flowTaken` that cannot
 precede its gateway, R-COND-4), `W-OR-PROB-PARCIAL` (an OR with `probability` on some outgoing
 flows but not all, R-OR-2), `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
@@ -1505,6 +1620,8 @@ lint or the `core/` guard catches it (unifying them requires touching `core/`; s
 | R-EVT-5, R-EVT-6 | terminate | LILA-026 |
 | R-BND-1 … R-BND-9 | interrupting boundary timer | #81 |
 | R-BND-10 … R-BND-14 | non-interrupting boundary timer | #81 |
+| R-BND-15 … R-BND-19 | boundary timer on an embedded sub-process (ADR-033) | #702 (`packages/engine/test/error-boundary-subprocess.test.ts`) |
+| R-ERR-1 … R-ERR-5 | error boundary event on a task or a sub-process (ADR-033) | #702 (`packages/engine/test/error-boundary-subprocess.test.ts`) |
 | R-EVG-1 … R-EVG-7 | event-based gateway with timer and message branches | #81 (`packages/engine/test/event-gateway.test.ts`) |
 | R-MSG-1, R-MSG-2, R-THR-1 … R-THR-3 | message start and end; none and message intermediate throw (ADR-033) | #698 (`packages/engine/test/message-throw-events.test.ts`) |
 | R-ARR-1 … R-ARR-5 | arrivals and stop (`duration` \| `triggerCount`, whichever first) | LILA-026 (`triggerCount` with no timer: LILA-186) |

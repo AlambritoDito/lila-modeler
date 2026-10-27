@@ -95,6 +95,11 @@ export interface CoreCodeMessages {
   /** R-EVG-6: variant for the token an event-based gateway with no armable branch keeps. */
   'W-JOIN-BLOQUEADO/evento': (nodeId: string, cases: number) => string;
 
+  /* --- core/sim.ts: error boundary events (ADR-033 § 5, #702) ------- */
+  /** `sum` arrives already formatted as `String(Number(sum.toFixed(6)))`. */
+  'E-PROB-ERROR-SUMA': (hostId: string, sum: string) => string;
+  'W-ERROR-SIN-PROBABILIDAD': (nodeId: string, hostId: string) => string;
+
   /* --- core/metrics.ts ---------------------------------------------- */
   /** `rho` arrives already rounded to one decimal so both locales print the same number. */
   'W-RECURSO-SATURADO': (poolId: string, rho: string) => string;

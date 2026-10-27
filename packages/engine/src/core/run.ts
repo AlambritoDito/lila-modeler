@@ -20,6 +20,7 @@ import {
 import type { BottleneckEntry, EventLogRow, RunResult } from './result.js';
 import {
   assertSupportedCalendarScenario,
+  assertSupportedErrorScenario,
   assertSupportedResourceScenario,
   assertSupportedLoopScenario,
   runReplication,
@@ -267,6 +268,7 @@ export function simulate(ir: ProcessIR, scenario: SimScenario, options: Simulate
   const locale = options.locale;
   assertSupportedResourceScenario(scenario, locale);
   assertSupportedCalendarScenario(scenario, locale);
+  assertSupportedErrorScenario(ir, scenario, locale);
   // ADR-033 R-LOOP-2: a loop that can never end.
   assertSupportedLoopScenario(ir, scenario, locale);
   // Contrato del event log (docs/RESULTS_FORMAT.md § 7): `result.log` solo se materializa cuando
