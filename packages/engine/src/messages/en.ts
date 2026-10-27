@@ -29,6 +29,7 @@ const NODE_TYPES: Record<string, string> = {
   and: 'AND gateway',
   timer: 'timer',
   throw: 'intermediate throw event',
+  errorBoundary: 'error boundary event',
   eventGateway: 'event-based gateway',
 };
 
@@ -264,6 +265,8 @@ export const en: Catalog = {
       `the resource selection only makes sense together with the task's resources (${path}).`,
     'E-CAMPO-NO-APLICA/solo-flujo-xor': (path) =>
       `only accepted on a sequence flow leaving a diverging exclusive gateway (${path}).`,
+    'E-CAMPO-NO-APLICA/solo-bucle': (path) =>
+      `only accepted on a task with a loop marker (${path}).`,
     'E-CAMPO-NO-APLICA/solo-multi': (path) => `only accepted on a multi-instance task (${path}).`,
     'E-TIMER-RECURSO': (path) => `a timer is a delay and consumes no resources (${path}).`,
     'E-REC-DESCONOCIDO/recurso': (path, ref) =>
@@ -274,6 +277,8 @@ export const en: Catalog = {
       `the quantity ${quantity} exceeds the capacity ${capacity} of ${ref} (${path}).`,
     'E-XOR-SUMA-CERO': (path) =>
       `the probabilities of the XOR add up to 0; there is no possible route (${path}).`,
+    'E-BUCLE-SIN-SALIDA': (path) =>
+      `a loop with probability 1 and no loopMaximum never ends (${path}).`,
     'E-SIN-PARADA': (path) =>
       `a stopping condition is missing; declare the run duration or a maximum number of arrivals (${path}).`,
     'W-SIN-SEED': (path) =>
@@ -284,6 +289,10 @@ export const en: Catalog = {
       `${flowId} cannot be reached before ${gatewayId} on any sequential path; the condition only applies if a parallel branch traverses it (${path}).`,
     'W-OR-PROB-PARCIAL': (path, flowId, gatewayId) =>
       `${flowId} declares no probability, but ${gatewayId} has other outgoing flows that do; the undeclared flow is always taken, because a missing probability counts as 1 (${path}).`,
+
+    'E-PROB-ERROR-SUMA/lint': (path, hostId, sum) =>
+      `the error probabilities of the boundary events on ${hostId} add up to ${sum}, more than 1 (${path}).`,
+    'E-CAMPO-NO-APLICA/solo-error': (path) => `only accepted on an error boundary event (${path}).`,
 
     'E-CLAVE-DESCONOCIDA': (keys) => `key not recognised by the schema: ${keys}.`,
   },
@@ -344,6 +353,7 @@ export const en: Catalog = {
     startInvalidOffset: (start, offset) =>
       `the start date ${start} does not have a valid offset; ${offset} is not a time offset.`,
     currencyIso: () => 'the currency must be an ISO 4217 code',
+    loopExactlyOne: () => 'declare exactly one of count or probability',
     intervalFrom: () => 'the start time of the interval must be "HH:MM"',
     intervalTo: () => 'the end time of the interval must be "HH:MM" ("24:00" is accepted)',
     intervalOrder: () =>

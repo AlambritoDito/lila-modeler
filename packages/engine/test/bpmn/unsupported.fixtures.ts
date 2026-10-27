@@ -159,12 +159,13 @@ export const UNSUPPORTED_FIXTURES: UnsupportedFixture[] = [
     messages: [message('Sub_Multi', 'bpmn:subProcess', 'marcador de multi-instancia')],
   },
   {
+    // ADR-033 § 3: on a task the loop marker is simulated (#700); on a sub-process it stays out.
     row: 'standardLoopCharacteristics',
     xml: processWith(
-      'Task_Loop',
-      `<bpmn:task id="Task_Loop"><bpmn:standardLoopCharacteristics id="Loop_Standard" /></bpmn:task>`,
+      'SubProcess_Loop',
+      `<bpmn:subProcess id="SubProcess_Loop"><bpmn:standardLoopCharacteristics id="Loop_Standard" /></bpmn:subProcess>`,
     ),
-    messages: [message('Task_Loop', 'bpmn:task', 'marcador de bucle en la actividad')],
+    messages: [message('SubProcess_Loop', 'bpmn:subProcess', 'marcador de bucle en la actividad')],
   },
   {
     row: 'bpmn:transaction',

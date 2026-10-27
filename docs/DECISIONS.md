@@ -750,7 +750,8 @@ decision draws from, so the per-element PRs do not need any further decision.
    `/solo-error` `only accepted on an error boundary event (${path}).` /
    `solo se admite en un evento de error adjunto (${path}).` A `loop` with neither or both of
    `count` and `probability` is a schema error at `elements.<id>.loop` with the message
-   `declare exactly one of count or probability` / `declara exactamente uno de count o probability`.
+   `declare exactly one of count or probability` / ``declara exactamente uno de `count` o `probability` ``
+   (the field names in backticks: a Spanish text carries no bare English field name, #519).
 7. **IR shapes.** Each part adds optional IR members, written only when the element is present,
    so every other IR stays as it is. They are named below. A new node type reaches every place
    that names the node types, in the same PR: `NODE_CATEGORY` in `process-document.ts`, the
@@ -793,7 +794,7 @@ decision draws from, so the per-element PRs do not need any further decision.
   and `W-REPLICACIONES-SIN-OBSERVACIONES` does not apply to it. Nothing degrades: there is no field
   to miss.
 
-### 3. Standard loop marker (#700)
+### 3. Standard loop marker (#700, implemented)
 
 **Profile and IR.** `standardLoopCharacteristics` on a supported task or call activity (on an
 embedded sub-process it stays `E-NOSOP` `loopMarker`). The task node gets
@@ -892,7 +893,7 @@ what it says (R-TOK-7 counts events, not instances), and choosing it is the mode
 - **Degradation.** Neither `instances` nor `cardinality`: one instance, plus
   `W-MULTI-SIN-CARDINALIDAD`.
 
-### 5. Error boundary event (#702)
+### 5. Error boundary event (#702, implemented)
 
 **Profile and IR.** A `bpmn:boundaryEvent` with exactly one `errorEventDefinition` (any or no
 `errorRef`), interrupting (`cancelActivity` absent, `"true"` or `"1"`), attached to a supported
@@ -940,7 +941,7 @@ entry flow and one exit flow (§ 6); without them the boundary stays `E-NOSOP` `
 - **Degradation.** No `errorProbability` on a boundary: it never fires (probability 0), plus
   `W-ERROR-SIN-PROBABILIDAD`. If no boundary of the host declares it, nothing is drawn.
 
-### 6. Timer boundary event on an embedded sub-process (#702)
+### 6. Timer boundary event on an embedded sub-process (#702, implemented)
 
 **Profile and IR.** The boundary timer of R-BND-1 and R-BND-10, with the same conditions, attached
 to an embedded sub-process in the profile instead of a task. It stays a `timer` node with
@@ -1001,7 +1002,7 @@ boundary on a sub-process with no entry flow or no exit flow stays `E-NOSOP` `bo
   that exits once per parallel branch after flattening (R-PLAN-1) decides its error once per exit;
   loop and multi-instance markers on a sub-process wait for a user who needs them.
 
-*(tests: `packages/engine/test/message-throw-events.test.ts` for § 2; each later part names its own)*
+*(tests: `packages/engine/test/message-throw-events.test.ts` for § 2; `packages/engine/test/error-boundary-subprocess.test.ts` for § 5 and § 6; each later part names its own)*
 
 ---
 

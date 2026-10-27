@@ -33,6 +33,7 @@ export type ClaseElemento =
   | 'eventGateway'
   | 'timer'
   | 'throw'
+  | 'errorBoundary'
   | 'flow';
 
 /**
@@ -63,6 +64,9 @@ export function fieldsForKind(clase: ClaseElemento | null): readonly string[] | 
     // ADR-033 R-THR-2: a none or message intermediate throw event is a milestone with no field of
     // its own; its `fixedCost` would charge nothing, as on a start or an end.
     case 'throw':
+    // ADR-033 § 5: an error boundary takes `errorProbability`, whose control #703 adds; until then
+    // the panel offers nothing on it and a written value shows in Routes.
+    case 'errorBoundary':
     case 'xor':
     case 'or':
     case 'and':
@@ -88,8 +92,9 @@ const RESERVADOS = new Set(['priority', 'preempt', 'batch', 'conditions']);
  * unreachable by hiding the others:
  *
  * - `arrivals`: what a start event takes — how often a case arrives and how many do.
- * - `times`: how long each activity (and timer) takes and what it costs per case, plus the
- *   reserved fields of § 4, which have no step of their own and are only ever shown to be deleted.
+ * - `times`: how long each activity (and timer) takes and what it costs per case, how many times a
+ *   looping task repeats (ADR-033 § 3), plus the reserved fields of § 4, which have no step of
+ *   their own and are only ever shown to be deleted.
  * - `routes`: how the work branches — the probability and conditions of the flows.
  * - `resources`: which pools a task takes, and `selection` (whether it needs all of them or any
  *   one, R14). The Lote M analysis put `selection` in Routes, but it is the resource choice of a
@@ -99,10 +104,12 @@ const RESERVADOS = new Set(['priority', 'preempt', 'batch', 'conditions']);
  */
 export const CAMPOS_DE_PASO: Record<PasoId, readonly string[]> = {
   arrivals: ['interTriggerTimer', 'triggerCount'],
-  // `instances` (ADR-033 § 4) is shown here only when a scenario already declares it: no class
-  // offers it until #703 adds the control for a task with a multi-instance marker.
-  times: ['processingTime', 'fixedCost', 'instances', 'priority', 'preempt', 'batch'],
-  routes: ['probability', 'conditions'],
+  // ADR-033 § 3: `loop` belongs to Times, but no class offers it yet: #703 offers it on a task
+  // with a loop marker. Until then Times only draws a `loop` the scenario already has (as a
+  // generic fieldset) and is where a loop problem (`E-BUCLE-SIN-SALIDA`) lands. The same holds
+  // for `instances` on a task with a multi-instance marker (ADR-033 § 4).
+  times: ['processingTime', 'fixedCost', 'priority', 'preempt', 'batch', 'loop', 'instances'],
+  routes: ['probability', 'conditions', 'errorProbability'],
   resources: ['resources', 'selection'],
   calendars: ['calendar'],
   run: [],

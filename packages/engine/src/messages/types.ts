@@ -53,6 +53,8 @@ export interface OuterCodeMessages {
   'E-CAMPO-NO-APLICA/solo-tarea': (path: string) => string;
   'E-CAMPO-NO-APLICA/selection': (path: string) => string;
   'E-CAMPO-NO-APLICA/solo-flujo-xor': (path: string) => string;
+  /** ADR-033 § 3: `loop` on an element without a loop marker. */
+  'E-CAMPO-NO-APLICA/solo-bucle': (path: string) => string;
   /** ADR-033 § 4 (#701): `instances` on an element without a multi-instance marker. */
   'E-CAMPO-NO-APLICA/solo-multi': (path: string) => string;
   'E-TIMER-RECURSO': (path: string) => string;
@@ -65,12 +67,19 @@ export interface OuterCodeMessages {
     ref: string,
   ) => string;
   'E-XOR-SUMA-CERO': (path: string) => string;
+  /** ADR-033 § 3, R-LOOP-2: `loop.probability: 1` on a loop marker with no `loopMaximum`. */
+  'E-BUCLE-SIN-SALIDA': (path: string) => string;
   'E-SIN-PARADA': (path: string) => string;
   'W-SIN-SEED': (path: string) => string;
   'W-ELEMENTO-SIN-PARAMETROS': (path: string) => string;
   'W-COND-INALCANZABLE': (path: string, flowId: string, gatewayId: string) => string;
   /** R-OR-2, #398: one entry per undeclared flow of an OR that declares probability on some others. */
   'W-OR-PROB-PARCIAL': (path: string, flowId: string, gatewayId: string) => string;
+
+  /* --- scenario.ts (lint): error boundary events (ADR-033 § 5, #702) */
+  /** `sum` arrives already formatted as `String(Number(sum.toFixed(6)))`. */
+  'E-PROB-ERROR-SUMA/lint': (path: string, hostId: string, sum: string) => string;
+  'E-CAMPO-NO-APLICA/solo-error': (path: string) => string;
 
   /* --- scenario.ts (schema) ----------------------------------------- */
   'E-CLAVE-DESCONOCIDA': (keys: string) => string;
@@ -113,6 +122,8 @@ export interface ZodMessages {
   startInvalidTime: (start: string, clock: string) => string;
   startInvalidOffset: (start: string, offset: string) => string;
   currencyIso: () => string;
+  /** ADR-033 § 3: `elements.<id>.loop` with neither or both of `count` and `probability`. */
+  loopExactlyOne: () => string;
   intervalFrom: () => string;
   intervalTo: () => string;
   intervalOrder: () => string;

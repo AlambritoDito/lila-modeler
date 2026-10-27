@@ -185,3 +185,39 @@ describe('buildReplay with an event-based gateway', () => {
     expect(eventReplay.passages.some((passage) => passage.elementId === 'Gateway_Espera')).toBe(true);
   });
 });
+
+describe('buildReplay with a looping task (ADR-033 § 3, #700)', () => {
+  it('the token leaves the task once, after the last iteration, as the engine counts it', async () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="urn:lila:test">
+  <bpmn:process id="P" isExecutable="true">
+    <bpmn:startEvent id="S" />
+    <bpmn:sequenceFlow id="F1" sourceRef="S" targetRef="T" />
+    <bpmn:task id="T"><bpmn:standardLoopCharacteristics /></bpmn:task>
+    <bpmn:sequenceFlow id="F2" sourceRef="T" targetRef="E" />
+    <bpmn:endEvent id="E" />
+  </bpmn:process>
+</bpmn:definitions>`;
+    const loopIr = (await parseBpmn(xml)).ir;
+    const parsed = parseScenario({
+      version: 1,
+      name: 'Loop',
+      model: 'model.bpmn',
+      run: { start: '2026-09-07T08:00:00-06:00', seed: 1 },
+      elements: { S: { triggerCount: 1 }, T: { processingTime: { type: 'constant', value: 10 }, loop: { count: 3 } } },
+    });
+    if (!parsed.success) throw new Error('the loop scenario does not parse');
+    const loopScenario = parsed.data as ResolvedScenario;
+    const loopRows: EventLogRow[] = [];
+    const loopResult = simulate(loopIr, loopScenario, { onEvent: (row) => loopRows.push(row) });
+    const loopReplay = buildReplay(loopRows, loopIr, loopScenario);
+
+    expect(loopReplay.moves.filter((move) => move.flows.includes('F2')).map((move) => move.from)).toEqual([30]);
+    const final = stateAt(loopReplay, loopReplay.horizon);
+    for (const id of ['S', 'T', 'E']) {
+      expect([id, final.elements[id]?.started, final.elements[id]?.completed])
+        .toEqual([id, loopResult.elements[id]?.started, loopResult.elements[id]?.completed]);
+    }
+    expect(final.elements.T?.completed).toBe(3);
+  });
+});

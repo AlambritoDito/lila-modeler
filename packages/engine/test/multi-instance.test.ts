@@ -535,6 +535,83 @@ describe('R-MI-6 — boundary events, terminate and stop', () => {
   });
 });
 
+describe('R-MI-6 with #702 — error boundaries and an enclosing sub-process', () => {
+  /** Start → Task_Review (parallel, N = 3) → End, with an interrupting error boundary. */
+  const withError = definitions(`    <bpmn:startEvent id="Start" />
+    <bpmn:sequenceFlow id="Flow_In" sourceRef="Start" targetRef="Task_Review" />
+    <bpmn:userTask id="Task_Review">${marker({ cardinality: '3' })}</bpmn:userTask>
+    <bpmn:sequenceFlow id="Flow_Out" sourceRef="Task_Review" targetRef="End" />
+    <bpmn:endEvent id="End" />
+    <bpmn:boundaryEvent id="Error_Rejected" attachedToRef="Task_Review"><bpmn:errorEventDefinition id="Def_Rejected" /></bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="Flow_Rejected" sourceRef="Error_Rejected" targetRef="End_Rejected" />
+    <bpmn:endEvent id="End_Rejected" />`);
+
+  test('an error drawn on a completed instance closes the other open ones; the token leaves once', async () => {
+    // One unit: instance 1 completes at 10 and the error fires; instance 2 (granted at 10 by the
+    // release) and instance 3 (queued) close `interrupted` and never complete.
+    const result = run(await irOf(withError), {
+      ...oneCase({ resources: [{ ref: 'reviewer' }] }, { Error_Rejected: { errorProbability: 1 } }),
+      resources: { reviewer: { capacity: 1 } },
+    });
+    expect(result.process).toMatchObject({ started: 1, completed: 1 });
+    expect(result.process.cycleTime.mean).toBe(10);
+    expect(result.elements.Task_Review).toMatchObject({ started: 3, completed: 1 });
+    expect(result.elements.Error_Rejected).toMatchObject({ started: 1, completed: 1 });
+    expect(rowsOf(result, 'Task_Review').map((row) => [row.status, row.observedUntil])).toEqual([
+      ['completed', 10],
+      ['interrupted', 10],
+      ['interrupted', 10],
+    ]);
+    expect(result.flows.Flow_Out!.count).toBe(0);
+    expect(result.flows.Flow_Rejected!.count).toBe(1);
+  });
+
+  test('with errorProbability 0 every instance completes and the token leaves normally', async () => {
+    const result = run(await irOf(withError), oneCase({}, { Error_Rejected: { errorProbability: 0 } }));
+    expect(result.elements.Task_Review).toMatchObject({ started: 3, completed: 3 });
+    expect(result.elements.Error_Rejected).toMatchObject({ started: 0, completed: 0 });
+    expect(result.flows.Flow_Out!.count).toBe(1);
+  });
+
+  test('a sub-process deadline cancels the entry inside it: no instance runs after, its own timer never fires', async () => {
+    const xml = definitions(`    <bpmn:startEvent id="Start" />
+    <bpmn:sequenceFlow id="Flow_In" sourceRef="Start" targetRef="Sub" />
+    <bpmn:subProcess id="Sub">
+      <bpmn:startEvent id="Sub_Start" />
+      <bpmn:sequenceFlow id="Sub_In" sourceRef="Sub_Start" targetRef="Task_Review" />
+      <bpmn:task id="Task_Review">${marker({ isSequential: 'true', cardinality: '3' })}</bpmn:task>
+      <bpmn:sequenceFlow id="Sub_Out" sourceRef="Task_Review" targetRef="Sub_End" />
+      <bpmn:endEvent id="Sub_End" />
+      <bpmn:boundaryEvent id="Timer_Task" attachedToRef="Task_Review"><bpmn:timerEventDefinition id="Def_Task" /></bpmn:boundaryEvent>
+      <bpmn:sequenceFlow id="Sub_Late" sourceRef="Timer_Task" targetRef="Sub_End" />
+    </bpmn:subProcess>
+    <bpmn:sequenceFlow id="Flow_Out" sourceRef="Sub" targetRef="End" />
+    <bpmn:endEvent id="End" />
+    <bpmn:boundaryEvent id="Deadline" attachedToRef="Sub"><bpmn:timerEventDefinition id="Def_Deadline" /></bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="Flow_Late" sourceRef="Deadline" targetRef="End_Late" />
+    <bpmn:endEvent id="End_Late" />`);
+    const result = run(
+      await irOf(xml),
+      oneCase({}, {
+        Deadline: { processingTime: { type: 'constant', value: 15 } },
+        Timer_Task: { processingTime: { type: 'constant', value: 100 } },
+      }),
+    );
+    expect(result.process.cycleTime.mean).toBe(15);
+    expect(result.elements.Task_Review).toMatchObject({ started: 2, completed: 1 });
+    expect(result.elements.Deadline).toMatchObject({ started: 1, completed: 1 });
+    expect(result.elements.Timer_Task).toMatchObject({ started: 0, completed: 0 });
+    expect(rowsOf(result, 'Task_Review').map((row) => row.status)).toEqual(['completed', 'interrupted']);
+    expect(result.process.inFlight).toBe(0);
+    // The task's own timer can no longer fire, so it does not stretch the run to t = 100 (R-BND-9).
+    const replication = runReplication(await irOf(xml), ScenarioSchema.parse(oneCase({}, {
+      Deadline: { processingTime: { type: 'constant', value: 15 } },
+      Timer_Task: { processingTime: { type: 'constant', value: 100 } },
+    })) as unknown as SimScenario);
+    expect(replication.stoppedAt).toBe(15);
+  });
+});
+
 describe('CLI — `lila validate` and `lila run` accept the element; same seed, same bytes', () => {
   let root: string;
   let output: string[];

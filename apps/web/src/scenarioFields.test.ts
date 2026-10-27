@@ -48,6 +48,8 @@ describe('fieldsForKind (§ 2.5, columna «Applies to»)', () => {
     expect(fieldsForKind('terminate')).toEqual(['fixedCost']);
     // ADR-033 R-THR-2: an intermediate throw event is a milestone with no field of its own.
     expect(fieldsForKind('throw')).toEqual([]);
+    // ADR-033 § 5: an error boundary takes `errorProbability`, but its control is #703's.
+    expect(fieldsForKind('errorBoundary')).toEqual([]);
   });
 
   it('una compuerta no tiene ningún campo de elemento; sus ramas se editan en su vista', () => {
@@ -66,17 +68,24 @@ describe('fieldsForKind (§ 2.5, columna «Applies to»)', () => {
     const delEsquema = new Set(Object.keys(ElementSchema.shape));
     // Los reservados de § 4 no los ofrece nadie a propósito: el motor los rechaza con error.
     const reservados = new Set(['priority', 'preempt', 'batch', 'conditions']);
-    // ADR-033 § 1.7: a task offers `instances` only when it has a multi-instance marker, and that
-    // control is #703's; until then the field is reachable only once declared (Times step).
-    const pendientes703 = new Set(['instances']);
+    // ADR-033 § 5: the engine takes `errorProbability` since #702; the panel offers it with #703.
+    const sinControlTodavia = new Set(['errorProbability']);
     const ofrecidos = new Set(
       (['task', 'start', 'timer', 'end', 'terminate', 'flow'] as const).flatMap(
         (c) => fieldsForKind(c)!,
       ),
     );
+    // ADR-033 § 1.7: `loop` and `instances` are offered only on a task with a loop or a
+    // multi-instance marker, which the class alone does not say; #703 adds those controls. Until
+    // then no class offers them, and it must stay so.
+    const conMarcador = new Set(['loop', 'instances']);
     for (const campo of ofrecidos) expect(delEsquema.has(campo)).toBe(true);
+    for (const campo of conMarcador) {
+      expect(delEsquema.has(campo)).toBe(true);
+      expect(ofrecidos.has(campo)).toBe(false);
+    }
     for (const campo of delEsquema) {
-      if (!reservados.has(campo) && !pendientes703.has(campo)) expect(ofrecidos.has(campo)).toBe(true);
+      if (!reservados.has(campo) && !sinControlTodavia.has(campo) && !conMarcador.has(campo)) expect(ofrecidos.has(campo)).toBe(true);
     }
   });
 });
