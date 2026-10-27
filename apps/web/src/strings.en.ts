@@ -978,6 +978,9 @@ export const en = {
       points: 'Points',
       // ADR-028: conditions on a flow leaving a diverging XOR
       flowTaken: 'Flow already taken',
+      // ADR-033 § 3: the loop marker of a task (#703 adds its own controls)
+      loop: 'Loop',
+      count: 'Iterations',
       // reserved (§ 4)
       priority: 'Priority',
       preempt: 'Preemption',

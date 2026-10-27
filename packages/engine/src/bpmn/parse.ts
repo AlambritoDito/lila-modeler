@@ -924,7 +924,8 @@ export function rawLoopMaximum(xml: string): Map<string, string> {
 /**
  * ADR-033 § 3: the loop cap from the raw `loopMaximum` literal. Only a trimmed decimal integer
  * literal (`/^\d+$/`) of at least 1 caps the loop; absent, `0`, a sign, a fraction or any other
- * text means no cap.
+ * text means no cap. So does a literal beyond `Number.MAX_SAFE_INTEGER`: no run reaches it, and
+ * reading it as no cap makes `probability: 1` an `E-BUCLE-SIN-SALIDA` instead of an endless run.
  */
 function loopMaximumOf(raw: string | undefined): number | undefined {
   const trimmed = raw?.trim();

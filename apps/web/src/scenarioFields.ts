@@ -101,7 +101,8 @@ const RESERVADOS = new Set(['priority', 'preempt', 'batch', 'conditions']);
 export const CAMPOS_DE_PASO: Record<PasoId, readonly string[]> = {
   arrivals: ['interTriggerTimer', 'triggerCount'],
   // ADR-033 § 3: `loop` belongs to Times, but no class offers it yet: #703 offers it on a task
-  // with a loop marker. Here it only sends a loop problem (`E-BUCLE-SIN-SALIDA`) to this step.
+  // with a loop marker. Until then Times only draws a `loop` the scenario already has (as a
+  // generic fieldset) and is where a loop problem (`E-BUCLE-SIN-SALIDA`) lands.
   times: ['processingTime', 'fixedCost', 'priority', 'preempt', 'batch', 'loop'],
   routes: ['probability', 'conditions'],
   resources: ['resources', 'selection'],

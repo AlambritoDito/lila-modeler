@@ -320,7 +320,7 @@ repite como dice el `elements[<tarea>].loop` del escenario: exactamente `count` 
 iteración con `probability` tras cada una (`SCENARIO_FORMAT.md` § 2.5). Su nodo del IR lleva
 `loop: { maximum? }`: `maximum` es el `loopMaximum` leído del literal en bruto del XML (como
 `cancelActivity`, R-BND-10) cuando, sin espacios, es un literal entero decimal ≥ 1; ausente, `0`,
-un signo, una fracción o cualquier otro texto significa sin tope. `testBefore` y `loopCondition` se
+un signo, una fracción o cualquier otro texto significa sin tope (también un literal mayor que `Number.MAX_SAFE_INTEGER`, al que ninguna corrida llega: con `probability: 1` es `E-BUCLE-SIN-SALIDA` en vez de una corrida sin fin). `testBefore` y `loopCondition` se
 leen y se ignoran, así que la primera iteración siempre corre: decide el escenario, como las
 probabilidades sustituyen a `conditionExpression` (R-PERF-4). En un subproceso embebido el marcador
 sigue siendo `E-NOSOP` con la construcción `loopMarker` (§3).
@@ -333,7 +333,7 @@ sigue siendo `E-NOSOP` con la construcción `loopMarker` (§3).
   tomarlas antes de la siguiente (no hay retención). *(prueba: #700)*
 - **R-LOOP-2 — La decisión.** Al completarse la iteración `k`: si `k` es igual a `count` o a
   `maximum`, el token sale; si no, con `probability`, se sortea un uniforme `u` del stream derivado
-  `<taskId>#loop` (§16, ADR-033 § 1) y la siguiente iteración se habilita en el mismo instante si
+  `<taskId>#loop` (ADR-033 § 1.3: un stream propio, sembrado como los de R-DET-2) y la siguiente iteración se habilita en el mismo instante si
   `u < p`. `count` nunca sortea, y no se sortea cuando un tope ya decide. La siguiente iteración
   se habilita con un evento nuevo del heap empujado en ese instante, así que `(t, seq)` (R-TOK-3)
   la ordena como a cualquier otra habilitación; no es una entrada nueva: no cuenta ningún flujo
@@ -1413,7 +1413,7 @@ W-BUCLE-SIN-PARAMETROS: <taskId>: marcador de bucle sin loop en el escenario; se
 ```
 
 `core/` también lanza `E-BUCLE-SIN-SALIDA` con una `probability` mayor que 1 y sin tope, que el
-lint reporta como `E-PROB-RANGO`. Un `loop` sin ninguno o con los dos de `count` y `probability`
+lint reporta como `E-PROB-RANGO`: una divergencia lint/`core/` declarada más, además de las dos del párrafo final de esta sección. Un `loop` sin ninguno o con los dos de `count` y `probability`
 es un error de esquema en `elements.<id>.loop`: `declare exactly one of count or probability` /
 ``declara exactamente uno de `count` o `probability` ``. El aviso sale cada vez que un token llega
 a la tarea y se agrega como cualquier otro.

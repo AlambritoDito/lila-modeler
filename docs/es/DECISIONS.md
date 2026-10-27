@@ -813,7 +813,7 @@ ninguna decisión más.
   gateway, y `W-REPLICACIONES-SIN-OBSERVACIONES` no se le aplica. No hay degradación: no hay campo
   que pueda faltar.
 
-### 3. Marcador de bucle estándar (#700)
+### 3. Marcador de bucle estándar (#700, implementado)
 
 **Perfil e IR.** `standardLoopCharacteristics` en una tarea o call activity soportada (en un
 subproceso embebido sigue siendo `E-NOSOP` `loopMarker`). El nodo de la tarea recibe

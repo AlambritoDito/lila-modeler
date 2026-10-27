@@ -326,7 +326,7 @@ scenario's `elements[<task>].loop` says: exactly `count` iterations, or another 
 `probability` after each one (`SCENARIO_FORMAT.md` § 2.5). Its IR node carries
 `loop: { maximum? }`: `maximum` is `loopMaximum` read from the raw XML literal (as `cancelActivity`
 is, R-BND-10) when, trimmed, it is a decimal integer literal ≥ 1; absent, `0`, a sign, a fraction or
-any other text means no cap. `testBefore` and `loopCondition` are read and ignored, so the first
+any other text means no cap (so is a literal beyond `Number.MAX_SAFE_INTEGER`, which no run reaches: with `probability: 1` it is `E-BUCLE-SIN-SALIDA` rather than an endless run). `testBefore` and `loopCondition` are read and ignored, so the first
 iteration always runs: the scenario decides, as probabilities replace `conditionExpression`
 (R-PERF-4). On an embedded sub-process the marker stays `E-NOSOP` with construction `loopMarker`
 (§3).
@@ -338,7 +338,7 @@ iteration always runs: the scenario decides, as probabilities replace `condition
   each iteration, so another token can take them before the next one (no holding). *(test: #700)*
 - **R-LOOP-2 — The decision.** When iteration `k` completes: if `k` equals `count` or `maximum`,
   the token leaves; otherwise, with `probability`, one uniform `u` is drawn from the derived stream
-  `<taskId>#loop` (§16, ADR-033 § 1) and the next iteration is enabled in the same instant if
+  `<taskId>#loop` (ADR-033 § 1.3: a stream of its own, seeded like R-DET-2's) and the next iteration is enabled in the same instant if
   `u < p`. `count` never draws, and no draw is made when a cap already decides. The next iteration
   is enabled by a new heap event pushed at that instant, so `(t, seq)` (R-TOK-3) orders it like any
   other enabling; it is not a new entry: no flow is counted and no boundary event is re-armed
@@ -1420,7 +1420,7 @@ W-BUCLE-SIN-PARAMETROS: <taskId>: marcador de bucle sin loop en el escenario; se
 ```
 
 `core/` also throws `E-BUCLE-SIN-SALIDA` for a `probability` above 1 with no cap, which the lint
-reports as `E-PROB-RANGO`. A `loop` with neither or both of `count` and `probability` is a schema
+reports as `E-PROB-RANGO`: one more declared lint/core divergence besides the two in this section's final paragraph. A `loop` with neither or both of `count` and `probability` is a schema
 error at `elements.<id>.loop`: `declare exactly one of count or probability` /
 ``declara exactamente uno de `count` o `probability` ``. The warning is emitted each time a token
 reaches the task and aggregated like any other.

@@ -794,7 +794,7 @@ decision draws from, so the per-element PRs do not need any further decision.
   and `W-REPLICACIONES-SIN-OBSERVACIONES` does not apply to it. Nothing degrades: there is no field
   to miss.
 
-### 3. Standard loop marker (#700)
+### 3. Standard loop marker (#700, implemented)
 
 **Profile and IR.** `standardLoopCharacteristics` on a supported task or call activity (on an
 embedded sub-process it stays `E-NOSOP` `loopMarker`). The task node gets
