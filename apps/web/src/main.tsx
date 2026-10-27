@@ -25,12 +25,12 @@ const desktop = typeof window.lila !== 'undefined';
 const store = desktop ? new DesktopStore() : new BrowserStore(new Map([['pedido', { xml: pedido, name: 'model.bpmn' }]]));
 // #653: a phone (or `?visor`) gets the read-only viewer, which only reads the saved session.
 const visor = !desktop && abrirVisor(location.search, Math.min(screen.width, screen.height));
-// #704: the beta build on Pages says so in a band over the editor; the stable app and the desktop never do.
+const vista = visor
+  ? <Visor inicial={(store as BrowserStore).restoreSession()} />
+  : <App store={store} bpmnFilesEnabled={!desktop} />;
+// #704: the beta build on Pages says so in a band over the editor or the viewer; the stable app
+// and the desktop never do.
 const beta = !desktop && channelOf() === 'beta';
 createRoot(document.getElementById('root')!, { onUncaughtError: (error) => { console.error(error); failStartup(); } }).render(
-  <StrictMode>{visor
-    ? <Visor inicial={(store as BrowserStore).restoreSession()} />
-    : beta
-      ? <div className="canal-beta"><AvisoBeta /><App store={store} bpmnFilesEnabled /></div>
-      : <App store={store} bpmnFilesEnabled={!desktop} />}</StrictMode>,
+  <StrictMode>{beta ? <div className="canal-beta"><AvisoBeta />{vista}</div> : vista}</StrictMode>,
 );

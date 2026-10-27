@@ -92,8 +92,8 @@ The site offers two builds of the web app (#704), each with its own button on th
 - `tools/build-pages.mjs` builds both into `_site/` and writes `_site/versions.json`
   (`{ stable: { version, tag, sha, downloads? }, beta: { version, sha } }`), from which the landing
   shows the stable version, its `.dmg`/`.exe` links and the beta's short SHA. The site itself
-  (landing, docs, build script) always comes from `main`. Locally, without `gh` or network, pass
-  the tag: `node tools/build-pages.mjs --stable-tag v1.0.0-beta.26`.
+  (landing, docs, build script) always comes from `main`. Locally, where `gh` is missing or not
+  logged in, pass the tag: `node tools/build-pages.mjs --stable-tag v1.0.0-beta.26`.
 - `.github/workflows/pages.yml` runs on a push to `main`, a published Release and by hand. A
   `release` event runs the workflow file as it is in the tagged commit, so the first Release that
   renews `app/` on its own is one tagged after #704 reached `main`; before that, run the workflow
@@ -104,7 +104,9 @@ The site offers two builds of the web app (#704), each with its own button on th
 - **Storage.** Both apps share the origin `alambritodito.github.io`. The stable app keeps the
   `lila.*` keys and the `lila-modeler-*` offline cache it always had; the beta uses names prefixed
   with its base path (`lila[/lila-modeler/beta/].*`) and is installed as «Lila Modeler Beta», so it
-  can neither overwrite nor recover the stable app's projects (`apps/web/src/channel.ts`).
+  can neither overwrite nor recover the stable app's projects (`apps/web/src/channel.ts`). They
+  still share the origin's storage quota: a very large beta session can make the stable app's
+  local copy fail to save (a console warning; the downloaded `.lila` is unaffected).
 - For a release: publish the GitHub Release (with its installers) first, then let the Pages run
   (or the manual dispatch) rebuild `app/` from it. Check `versions.json` on the deployed site.
 

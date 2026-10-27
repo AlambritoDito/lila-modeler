@@ -9,7 +9,7 @@
  * app's offline cache. Every storage name in the app goes through this module so the rule lives
  * in one place:
  *
- * - **Stable** (any base not ending in `/beta/`: `/` in dev and Electron, `/lila-modeler/app/` on
+ * - **Stable** (any base not ending in `/beta/` or `/beta`: `/` in dev and Electron, `/lila-modeler/app/` on
  *   Pages) keeps today's names, `lila.<name>` and `lila-modeler-<version>`, so existing users
  *   lose nothing.
  * - **Beta** prefixes them with its base path: `lila[/lila-modeler/beta/].<name>` and
@@ -22,7 +22,8 @@
 export type Channel = 'stable' | 'beta';
 
 export function channelOf(base: string = import.meta.env.BASE_URL): Channel {
-  return base.endsWith('/beta/') ? 'beta' : 'stable';
+  // With or without the trailing slash: a base typed as `/lila-modeler/beta` must not pass for stable.
+  return /\/beta\/?$/.test(base) ? 'beta' : 'stable';
 }
 
 /** The `localStorage` key for `name` (`tema`, `project.v1`, …) in the build served at `base`. */
@@ -37,7 +38,7 @@ export function cachePrefix(base: string = import.meta.env.BASE_URL): string {
 
 /** The stable app next to a beta build: `/lila-modeler/beta/` → `/lila-modeler/app/`. */
 export function stableAppPath(base: string = import.meta.env.BASE_URL): string {
-  return base.replace(/beta\/$/, 'app/');
+  return base.replace(/beta\/?$/, 'app/');
 }
 
 /**

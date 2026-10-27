@@ -62,7 +62,7 @@ Run the directed tests after `npm run build`:
 
 ```sh
 npx vitest run apps/web/src/replay
-npm run build:pages
+npm run build:pages -- --stable-tag HEAD
 LILA_E2E_CONCURRENT=1 LILA_E2E_PORT=18763 LILA_E2E_CDP_PORT=19363 \
   LILA_E2E_SCREENSHOT=/tmp/lila-363-animate.png node tools/e2e-replay.mjs
 ```

@@ -21,8 +21,10 @@ npm run build:pages
 The script builds the Vite app twice and assembles `_site/`: landing page, `beta/` (the checked-out
 tree, `LILA_WEB_BASE=/lila-modeler/beta/`), `app/` (the stable Release's tag in a temporary
 `git worktree`, `LILA_WEB_BASE=/lila-modeler/app/`), `versions.json`, local fonts/themes, English
-screenshots and the rendered docs. It asks `gh` for the stable tag; without `gh` or network, pass it:
-`npm run build:pages -- --stable-tag v1.0.0-beta.26` (or `LILA_STABLE_TAG`). The normal
+screenshots and the rendered docs. It asks `gh` for the stable tag; where `gh` is missing or not
+logged in, pass it: `npm run build:pages -- --stable-tag v1.0.0-beta.26` (or `LILA_STABLE_TAG`).
+A tag the clone lacks is fetched from `origin` and the worktree runs `npm ci`, so that still needs
+the network; only `--stable-tag HEAD` builds fully offline. The normal
 desktop/web build retains its root base. To preview the real subpath, serve a directory containing
 a `lila-modeler` link or copy of `_site`, then open `/lila-modeler/` on that server.
 

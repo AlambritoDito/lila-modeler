@@ -63,15 +63,18 @@ body {
   grid-template-columns: auto 1fr 0;
 }
 
-/* The beta build on Pages (#704, `AvisoBeta.tsx`): a one-line band over the editor, which takes the
-   rest of the window; closing the band gives its row back. Only the beta mounts `.canal-beta`. */
+/* The beta build on Pages (#704, `AvisoBeta.tsx`): a one-line band over the editor (or the phone
+   viewer), which takes the rest of the window; closing the band gives its row back. Only the beta
+   mounts `.canal-beta`. */
 .canal-beta {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
 }
 
-.canal-beta > .app {
+.canal-beta > .app,
+.canal-beta > .visor {
   flex: 1;
   min-height: 0;
   height: auto;

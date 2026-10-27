@@ -28,6 +28,7 @@ function sources(): [string, string][] {
 describe('channel of a build', () => {
   it('is beta only for a base ending in /beta/', () => {
     expect(channelOf(BETA)).toBe('beta');
+    expect(channelOf('/lila-modeler/beta')).toBe('beta');
     for (const base of ['/', APP, '/lila-modeler/', '/beta-x/']) expect(channelOf(base)).toBe('stable');
     expect(stableAppPath(BETA)).toBe(APP);
   });
@@ -53,9 +54,15 @@ describe('storage names (#704)', () => {
     }
   });
 
-  it('no storage call in the app names a key by hand', () => {
-    const literal = /(?:localStorage|sessionStorage|storage)\.(?:getItem|setItem|removeItem)\(\s*['"`]/;
+  it('no storage call passes a literal key, and no code outside channel.ts spells a key out', () => {
+    const literal = /(?:localStorage|sessionStorage|storage)\??\.(?:getItem|setItem|removeItem)\(\s*['"`]/;
     for (const [file, text] of sources()) expect(literal.test(text), file).toBe(false);
+    // `lila.<name>` for a name in use, written in code (comments aside) instead of `storageKey(name)`.
+    const codigo = (text: string) => text.split('\n').filter((l) => !/^\s*(?:\*|\/\/|\/\*)/.test(l)).join('\n');
+    for (const [file, text] of sources()) {
+      if (file === 'channel.ts') continue;
+      for (const nombre of nombres) expect(codigo(text).includes(`lila.${nombre}'`), `${file}: lila.${nombre}`).toBe(false);
+    }
     // Nor a cache or a database opened outside the service worker, whose names `cachePrefix` covers.
     for (const [file, text] of sources()) expect(/indexedDB\.open|caches\.open/.test(text), file).toBe(false);
   });
@@ -138,6 +145,8 @@ describe('beta notice', () => {
   it('is mounted only by the beta build, never by the stable or desktop one', () => {
     const main = readFileSync(join(SRC, 'main.tsx'), 'utf8');
     expect(main).toMatch(/const beta = !desktop && channelOf\(\) === 'beta';/);
+    // Over whichever view opens, the editor or the phone viewer.
+    expect(main).toContain(`{beta ? <div className="canal-beta"><AvisoBeta />{vista}</div> : vista}`);
     expect(main.match(/<AvisoBeta/g)).toHaveLength(1);
   });
 });

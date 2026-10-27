@@ -12,6 +12,24 @@
   const LANG_KEY = 'lila-landing-lang';
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  // #704: the stable Release (badge, button, downloads) and the beta's short SHA. First, so an
+  // error in the animations below cannot keep the versions from showing.
+  const RELEASES = 'https://github.com/AlambritoDito/lila-modeler/releases';
+  function applyVersions(v) {
+    const stable = v?.stable, beta = v?.beta;
+    if (typeof stable?.tag === 'string' && typeof stable.version === 'string') {
+      const page = `${RELEASES}/tag/${encodeURIComponent(stable.tag)}`;
+      $('#badge-stable').href = page;
+      $('#badge-version').textContent = `v${stable.version}`;
+      $('#ver-stable').textContent = `v${stable.version}`;
+      $('#dl-mac').href = typeof stable.downloads?.dmg === 'string' ? stable.downloads.dmg : page;
+      $('#dl-win').href = typeof stable.downloads?.exe === 'string' ? stable.downloads.exe : page;
+    }
+    if (typeof beta?.sha === 'string') $('#ver-beta').textContent = beta.sha.slice(0, 7);
+  }
+  fetch('versions.json', { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).then(applyVersions, () => {});
+
+
   // Spanish strings; the English ones are the page's own markup, captured at load.
   const ES = {
     nav1: 'Capacidades', nav2: 'Cómo corre', nav3: 'Comparar', nav4: 'Inicio rápido', nav5: 'Pantallas',
@@ -379,22 +397,6 @@
     drawHero(); drawRep();
     requestAnimationFrame(loop);
   }
-  // #704: the stable Release (badge, button, downloads) and the beta's short SHA.
-  const RELEASES = 'https://github.com/AlambritoDito/lila-modeler/releases';
-  function applyVersions(v) {
-    const stable = v?.stable, beta = v?.beta;
-    if (typeof stable?.tag === 'string' && typeof stable.version === 'string') {
-      const page = `${RELEASES}/tag/${encodeURIComponent(stable.tag)}`;
-      $('#badge-stable').href = page;
-      $('#badge-version').textContent = `v${stable.version}`;
-      $('#ver-stable').textContent = `v${stable.version}`;
-      $('#dl-mac').href = typeof stable.downloads?.dmg === 'string' ? stable.downloads.dmg : page;
-      $('#dl-win').href = typeof stable.downloads?.exe === 'string' ? stable.downloads.exe : page;
-    }
-    if (typeof beta?.sha === 'string') $('#ver-beta').textContent = beta.sha.slice(0, 7);
-  }
-  fetch('versions.json', { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).then(applyVersions, () => {});
-
   applyLang();
   pushHud();
   requestAnimationFrame(loop);

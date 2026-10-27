@@ -1,8 +1,9 @@
 /**
  * The band over the beta build on Pages (#704): this is the preview built from `main`, and the
- * stable app is one link away. Only `main.tsx` mounts it, and only when the build's base is the
- * beta's (`channel.ts`) and the app is not the desktop one. Closing it lasts for the tab
- * (`sessionStorage`): a new visit says it again, so nobody forgets which build they are in.
+ * stable app is one link away. Only `main.tsx` mounts it, over the editor or the phone viewer, and
+ * only when the build's base is the beta's (`channel.ts`) and the app is not the desktop one.
+ * Closing it lasts for the tab (`sessionStorage`): a new visit says it again, so nobody forgets
+ * which build they are in.
  */
 import { useState } from 'react';
 import { stableAppPath, storageKey } from './channel';
