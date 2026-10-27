@@ -756,11 +756,10 @@ ninguna decisión más.
    mano (el patrón del preflight de R-REC-2).
 7. **Formas del IR.** Cada parte añade miembros opcionales al IR, escritos solo cuando el elemento
    está presente, así que todo otro IR queda como está. Se nombran abajo. Los consumidores
-   exhaustivos de `NodeType` (`process-document.ts`) reciben los miembros nuevos en el mismo PR; la
-   tabla de campos del panel Simular (`apps/web/src/scenarioFields.ts`) los recibe con #703:
-   `throw` no ofrece ningún campo, `errorBoundary` ofrece `errorProbability` y una tarea ofrece
-   `loop` o `instances` cuando tiene ese marcador. Hasta entonces el panel no filtra los campos de
-   estos elementos, como con cualquier id que no conoce.
+   exhaustivos de `NodeType` (`process-document.ts`, el `ClaseElemento` del panel Simular en
+   `apps/web/src/scenarioFields.ts`) reciben los miembros nuevos en el mismo PR: `throw` no ofrece
+   ningún campo (#698), `errorBoundary` ofrece `errorProbability` y una tarea ofrece `loop` o
+   `instances` cuando tiene ese marcador (#703 añade los controles).
 8. **Ids de regla.** `SEMANTICS.md` recibe las reglas de cada parte con los ids dados aquí:
    R-MSG-1…2 y R-THR-1…3 (§ 9.2, #698), R-LOOP-1…6 (§ 4.1, #700), R-MI-1…6 (§ 4.2, #701),
    R-ERR-1…5 (§ 9.3, #702) y R-BND-15…19 (§ 9, después de R-BND-14, #702).

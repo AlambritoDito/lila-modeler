@@ -739,11 +739,10 @@ decision draws from, so the per-element PRs do not need any further decision.
    pattern).
 7. **IR shapes.** Each part adds optional IR members, written only when the element is present,
    so every other IR stays as it is. They are named below. Exhaustive consumers of `NodeType`
-   (`process-document.ts`) get the new members in the same PR; the Simulate panel's field table
-   (`apps/web/src/scenarioFields.ts`) gets them with #703: `throw` offers no field,
-   `errorBoundary` offers `errorProbability`, and a task offers `loop` or `instances` when it has
-   that marker. Until then the panel does not filter the fields of these elements, as for any id
-   it does not know.
+   (`process-document.ts`, the Simulate panel's `ClaseElemento` in `apps/web/src/scenarioFields.ts`)
+   get the new members in the same PR: `throw` offers no field (#698), `errorBoundary` offers
+   `errorProbability`, and a task offers `loop` or `instances` when it has that marker (#703 adds
+   the controls).
 8. **Rule ids.** `SEMANTICS.md` receives each part's rules with the ids given here: R-MSG-1…2 and
    R-THR-1…3 (§ 9.2, #698), R-LOOP-1…6 (§ 4.1, #700), R-MI-1…6 (§ 4.2, #701), R-ERR-1…5 (§ 9.3,
    #702) and R-BND-15…19 (§ 9, after R-BND-14, #702).

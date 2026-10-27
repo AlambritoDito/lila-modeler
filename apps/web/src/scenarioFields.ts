@@ -32,6 +32,7 @@ export type ClaseElemento =
   | 'and'
   | 'eventGateway'
   | 'timer'
+  | 'throw'
   | 'flow';
 
 /**
@@ -59,6 +60,9 @@ export function fieldsForKind(clase: ClaseElemento | null): readonly string[] | 
       // ADR-028: `conditions` only means something on a flow leaving a diverging XOR, and the
       // class alone does not say which; a flow elsewhere gets `E-CAMPO-NO-APLICA` from the lint.
       return ['probability', 'conditions'];
+    // ADR-033 R-THR-2: a none or message intermediate throw event is a milestone with no field of
+    // its own; its `fixedCost` would charge nothing, as on a start or an end.
+    case 'throw':
     case 'xor':
     case 'or':
     case 'and':
