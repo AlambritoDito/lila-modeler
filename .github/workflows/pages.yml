@@ -1,10 +1,15 @@
 name: Pages
 
+# The site has two channels (#704): `beta/` is built from `main`, `app/` from the latest GitHub
+# Release (`tools/build-pages.mjs`). A push to `main` renews the beta, a published Release renews the
+# stable app, and both are always assembled from `main`'s site and build script, whatever the event.
 on:
   pull_request:
     paths: ['apps/web/**', 'packages/engine/**', 'examples/**', 'site/**', 'docs/**', 'tools/build-pages.mjs', 'tools/build-docs.mjs', 'package*.json', '.github/workflows/pages.yml']
   push:
     branches: [main]
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       publish:
@@ -15,38 +20,51 @@ on:
 permissions:
   contents: read
 
+# Pull requests build side by side; every other run (push, Release, manual) queues in one group, so
+# the run that builds last reads the newest `main` and the newest Release and deploys last.
 concurrency:
-  group: pages-${{ github.ref }}
+  group: pages-${{ github.event_name == 'pull_request' && github.ref || 'site' }}
   cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # A pull request builds its own code; a push builds the pushed commit; a Release or a manual
+      # run builds `main` (the stable app itself comes from the Release's tag, below).
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.ref || github.event_name == 'push' && github.sha || 'main' }}
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
       - name: Record the source being built
         env:
+          EVENT: ${{ github.event_name }}
           REF: ${{ github.ref }}
           SHA: ${{ github.sha }}
         run: |
-          echo "ref=$REF sha=$SHA head=$(git rev-parse HEAD)" | tee -a "$GITHUB_STEP_SUMMARY"
-          test "$(git rev-parse HEAD)" = "$SHA"
+          echo "event=$EVENT ref=$REF sha=$SHA head=$(git rev-parse HEAD)" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$EVENT" = push ] || [ "$EVENT" = pull_request ]; then test "$(git rev-parse HEAD)" = "$SHA"; fi
       - run: npm ci
+      # `gh` picks the stable tag (latest Release, else the newest prerelease) and lists its
+      # installers; the read-only GITHUB_TOKEN is all it needs.
       - run: node tools/build-pages.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Record the versions published
+        run: cat _site/versions.json | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
 
   deploy:
-    # Build and upload by default. The owner publishes manually after review, from `main` or
-    # from a validated release tag (`gh workflow run pages.yml --ref v1.0.0-beta.1 -f publish=true`
-    # takes this workflow file and the site source from that exact tag). Automatic publication
-    # on push stays behind the PAGES_PUBLISH_ENABLED repository variable.
-    if: (github.event_name == 'workflow_dispatch' && inputs.publish && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))) || (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.PAGES_PUBLISH_ENABLED == 'true')
+    # Build and upload by default. The owner publishes manually after review by running this
+    # workflow from `main` with `publish` (`gh workflow run pages.yml --ref main -f publish=true`).
+    # Automatic publication on a push to `main` or a published Release stays behind the
+    # PAGES_PUBLISH_ENABLED repository variable.
+    if: (github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main') || ((github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'release') && vars.PAGES_PUBLISH_ENABLED == 'true')
     needs: build
     # One deployment at a time, never cancelled: a manual publish waits for a running one.
     concurrency:
