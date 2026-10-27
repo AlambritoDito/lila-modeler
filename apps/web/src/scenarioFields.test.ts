@@ -64,8 +64,8 @@ describe('fieldsForKind (§ 2.5, columna «Applies to»)', () => {
     ]);
     // A marker means nothing on another class: a timer is never a loop.
     expect(fieldsForKind('timer', { bucle: true, multiInstancia: true })).toEqual(fieldsForKind('timer'));
-    expect(marcadoresDe({ type: 'task', loop: {} })).toEqual({ bucle: true, multiInstancia: false });
-    expect(marcadoresDe({ type: 'task', multiInstance: { sequential: true } })).toEqual({ bucle: false, multiInstancia: true });
+    expect(marcadoresDe({ loop: {} })).toEqual({ bucle: true, multiInstancia: false });
+    expect(marcadoresDe({ multiInstance: { sequential: true } })).toEqual({ bucle: false, multiInstancia: true });
     expect(marcadoresDe(undefined)).toEqual(sin);
   });
 
