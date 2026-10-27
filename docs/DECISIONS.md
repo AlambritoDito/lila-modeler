@@ -750,7 +750,8 @@ decision draws from, so the per-element PRs do not need any further decision.
    `/solo-error` `only accepted on an error boundary event (${path}).` /
    `solo se admite en un evento de error adjunto (${path}).` A `loop` with neither or both of
    `count` and `probability` is a schema error at `elements.<id>.loop` with the message
-   `declare exactly one of count or probability` / `declara exactamente uno de count o probability`.
+   `declare exactly one of count or probability` / ``declara exactamente uno de `count` o `probability` ``
+   (the field names in backticks: a Spanish text carries no bare English field name, #519).
 7. **IR shapes.** Each part adds optional IR members, written only when the element is present,
    so every other IR stays as it is. They are named below. A new node type reaches every place
    that names the node types, in the same PR: `NODE_CATEGORY` in `process-document.ts`, the

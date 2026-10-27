@@ -88,8 +88,9 @@ const RESERVADOS = new Set(['priority', 'preempt', 'batch', 'conditions']);
  * unreachable by hiding the others:
  *
  * - `arrivals`: what a start event takes — how often a case arrives and how many do.
- * - `times`: how long each activity (and timer) takes and what it costs per case, plus the
- *   reserved fields of § 4, which have no step of their own and are only ever shown to be deleted.
+ * - `times`: how long each activity (and timer) takes and what it costs per case, how many times a
+ *   looping task repeats (ADR-033 § 3), plus the reserved fields of § 4, which have no step of
+ *   their own and are only ever shown to be deleted.
  * - `routes`: how the work branches — the probability and conditions of the flows.
  * - `resources`: which pools a task takes, and `selection` (whether it needs all of them or any
  *   one, R14). The Lote M analysis put `selection` in Routes, but it is the resource choice of a
@@ -99,7 +100,9 @@ const RESERVADOS = new Set(['priority', 'preempt', 'batch', 'conditions']);
  */
 export const CAMPOS_DE_PASO: Record<PasoId, readonly string[]> = {
   arrivals: ['interTriggerTimer', 'triggerCount'],
-  times: ['processingTime', 'fixedCost', 'priority', 'preempt', 'batch'],
+  // ADR-033 § 3: `loop` belongs to Times, but no class offers it yet: #703 offers it on a task
+  // with a loop marker. Here it only sends a loop problem (`E-BUCLE-SIN-SALIDA`) to this step.
+  times: ['processingTime', 'fixedCost', 'priority', 'preempt', 'batch', 'loop'],
   routes: ['probability', 'conditions'],
   resources: ['resources', 'selection'],
   calendars: ['calendar'],

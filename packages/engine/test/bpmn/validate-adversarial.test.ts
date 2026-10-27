@@ -99,7 +99,8 @@ test('la precedencia es determinista, conserva nombres con comillas y ordena ent
   expect(await errorsOf(xml)).toEqual([
     'Choreo_First (bpmn:choreography, "Raíz "uno""): diagrama de coreografía no soportado por el simulador.',
     'Choreo_Task (bpmn:choreographyTask): diagrama de coreografía no soportado por el simulador.',
-    'Task_Many (bpmn:task): marcador de bucle en la actividad no soportado por el simulador.',
+    // ADR-033 § 3: the loop marker is in the profile on a task, so `startQuantity` comes next.
+    'Task_Many (bpmn:task): atributo `startQuantity` distinto de 1 no soportado por el simulador.',
     'Boundary_Many (bpmn:boundaryEvent): evento adjunto a actividad (boundary event) no soportado por el simulador.',
     'Throw_Signal (bpmn:intermediateThrowEvent): evento intermedio de lanzamiento no soportado por el simulador.',
     'End_Timer (bpmn:endEvent): evento de fin con ese disparador no soportado por el simulador.',

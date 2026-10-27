@@ -767,7 +767,8 @@ ninguna decisión más.
    `/solo-error` `only accepted on an error boundary event (${path}).` /
    `solo se admite en un evento de error adjunto (${path}).` Un `loop` sin `count` ni
    `probability`, o con los dos, es un error de esquema en `elements.<id>.loop` con el mensaje
-   `declare exactly one of count or probability` / `declara exactamente uno de count o probability`.
+   `declare exactly one of count or probability` / ``declara exactamente uno de `count` o `probability` ``
+   (los nombres de campo entre comillas invertidas: un texto en español no lleva nombres de campo en inglés sueltos, #519).
 7. **Formas del IR.** Cada parte añade miembros opcionales al IR, escritos solo cuando el elemento
    está presente, así que todo otro IR queda como está. Se nombran abajo. Un tipo de nodo nuevo
    llega en el mismo PR a todos los sitios que nombran los tipos de nodo: `NODE_CATEGORY` en

@@ -54,6 +54,10 @@ export interface CoreCodeMessages {
   'E-CAL-VACIO/festivos': (name: string) => string;
   'E-CAL-DESCONOCIDO': (subject: string, calendar: string) => string;
 
+  /* --- core/sim.ts (loop marker preflight, ADR-033 § 3) -------------- */
+  /** R-LOOP-2: `probability: 1` on a task whose loop marker has no `loopMaximum`. */
+  'E-BUCLE-SIN-SALIDA/elemento': (nodeId: string) => string;
+
   /* --- core/resources.ts (internal guards) -------------------------- */
   'E-REC-LIBERACION': (requestId: string) => string;
   'E-REC-SOLICITUD-DUPLICADA': (requestId: string) => string;
@@ -84,6 +88,8 @@ export interface CoreCodeMessages {
   /** R-EVG-5: variant for a branch event of an event-based gateway, which never fires instead. */
   'W-TIMER-SIN-TIEMPO/rama': (nodeId: string, gatewayId: string) => string;
   'W-BORDE-SIN-TIEMPO': (nodeId: string, hostId: string) => string;
+  /** ADR-033 § 3: a task with a loop marker and no `loop` in the scenario runs once. */
+  'W-BUCLE-SIN-PARAMETROS': (nodeId: string) => string;
   'W-OR-JOIN-SIN-FORK': (nodeId: string) => string;
   'W-JOIN-BLOQUEADO': (nodeId: string, cases: number) => string;
   /** R-EVG-6: variant for the token an event-based gateway with no armable branch keeps. */

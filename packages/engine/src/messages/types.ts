@@ -53,6 +53,8 @@ export interface OuterCodeMessages {
   'E-CAMPO-NO-APLICA/solo-tarea': (path: string) => string;
   'E-CAMPO-NO-APLICA/selection': (path: string) => string;
   'E-CAMPO-NO-APLICA/solo-flujo-xor': (path: string) => string;
+  /** ADR-033 § 3: `loop` on an element without a loop marker. */
+  'E-CAMPO-NO-APLICA/solo-bucle': (path: string) => string;
   'E-TIMER-RECURSO': (path: string) => string;
   'E-REC-DESCONOCIDO/recurso': (path: string, ref: string) => string;
   'E-REC-DUPLICADO/ref': (path: string, ref: string) => string;
@@ -63,6 +65,8 @@ export interface OuterCodeMessages {
     ref: string,
   ) => string;
   'E-XOR-SUMA-CERO': (path: string) => string;
+  /** ADR-033 § 3, R-LOOP-2: `loop.probability: 1` on a loop marker with no `loopMaximum`. */
+  'E-BUCLE-SIN-SALIDA': (path: string) => string;
   'E-SIN-PARADA': (path: string) => string;
   'W-SIN-SEED': (path: string) => string;
   'W-ELEMENTO-SIN-PARAMETROS': (path: string) => string;
@@ -111,6 +115,8 @@ export interface ZodMessages {
   startInvalidTime: (start: string, clock: string) => string;
   startInvalidOffset: (start: string, offset: string) => string;
   currencyIso: () => string;
+  /** ADR-033 § 3: `elements.<id>.loop` with neither or both of `count` and `probability`. */
+  loopExactlyOne: () => string;
   intervalFrom: () => string;
   intervalTo: () => string;
   intervalOrder: () => string;

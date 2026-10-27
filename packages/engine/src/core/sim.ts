@@ -72,6 +72,12 @@ export interface SimElement {
    * en una salida de un XOR divergente; gana la primera entrada cuyo `flowTaken` esté recorrido.
    */
   conditions?: readonly { readonly flowTaken: string; readonly probability: number }[] | undefined;
+  /**
+   * ADR-033 § 3 (R-LOOP-1…6): how a task with a standard loop marker repeats. Exactly one of
+   * `count` (iterations per entry) and `probability` (of another iteration after each one); the
+   * scenario schema enforces it. Read only on a task whose IR node has `loop`.
+   */
+  loop?: { readonly count?: number | undefined; readonly probability?: number | undefined } | undefined;
 }
 
 /** Un tramo de `resources[pool].capacity` por intervalos: `capacity` unidades durante `calendar`. */
@@ -292,6 +298,28 @@ export function assertSupportedResourceScenario(scenario: SimScenario, locale: L
   }
 }
 
+/**
+ * ADR-033 § 3 (R-LOOP-2): preflight of the loop marker, with the same contract as the resource
+ * one (before any public callback). `validateScenario` reports `E-BUCLE-SIN-SALIDA` for the same
+ * defect; `core/` repeats it because a loop that never ends would never let the run stop. A
+ * `probability` above 1 (`E-PROB-RANGO` in the lint) never ends either, so it trips the same guard.
+ */
+export function assertSupportedLoopScenario(
+  ir: ProcessIR,
+  scenario: SimScenario,
+  locale: Locale = 'en',
+): void {
+  for (const [nodeId, node] of Object.entries(ir.nodes)) {
+    if (node.loop === undefined || node.loop.maximum !== undefined) continue;
+    const loop = scenario.elements?.[nodeId]?.loop;
+    if (loop?.count === undefined && (loop?.probability ?? 0) >= 1) {
+      throw new RangeError(
+        coded('E-BUCLE-SIN-SALIDA', coreMessages(locale).codes['E-BUCLE-SIN-SALIDA/elemento'](nodeId)),
+      );
+    }
+  }
+}
+
 /* ------------------------------------------------------------------ *
  * Calendarios (§12, LILA-041)
  * ------------------------------------------------------------------ */
@@ -458,6 +486,11 @@ type SimEvent =
        * Absent everywhere else, which is every token that did not come out of one.
        */
       readonly duration?: number;
+      /**
+       * ADR-033 R-LOOP-2: the next iteration of a loop already open, keyed by the activity
+       * instance of its iteration 1. Not a new entry: no flow counted, no boundary re-armed.
+       */
+      readonly loopEntry?: string;
     }
   | {
       readonly t: number;
@@ -491,6 +524,20 @@ interface ActivityState {
   allocation?: ResourceAllocation;
   startedAt: number | null;
   closed: boolean;
+  /** ADR-033 R-LOOP-1: the loop this iteration belongs to (iteration 1's instance id). */
+  loopEntry?: string;
+}
+
+/**
+ * ADR-033 R-LOOP-1/5: one entry of a token into a task whose scenario declares `loop`, shared by
+ * all its iterations and keyed by iteration 1's activity instance id. A boundary timer armed at
+ * iteration 1 acts on `current`, so it covers the whole loop.
+ */
+interface LoopEntry {
+  /** Iterations enabled so far. */
+  iteration: number;
+  /** Activity instance of the iteration in flight (or the last one, once the token left). */
+  current: string;
 }
 
 /** Estado vivo de un caso mientras corre. */
@@ -565,6 +612,8 @@ export function runReplication(
   assertSupportedResourceScenario(scenario, locale);
   // R-CAL-4 / R-CAL-10: compilado una sola vez por replicación. Vacío ⇒ 24×7 en todas partes.
   const calendars = assertSupportedCalendarScenario(scenario, locale);
+  // ADR-033 R-LOOP-2: a loop that can never end is rejected before the first event.
+  assertSupportedLoopScenario(ir, scenario, locale);
 
   // Cache por `(nodeId, pools)`: una tarea AND con los mismos dos pools intersecta una vez, no
   // una vez por instancia. Con el mapa vacío ni siquiera se construye la clave.
@@ -661,6 +710,28 @@ export function runReplication(
   const resourceManager = new ResourceManager(poolDefinitions, locale);
   const activities = new Map<string, ActivityState>();
   let nextActivityInstanceId = 1;
+
+  /* --- loop marker (ADR-033 § 3) ------------------------------------ */
+
+  /** Open loops by iteration 1's activity instance id; empty in a model without `loop`. */
+  const loops = new Map<string, LoopEntry>();
+  /**
+   * R-LOOP-5: a boundary event is armed once per entry, on iteration 1; on a loop it acts on the
+   * iteration in flight. Any other boundary keeps its own activity instance.
+   */
+  const boundaryTarget = (activityInstanceId: string): string =>
+    loops.get(activityInstanceId)?.current ?? activityInstanceId;
+  /**
+   * R-LOOP-2: when iteration `k` completes, does another one run? `count` and `maximum` cap it
+   * without drawing; otherwise one uniform from the derived stream `<taskId>#loop` (R-DET-2,
+   * ADR-033 § 1.3) decides with `probability`.
+   */
+  const loopAgain = (nodeId: string, maximum: number | undefined, k: number): boolean => {
+    const loop = spec[nodeId]?.loop;
+    if (loop?.count !== undefined) return k < Math.min(loop.count, maximum ?? Infinity);
+    if (loop?.probability === undefined || (maximum !== undefined && k >= maximum)) return false;
+    return rngFor(`${nodeId}#loop`).next() < loop.probability;
+  };
 
   /**
    * R-CAL-11: los eventos de subida de capacidad se agendan **solo cuando hay alguien esperando**
@@ -1033,7 +1104,7 @@ export function runReplication(
     // capacidad: una corrida sin `run.duration` no debe estirar `stoppedAt` hasta un temporizador
     // que nunca iba a disparar (R-ARR-3).
     if (next.kind === 'boundary') {
-      const pending = activities.get(next.activityInstanceId);
+      const pending = activities.get(boundaryTarget(next.activityInstanceId));
       if (pending === undefined || pending.closed) continue;
     }
     // R-EVT-5 / R-BND-9: el `done` de una actividad que ya cerró otro evento —el `terminate` que
@@ -1131,10 +1202,26 @@ export function runReplication(
       if (activity.requestId !== undefined) {
         startAllocations(resourceManager.release([activity.requestId], next.t));
       }
-      // Completar una tarea incluye recorrer sus flujos salientes instantáneos (R-TOK-4).
-      // Una cancelación activada por onEvent se observa después de cerrar esa transición
-      // atómica, nunca entre el contador/row de la tarea y su forward.
-      forward(node, next.caseId, activity.marks, next.t);
+      // ADR-033 R-LOOP-2/3: another iteration is a new enabling of the same task at this instant,
+      // pushed to the heap like any other; the token only leaves after the last one.
+      const loop = activity.loopEntry === undefined ? undefined : loops.get(activity.loopEntry);
+      if (loop !== undefined && loopAgain(next.nodeId, node.loop?.maximum, loop.iteration)) {
+        loop.iteration += 1;
+        heap.push({
+          t: next.t,
+          kind: 'enter',
+          caseId: next.caseId,
+          nodeId: next.nodeId,
+          marks: activity.marks,
+          loopEntry: activity.loopEntry!,
+        });
+      } else {
+        if (loop !== undefined) loops.delete(activity.loopEntry!);
+        // Completar una tarea incluye recorrer sus flujos salientes instantáneos (R-TOK-4).
+        // Una cancelación activada por onEvent se observa después de cerrar esa transición
+        // atómica, nunca entre el contador/row de la tarea y su forward.
+        forward(node, next.caseId, activity.marks, next.t);
+      }
       if (isAborted()) {
         cancelled = true;
         stoppedAt = clock;
@@ -1144,7 +1231,7 @@ export function runReplication(
     }
 
     if (next.kind === 'boundary') {
-      const activity = activities.get(next.activityInstanceId);
+      const activity = activities.get(boundaryTarget(next.activityInstanceId));
       if (activity === undefined || activity.closed) continue;
       // R-BND-6: el borde cuenta un disparo entero (un `started` y un `completed` en el mismo
       // instante) y no emite fila de log propia, interrumpa o no.
@@ -1172,6 +1259,8 @@ export function runReplication(
         if (activity.requestId !== undefined) {
           startAllocations(resourceManager.cancel([activity.requestId], next.t));
         }
+        // ADR-033 R-LOOP-5: interrupting a loop closes the iteration in flight; no further one runs.
+        if (activity.loopEntry !== undefined) loops.delete(activity.loopEntry);
         forward(node, next.caseId, activity.marks, next.t);
       }
       if (isAborted()) {
@@ -1243,12 +1332,26 @@ export function runReplication(
         };
         activities.set(activity.id, activity);
         state.activityIds.add(activity.id);
+        // ADR-033 R-LOOP-1: every iteration is its own activity instance. Iteration 1 opens the
+        // loop; a task with the marker and no `loop` in the scenario runs once, with a warning.
+        if (next.loopEntry !== undefined) {
+          activity.loopEntry = next.loopEntry;
+          loops.get(next.loopEntry)!.current = activity.id;
+        } else if (node.loop !== undefined) {
+          if (spec[next.nodeId]?.loop === undefined) {
+            warn(coded('W-BUCLE-SIN-PARAMETROS', M['W-BUCLE-SIN-PARAMETROS'](next.nodeId)));
+          } else {
+            activity.loopEntry = activity.id;
+            loops.set(activity.id, { iteration: 1, current: activity.id });
+          }
+        }
         // R-BND-2/3/7: el borde cuenta desde que la tarea queda habilitada, con su propio flujo
         // de aleatorios (por eso las corridas sin bordes no cambian) y a reloj de pared salvo que
         // el borde declare calendario. Se encola **antes** que el `done` para que, con el mismo
         // instante, el desempate por orden de inserción lo gane el borde: interrumpa (R-BND-7) o
         // no (R-BND-13, donde «ganar» es encontrar al host todavía abierto y disparar).
-        for (const boundaryId of boundariesByHost.get(next.nodeId) ?? []) {
+        // ADR-033 R-LOOP-5: on a loop the boundaries are armed once per entry, at iteration 1.
+        for (const boundaryId of next.loopEntry === undefined ? (boundariesByHost.get(next.nodeId) ?? []) : []) {
           const boundaryDist = spec[boundaryId]?.processingTime;
           // R-BND-8: sin tiempo no hay plazo que vencer; el borde nunca dispara.
           if (boundaryDist === undefined) {
@@ -1433,6 +1536,7 @@ export function runReplication(
             if (activity === undefined || activity.closed) continue;
             closeActivity(activity, next.t, 'terminated');
             if (activity.requestId !== undefined) requestIds.push(activity.requestId);
+            if (activity.loopEntry !== undefined) loops.delete(activity.loopEntry);
           }
           startAllocations(resourceManager.cancel(requestIds, next.t));
         }

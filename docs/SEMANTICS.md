@@ -76,6 +76,7 @@ defined semantics; everything else falls into section 3 of this document.
 | `bpmn:intermediateCatchEvent` with `timerEventDefinition` or `messageEventDefinition`, as a branch of that gateway | `timer` | wait with the branch's own time, with no resource (§9.1) |
 | `bpmn:task` and all its variants (`userTask`, `serviceTask`, `sendTask`, `receiveTask`, `manualTask`, `scriptTask`, `businessRuleTask`) | `task` | work with duration and resources (§11) |
 | `bpmn:callActivity` | `task` | task with its own duration (§4) |
+| `bpmn:task` (any variant) or `bpmn:callActivity` with `standardLoopCharacteristics` | `task` with `loop` | repeats per the scenario's `loop` (§4.1, R-LOOP-1) |
 | `bpmn:subProcess` embedded (`triggeredByEvent="false"`, no markers) | — | flattened (§4) |
 | `bpmn:exclusiveGateway` | `xor` | diverging: §6; converging: pass-through merge |
 | `bpmn:inclusiveGateway` | `or` | §7 |
@@ -156,7 +157,7 @@ failure. The text follows Bizagi's style ("not supported by the simulator").
 | `bpmn:eventBasedGateway` other than an exclusive, non-instantiating one whose every outgoing flow goes to a timer or message branch catch event: `instantiate="true"`, `eventGatewayType="Parallel"`, any other branch element, or no outgoing flow | `eventBasedGateway` | `event-based gateway` | `gateway basado en eventos` |
 | `bpmn:complexGateway` | `complexGateway` | `complex gateway` | `gateway complejo` |
 | `multiInstanceLoopCharacteristics` | `multiInstanceMarker` | `multi-instance marker` | `marcador de multi-instancia` |
-| `standardLoopCharacteristics` | `loopMarker` | `loop marker on the activity` | `marcador de bucle en la actividad` |
+| `standardLoopCharacteristics` on an embedded sub-process (on a task or call activity it is in the profile, §4.1) | `loopMarker` | `loop marker on the activity` | `marcador de bucle en la actividad` |
 | `bpmn:transaction` | `transactionSubProcess` | `transaction subprocess` | `subproceso transaccional` |
 | `bpmn:adHocSubProcess` | `adHocSubProcess` | `ad-hoc subprocess` | `subproceso ad-hoc` |
 | `bpmn:subProcess` with `triggeredByEvent="true"` | `eventSubProcess` | `event subprocess` | `subproceso de eventos` |
@@ -317,6 +318,53 @@ failure. The text follows Bizagi's style ("not supported by the simulator").
 - **R-PLAN-5 — Flattening does not change the numbers.** A process with an embedded sub-process
   and the same process flattened by hand produce the same `RunResult`, except for the ids of the
   internal nodes. *(test: LILA-019)*
+
+### 4.1 Standard loop marker (ADR-033)
+
+A `bpmn:task` (any variant) or `bpmn:callActivity` with `standardLoopCharacteristics` repeats as the
+scenario's `elements[<task>].loop` says: exactly `count` iterations, or another iteration with
+`probability` after each one (`SCENARIO_FORMAT.md` § 2.5). Its IR node carries
+`loop: { maximum? }`: `maximum` is `loopMaximum` read from the raw XML literal (as `cancelActivity`
+is, R-BND-10) when, trimmed, it is a decimal integer literal ≥ 1; absent, `0`, a sign, a fraction or
+any other text means no cap. `testBefore` and `loopCondition` are read and ignored, so the first
+iteration always runs: the scenario decides, as probabilities replace `conditionExpression`
+(R-PERF-4). On an embedded sub-process the marker stays `E-NOSOP` with construction `loopMarker`
+(§3).
+
+- **R-LOOP-1 — Each iteration is an activity instance.** Iteration 1 is enabled when the token
+  arrives. Every iteration has its own `activityInstanceId`, its own resource request queued in
+  FIFO order by its own enabling (R-REC-3), its own `processingTime` sample from the task's stream,
+  its calendar (R-CAL-4/5) and its `fixedCost` when it completes. Units are released at the end of
+  each iteration, so another token can take them before the next one (no holding). *(test: #700)*
+- **R-LOOP-2 — The decision.** When iteration `k` completes: if `k` equals `count` or `maximum`,
+  the token leaves; otherwise, with `probability`, one uniform `u` is drawn from the derived stream
+  `<taskId>#loop` (§16, ADR-033 § 1) and the next iteration is enabled in the same instant if
+  `u < p`. `count` never draws, and no draw is made when a cap already decides. The next iteration
+  is enabled by a new heap event pushed at that instant, so `(t, seq)` (R-TOK-3) orders it like any
+  other enabling; it is not a new entry: no flow is counted and no boundary event is re-armed
+  (R-LOOP-5). With an error boundary on the task (#702), the error is decided first: if it fires
+  the loop ends and `#loop` is not drawn. `probability: 1` with no `maximum` is
+  `E-BUCLE-SIN-SALIDA`, in the lint and in `core/` before the first event. *(test: #700)*
+- **R-LOOP-3 — One token, one pass on the flows.** The case keeps one token in the task for the
+  whole loop; it leaves through the first outgoing flow after the last iteration, so incoming and
+  outgoing flows count once per entry. *(test: #700)*
+- **R-LOOP-4 — Results.** `elements[task].started`/`completed` count iterations (Bizagi's
+  "Instances started/completed"); `processing`, `resourceWait`, `offHoursWait` and `queueLength`
+  are per iteration; `fixedCostTotal = fixedCost × completed iterations`. The event log has one
+  row group per iteration. No result field is added and no column is renamed. *(test: #700)*
+- **R-LOOP-5 — Boundary events cover the whole loop.** The loop is open from iteration 1's
+  enabling until the token leaves, and that is what R-BND-4 checks. A boundary timer is armed once
+  per entry, from iteration 1's `enabledAt` (R-BND-2), before the iteration's own `done`, so a tie
+  interrupts (R-BND-7). Interrupting, it closes the current iteration `interrupted` (R-BND-5) and
+  no further iteration runs; non-interrupting, it fires at most once per entry. An error boundary
+  (#702) draws per completed iteration and, on error, no further iteration runs. *(test: #700)*
+- **R-LOOP-6 — Terminate and stop.** The open iteration is treated as R-EVT-6 and R-ARR-5 say; no
+  further iteration runs. Zero-time iterations still count toward R-TOK-7's budget. *(test: #700)*
+
+Degradation: a task with the marker and no `loop` in the scenario runs exactly one iteration, as if
+the marker were absent (same bytes), plus warning `W-BUCLE-SIN-PARAMETROS` naming the task each
+time a token reaches it (§17). A scenario that declares no `loop` draws nothing from `#loop`, so it
+keeps its results bit for bit (R-DET-3).
 
 ---
 
@@ -1185,6 +1233,7 @@ Errors (they abort; validation errors are returned in `errors[]`, runtime errors
 | `E-CAMPO-NO-APLICA` | field declared on an element that does not admit it (R4, R5, R14) |
 | `E-CAL-VACIO` | calendar with no intervals, a calendar whose every opening falls on one of its own holidays (R-CAL-14, cites `calendars.<name>`), or empty intersection of calendars (cites the task) |
 | `E-SIN-PARADA` | neither `run.duration` nor any `triggerCount` |
+| `E-BUCLE-SIN-SALIDA` | `loop.probability: 1` on a task whose loop marker has no `loopMaximum`: the loop never ends (R-LOOP-2); the lint cites `elements.<id>.loop.probability` and `core/` repeats the check before the first event |
 | `E-RESERVADO` | reserved field (§15, exact text in R-RES-2) |
 
 Exact texts of R-CAL-11's two errors (`packages/engine/src/scenario.ts` for the lint,
@@ -1351,6 +1400,31 @@ W-REPLICACIONES-SIN-OBSERVACIONES: <endId>: ningún caso terminó aquí en <m> d
 With `n = 1` the Spanish texts end in `solo la otra replicación` instead of `solo las otras 1`.
 `R ≥ 2` always (`0 < n < R`); a single replication would read `of 1 replication` / `de 1 replicación`.
 
+Loop marker (ADR-033 § 3, §4.1). `E-BUCLE-SIN-SALIDA`, `loop` on an element without a loop marker
+(`E-CAMPO-NO-APLICA`, variant `/solo-bucle`) and `W-BUCLE-SIN-PARAMETROS` have these exact texts:
+the lint line of the first error (its `code` travels in its own field), `core/`'s guard, the
+`E-CAMPO-NO-APLICA` variant and the warning, in `en` and in `es`:
+
+```
+a loop with probability 1 and no loopMaximum never ends (elements.<id>.loop.probability).
+E-BUCLE-SIN-SALIDA: <taskId>: a loop with probability 1 and no loopMaximum never ends.
+only accepted on a task with a loop marker (elements.<id>.loop).
+W-BUCLE-SIN-PARAMETROS: <taskId>: loop marker with no loop in the scenario; it runs once.
+```
+
+```
+un bucle con probabilidad 1 y sin loopMaximum nunca termina (elements.<id>.loop.probability).
+E-BUCLE-SIN-SALIDA: <taskId>: un bucle con probabilidad 1 y sin loopMaximum nunca termina.
+solo se admite en una tarea con marcador de bucle (elements.<id>.loop).
+W-BUCLE-SIN-PARAMETROS: <taskId>: marcador de bucle sin loop en el escenario; se ejecuta una vez.
+```
+
+`core/` also throws `E-BUCLE-SIN-SALIDA` for a `probability` above 1 with no cap, which the lint
+reports as `E-PROB-RANGO`. A `loop` with neither or both of `count` and `probability` is a schema
+error at `elements.<id>.loop`: `declare exactly one of count or probability` /
+``declara exactamente uno de `count` o `probability` ``. The warning is emitted each time a token
+reaches the task and aggregated like any other.
+
 `W-START-SIN-LLEGADAS` fires only when the `start` declares **neither** `interTriggerTimer`
 **nor** `triggerCount`: with `triggerCount` alone there are arrivals (all at `t = 0`, R-ARR-1) and
 no warning.
@@ -1412,6 +1486,7 @@ lint or the `core/` guard catches it (unifying them requires touching `core/`; s
 | R-PLAN-1, R-PLAN-2, R-PLAN-5 | embedded sub-process flattened | LILA-019 |
 | R-PLAN-3 | sub-process has no time of its own | LILA-019 (`E-SUBPROC-PARAMETRO`: LILA-198) |
 | R-PLAN-4 | call activity = task with its own duration | LILA-019 |
+| R-LOOP-1 … R-LOOP-6 | standard loop marker on a task (ADR-033 § 3) | #700 (`packages/engine/test/loop-marker.test.ts`) |
 | R-TOK-1 | clock in seconds since `run.start` | LILA-037 |
 | R-TOK-2 | case = set of tokens | LILA-026 |
 | R-TOK-3 | heap `(t, seq)` | LILA-023, LILA-030 |
