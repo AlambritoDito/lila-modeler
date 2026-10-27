@@ -89,8 +89,9 @@ sea el mismo en toda replicación. Ese 0 es la identidad numérica del conjunto 
 duración observada: `total = 0` es cierto (no se procesó nada), pero `min`, `max` y `mean` no
 describen ninguna instancia. Del mismo modo, la `sd` de una sola instancia vale 0 porque no hay
 dispersión que medir. Con varias replicaciones ninguno de los dos entra al agregado (sección 8).
-Gateways, start, end, terminate y timers de borde cuentan `started`/`completed` pero nunca
-producen duraciones: sus ceros son exactos y siempre entran.
+Gateways, start, end, terminate, eventos intermedios de lanzamiento (`SEMANTICS.md` R-THR-1) y
+timers de borde cuentan `started`/`completed` pero nunca producen duraciones: sus ceros son
+exactos y siempre entran.
 
 Bizagi no distingue `resourceWait` de `offHoursWait` (ver sección 3: "Espera fuera de horario separada de espera por recurso — Bizagi ✗ / Lila ✓"); es una métrica extra de Lila.
 

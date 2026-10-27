@@ -232,6 +232,7 @@ const TIPO_BPMN: Partial<Record<ClaseElemento, string>> = {
   and: 'bpmn:ParallelGateway',
   eventGateway: 'bpmn:EventBasedGateway',
   timer: 'bpmn:IntermediateCatchEvent',
+  throw: 'bpmn:IntermediateThrowEvent',
   flow: 'bpmn:SequenceFlow',
 };
 

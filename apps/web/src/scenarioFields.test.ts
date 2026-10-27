@@ -46,6 +46,8 @@ describe('fieldsForKind (§ 2.5, columna «Applies to»)', () => {
     expect(fieldsForKind('timer')).not.toContain('resources');
     expect(fieldsForKind('end')).toEqual(['fixedCost']);
     expect(fieldsForKind('terminate')).toEqual(['fixedCost']);
+    // ADR-033 R-THR-2: an intermediate throw event is a milestone with no field of its own.
+    expect(fieldsForKind('throw')).toEqual([]);
   });
 
   it('una compuerta no tiene ningún campo de elemento; sus ramas se editan en su vista', () => {

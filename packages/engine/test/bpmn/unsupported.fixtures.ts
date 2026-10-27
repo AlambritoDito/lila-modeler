@@ -128,8 +128,12 @@ export const UNSUPPORTED_FIXTURES: UnsupportedFixture[] = [
     ],
   },
   {
-    row: 'bpmn:intermediateThrowEvent (sin disparador o con cualquiera)',
-    xml: processWith('Event_Throw', `<bpmn:intermediateThrowEvent id="Event_Throw" />`),
+    // R-THR-1 (ADR-033): the none and message throws simulate; any other trigger is this row.
+    row: 'bpmn:intermediateThrowEvent con un disparador que no sea none ni message',
+    xml: processWith(
+      'Event_Throw',
+      `<bpmn:intermediateThrowEvent id="Event_Throw"><bpmn:linkEventDefinition id="Def_Throw_Link" name="L" /></bpmn:intermediateThrowEvent>`,
+    ),
     messages: [
       message('Event_Throw', 'bpmn:intermediateThrowEvent', 'evento intermedio de lanzamiento'),
     ],

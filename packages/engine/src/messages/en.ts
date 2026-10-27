@@ -28,6 +28,7 @@ const NODE_TYPES: Record<string, string> = {
   or: 'OR gateway',
   and: 'AND gateway',
   timer: 'timer',
+  throw: 'intermediate throw event',
   eventGateway: 'event-based gateway',
 };
 

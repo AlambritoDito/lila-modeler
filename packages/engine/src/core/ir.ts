@@ -21,6 +21,8 @@ export type NodeType =
   | 'or'
   | 'and'
   | 'timer'
+  /** None or message `bpmn:intermediateThrowEvent`: a no-op milestone that only counts (R-THR-1). */
+  | 'throw'
   /** Exclusive `bpmn:eventBasedGateway`: it arms its branch events and the first one wins (R-EVG-1). */
   | 'eventGateway';
 

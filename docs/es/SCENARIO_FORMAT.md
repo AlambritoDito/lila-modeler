@@ -158,11 +158,22 @@ Mapa `id BPMN → parámetros`. Las claves son ids del diagrama: nodos (`Task_�
 | `resources` | array de `{ ref, quantity }` | tareas | — | `ref` = clave de `resources`; `quantity` integer ≥ 1, default `1`. Sin `resources` ⇒ capacidad infinita. |
 | `selection` | `"and"` \| `"or"` | tareas con `resources` | `"and"` | `and`: arranca cuando **todos** los pools tienen capacidad simultáneamente (se comprueba en cada liberación; no se retienen recursos parciales ⇒ sin deadlock). `or`: se encola en todos, arranca con el primero disponible y se retira de los demás; si hay varios libres a la vez gana el que aparece primero en `resources` (R-REC-6). |
 | `fixedCost` | number ≥ 0 | cualquier nodo | `0` | Costo fijo por token **completado** en el elemento. |
-| `interTriggerTimer` | distribución (§ 3) | starts (incluido el start con timer) | — | Tiempo entre llegadas, en segundos. |
-| `triggerCount` | integer ≥ 1 | starts (incluido el start con timer) | — | Máximo de casos generados por ese elemento (el "Max arrival count" de Bizagi). |
+| `interTriggerTimer` | distribución (§ 3) | starts (incluidos el start con timer y el de mensaje) | — | Tiempo entre llegadas, en segundos. |
+| `triggerCount` | integer ≥ 1 | starts (incluidos el start con timer y el de mensaje) | — | Máximo de casos generados por ese elemento (el "Max arrival count" de Bizagi). |
 | `calendar` | string (clave de `calendars`) | starts, timers y tareas | — | Calendario de llegadas: una llegada que cae en horario cerrado se desplaza al siguiente instante abierto. En una tarea también se admite, y se **intersecta** con el de sus pools (R-CAL-4); un `timer` corre 24×7 salvo que lo declare (R-EVT-3), temporizadores de borde incluidos (R-BND-3). |
 | `probability` | number en `[0, 1]` | sequence flows | equitativo | Probabilidad de tomar el flujo. En XOR se reparte por probabilidad acumulada; en OR cada salida es independiente. El rango lo comprueba el lint (`E-PROB-RANGO`), no el esquema. |
 | `conditions` | array de `{ flowTaken, probability }` | sequence flow que sale de un **XOR divergente** | — | Probabilidad de tomar el flujo **según lo que el caso ya hizo** (ADR-028, R-COND-1…5). La primera entrada cuyo `flowTaken` el caso ya recorrió sustituye la probabilidad declarada de este flujo; si no coincide ninguna, aplica la `probability` a secas. `flowTaken` es el id de un sequence flow del modelo (`E-REF-DESCONOCIDA` si no, `W-COND-INALCANZABLE` si no puede preceder al gateway). En cualquier otro elemento el campo sigue reservado (§ 4). |
+
+Eventos de mensaje y de lanzamiento (ADR-033, `SEMANTICS.md` § 9.2): un start de mensaje admite los campos de start de arriba y un end de mensaje los del end; un evento intermedio de lanzamiento (*none* o de mensaje) no tiene campos propios, y `resources`, `interTriggerTimer` o `triggerCount` en él son `E-CAMPO-NO-APLICA`.
+
+**Especificados para 1.0, aún sin implementar** (ADR-033). El ADR fija estos campos y llegan con el issue que nombra cada fila. Hasta entonces el elemento que configuran sigue siendo `E-NOSOP`, el esquema estricto rechaza `loop`, `instances` y `errorProbability` con `E-CLAVE-DESCONOCIDA`, y la entrada de un temporizador adjunto a un subproceso es `E-ELEMENTO-DESCONOCIDO` (el evento adjunto aún no está en el IR). Son aditivos: `version` sigue en `1` (§ 9).
+
+| Campo | Tipo | Aplica a | Default | Descripción |
+|---|---|---|---|---|
+| `loop` | objeto con exactamente uno de `count` (integer ≥ 1) o `probability` (number en `[0, 1]`) | tarea o call activity con marcador de bucle estándar | — (una iteración y `W-BUCLE-SIN-PARAMETROS`) | #700. `count`: la tarea corre exactamente esas veces por entrada. `probability`: tras cada iteración completada corre otra con esta probabilidad (`1/(1 − p)` ejecuciones en promedio). El `loopMaximum` de BPMN pone tope a los dos. `probability: 1` sin `loopMaximum` es `E-BUCLE-SIN-SALIDA`; fuera de rango es `E-PROB-RANGO`. Cada iteración es una instancia en los resultados (ADR-033 § 3). |
+| `instances` | distribución (§ 3) | tarea o call activity multi-instancia, paralela o secuencial | el `loopCardinality` de BPMN cuando es un literal entero; si no, 1 y `W-MULTI-SIN-CARDINALIDAD` | #701. Número de instancias por entrada, `N = floor(max(0, x) + 0.5)`. Cada instancia es una instancia en los resultados (ADR-033 § 4). |
+| `errorProbability` | number en `[0, 1]` | evento de error adjunto e interruptor sobre una tarea o un subproceso embebido | — (nunca dispara y `W-ERROR-SIN-PROBABILIDAD`) | #702. Cuota de las finalizaciones del anfitrión (o de las salidas del subproceso) que salen por este evento adjunto. Los valores de los eventos de error de un mismo anfitrión suman como mucho 1 (`E-PROB-ERROR-SUMA`); fuera de rango es `E-PROB-RANGO` (ADR-033 § 5). |
+| `processingTime`, `calendar` (ampliados) | como arriba | temporizador adjunto a un subproceso embebido | como arriba (`W-BORDE-SIN-TIEMPO`) | #702. El plazo sobre el subproceso, medido desde que un token del caso entra en él (ADR-033 § 6). |
 
 Asignar un carril entero: el panel web puede rellenar `resources` en **todas las tareas de un carril** en una sola acción (sección de recursos, «Asignar carril»). Es una edición en bloque de este mismo campo por tarea —el carril es una etiqueta del diagrama (`docs/SEMANTICS.md` § 2) y no se guarda nunca en el escenario— y las tareas que ya tienen `resources` se listan y piden confirmación antes de reemplazarlas.
 
@@ -223,7 +234,7 @@ Las seis primeras son literalmente las del documento de estructura; las demás s
 | **R2** | `baseTimeUnit` **solo afecta a la presentación**. |
 | **R3** | Las claves de `elements` **deben existir en el IR**: si falta, **error** citando el `id`; una entrada ausente genera **warning** solo para tareas, temporizadores, starts y XOR/OR divergentes sin probabilidades ni condiciones no vacías en sus salidas (SEMANTICS §17, #360). |
 | **R4** | `probability` solo en **sequence flows** (en un nodo es `E-PROB-EN-NODO`). |
-| **R5** | `interTriggerTimer` / `triggerCount` solo en **starts**, incluido el `bpmn:startEvent` con `timerEventDefinition` (que `SEMANTICS.md` § 2 mapea a `start`). Un `bpmn:intermediateCatchEvent` con timer es retardo, nunca generador: los dos campos ahí son `E-CAMPO-NO-APLICA`. Un `triggerCount` sin `interTriggerTimer` significa `triggerCount` llegadas en `t = 0` (R-ARR-1), no un start mudo. |
+| **R5** | `interTriggerTimer` / `triggerCount` solo en **starts**, incluido el `bpmn:startEvent` con `timerEventDefinition` o con un único `messageEventDefinition` (que `SEMANTICS.md` § 2 mapea a `start`). Un `bpmn:intermediateCatchEvent` con timer es retardo, nunca generador: los dos campos ahí son `E-CAMPO-NO-APLICA`. Un `triggerCount` sin `interTriggerTimer` significa `triggerCount` llegadas en `t = 0` (R-ARR-1), no un start mudo. |
 | **R6** | Al menos uno de `run.duration` o un `triggerCount` **en un start** (el de un elemento que no genera no cuenta como parada). Con `triggerCount` a solas la corrida termina al vaciarse el heap. |
 | R7 | `version` debe ser `1`; la raíz y todos los objetos son estrictos (clave desconocida ⇒ error). |
 | R8 | `model` y `run` deben existir **en el escenario resuelto**; `run.start` debe ser ISO 8601 **con offset** y designar un instante que **existe**: fecha civil real (`2026-02-31`, `2026-13-01` y `2026-02-29` son error, `2024-02-29` no), hora `00:00:00`–`23:59:59` y offset `±00:00`–`±23:59`. `24:00` no se admite aquí (sí en `intervals[].to`, R13): como instante de arranque se escribe `00:00` del día siguiente. |
@@ -411,3 +422,9 @@ Cambios ya aplicados dentro de v1:
   válido y da el mismo resultado byte a byte, porque el entero es el caso de un solo tramo. Un
   escenario que use la forma nueva **no** lo entiende un motor anterior: el esquema estricto lo
   rechaza con un error de tipo, que es la degradación correcta (no adivinar).
+- **`loop`, `instances` y `errorProbability`, y `processingTime`/`calendar` en un temporizador
+  adjunto a un subproceso** (ADR-033, § 2.5; #700, #701, #702). Campos opcionales nuevos:
+  `version` **sigue en 1**, y un escenario que no los usa da el mismo resultado byte a byte. Un
+  motor anterior rechaza el elemento del modelo con `E-NOSOP`, y el escenario con
+  `E-CLAVE-DESCONOCIDA` para las tres claves nuevas o `E-ELEMENTO-DESCONOCIDO` para la entrada de
+  un temporizador adjunto a un subproceso.

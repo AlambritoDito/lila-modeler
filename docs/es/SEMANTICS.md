@@ -63,7 +63,10 @@ definida; todo lo demás cae en la sección 3 de este documento.
 |---|---|---|
 | `bpmn:startEvent` sin disparador (*none*) | `start` | generador de casos (sección 10) |
 | `bpmn:startEvent` con `timerEventDefinition` | `start` | generador de casos, idéntico al *none* |
+| `bpmn:startEvent` con un único `messageEventDefinition` | `start` | generador de casos, idéntico al *none* (§9.2, R-MSG-1) |
 | `bpmn:endEvent` sin disparador (*none*) | `end` | consume el token (§9) |
+| `bpmn:endEvent` con un único `messageEventDefinition` | `end` | consume el token, idéntico al *none* (§9.2, R-MSG-2) |
+| `bpmn:intermediateThrowEvent` sin disparador (*none*) o con un único `messageEventDefinition` | `throw` | hito: cuenta el paso, no consume tiempo (§9.2, R-THR-1) |
 | `bpmn:endEvent` con `terminateEventDefinition` | `terminate` | mata todos los tokens del caso (§9) |
 | `bpmn:intermediateCatchEvent` con `timerEventDefinition` | `timer` | retardo sin recurso (§9) |
 | `bpmn:boundaryEvent` interruptor, con un único `timerEventDefinition`, adjunto a una tarea y con flujo de salida | `timer` con `attachedTo` | plazo que corta la tarea (§9) |
@@ -139,7 +142,7 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
 | Construcción detectada | `id` | `{construction}` (`en`) | `{construcción}` (`es`) |
 |---|---|---|---|
 | `bpmn:boundaryEvent` que no sea un temporizador con una salida adjunto a una tarea, interrumpa o no: de mensaje/error/señal/…, sobre un subproceso o sin flujo de salida | `boundaryEvent` | `event attached to an activity (boundary event)` | `evento adjunto a actividad (boundary event)` |
-| `messageEventDefinition` en cualquier evento que no sea un evento de rama de un event-based gateway soportado (§9.1) | `messageEvent` | `message event` | `evento de mensaje` |
+| `messageEventDefinition` en un evento intermedio de captura que no sea un evento de rama de un event-based gateway soportado (§9.1); con ese único disparador, un evento de inicio, de fin o intermedio de lanzamiento está en el perfil (§9.2) | `messageEvent` | `message event` | `evento de mensaje` |
 | `signalEventDefinition` | `signalEvent` | `signal event` | `evento de señal` |
 | `linkEventDefinition` | `linkEvent` | `link event` | `evento de enlace` |
 | `errorEventDefinition` | `errorEvent` | `error event` | `evento de error` |
@@ -148,7 +151,7 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
 | `conditionalEventDefinition` | `conditionalEvent` | `conditional event` | `evento condicional` |
 | `cancelEventDefinition` | `cancelEvent` | `cancel event` | `evento de cancelación` |
 | `multipleEventDefinition` / `parallelMultipleEventDefinition` | `multipleTriggerEvent` | `event with multiple triggers` | `evento con disparadores múltiples` |
-| `bpmn:intermediateThrowEvent` (sin disparador o con cualquiera) | `intermediateThrowEvent` | `intermediate throw event` | `evento intermedio de lanzamiento` |
+| `bpmn:intermediateThrowEvent` con un disparador que no sea *none* ni un único mensaje (señal, escalamiento, enlace, compensación…), o con varios | `intermediateThrowEvent` | `intermediate throw event` | `evento intermedio de lanzamiento` |
 | `bpmn:eventBasedGateway` que no sea exclusivo, sin instanciar y con cada flujo de salida hacia un evento de rama de tiempo o de mensaje: `instantiate="true"`, `eventGatewayType="Parallel"`, cualquier otro elemento de rama, o sin flujo de salida | `eventBasedGateway` | `event-based gateway` | `gateway basado en eventos` |
 | `bpmn:complexGateway` | `complexGateway` | `complex gateway` | `gateway complejo` |
 | `multiInstanceLoopCharacteristics` | `multiInstanceMarker` | `multi-instance marker` | `marcador de multi-instancia` |
@@ -160,8 +163,8 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
 | `bpmn:conversation`, `bpmn:callConversation`, `bpmn:subConversation` | `conversationDiagram` | `conversation diagram` | `diagrama de conversación` |
 | `startQuantity` distinto de 1 | `startQuantity` | `startQuantity attribute other than 1` | ``atributo `startQuantity` distinto de 1`` |
 | `completionQuantity` distinto de 1 | `completionQuantity` | `completionQuantity attribute other than 1` | ``atributo `completionQuantity` distinto de 1`` |
-| `bpmn:endEvent` con un disparador que no sea *none* ni `terminate` | `endEventTrigger` | `end event with that trigger` | `evento de fin con ese disparador` |
-| `bpmn:startEvent` con un disparador que no sea *none* ni `timer` | `startEventTrigger` | `start event with that trigger` | `evento de inicio con ese disparador` |
+| `bpmn:endEvent` con un disparador que no sea *none*, mensaje ni `terminate` | `endEventTrigger` | `end event with that trigger` | `evento de fin con ese disparador` |
+| `bpmn:startEvent` con un disparador que no sea *none*, mensaje ni `timer` | `startEventTrigger` | `start event with that trigger` | `evento de inicio con ese disparador` |
 
   El detalle que distingue cada fila del catálogo se conserva desde el parser; los fixtures que
   verifican el texto exacto de las 24 filas son parte de LILA-163. La fila 25 del catálogo,
@@ -652,6 +655,43 @@ hace simulable la construcción sin mensajes, señales ni bus de eventos.
   las carreras de dos pasadas distintas (o de dos casos distintos) no comparten más que los flujos
   de aleatorios de los que sortean. *(prueba: #81)*
 
+### 9.2 Eventos de mensaje y de lanzamiento (ADR-033)
+
+Los archivos de Bizagi usan eventos de inicio y de fin de mensaje, y eventos intermedios de
+lanzamiento como hitos. Lila los simula sin simular el mensaje: no hay emisor, ni correlación, ni
+cola, y los message flows siguen sin llevar tokens (R-PERF-3). Los eventos de señal y de
+escalamiento siguen fuera del perfil (§3, #639).
+
+- **R-MSG-1 — Un inicio de mensaje es un inicio.** Un `bpmn:startEvent` con exactamente un
+  `messageEventDefinition`, en línea o por `eventDefinitionRef`, es un `start`: un generador de
+  casos con los mismos campos (`interTriggerTimer`, `triggerCount`, `calendar`), su propio flujo de
+  aleatorios y los mismos avisos que un inicio *none* (§10). Dentro de un subproceso embebido se
+  aplana exactamente como un inicio interno *none* (R-PLAN-1, R-PLAN-2). *(prueba: #698)*
+- **R-MSG-2 — Un fin de mensaje es un fin.** Un `bpmn:endEvent` con exactamente un
+  `messageEventDefinition` es un `end`: consume el token (R-EVT-4) y tiene su propia entrada en
+  `process.byEndEvent`. *(prueba: #698)*
+- **R-THR-1 — Un evento intermedio de lanzamiento es un hito.** Un `bpmn:intermediateThrowEvent`
+  sin disparador, o con exactamente un `messageEventDefinition`, es un nodo `throw`. Un token que
+  llega cuenta un `started` y un `completed` y sale en el mismo instante por su primer flujo de
+  salida, con sus marcas OR. No consume tiempo, no ocupa recursos, no sortea ningún aleatorio y no
+  emite fila en el log de eventos. Cualquier otro disparador, o varios, sigue siendo `E-NOSOP` con
+  la construcción `intermediateThrowEvent` (§3). *(prueba: #698)*
+- **R-THR-2 — Un evento de lanzamiento no tiene campos propios.** `resources` sobre él es
+  `E-CAMPO-NO-APLICA` (R-REC-10), y también `interTriggerTimer` y `triggerCount` (R5 de
+  `SCENARIO_FORMAT.md`). `processingTime`, `calendar` y `fixedCost` se aceptan y no cambian nada,
+  como en un evento de fin: el lanzamiento no consume tiempo, y su `fixedCost` no cobra nada porque
+  solo las filas de una actividad llevan `elementCost` (R-COST-3). El panel Simular no ofrece
+  ningún campo en él. *(prueba: #698)*
+- **R-THR-3 — Los mismos números con eventos de mensaje o *none*.** Un evento de lanzamiento no
+  sortea nada, así que no mueve el flujo de ningún otro elemento (§16). El mismo diagrama dibujado
+  con eventos de mensaje o *none*, con los mismos ids y referencias de mensaje que se resuelven (un
+  `messageRef` sin resolver añade un aviso `W-PARSE`, R-NOSOP-6), da resultados idénticos byte a
+  byte. Quitar un evento de lanzamiento de una secuencia (unir sus dos flujos en uno) no siempre es
+  neutro: su salto de más añade un evento, que cambia el `seq` de los eventos posteriores del mismo
+  instante (R-TOK-3). Si otro token llega al mismo elemento, cola o join en ese instante exacto,
+  los dos pueden intercambiar su lugar, y con él qué caso recibe qué sorteo del flujo de ese
+  elemento; sin ese empate todo otro número queda igual. *(prueba: #698)*
+
 ---
 
 ## 10. Llegadas, parada, warmup y replicaciones
@@ -771,8 +811,8 @@ calendar }`. En la tarea: `resources: [{ ref, quantity }]` y `selection: "and" |
   de estructura: `resourceWait = started − enabled`. *(prueba: LILA-036, LILA-041)*
 - **R-REC-9 — Un mismo pool no se pide dos veces.** Dos entradas con la misma `ref` en una tarea es
   error `E-REC-DUPLICADO`: la cantidad se expresa con `quantity`. *(prueba: LILA-013)*
-- **R-REC-10 — Elementos sin recursos.** `start`, `end`, `terminate`, gateways y `timer` nunca
-  consumen recursos. Solo `task` (y por tanto `callActivity`) admite `resources`.
+- **R-REC-10 — Elementos sin recursos.** `start`, `end`, `terminate`, `throw`, gateways y `timer`
+  nunca consumen recursos. Solo `task` (y por tanto `callActivity`) admite `resources`.
   *(prueba: LILA-021, LILA-026)*
 - **R-REC-11 — Filas por asignación.** Cada asignación efectiva de pool produce una fila plana con
   `resourceId` y `resourceQuantity`; una actividad sin pool produce exactamente una fila sentinel
@@ -1377,6 +1417,7 @@ guardia de `core/` (unificarlos toca `core/`; ver R-CAL-10).
 | R-BND-1 … R-BND-9 | temporizador de borde interruptor | #81 |
 | R-BND-10 … R-BND-14 | temporizador de borde no interruptor | #81 |
 | R-EVG-1 … R-EVG-7 | gateway basado en eventos con ramas de tiempo y de mensaje | #81 (`packages/engine/test/event-gateway.test.ts`) |
+| R-MSG-1, R-MSG-2, R-THR-1 … R-THR-3 | inicio y fin de mensaje; evento intermedio de lanzamiento *none* y de mensaje (ADR-033) | #698 (`packages/engine/test/message-throw-events.test.ts`) |
 | R-ARR-1 … R-ARR-5 | llegadas y parada (`duration` \| `triggerCount`, lo primero) | LILA-026 (`triggerCount` sin timer: LILA-186) |
 | R-ARR-6 | llegadas con calendario | LILA-041 |
 | R-ARR-7 | warmup | LILA-027 |

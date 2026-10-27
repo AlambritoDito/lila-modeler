@@ -64,7 +64,10 @@ defined semantics; everything else falls into section 3 of this document.
 |---|---|---|
 | `bpmn:startEvent` with no trigger (*none*) | `start` | case generator (section 10) |
 | `bpmn:startEvent` with `timerEventDefinition` | `start` | case generator, identical to *none* |
+| `bpmn:startEvent` with a single `messageEventDefinition` | `start` | case generator, identical to *none* (§9.2, R-MSG-1) |
 | `bpmn:endEvent` with no trigger (*none*) | `end` | consumes the token (§9) |
+| `bpmn:endEvent` with a single `messageEventDefinition` | `end` | consumes the token, identical to *none* (§9.2, R-MSG-2) |
+| `bpmn:intermediateThrowEvent` with no trigger (*none*) or a single `messageEventDefinition` | `throw` | milestone: counts the pass, takes no time (§9.2, R-THR-1) |
 | `bpmn:endEvent` with `terminateEventDefinition` | `terminate` | kills every token of the case (§9) |
 | `bpmn:intermediateCatchEvent` with `timerEventDefinition` | `timer` | delay with no resource (§9) |
 | `bpmn:boundaryEvent` interrupting, with a single `timerEventDefinition`, attached to a task and with an outgoing flow | `timer` with `attachedTo` | deadline that cuts the task short (§9) |
@@ -140,7 +143,7 @@ failure. The text follows Bizagi's style ("not supported by the simulator").
 | Detected construct | `id` | `{construction}` (`en`) | `{construcción}` (`es`) |
 |---|---|---|---|
 | `bpmn:boundaryEvent` other than a timer with one outgoing flow attached to a task, interrupting or not: message/error/signal/…, on a sub-process, or with no outgoing flow | `boundaryEvent` | `event attached to an activity (boundary event)` | `evento adjunto a actividad (boundary event)` |
-| `messageEventDefinition` in any event other than a branch catch event of a supported event-based gateway (§9.1) | `messageEvent` | `message event` | `evento de mensaje` |
+| `messageEventDefinition` in an intermediate catch event that is not a branch catch event of a supported event-based gateway (§9.1); with that single trigger a start, an end or an intermediate throw event is in the profile (§9.2) | `messageEvent` | `message event` | `evento de mensaje` |
 | `signalEventDefinition` | `signalEvent` | `signal event` | `evento de señal` |
 | `linkEventDefinition` | `linkEvent` | `link event` | `evento de enlace` |
 | `errorEventDefinition` | `errorEvent` | `error event` | `evento de error` |
@@ -149,7 +152,7 @@ failure. The text follows Bizagi's style ("not supported by the simulator").
 | `conditionalEventDefinition` | `conditionalEvent` | `conditional event` | `evento condicional` |
 | `cancelEventDefinition` | `cancelEvent` | `cancel event` | `evento de cancelación` |
 | `multipleEventDefinition` / `parallelMultipleEventDefinition` | `multipleTriggerEvent` | `event with multiple triggers` | `evento con disparadores múltiples` |
-| `bpmn:intermediateThrowEvent` (no trigger or with any) | `intermediateThrowEvent` | `intermediate throw event` | `evento intermedio de lanzamiento` |
+| `bpmn:intermediateThrowEvent` with a trigger other than *none* or a single message (signal, escalation, link, compensation…), or with several | `intermediateThrowEvent` | `intermediate throw event` | `evento intermedio de lanzamiento` |
 | `bpmn:eventBasedGateway` other than an exclusive, non-instantiating one whose every outgoing flow goes to a timer or message branch catch event: `instantiate="true"`, `eventGatewayType="Parallel"`, any other branch element, or no outgoing flow | `eventBasedGateway` | `event-based gateway` | `gateway basado en eventos` |
 | `bpmn:complexGateway` | `complexGateway` | `complex gateway` | `gateway complejo` |
 | `multiInstanceLoopCharacteristics` | `multiInstanceMarker` | `multi-instance marker` | `marcador de multi-instancia` |
@@ -161,8 +164,8 @@ failure. The text follows Bizagi's style ("not supported by the simulator").
 | `bpmn:conversation`, `bpmn:callConversation`, `bpmn:subConversation` | `conversationDiagram` | `conversation diagram` | `diagrama de conversación` |
 | `startQuantity` other than 1 | `startQuantity` | `startQuantity attribute other than 1` | ``atributo `startQuantity` distinto de 1`` |
 | `completionQuantity` other than 1 | `completionQuantity` | `completionQuantity attribute other than 1` | ``atributo `completionQuantity` distinto de 1`` |
-| `bpmn:endEvent` with a trigger other than *none* or `terminate` | `endEventTrigger` | `end event with that trigger` | `evento de fin con ese disparador` |
-| `bpmn:startEvent` with a trigger other than *none* or `timer` | `startEventTrigger` | `start event with that trigger` | `evento de inicio con ese disparador` |
+| `bpmn:endEvent` with a trigger other than *none*, message or `terminate` | `endEventTrigger` | `end event with that trigger` | `evento de fin con ese disparador` |
+| `bpmn:startEvent` with a trigger other than *none*, message or `timer` | `startEventTrigger` | `start event with that trigger` | `evento de inicio con ese disparador` |
 
   The detail that distinguishes each row of the catalog is preserved from the parser; the fixtures
   that verify the exact text of the 24 rows are part of LILA-163. Row 25 of the catalog,
@@ -657,6 +660,42 @@ what makes the construct simulable without messages, signals or an event bus.
   two different passes (or of two different cases) share nothing but the streams they draw from.
   *(test: #81)*
 
+### 9.2 Message and throw events (ADR-033)
+
+Bizagi files use message start and end events, and intermediate throw events as milestones. Lila
+simulates them without simulating the message: there is no sender, no correlation and no queue,
+and message flows still carry no tokens (R-PERF-3). Signal and escalation events stay outside the
+profile (§3, #639).
+
+- **R-MSG-1 — A message start is a start.** A `bpmn:startEvent` with exactly one
+  `messageEventDefinition`, inline or by `eventDefinitionRef`, is a `start`: a case generator with
+  the same fields (`interTriggerTimer`, `triggerCount`, `calendar`), its own random stream and the
+  same warnings as a *none* start (§10). Inside an embedded sub-process it is flattened exactly
+  like a *none* inner start (R-PLAN-1, R-PLAN-2). *(test: #698)*
+- **R-MSG-2 — A message end is an end.** A `bpmn:endEvent` with exactly one
+  `messageEventDefinition` is an `end`: it consumes the token (R-EVT-4) and has its own entry in
+  `process.byEndEvent`. *(test: #698)*
+- **R-THR-1 — An intermediate throw event is a milestone.** A `bpmn:intermediateThrowEvent` with no
+  trigger, or with exactly one `messageEventDefinition`, is a `throw` node. A token that reaches it
+  counts one `started` and one `completed` and leaves in the same instant through its first
+  outgoing flow, with its OR marks. It takes no time, occupies no resource, draws no random number
+  and emits no event-log row. Any other trigger, or several, stays `E-NOSOP` with construction
+  `intermediateThrowEvent` (§3). *(test: #698)*
+- **R-THR-2 — A throw event has no field of its own.** `resources` on it is `E-CAMPO-NO-APLICA`
+  (R-REC-10) and so are `interTriggerTimer` and `triggerCount` (R5 of `SCENARIO_FORMAT.md`).
+  `processingTime`, `calendar` and `fixedCost` are accepted and change nothing, as on an end event:
+  the throw takes no time, and its `fixedCost` charges nothing because only activity rows carry an
+  `elementCost` (R-COST-3). The Simulate panel offers no field on it. *(test: #698)*
+- **R-THR-3 — Same numbers with message or none events.** A throw draws nothing, so it shifts no
+  other element's stream (§16). The same diagram drawn with message or with *none* events, with the
+  same ids and message references that resolve (an unresolved `messageRef` adds a `W-PARSE`
+  warning, R-NOSOP-6), produces byte-identical results. Removing a throw from a sequence (joining
+  its two flows into one) is not always neutral: its extra hop adds one event, which changes the
+  `seq` of later events at the same instant (R-TOK-3). If another token reaches the same element,
+  queue or join at that exact instant, the two can swap places, and with them which case gets
+  which draw of that element's stream; without such a tie every other number stays the same.
+  *(test: #698)*
+
 ---
 
 ## 10. Arrivals, stop, warm-up and replications
@@ -780,8 +819,8 @@ calendar }`. On the task: `resources: [{ ref, quantity }]` and `selection: "and"
   structure document: `resourceWait = started − enabled`. *(test: LILA-036, LILA-041)*
 - **R-REC-9 — The same pool is never requested twice.** Two entries with the same `ref` on a task
   is error `E-REC-DUPLICADO`: the amount is expressed with `quantity`. *(test: LILA-013)*
-- **R-REC-10 — Elements with no resources.** `start`, `end`, `terminate`, gateways and `timer`
-  never consume resources. Only `task` (and therefore `callActivity`) admits `resources`.
+- **R-REC-10 — Elements with no resources.** `start`, `end`, `terminate`, `throw`, gateways and
+  `timer` never consume resources. Only `task` (and therefore `callActivity`) admits `resources`.
   *(test: LILA-021, LILA-026)*
 - **R-REC-11 — Rows per assignment.** Every effective pool assignment produces a flat row with
   `resourceId` and `resourceQuantity`; an activity with no pool produces exactly one sentinel row
@@ -1392,6 +1431,7 @@ lint or the `core/` guard catches it (unifying them requires touching `core/`; s
 | R-BND-1 … R-BND-9 | interrupting boundary timer | #81 |
 | R-BND-10 … R-BND-14 | non-interrupting boundary timer | #81 |
 | R-EVG-1 … R-EVG-7 | event-based gateway with timer and message branches | #81 (`packages/engine/test/event-gateway.test.ts`) |
+| R-MSG-1, R-MSG-2, R-THR-1 … R-THR-3 | message start and end; none and message intermediate throw (ADR-033) | #698 (`packages/engine/test/message-throw-events.test.ts`) |
 | R-ARR-1 … R-ARR-5 | arrivals and stop (`duration` \| `triggerCount`, whichever first) | LILA-026 (`triggerCount` with no timer: LILA-186) |
 | R-ARR-6 | arrivals with a calendar | LILA-041 |
 | R-ARR-7 | warm-up | LILA-027 |

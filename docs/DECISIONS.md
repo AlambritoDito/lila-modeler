@@ -678,6 +678,333 @@ at the per-object catalog; `docs/PROJECT_FORMAT.md` is updated together with the
 
 ---
 
+## ADR-033 — Simulation semantics of the 1.0 BPMN elements (#639)
+
+**Status:** Accepted (scope decided by Brito on 2026-10-26: everything #639 lists except signal and
+escalation events). Implemented in parts: message start and end events and none and message
+intermediate throw events (#698, with this ADR); the standard loop marker (#700); multi-instance
+tasks (#701); the error boundary event and the timer boundary event on a sub-process (#702); their
+editor fields (#703). Until a part lands, its elements stay `E-NOSOP` and the strict scenario
+schema rejects its field with `E-CLAVE-DESCONOCIDA`.
+
+Context: the simulator rejects with `E-NOSOP` (ADR-021) several elements that are common in real
+processes and in BPMN exported from Bizagi, so those files fail on import to simulation. 1.0 is
+the version colleagues will use as a Bizagi alternative, so it needs them. This record fixes, per
+element, the semantics, the scenario field, what results count and which random stream each
+decision draws from, so the per-element PRs do not need any further decision.
+
+### 1. Rules that hold for every element
+
+1. **Scenario version 1, additive only.** Every new field is optional and is added under
+   `SCENARIO_FORMAT.md` § 9 ("v1 grows additively"): no existing field changes meaning, `version`
+   stays `1`, and a scenario written before 1.0 produces the same bytes.
+2. **No new result field, no column renamed.** The new elements report through the existing
+   `elements[id]`, `flows[id]`, `process` and event-log rows. The Bizagi column names
+   (`BIZAGI_PARITY.md`, `RESULTS_FORMAT.md` § 10), the 17 event-log columns and the XLSX/CSV sheets
+   do not change. "Instances started"/"Instances completed" of an element count what each section
+   below calls an instance.
+3. **Derived random streams.** R-DET-2 seeds one stream per element with
+   `hash(seed, replication, elementId)`. A new decision draws from a **derived** stream keyed
+   `<elementId>#<purpose>` (`#loop`, `#instances`, `#error`). `#` is not an NCName character and
+   every id is sanitized to an NCName before parsing (R-DURA-4), so a derived key never collides
+   with a BPMN id. Each decision consumes a fixed number of uniforms (R-DET-4 for distributions),
+   and only when the element and its field are present: a model without the new elements, or a
+   scenario that does not declare their fields, draws exactly the numbers it drew before and keeps
+   its results bit for bit (R-DET-3, R-DEG-5).
+4. **Degradation.** A scenario without the new field gets the neutral behaviour listed in each
+   section, plus a warning that names the element, emitted by the engine the first time a token
+   reaches the element — for a boundary event, the first time a token enters its host, as
+   `W-BORDE-SIN-TIEMPO` does today — and deduplicated like any other warning (§ 17). Never an error and never
+   invented variability.
+5. **What stays `E-NOSOP` after 1.0.** Signal and escalation events in any position; error start,
+   intermediate and end events (the error is drawn on the boundary, § 5, not thrown by an event);
+   an intermediate message catch event outside an event-based gateway (R-EVG-1); boundary events
+   other than a timer or an interrupting error; loop and multi-instance markers on a sub-process
+   (only tasks and call activities take them); link, compensation, cancel, conditional and
+   multiple-trigger events; event, transaction and ad-hoc sub-processes. The ids and texts of the R-NOSOP-2 catalogue do not change; only its first
+   column ("Detected construct") narrows as each part lands.
+6. **New codes.** Five, each added by the PR that implements its element, with these texts (the
+   lint ones carry the path, the engine ones the element id, as their neighbours do):
+
+   | Code | Where | `en` | `es` |
+   |---|---|---|---|
+   | `E-BUCLE-SIN-SALIDA` | lint (#700) | `a loop with probability 1 and no loopMaximum never ends (${path}).` | `un bucle con probabilidad 1 y sin loopMaximum nunca termina (${path}).` |
+   | `E-PROB-ERROR-SUMA` | lint (#702) | `the error probabilities of the boundary events on ${hostId} add up to ${sum}, more than 1 (${path}).` | `las probabilidades de error de los eventos adjuntos a ${hostId} suman ${sum}, más de 1 (${path}).` |
+   | `W-BUCLE-SIN-PARAMETROS` | engine (#700) | `${nodeId}: loop marker with no loop in the scenario; it runs once.` | `${nodeId}: marcador de bucle sin loop en el escenario; se ejecuta una vez.` |
+   | `W-MULTI-SIN-CARDINALIDAD` | engine (#701) | `${nodeId}: multi-instance task with neither instances in the scenario nor a numeric loopCardinality; it runs one instance.` | `${nodeId}: tarea multi-instancia sin instances en el escenario ni loopCardinality numérico; ejecuta una instancia.` |
+   | `W-ERROR-SIN-PROBABILIDAD` | engine (#702) | `${nodeId}: error boundary event without errorProbability; it never fires on ${hostId}.` | `${nodeId}: evento de error adjunto sin errorProbability; nunca dispara sobre ${hostId}.` |
+
+   `E-BUCLE-SIN-SALIDA` cites `elements.<id>.loop.probability`; `E-PROB-ERROR-SUMA` cites
+   `elements.<hostId>` and prints the sum as `String(Number(sum.toFixed(6)))` in both languages
+   (a dot as decimal separator, no trailing zeros). `core/` repeats both checks before the first
+   event and throws, with the code inside the message as its other guards do:
+   `E-BUCLE-SIN-SALIDA: ${nodeId}: a loop with probability 1 and no loopMaximum never ends.` /
+   `E-BUCLE-SIN-SALIDA: ${nodeId}: un bucle con probabilidad 1 y sin loopMaximum nunca termina.`
+   and `E-PROB-ERROR-SUMA: ${hostId}: the error probabilities of its boundary events add up to ${sum}, more than 1.` /
+   `E-PROB-ERROR-SUMA: ${hostId}: las probabilidades de error de sus eventos adjuntos suman ${sum}, más de 1.`
+
+   A new field on an element that does not take it is `E-CAMPO-NO-APLICA` with a variant per
+   field, like `/solo-inicio`: `/solo-bucle` `only accepted on a task with a loop marker (${path}).`
+   / `solo se admite en una tarea con marcador de bucle (${path}).`; `/solo-multi`
+   `only accepted on a multi-instance task (${path}).` / `solo se admite en una tarea multi-instancia (${path}).`;
+   `/solo-error` `only accepted on an error boundary event (${path}).` /
+   `solo se admite en un evento de error adjunto (${path}).` A `loop` with neither or both of
+   `count` and `probability` is a schema error at `elements.<id>.loop` with the message
+   `declare exactly one of count or probability` / `declara exactamente uno de count o probability`.
+7. **IR shapes.** Each part adds optional IR members, written only when the element is present,
+   so every other IR stays as it is. They are named below. A new node type reaches every place
+   that names the node types, in the same PR: `NODE_CATEGORY` in `process-document.ts`, the
+   node-type labels of `describe_process` (`NODE_TYPES` in `messages/en.ts`, `TIPOS_NODO` in
+   `messages/es.ts`), and in the web `ClaseElemento` and `fieldsForKind` (`scenarioFields.ts`) and
+   `TIPO_BPMN` (`ScenarioPanel.tsx`). In the panel, `throw` offers no field (#698),
+   `errorBoundary` offers `errorProbability`, and a task offers `loop` or `instances` when it has
+   that marker (#703 adds the controls).
+8. **Rule ids.** `SEMANTICS.md` receives each part's rules with the ids given here: R-MSG-1…2 and
+   R-THR-1…3 (§ 9.2, #698), R-LOOP-1…6 (§ 4.1, #700), R-MI-1…6 (§ 4.2, #701), R-ERR-1…5 (§ 9.3,
+   #702) and R-BND-15…19 (§ 9, after R-BND-14, #702).
+
+### 2. Message start, message end, none and message intermediate throw (#698, implemented)
+
+- **R-MSG-1 — A message start is a start.** A `bpmn:startEvent` with exactly one
+  `messageEventDefinition` (inline or by reference) is the IR node `start`: a case generator with
+  `interTriggerTimer`, `triggerCount` and `calendar`, its own stream and the warnings of § 10. The
+  message itself is not simulated: no sender, no correlation, and message flows still carry no
+  tokens (R-PERF-3). Inside an embedded sub-process it is flattened exactly like a *none* inner
+  start (R-PLAN-1, R-PLAN-2).
+- **R-MSG-2 — A message end is an end.** A `bpmn:endEvent` with exactly one
+  `messageEventDefinition` is the IR node `end` (R-EVT-4) and has its `process.byEndEvent` entry.
+- **R-THR-1 — An intermediate throw is a milestone.** A `bpmn:intermediateThrowEvent` with no
+  trigger, or with exactly one `messageEventDefinition`, is the IR node `throw`. A token that
+  reaches it counts one `started` and one `completed` and leaves in the same instant through its
+  first outgoing flow, with its OR marks: no time, no resource, no random draw, no event-log row.
+  Any other trigger, or more than one, stays `E-NOSOP` with construction `intermediateThrowEvent`.
+- **R-THR-2 — No field of its own.** `resources` is `E-CAMPO-NO-APLICA` (R-REC-10) and the
+  arrival fields are `E-CAMPO-NO-APLICA` (R5), as on an end. `processingTime`, `calendar` and
+  `fixedCost` are accepted and change nothing, as on an end: no time, and no charge, because only
+  activity rows carry an `elementCost` (R-COST-3). The Simulate panel offers no field on it.
+- **R-THR-3 — Determinism.** A throw draws nothing, so it shifts no stream. The same diagram drawn
+  with message or none events, with the same ids and message references that resolve, gives
+  byte-identical results. Its extra hop adds one `enter` event, which changes the `seq` of later
+  events at the same instant (R-TOK-3): removing a throw from a sequence (joining its two flows)
+  leaves every other number unchanged unless another token reaches the same element, queue or join
+  at that exact instant, in which case the two can swap places and with them the draws of that
+  element's stream.
+- **Results.** `elements[throwId]` counts passes; its durations are exact zeros like a gateway's,
+  and `W-REPLICACIONES-SIN-OBSERVACIONES` does not apply to it. Nothing degrades: there is no field
+  to miss.
+
+### 3. Standard loop marker (#700)
+
+**Profile and IR.** `standardLoopCharacteristics` on a supported task or call activity (on an
+embedded sub-process it stays `E-NOSOP` `loopMarker`). The task node gets
+`loop: { maximum?: number }`; `maximum` is `loopMaximum` read from the raw XML literal (as
+`cancelActivity` is, R-BND-10) when, trimmed, it is a decimal integer literal ≥ 1 (`/^\d+$/`), and
+absent otherwise: absent, `0`, a sign, a fraction or any other text means no cap. `testBefore` and `loopCondition` are read and
+ignored, so the first iteration always runs: the scenario's `loop` decides, as probabilities
+replace `conditionExpression` (R-PERF-4).
+
+**Scenario field.** `elements[<task>].loop`, a strict object with **exactly one** of:
+
+- `count`: integer ≥ 1. The task runs exactly `count` times per entry (fewer if `maximum` is
+  lower).
+- `probability`: number in `[0, 1]`. After each completed iteration, another one runs with this
+  probability, so a task with no `maximum` runs `1/(1 − p)` times on average.
+
+Neither or both is a schema error. `probability` outside `[0, 1]` is `E-PROB-RANGO` at
+`elements.<id>.loop.probability`; `probability: 1` with no `maximum` is `E-BUCLE-SIN-SALIDA`.
+`loop` on an element without a loop marker is `E-CAMPO-NO-APLICA`.
+
+- **R-LOOP-1 — Each iteration is an activity instance.** Iteration 1 is enabled when the token
+  arrives. Every iteration has its own `activityInstanceId`, its own resource request queued in
+  FIFO order by its own enabling (R-REC-3), its own `processingTime` sample from the task's stream,
+  its calendar (R-CAL-4/5) and its `fixedCost` when it completes. Units are released at the end of
+  each iteration, so another token can take them before the next one (no holding).
+- **R-LOOP-2 — The decision.** When iteration `k` completes: if `k` equals `count` or `maximum`,
+  the token leaves; otherwise, in `probability` mode, one uniform `u` is drawn from
+  `<taskId>#loop` and the next iteration is enabled in the same instant if `u < p`. `count` mode
+  never draws, and no draw is made when a cap already decides. The next iteration is enabled by a
+  new heap event pushed at that instant, so `(t, seq)` (R-TOK-3) orders it like any other
+  enabling; it is not a new entry: no flow is counted and no boundary event is re-armed
+  (R-LOOP-5). With an error boundary on the task, the error is decided first (R-ERR-2): if it
+  fires the loop ends and `#loop` is not drawn.
+- **R-LOOP-3 — One token, one pass on the flows.** The case keeps one token in the task for the
+  whole loop; it leaves through the first outgoing flow after the last iteration, so incoming and
+  outgoing flows count once per entry.
+- **R-LOOP-4 — Results.** `elements[task].started`/`completed` count iterations (Bizagi's
+  "Instances started/completed"); `processing`, `resourceWait`, `offHoursWait` and `queueLength`
+  are per iteration; `fixedCostTotal = fixedCost × completed iterations`. The event log has one
+  row group per iteration.
+- **R-LOOP-5 — Boundary events cover the whole loop.** The loop is open from iteration 1's
+  enabling until the token leaves, and that is what R-BND-4 checks. A boundary timer is armed once
+  per entry, from iteration 1's `enabledAt` (R-BND-2), before the iteration's own `done`, so a tie
+  interrupts (R-BND-7). Interrupting, it closes the current iteration
+  `interrupted` (R-BND-5) and no further iteration runs; non-interrupting, it fires at most once
+  per entry. An error boundary draws per completed iteration (R-ERR-1) and, on error, no further
+  iteration runs.
+- **R-LOOP-6 — Terminate and stop.** The open iteration is treated as R-EVT-6 and R-ARR-5 say; no
+  further iteration runs. Zero-time iterations still count toward R-TOK-7's budget.
+- **Degradation.** No `loop`: exactly one iteration, as if the marker were absent, plus
+  `W-BUCLE-SIN-PARAMETROS`.
+
+### 4. Multi-instance task (#701)
+
+**Profile and IR.** `multiInstanceLoopCharacteristics` on a supported task or call activity (on a
+sub-process it stays `E-NOSOP` `multiInstanceMarker`). The task node gets
+`multiInstance: { sequential: boolean; cardinality?: number }`. `isSequential` is read from the
+raw XML literal like `cancelActivity` (R-BND-10): absent, `"false"` or `"0"` is parallel, `"true"`
+or `"1"` sequential, any other literal is `E-NOSOP` `multiInstanceMarker`. `cardinality` is the
+body of `loopCardinality` when, trimmed, it matches `/^\d+$/` (`0` included); a sign (`"+3"`,
+`"-2"`), an expression or an empty body leaves it absent. `completionCondition`, data inputs and outputs and
+`behavior` are ignored.
+
+**Scenario field.** `elements[<task>].instances`: a distribution (§ 3 of `SCENARIO_FORMAT.md`).
+Each entry's `N = floor(max(0, x) + 0.5)` (round half up). Precedence: `instances` if declared,
+else `cardinality`, else `N = 1`. There is no cap on `N`: like `triggerCount`, a huge value costs
+what it says (R-TOK-7 counts events, not instances), and choosing it is the modeller's call. `instances` on a task without the marker is
+`E-CAMPO-NO-APLICA`.
+
+- **R-MI-1 — Drawing N.** One sample of `instances` per entry, from `<taskId>#instances`, before any
+  instance's duration. With `cardinality` or the default nothing is drawn.
+- **R-MI-2 — Parallel.** The `N` instances are enabled at the arrival instant in order `1…N`: each
+  is an activity instance with its own `processingTime` sample from the task's stream, in that
+  order. Each instance's enabling takes its own `seq`, in instance order, so their requests share
+  `enabledAt` and are still totally ordered by `(enabledAt, seq)` (R-REC-3, R-TOK-3: no new
+  tie-break). They compete with each other and with other tokens.
+- **R-MI-3 — Sequential.** Instance 1 is enabled at the arrival instant and instance `k + 1` at the
+  instant `k` completes, as a new enabling (it queues behind requests already waiting); each
+  duration is sampled when its instance is enabled.
+- **R-MI-4 — Completion.** The token leaves through the first outgoing flow at the instant the last
+  instance completes. With `N = 0` it leaves in the same instant: no instance, no row, no
+  `started`, no boundary event armed and no boundary or error draw; the flows still count.
+- **R-MI-5 — Results.** `elements[task].started`/`completed` count instances; the per-instance
+  statistics and the event-log rows are per instance; `fixedCostTotal = fixedCost × completed
+  instances`. The case keeps one token (R-TOK-2) and the flows count once per entry. Hand-checked
+  oracles: sequential `N = 3`, constant `d`, no resources takes `3d`; parallel `N = 3` with one
+  unit takes `3d`, with three units `d`.
+- **R-MI-6 — Boundary events, terminate and stop.** The activity is open from the entry until the
+  token leaves (R-BND-4). A boundary timer is armed once per entry, from the entry instant and
+  before any instance's `done`. Interrupting, it closes every open instance `interrupted` (granted
+  units released, queued requests dropped, R-BND-5), and sequential instances not yet enabled are
+  never created; non-interrupting, it fires at most once per entry. An error boundary draws per
+  completed instance (R-ERR-1); on error every other open instance closes `interrupted`, no
+  further instance starts and the token leaves once, through the boundary. `terminate` and the
+  stop treat every open instance as R-EVT-6 and R-ARR-5 say.
+- **Degradation.** Neither `instances` nor `cardinality`: one instance, plus
+  `W-MULTI-SIN-CARDINALIDAD`.
+
+### 5. Error boundary event (#702)
+
+**Profile and IR.** A `bpmn:boundaryEvent` with exactly one `errorEventDefinition` (any or no
+`errorRef`), interrupting (`cancelActivity` absent, `"true"` or `"1"`), attached to a supported
+task or to an embedded sub-process in the profile, with at least one outgoing flow and no incoming
+one. Anything else (non-interrupting, another literal, no outgoing flow) stays `E-NOSOP`
+`boundaryEvent`. It is a new node type `errorBoundary` with `attachedTo` = the host's id and no
+`incoming`; it is reachable exactly when its host is.
+
+**Scenario field.** `elements[<boundary>].errorProbability`: a number in `[0, 1]`
+(`E-PROB-RANGO`). It is a new name because `probability` stays a sequence-flow field (R4,
+R-XOR-8). On any other element it is `E-CAMPO-NO-APLICA`; `resources` on the boundary is
+`E-CAMPO-NO-APLICA` (R-REC-10); `processingTime`, `calendar` and `fixedCost` are accepted and
+change nothing, as on a throw event (R-THR-2), and `W-ELEMENTO-SIN-PARAMETROS` does not apply to it
+(`W-ERROR-SIN-PROBABILIDAD` does). The declared `errorProbability` of one host's error boundaries
+add up to at most 1 (`E-PROB-ERROR-SUMA` above `1 + 1e-9`). A sub-process host needs at least one
+entry flow and one exit flow (§ 6); without them the boundary stays `E-NOSOP` `boundaryEvent`.
+
+- **R-ERR-1 — When the error is decided.** On a task host, at each **completion** of one of its
+  activity instances (each iteration of a loop, each instance of a multi-instance task); an
+  instance that is interrupted, terminated or still in flight decides nothing. On a sub-process
+  host, each time a token of the case leaves it through an exit (a flow into one of its inner end
+  events, R-PLAN-1).
+- **R-ERR-2 — One draw per decision.** If at least one of the host's error boundaries declares
+  `errorProbability`, one uniform `u` is drawn from `<hostId>#error` per decision; the boundaries
+  are walked in document order and the first whose cumulative `errorProbability` exceeds `u`
+  fires; if none does, the token follows its normal path. The probabilities are shares of the
+  completions, like an XOR's (R-XOR-7), and there is one draw however many boundaries the host has.
+  When the declared values add up to 1 within `1e-9` and rounding leaves `u` above the last
+  cumulative sum, the last boundary with `errorProbability > 0` fires (R-XOR-7's rounding rule);
+  with a smaller sum, a `u` above it means no error.
+- **R-ERR-3 — Error on a task.** The instance did its work: it counts `completed`, closes with
+  `status = "completed"`, enters the duration statistics, charges its `fixedCost` and releases its
+  units at its end, as always — there is no cancelled work to report. The token leaves through the
+  boundary's first outgoing flow instead of the host's (the host's outgoing flow does not count),
+  carrying the host token's OR marks (R-BND-6). With a loop no further iteration runs; with a
+  multi-instance task, R-MI-6.
+- **R-ERR-4 — Error on a sub-process.** The exiting token goes to the boundary instead of to the
+  exit's target; the exit flow itself counts, because the token did reach the inner end. Everything
+  of the case still inside the sub-process is cancelled as R-BND-17 says. When the flow also leaves
+  enclosing sub-processes, the innermost decides first, and a token sent to its error boundary has
+  not left the others.
+- **R-ERR-5 — Results.** The boundary counts one `started` and one `completed` per firing, in the
+  same instant, and emits no event-log row; like a boundary timer it is not subject to
+  `W-REPLICACIONES-SIN-OBSERVACIONES`.
+- **Degradation.** No `errorProbability` on a boundary: it never fires (probability 0), plus
+  `W-ERROR-SIN-PROBABILIDAD`. If no boundary of the host declares it, nothing is drawn.
+
+### 6. Timer boundary event on an embedded sub-process (#702)
+
+**Profile and IR.** The boundary timer of R-BND-1 and R-BND-10, with the same conditions, attached
+to an embedded sub-process in the profile instead of a task. It stays a `timer` node with
+`attachedTo` = the sub-process id (no longer an IR node after flattening). The IR gains
+`subprocesses?: Record<subProcessId, { parent?: string; entryFlows: string[]; exitFlows: string[] }>`,
+written only when a boundary event (timer or error) is attached to a sub-process, and then listing
+every embedded sub-process of the process: `entryFlows` are the flows flattening redirected into
+the sub-process, `exitFlows` the flows it redirected out of the inner end events, and `parent` the
+enclosing sub-process. A node is **inside** a sub-process when its `subprocessId` is that
+sub-process or one nested in it (following `parent`). One flow can enter, or leave, several nested
+sub-processes at once: they open outermost first and are left innermost first. A flow can also
+be the exit of one sub-process and the entry of the next (two flattened sub-processes in a row):
+the token leaves first, with its error decision (R-ERR-4), and enters only if it was not sent to
+an error boundary, so a sub-process it never enters opens no instance and draws no deadline. A
+boundary on a sub-process with no entry flow or no exit flow stays `E-NOSOP` `boundaryEvent`.
+
+- **R-BND-15 — The sub-process instance.** Per case: an instance opens when a token of the case
+  crosses an entry flow while the case has no open instance of that sub-process (a token crossing
+  one while it is open joins it). It stays open while at least one token of the case is inside —
+  at a node inside, held by an activity or a join inside, or travelling on a flow whose target is
+  inside — and closes when the last one leaves through an exit flow, or when the case dies.
+- **R-BND-16 — The deadline.** It is armed when the instance opens, with one `processingTime`
+  sample from the boundary's own stream, 24×7 unless the boundary declares `calendar` (R-BND-3),
+  and it fires only if that instance is still open (R-BND-4, R-BND-9). Its event is queued at the
+  opening, before anything the instance schedules, so a deadline exactly as long as the work
+  fires (R-BND-7, R-BND-13).
+- **R-BND-17 — Interrupting.** Everything of the case inside the sub-process is cancelled at the
+  firing instant: every open activity instance closes `interrupted` with R-BND-5's accounting
+  (granted units released and queued requests dropped, hourly cost up to that instant, no
+  `fixedCost`, `started` without `completed`); pending enablings of nodes inside are discarded;
+  AND/OR join counters and event-gateway races inside are discarded; nested sub-process instances
+  close and their deadlines are discarded; remaining loop iterations and multi-instance instances
+  never run. The case loses those tokens, and one token leaves through the boundary's first
+  outgoing flow carrying the OR marks of the token that opened the instance. Each row's busy time
+  ends at its `observedUntil`, so nothing is counted twice in costs or utilization.
+- **R-BND-18 — Non-interrupting.** It fires at most once per instance and adds a token with no OR
+  marks (R-BND-11, R-BND-12); the sub-process keeps running.
+- **R-BND-19 — Results.** As R-BND-6: the boundary counts one `started` and one `completed` per
+  firing and emits no row; the cancelled instances keep their own rows with `status =
+  "interrupted"`. `elements[<sub-process>]` still takes no parameter (`E-SUBPROC-PARAMETRO`,
+  R-PLAN-3); the boundary is its own id.
+- **Degradation.** No `processingTime` on the boundary: it never fires, with the existing
+  `W-BORDE-SIN-TIEMPO`, which names the sub-process as host.
+
+### 7. Consequences
+
+- `SCENARIO_FORMAT.md` § 2.5 lists `loop`, `instances` and `errorProbability` as specified, and
+  each implementing PR moves its row to implemented, with the zod schema, `docs/scenario.schema.json`
+  and the spreadsheet template (#449) where #703 says so. `version` stays `1`.
+- `SEMANTICS.md` § 2, § 3, § 17 and § 18, `BIZAGI_PARITY.md` and their Spanish counterparts are
+  updated by each part. None of these semantics has been checked against a Bizagi Modeler run:
+  `BIZAGI_PARITY.md` lists multi-instance among what Bizagi does not simulate, and Lila simulates
+  it from 1.0 by the owner's decision, with no published run to compare against.
+- The outline and `edit_process` support that #639 asks per element (#631) is not part of these
+  parts unless their issue says so; the web palette and context pad already draw these elements.
+- Ceilings, all deliberate: the message is a label, never a correlation; the error is a
+  probability per completion, never an error code matched to an error end event; a sub-process
+  that exits once per parallel branch after flattening (R-PLAN-1) decides its error once per exit;
+  loop and multi-instance markers on a sub-process wait for a user who needs them.
+
+*(tests: `packages/engine/test/message-throw-events.test.ts` for § 2; each later part names its own)*
+
+---
+
 ## See also
 
 - `LILA_MODELER_ESTRUCTURA.md` — the full structure document (source of truth for every ADR in this file).

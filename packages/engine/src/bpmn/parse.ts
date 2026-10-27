@@ -263,13 +263,21 @@ function unsupportedConstruction(
   if (el.$type === 'bpmn:BoundaryEvent') {
     return boundaryTimerHost(el, ctx) === undefined ? 'boundaryEvent' : undefined;
   }
-  if (el.$type === 'bpmn:IntermediateThrowEvent') return 'intermediateThrowEvent';
+  if (el.$type === 'bpmn:IntermediateThrowEvent') {
+    return isThrowInProfile(el) ? undefined : 'intermediateThrowEvent';
+  }
 
   const definitions = eventDefinitionsOf(el);
   if (el.parallelMultiple === true || definitions.length > 1) {
     return 'multipleTriggerEvent';
   }
+  // R-MSG-1/R-MSG-2: a message start is a case generator like a none start and a message end
+  // consumes the token like a none end; the message itself is not simulated.
+  const messageStartOrEnd =
+    (el.$type === 'bpmn:StartEvent' || el.$type === 'bpmn:EndEvent') &&
+    definitions[0]?.$type === 'bpmn:MessageEventDefinition';
   for (const definition of definitions) {
+    if (messageStartOrEnd) break;
     const construction = EVENT_DEFINITION_CONSTRUCTIONS[definition.$type];
     if (construction !== undefined) return construction;
   }
@@ -295,6 +303,7 @@ function unsupportedConstruction(
   if (
     el.$type === 'bpmn:EndEvent' &&
     definitions.length > 0 &&
+    !messageStartOrEnd &&
     !hasEventDefinition(el, 'bpmn:TerminateEventDefinition')
   ) {
     return 'endEventTrigger';
@@ -302,11 +311,25 @@ function unsupportedConstruction(
   if (
     el.$type === 'bpmn:StartEvent' &&
     definitions.length > 0 &&
+    !messageStartOrEnd &&
     !hasEventDefinition(el, 'bpmn:TimerEventDefinition')
   ) {
     return 'startEventTrigger';
   }
   return undefined;
+}
+
+/**
+ * R-THR-1: an intermediate throw event enters the profile with no trigger (none) or with exactly
+ * one message trigger. Any other trigger (signal, escalation, link, compensation…), or several of
+ * them, keeps it out with construction `intermediateThrowEvent` (§3).
+ */
+function isThrowInProfile(el: ModdleElement): boolean {
+  const definitions = eventDefinitionsOf(el);
+  return (
+    definitions.length === 0 ||
+    (definitions.length === 1 && definitions[0]!.$type === 'bpmn:MessageEventDefinition')
+  );
 }
 
 /** Tipo del IR para un elemento moddle, o `undefined` si está fuera del perfil soportado. */
@@ -321,6 +344,9 @@ function nodeTypeOf(el: ModdleElement): NodeType | undefined {
       return 'start';
     case 'bpmn:EndEvent':
       return hasEventDefinition(el, 'bpmn:TerminateEventDefinition') ? 'terminate' : 'end';
+    // R-THR-1: only a none or message throw gets here (`isThrowInProfile`); a no-op milestone.
+    case 'bpmn:IntermediateThrowEvent':
+      return 'throw';
     // R-EVG-2: a branch event of an event-based gateway is a delay too, message or timer alike;
     // only the branch of a supported gateway gets here with a message trigger (R-EVG-1).
     case 'bpmn:IntermediateCatchEvent':
