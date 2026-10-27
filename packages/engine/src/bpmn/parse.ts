@@ -152,10 +152,11 @@ function interruptingOf(
 }
 
 /**
- * Tarea a la que está adjunto un boundary event **dentro del perfil** (R-BND-1, R-BND-10), o
- * `undefined` si el boundary se queda fuera: no es de tiempo, trae más de un disparador, cuelga
- * de algo que no es una tarea soportada (un subproceso se aplana, así que no vale) o no tiene ni
- * un flujo de salida por el que continuar el token.
+ * Host of a boundary event **in the profile** (R-BND-1, R-BND-10) and whether it is a timer or an
+ * error boundary, or `undefined` if the boundary stays out: it is neither a timer nor an error
+ * event, it has more than one trigger, it hangs from something other than a supported task or an
+ * embedded sub-process in the profile, it has an incoming flow, or it has no outgoing flow to
+ * continue the token through.
  *
  * Interrumpir o no da igual aquí: las dos formas entran al perfil y se distinguen con
  * `node.interrupting`. El `"false"` (o `"0"`) explícito es el borde no interruptor y su ausencia
@@ -165,7 +166,7 @@ function interruptingOf(
  * ADR-033 § 5 and § 6: the host may also be an embedded sub-process in the profile, and an
  * interrupting boundary with one `errorEventDefinition` enters too (`errorRef` is not read). A
  * non-interrupting error boundary stays out. Whether a sub-process host has the entry and exit
- * flows it needs is only known after flattening (`dropBoundariesWithoutPassage`).
+ * flows it needs is only known after flattening (`subprocessPassages`).
  */
 function boundaryHost(
   el: ModdleElement,
@@ -440,7 +441,10 @@ interface Collector {
   order: Map<ModdleElement, number>;
   /** Elementos fuera del perfil soportado, ya descartados del IR. */
   unsupportedEls: Set<ModdleElement>;
-  /** `id del boundary -> host moddle y si interrumpe`, para resolver `attachedTo` tras el recorrido. */
+  /**
+   * `id del boundary -> host moddle y si interrumpe`, para resolver `attachedTo` tras el recorrido;
+   * `el` is the boundary itself, which `subprocessPassages` may still send to `unsupported`.
+   */
   boundaryHosts: Map<string, { el: ModdleElement; host: ModdleElement; interrupting: boolean }>;
   /** `id del boundary -> literal en bruto de `cancelActivity``, leído del texto del XML. */
   rawCancel: ReadonlyMap<string, string>;

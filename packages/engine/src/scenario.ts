@@ -822,6 +822,9 @@ export function validateScenario(
       .map((node) => node.subprocessId)
       .filter((subprocessId): subprocessId is string => subprocessId !== undefined),
   );
+  // ADR-033 § 6: with a boundary event on a sub-process the IR carries every sub-process, the
+  // outer ones of a nesting included, so they are recognised too.
+  for (const subprocessId of Object.keys(ir.subprocesses ?? {})) subprocessIds.add(subprocessId);
 
   for (const [id, element] of Object.entries(elements)) {
     reserved(problems, `elements.${id}`, element, RESERVED.elements, M);
@@ -844,7 +847,17 @@ export function validateScenario(
           message: M['E-SUBPROC-PARAMETRO'](`elements.${id}.${field}`, id),
         });
       }
-      if (subprocessFields.length === 0) {
+      // ADR-033 § 5: a sub-process can host an error boundary, but the probability is the boundary's.
+      const misplacedError = subprocessIds.has(id) && element.errorProbability !== undefined;
+      if (misplacedError) {
+        problems.push({
+          code: 'E-CAMPO-NO-APLICA',
+          path: `elements.${id}.errorProbability`,
+          severity: 'error',
+          message: M['E-CAMPO-NO-APLICA/solo-error'](`elements.${id}.errorProbability`),
+        });
+      }
+      if (subprocessFields.length === 0 && !misplacedError) {
         const other = options.elsewhere?.[id];
         problems.push({
           code: 'E-ELEMENTO-DESCONOCIDO',

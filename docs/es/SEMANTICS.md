@@ -304,7 +304,9 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
   (`ProcessIR.nodes[x].subprocessId`). **Límite conocido**: ese campo guarda solo el subproceso
   *inmediato*, así que con subprocesos anidados el lint reconoce el más interno; declarar
   parámetros en uno exterior sale hoy como `E-ELEMENTO-DESCONOCIDO`. Cerrarlo pide llevar la
-  cadena completa al IR (`bpmn/parse.ts`), que es otro ticket.
+  cadena completa al IR (`bpmn/parse.ts`), que es otro ticket. Cuando hay un evento adjunto a un
+  subproceso, el IR ya lleva todos los subprocesos (`subprocesses`, §9 antes de R-BND-15), y
+  entonces también se reconocen los exteriores.
   *(prueba: LILA-019, LILA-198)*
 - **R-PLAN-4 — Call activity = tarea con tiempo global.** Un `bpmn:callActivity` se traduce a
   `task` y **no** se expande el proceso llamado, aunque esté en el archivo. Su duración es su
@@ -517,8 +519,9 @@ de la solicitud de servicio), sin introducir variables de caso ni un lenguaje de
   soportada —o, desde ADR-033, a un subproceso embebido (R-BND-15…19)— y con al menos un flujo de
   salida, entra al perfil como nodo `timer` con `attachedTo` = el id del host y **sin**
   `incoming`: su token lo crea el host, no un flujo. Es alcanzable exactamente cuando lo es su
-  host, así que nunca es `E-INALCANZABLE` por sí solo. Cualquier otro boundary event sigue siendo
-  `E-NOSOP` con la construcción `boundaryEvent` (§3). *(prueba: #81)*
+  host, así que nunca es `E-INALCANZABLE` por sí solo. Cualquier otro boundary event, salvo el
+  evento de error interruptor de §9.3, sigue siendo `E-NOSOP` con la construcción `boundaryEvent`
+  (§3). *(prueba: #81)*
 - **R-BND-2 — El plazo cuenta desde que se habilita el host.** Se mide desde el `enabledAt` de la
   actividad host, no desde que consigue sus recursos: un token que espera en la cola de un pool
   ocupado ya está consumiendo su plazo. *(prueba: #81)*

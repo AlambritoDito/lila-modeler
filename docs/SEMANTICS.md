@@ -311,6 +311,8 @@ failure. The text follows Bizagi's style ("not supported by the simulator").
   sub-process, so with nested sub-processes the lint recognizes only the innermost one; declaring
   parameters on an outer one today comes out as `E-ELEMENTO-DESCONOCIDO`. Closing that gap
   requires carrying the full chain into the IR (`bpmn/parse.ts`), which is a separate ticket.
+  When a boundary event is attached to a sub-process the IR already carries every sub-process
+  (`subprocesses`, §9 before R-BND-15), and then the outer ones are recognized too.
   *(test: LILA-019, LILA-198)*
 - **R-PLAN-4 — Call activity = task with its own duration.** A `bpmn:callActivity` is translated
   to `task` and the called process is **not** expanded, even if it is present in the file. Its
@@ -526,8 +528,9 @@ pair), without introducing case variables or an expression language.
   supported task — or, since ADR-033, to an embedded sub-process (R-BND-15…19) — and with at
   least one outgoing flow, enters the profile as a `timer` node with `attachedTo` = the host's
   id and **no** `incoming`: its token is created by the host, not by a flow. It is reachable
-  exactly when its host is, so it is never `E-INALCANZABLE` on its own. Any other boundary event
-  stays `E-NOSOP` with construction `boundaryEvent` (§3). *(test: #81)*
+  exactly when its host is, so it is never `E-INALCANZABLE` on its own. Any other boundary event,
+  except the interrupting error boundary of §9.3, stays `E-NOSOP` with construction
+  `boundaryEvent` (§3). *(test: #81)*
 - **R-BND-2 — The deadline starts when the host is enabled.** It is measured from the host
   activity's `enabledAt`, not from the instant it acquires its resources: a token queuing for a
   busy pool is already burning its deadline. *(test: #81)*

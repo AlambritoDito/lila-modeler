@@ -153,6 +153,12 @@ export function flowOrder(ir: ProcessIR): string[] {
     if (seen.has(id) || node === undefined) continue;
     seen.add(id);
     queue.push(...(boundaries.get(id) ?? []));
+    // ADR-033 § 6: a boundary on a sub-process comes with the nodes inside it.
+    const chain = new Set<string>();
+    for (let s = node.subprocessId; s !== undefined && ir.subprocesses !== undefined && !chain.has(s); s = ir.subprocesses[s]?.parent) {
+      chain.add(s);
+      queue.push(...(boundaries.get(s) ?? []));
+    }
     for (const flow of node.outgoing) {
       const to = ir.flows[flow]?.to;
       if (to !== undefined) queue.push(to);

@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { parseBpmn } from '../src/bpmn/parse.js';
 import { validate } from '../src/bpmn/validate.js';
 import { main } from '../src/cli.js';
+import { flowOrder } from '../src/process-document.js';
 import type { ProcessIR } from '../src/core/ir.js';
 import type { EventLogRow, RunResult } from '../src/core/result.js';
 import { simulate, type SimulationProgress } from '../src/core/run.js';
@@ -217,6 +218,12 @@ describe('profile (ADR-033 § 5 and § 6)', () => {
     expect(errors).toContain('E-INALCANZABLE End_Late');
   });
 
+  test('the process document lists a sub-process boundary with the nodes inside its host', async () => {
+    const order = flowOrder(await irOf(TIMER_ON_SUB));
+    expect(order.indexOf('Deadline')).toBeLessThan(order.indexOf('End_Ok'));
+    expect(order.indexOf('Deadline')).toBeGreaterThan(order.indexOf('T1'));
+  });
+
   test('a boundary on a sub-process is reachable with its host: no `E-INALCANZABLE`', async () => {
     const { ir, unsupported } = await parseBpmn(ERROR_ON_SUB);
     expect(validate(ir, { unsupported }).errors).toEqual([]);
@@ -292,6 +299,38 @@ describe('scenario field `errorProbability` (ADR-033 § 5, § 1.6)', () => {
     );
     // `processingTime` and `fixedCost` are accepted and change nothing (as on a throw event).
     expect(problems.filter((p) => p.includes('Err_A.processingTime') || p.includes('Err_A.fixedCost'))).toEqual([]);
+  });
+
+  test('on a sub-process host: `errorProbability` is `E-CAMPO-NO-APLICA`, and an outer one is still a sub-process', async () => {
+    const ir = await irOf(ERROR_ON_SUB);
+    const problems = lint({ version: 1, name: 's', run, elements: { Sub: { errorProbability: 0.2 } } }, ir);
+    expect(problems.filter((p) => p.severity === 'error').map((p) => `${p.code} ${p.path}`)).toEqual([
+      'E-CAMPO-NO-APLICA elements.Sub.errorProbability',
+    ]);
+
+    // `Outer` only contains `Inner`, so no node names it; `ir.subprocesses` does (R-PLAN-3).
+    const nested = await irOf(definitions(`
+    <bpmn:startEvent id="Start" />
+    <bpmn:sequenceFlow id="F_In" sourceRef="Start" targetRef="Outer" />
+    <bpmn:subProcess id="Outer">
+      <bpmn:startEvent id="O_Start" />
+      <bpmn:sequenceFlow id="O1" sourceRef="O_Start" targetRef="Inner" />
+      <bpmn:subProcess id="Inner">
+        <bpmn:startEvent id="I_Start" />
+        <bpmn:sequenceFlow id="I1" sourceRef="I_Start" targetRef="T" />
+        <bpmn:task id="T" />
+        <bpmn:sequenceFlow id="I2" sourceRef="T" targetRef="I_End" />
+        <bpmn:endEvent id="I_End" />
+      </bpmn:subProcess>
+      <bpmn:sequenceFlow id="O2" sourceRef="Inner" targetRef="O_End" />
+      <bpmn:endEvent id="O_End" />
+    </bpmn:subProcess>
+    <bpmn:sequenceFlow id="F_Out" sourceRef="Outer" targetRef="End" />
+    <bpmn:endEvent id="End" />
+    <bpmn:boundaryEvent id="Outer_Late" attachedToRef="Outer"><bpmn:timerEventDefinition id="DO" /></bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="F_Late" sourceRef="Outer_Late" targetRef="End" />`));
+    const outer = lint({ version: 1, name: 's', run, elements: { Outer: { processingTime: seconds(5) } } }, nested);
+    expect(outer.filter((p) => p.severity === 'error').map((p) => p.code)).toEqual(['E-SUBPROC-PARAMETRO']);
   });
 
   test('`W-ELEMENTO-SIN-PARAMETROS` does not apply to an error boundary', async () => {
