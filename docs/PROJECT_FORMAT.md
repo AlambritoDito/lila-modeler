@@ -120,12 +120,47 @@ processes/<slug>/runs/<id>.result.json
 `version` is `1` or `2`. Changes to this format may only **add optional fields**; anything that
 would make a reader misread a file takes a new `version`, and the reader refuses it instead of
 guessing — the current reader refuses a version 3 with `LILA-MANIFEST` (in the folder, `E-MANIFEST`).
-There is no migration step and none is planned: the files are on the user's disk, not in a database
-anybody controls.
+Opening never rewrites a file: the files are on the user's disk, not in a database anybody
+controls, so a reader takes each released shape as it is and a save writes the current one. A
+change that needs a migration ships with it ([Compatibility](#compatibility)).
 
 A build that only reads version 1 (up to 1.0.0-beta.14) refuses a version 2 repository cleanly: it
 looks for the root `model.bpmn` before it reads the manifest's version, so the refusal it gives is
 «no model.bpmn» (`E-NO-MODEL` for a `.lila`, `E-SIN-MODELO` for a folder) — never a half-read project.
+
+## Compatibility
+
+From 1.0.0 on, Lila promises:
+
+- **Every `.lila` written by a released version opens in every later version**, and its scenarios
+  run. That covers the pre-1.0 betas too. Frozen archives in
+  `packages/engine/test/fixtures/released-lila/` stand for them, and a test opens, runs, saves and
+  reopens each one on every build. They are never regenerated.
+- **A format change ships with a migration and a frozen fixture.** A new `version` comes with a
+  reader for every older one: an old file is migrated in memory when it opens, and nothing is
+  written until you save. It also adds an archive written by the last release before the change to
+  the frozen fixtures.
+- **Unknown entries are kept.** ADR-032 (§ 1.4 of [the repository contract](REPOSITORY_CONTRACT.md))
+  replaces the rule that drops them. Until the reader that keeps them ships, versions 1 and 2 still
+  report them and drop them on save ([below](#what-is-tolerated-and-what-is-not)).
+- **A shape a released writer got wrong is repaired on read**, not refused. There is one so far:
+
+**The loose-diagram project (#613, #699).** Up to 1.0.0-beta.23, «Save As» of a loose diagram
+(`ventas.bpmn`) as a project wrote the diagram as `model.bpmn`, but kept `ventas.bpmn` in the
+manifest's `model.name` and in the scenarios' `model`. Reopened, every run stopped with «The
+scenario points at ventas.bpmn, but the active model is model.bpmn». The reader now repairs it:
+
+- When a version 1 manifest, or a process of a version 2 one, names a model file that the archive
+  does not hold, the model is read as `model.bpmn`.
+- Every scenario whose `model` named that file is pointed at `model.bpmn`. A scenario that
+  `extends` it inherits the fix.
+- Nothing else changes, revisions included, so stored runs stay current. The next save writes the
+  repaired names.
+- A scenario that names any other file is left as it is, and so is a manifest that names an entry
+  the archive does hold. «Run» still refuses a genuinely different model.
+
+The engine's `.lila` reader does this, so the browser, the desktop app, the CLI and the MCP server
+open such a file the same way. Project folders are read as they are.
 
 ## What is tolerated, and what is not
 

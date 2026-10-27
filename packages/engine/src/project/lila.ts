@@ -25,6 +25,9 @@
  * its own) under `processes/<slug>/`. It is written ONLY when the document has more than one
  * process: a project that never grew a second one keeps producing the version 1 archive, byte for
  * byte, so the builds that only read version 1 go on opening it.
+ *
+ * Every `.lila` a released version wrote keeps opening (`docs/PROJECT_FORMAT.md`, «Compatibility»).
+ * The one shape the reader repairs is the legacy loose-diagram project (#699, `projectModelOf`).
  */
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { version as engineVersion } from '../version.js';
@@ -235,6 +238,30 @@ function readManifest(raw: Uint8Array, problems: ProjectProblem[]): Manifest | n
 }
 
 /**
+ * A process as the project's `model.bpmn` (#699). Up to 1.0.0-beta.23, «Save As» of a loose
+ * diagram wrote the diagram as `model.bpmn` but kept the loose file's name in the manifest
+ * (`"model": {"name": "ventas.bpmn"}`) and in the scenarios' `model`, so once reopened every run
+ * stopped with «the scenario points at ventas.bpmn, but the active model is model.bpmn» (#613
+ * fixed new saves). When the manifest names a file the archive does not hold, that name can only
+ * mean the `model.bpmn` beside it: the process is read as `model.bpmn` and the scenarios whose
+ * `model` named that file are retargeted, as `procesoDelProyecto` does on «Save As» in the web app.
+ * A scenario naming anything else, and a manifest naming an entry the archive does hold, are left
+ * alone, so a genuinely different model is still refused when it runs. Revisions are not bumped:
+ * the scenarios describe the same model as before.
+ */
+function projectModelOf<T extends { readonly model: { readonly name: string }; readonly scenarios: Readonly<Record<string, ScenarioDocument>> }>(
+  process: T,
+  isEntry: (name: string) => boolean,
+): T {
+  const legacy = process.model.name;
+  if (legacy === MODEL_FILE || isEntry(legacy)) return process;
+  const scenarios = Object.fromEntries(
+    Object.entries(process.scenarios).map(([name, scenario]) => [name, scenario.model === legacy ? { ...scenario, model: MODEL_FILE } : scenario]),
+  );
+  return { ...process, model: { ...process.model, name: MODEL_FILE }, scenarios };
+}
+
+/**
  * Reads a `.lila`. Tolerant in exactly the same places as the folder reader: a broken scenario or
  * run is excluded and explained in `problems`, while a missing manifest or a missing `model.bpmn`
  * is fatal — without them there is no project and nothing to model.
@@ -302,12 +329,16 @@ export function decodeLila(bytes: Uint8Array): ProjectDocument {
     problems.push({ file: name, message: 'not part of the Lila project layout; ignored and not written back.' });
   }
 
+  const process = projectModelOf(
+    { model: { id: manifest.model.id, name: manifest.model.name, xml: strFromU8(modelRaw), revision: manifest.model.revision }, scenarios },
+    (name) => Object.hasOwn(entries, name),
+  );
   const document: ProjectDocument = {
     version: 1,
     id: manifest.id,
     name: manifest.name,
-    model: { id: manifest.model.id, name: manifest.model.name, xml: strFromU8(modelRaw), revision: manifest.model.revision },
-    scenarios,
+    model: process.model,
+    scenarios: process.scenarios,
     scenarioRevisions: manifest.scenarioRevisions,
     runs,
     // Only when there is something to say: an empty `problems` would make an untouched
@@ -411,14 +442,14 @@ function decodeRepository(parsed: Record<string, unknown>, entries: Record<strin
     problems.push({ file: name, message: 'not part of the Lila repository layout; ignored and not written back.' });
   }
 
-  const processes: ProcessDocument[] = [...byPrefix].map(([prefix, { manifest, scenarios, runs }]) => ({
+  const processes: ProcessDocument[] = [...byPrefix].map(([prefix, { manifest, scenarios, runs }]) => projectModelOf({
     slug: manifest.slug,
     name: manifest.name,
     model: { ...manifest.model, xml: strFromU8(entries[`${prefix}${MODEL_FILE}`] as Uint8Array) },
     scenarios,
     scenarioRevisions: manifest.scenarioRevisions,
     runs,
-  }));
+  }, (name) => Object.hasOwn(entries, `${prefix}${name}`)));
   const first = processes[0] as ProcessDocument;
   const base: ProjectDocument = {
     version: 1,

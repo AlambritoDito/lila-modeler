@@ -123,13 +123,53 @@ processes/<slug>/runs/<id>.result.json
 `version` es `1` o `2`. Los cambios a este formato solo pueden **añadir campos opcionales**; lo que
 haría que un lector interpretara mal un archivo lleva una `version` nueva, y el lector la rechaza en
 vez de adivinar: el lector actual rechaza una versión 3 con `LILA-MANIFEST` (en la carpeta,
-`E-MANIFEST`). No hay paso de migración ni está previsto: los archivos están en el disco del usuario,
-no en una base de datos que alguien controle.
+`E-MANIFEST`). Abrir nunca reescribe un archivo: los archivos están en el disco del usuario, no en
+una base de datos que alguien controle, así que el lector toma cada forma publicada tal como es y
+guardar escribe la actual. Un cambio que necesite una migración la trae consigo
+([Compatibilidad](#compatibilidad)).
 
 Una versión de la app que solo lee la versión 1 (hasta la 1.0.0-beta.14) rechaza limpiamente un
 repositorio versión 2: busca el `model.bpmn` de la raíz antes de leer la versión del manifiesto, así
 que el rechazo que da es «falta model.bpmn» (`E-NO-MODEL` en un `.lila`, `E-SIN-MODELO` en una
 carpeta), nunca un proyecto leído a medias.
+
+## Compatibilidad
+
+Desde la 1.0.0, Lila promete:
+
+- **Todo `.lila` escrito por una versión publicada abre en todas las versiones posteriores**, y sus
+  escenarios corren. Eso incluye las betas anteriores a la 1.0. Los archivos congelados de
+  `packages/engine/test/fixtures/released-lila/` las representan, y una prueba abre, corre, guarda
+  y vuelve a abrir cada uno en cada build. Nunca se regeneran.
+- **Un cambio de formato trae una migración y un fixture congelado.** Una `version` nueva llega con
+  un lector para cada una de las anteriores: un archivo viejo se migra en memoria al abrirlo y no se
+  escribe nada hasta que guardas. También añade a los fixtures congelados un archivo escrito por la
+  última versión publicada antes del cambio.
+- **Las entradas desconocidas se conservan.** El ADR-032 (§ 1.4 del [contrato del
+  repositorio](REPOSITORY_CONTRACT.md)) sustituye la regla que las descarta. Hasta que se publique
+  el lector que las conserva, las versiones 1 y 2 siguen avisándolas y descartándolas al guardar
+  ([abajo](#qué-se-tolera-y-qué-no)).
+- **Una forma que un escritor publicado dejó mal se repara al leer**, no se rechaza. Por ahora hay
+  una:
+
+**El proyecto de diagrama suelto (#613, #699).** Hasta la 1.0.0-beta.23, «Guardar como» de un
+diagrama suelto (`ventas.bpmn`) como proyecto escribía el diagrama como `model.bpmn`, pero dejaba
+`ventas.bpmn` en el `model.name` del manifiesto y en el `model` de los escenarios. Al reabrirlo,
+toda corrida se detenía con «El escenario apunta a ventas.bpmn, pero el modelo activo es
+model.bpmn». El lector ahora lo repara:
+
+- Cuando un manifiesto versión 1, o un proceso de uno versión 2, nombra un archivo de modelo que el
+  archivo no contiene, el modelo se lee como `model.bpmn`.
+- Cada escenario cuyo `model` nombraba ese archivo pasa a apuntar a `model.bpmn`. Un escenario que
+  lo `extends` hereda el arreglo.
+- Nada más cambia, revisiones incluidas, así que las corridas guardadas siguen vigentes. El
+  siguiente guardado escribe los nombres reparados.
+- Un escenario que nombra cualquier otro archivo se deja como está, igual que un manifiesto que
+  nombra una entrada que el archivo sí contiene. «Ejecutar» sigue rechazando un modelo de verdad
+  distinto.
+
+Lo hace el lector de `.lila` del motor, así que el navegador, la app de escritorio, la CLI y el
+servidor MCP abren ese archivo igual. Las carpetas de proyecto se leen tal como están.
 
 ## Qué se tolera y qué no
 

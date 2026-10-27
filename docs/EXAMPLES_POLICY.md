@@ -31,6 +31,7 @@ cases, including documentation, screenshots, issue/PR text and attachments.
 | `examples/bizagi-levels/` | Attributed reconstructions of public reference examples, with source URLs, expected values and documented differences. |
 | `examples/bizagi-exports/` | Unmodified BPMN MIWG interoperability fixtures, with upstream commit and CC BY 3.0 attribution. |
 | `packages/engine/test/fixtures/outlines/` | Synthetic outlines (#97) from the QA of #553: branch order, same-row skips, shared gateway trunks. |
+| `packages/engine/test/fixtures/released-lila/` | Frozen synthetic `.lila` archives (#699) standing for files released versions wrote: a legacy loose-diagram v1, a regular v1 and a two-process v2. Never regenerated; see its README. |
 | `packages/engine/test/fixtures/service-request/` | Neutral regression inputs for resource, outcome, UI and replay checks. |
 | `packages/engine/test/fixtures/service-shared-denial.bpmn` | Neutral shared-path fixture for conditional-routing invariants. |
 | `packages/engine/test/fixtures/zero-time-driver.ts` | Synthetic zero-time loop and finite-control regression models for #368; executed in timeout-protected child processes. |
