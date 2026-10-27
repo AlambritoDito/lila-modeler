@@ -77,6 +77,37 @@ gh run download <run-id> -n lila-release-candidate-<sha> -D candidate
 `<sha>` is the commit the run built (`headSha` in `gh run view <run-id> --json headSha`). The
 artifact holds `assets/` (what the release would attach) and, when present, `notes.md` (the body).
 
+## The web app on GitHub Pages: stable and beta
+
+The site offers two builds of the web app (#704), each with its own button on the landing:
+
+| Channel | Path | Built from | Renewed by |
+| --- | --- | --- | --- |
+| Stable | `app/` | the latest GitHub Release's tag | publishing a Release |
+| Beta | `beta/` | `main` | a push to `main` |
+
+- **Which Release is stable.** GitHub's «latest» Release (not a prerelease, not a draft); while
+  none exists, the newest published prerelease. A draft Release never counts, so the desktop
+  workflow's draft does not move the stable app until it is published.
+- `tools/build-pages.mjs` builds both into `_site/` and writes `_site/versions.json`
+  (`{ stable: { version, tag, sha, downloads? }, beta: { version, sha } }`), from which the landing
+  shows the stable version, its `.dmg`/`.exe` links and the beta's short SHA. The site itself
+  (landing, docs, build script) always comes from `main`. Locally, without `gh` or network, pass
+  the tag: `node tools/build-pages.mjs --stable-tag v1.0.0-beta.26`.
+- `.github/workflows/pages.yml` runs on a push to `main`, a published Release and by hand. A
+  `release` event runs the workflow file as it is in the tagged commit, so the first Release that
+  renews `app/` on its own is one tagged after #704 reached `main`; before that, run the workflow
+  by hand after publishing the Release.
+- **Publication stays manual** until the owner sets `PAGES_PUBLISH_ENABLED=true` (see
+  [PAGES.md](PAGES.md)). With it set, both events publish; without it, run the workflow from
+  `main` with **publish**.
+- **Storage.** Both apps share the origin `alambritodito.github.io`. The stable app keeps the
+  `lila.*` keys and the `lila-modeler-*` offline cache it always had; the beta uses names prefixed
+  with its base path (`lila[/lila-modeler/beta/].*`) and is installed as «Lila Modeler Beta», so it
+  can neither overwrite nor recover the stable app's projects (`apps/web/src/channel.ts`).
+- For a release: publish the GitHub Release (with its installers) first, then let the Pages run
+  (or the manual dispatch) rebuild `app/` from it. Check `versions.json` on the deployed site.
+
 ## Publishing to npm
 
 Publication is an explicit owner action from the **tag** (not `main`):

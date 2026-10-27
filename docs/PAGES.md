@@ -1,7 +1,10 @@
 # GitHub Pages web app
 
 The live public address is `https://alambritodito.github.io/lila-modeler/`.
-The landing page lives at that root and links to the app at `app/`. The owner authorized the first
+The landing page lives at that root and links to two builds of the app (#704): the stable one at
+`app/`, built from the latest GitHub Release, and the beta at `beta/`, built from `main`. The two
+channels, the rule that picks the stable Release and how their storage is kept apart are described
+in [RELEASING.md](RELEASING.md#the-web-app-on-github-pages-stable-and-beta). The owner authorized the first
 publication on 2026-09-10. [Deployment](https://github.com/AlambritoDito/lila-modeler/actions/runs/34485464026)
 succeeded for main `be0f695`; the public landing and editor returned HTTP 200. Real browser
 acceptance passed: editing, both seed-42/30-replication simulations, comparison, explicit saving,
@@ -15,10 +18,17 @@ npm ci
 npm run build:pages
 ```
 
-The script builds the existing Vite app with `LILA_WEB_BASE=/lila-modeler/app/` and assembles
-`_site/`: landing page, app, local fonts/themes, English screenshots and the rendered docs. The normal desktop/web
-build retains its root base. To preview the real subpath, serve a directory containing a
-`lila-modeler` link or copy of `_site`, then open `/lila-modeler/` on that server.
+The script builds the Vite app twice and assembles `_site/`: landing page, `beta/` (the checked-out
+tree, `LILA_WEB_BASE=/lila-modeler/beta/`), `app/` (the stable Release's tag in a temporary
+`git worktree`, `LILA_WEB_BASE=/lila-modeler/app/`), `versions.json`, local fonts/themes, English
+screenshots and the rendered docs. It asks `gh` for the stable tag; without `gh` or network, pass it:
+`npm run build:pages -- --stable-tag v1.0.0-beta.26` (or `LILA_STABLE_TAG`). The normal
+desktop/web build retains its root base. To preview the real subpath, serve a directory containing
+a `lila-modeler` link or copy of `_site`, then open `/lila-modeler/` on that server.
+
+`check:pwa` and the `tools/e2e-*.mjs` scripts test `/lila-modeler/app/`. To point them at the code
+in front of you instead of the last Release, build with `--stable-tag HEAD`: a ref that names the
+checked-out commit builds the stable app from the working tree.
 
 `tools/build-docs.mjs` renders every `.md` in `docs/`, `docs/es/` and `docs/releases/` to
 `_site/docs/`, with an index at `docs/`. A new document is published by adding the file; to keep one
@@ -48,7 +58,7 @@ it comes from the cache offline. Before asking someone to
 test on Windows ([tester guide](WINDOWS-PWA-TESTER-GUIDE.md)), run
 
 ```bash
-npm run build:pages && npm run check:pwa
+npm run build:pages -- --stable-tag HEAD && npm run check:pwa
 ```
 
 which checks the manifest and installability over CDP, the service worker, save-in-place, the
@@ -68,36 +78,21 @@ and the gestures on a real device are still a person's check.
 ## Publish an update (owner action)
 
 1. Repository Settings → Pages is configured to use GitHub Actions.
-2. Review the Pages workflow's uploaded artifact and the model/simulate/compare/save/reload flow.
+2. Review the Pages workflow's uploaded artifact (its summary shows `versions.json`) and the
+   model/simulate/compare/save/reload flow in both `app/` and `beta/`.
 3. Run the Pages workflow from `main` with **publish** selected.
-4. To publish future pushes automatically, set repository variable `PAGES_PUBLISH_ENABLED=true`.
-   Leave it unset to retain manual publication.
+4. To publish future pushes to `main` and published Releases automatically, set repository
+   variable `PAGES_PUBLISH_ENABLED=true`. Leave it unset to retain manual publication.
 
-PRs and pushes build the artifact without publishing by default. Deployment uses the
+PRs, pushes and Releases build the artifact without publishing by default. A `release` event's
+deployment runs from the tag's ref, so the `github-pages` environment must allow `v*` tags (as the
+earlier tag-publishing procedure already required). Deployment uses the
 `github-pages` environment with `pages: write` and `id-token: write`; build jobs only need
 read access to repository contents. No npm token or backend server is required.
 
-## Publishing from a release tag (owner action)
+## Publishing from a release tag (superseded)
 
-For a tagged release such as `v1.0.0-beta.1`, publish the landing and web app that match that exact
-tag, rather than whatever is currently on `main`. This requires `pages.yml`'s `deploy` job to
-accept `main` or a `v*` tag ref (workflow #382) and the `github-pages` environment to carry a tag
-deployment policy of `v*` — both added by the owner/lead. The procedure:
-
-1. **Publish the GitHub release first.** The landing's download button links straight to
-   `releases/tag/v1.0.0-beta.1`; publish that (pre)release before publishing the site, so the
-   button resolves the moment the page goes live instead of 404ing.
-2. **Dispatch the workflow against the tag ref**, once the environment accepts tag deployments
-   (requires the environment policy above):
-
-   ```bash
-   gh workflow run pages.yml --ref v1.0.0-beta.1 -f publish=true
-   ```
-
-3. **Verify the SHA before and after.** Note the tag's commit SHA (`git rev-parse v1.0.0-beta.1`)
-   before dispatching. After the run finishes, compare it against the SHA recorded in the run's job
-   summary (or `gh run view <run-id> --json headSha`) to confirm the site was built from that exact
-   tag commit, not a later commit on `main`.
-4. **Automatic publication on push to `main` stays gated** by the repository variable
-   `PAGES_PUBLISH_ENABLED` (currently unset) — this tag-based procedure does not change that; both
-   remain manual until the owner opts in.
+Until #704 the stable site was published by dispatching this workflow against a tag ref. That path
+is gone: the site is always built from `main`, and `app/` comes from the latest Release by itself.
+Publish the GitHub Release first, then run the workflow from `main` (or let the `release` event do
+it once `PAGES_PUBLISH_ENABLED` is on).

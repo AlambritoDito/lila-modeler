@@ -63,6 +63,46 @@ body {
   grid-template-columns: auto 1fr 0;
 }
 
+/* The beta build on Pages (#704, `AvisoBeta.tsx`): a one-line band over the editor, which takes the
+   rest of the window; closing the band gives its row back. Only the beta mounts `.canal-beta`. */
+.canal-beta {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.canal-beta > .app {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+.aviso-beta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 12px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--accent-tertiary);
+  color: var(--fg-primary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+
+.aviso-beta a {
+  color: var(--accent-primary);
+}
+
+.aviso-beta .cerrar {
+  margin-left: auto;
+  background: none;
+  border: 0;
+  color: var(--fg-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
 /* The dividers stay on screen when their side is hidden — a double-click or Enter brings it back
    — overlaying the canvas edge instead of taking a column (and adding no horizontal scroll). */
 .app.sin-panel > .divisor {

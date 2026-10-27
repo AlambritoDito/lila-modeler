@@ -2138,6 +2138,11 @@ export const es: Strings = {
     sinNombre: { 'bpmn:Participant': 'Pool sin nombre', 'bpmn:Lane': 'Carril sin nombre' },
     finCorto: 'Fin',
   },
+  canal: {
+    betaTexto: 'Beta: la vista previa construida con lo último de main. Los proyectos de aquí se guardan aparte de la app estable.',
+    irEstable: 'Abrir la app estable',
+    cerrar: 'Cerrar el aviso de beta',
+  },
   visor: {
     modo: 'Modo visor',
     editor: 'Editor completo',

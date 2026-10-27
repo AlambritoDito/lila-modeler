@@ -3,6 +3,9 @@
  * `Landing.dc.html`: the live replay in the hero, the replication histogram, the KPI bars, the
  * typing terminal, the screenshot switcher, the mobile menu and the English/Spanish toggle.
  * The page reads fine without it. Colours come from the CSS tokens (Lila Light / Lila Dark).
+ * It also reads `versions.json` (#704, written by `tools/build-pages.mjs`) to show the stable
+ * Release and the beta's commit next to their buttons; without it the links keep pointing at
+ * the Releases page.
  */
 (() => {
   const $ = (s) => document.querySelector(s);
@@ -15,7 +18,7 @@
     badge: 'Beta de escritorio: macOS · Windows (sin probar) · Novedades →',
     h1: 'Mira tu proceso <span class="hl">correr</span> antes de que corra.',
     lede: 'Simulador de eventos discretos para BPMN, de código abierto. Dibuja el proceso, define tiempos, recursos y calendarios, y reproduce cada caso sobre el diagrama — con <strong>comparaciones AS-IS vs TO-BE al 95% de confianza</strong>. Sin cuenta, sin servidor.',
-    ctaDemo: 'Abrir la app', ctaQuick: 'Inicio rápido', ctaBizagi: '¿Vienes de Bizagi?',
+    ctaDemo: 'Abrir la app', ctaBeta: 'Beta: lo último de main', ctaQuick: 'Inicio rápido', ctaBizagi: '¿Vienes de Bizagi?',
     tagPlatforms: 'Navegador · Escritorio · CLI · MCP', tagSeeded: 'Con semilla y reproducible',
     live: 'Reproducción en vivo', hudClock: 'Reloj', hudDone: 'Completados', hudCycle: 'Ciclo prom.', speed: 'Velocidad',
     lgToken: 'Token de caso', lgWait: 'Esperando un recurso', lgBusy: 'Recurso ocupado', lgCount: 'completados / iniciados', swipe: 'desliza el diagrama',
@@ -376,6 +379,22 @@
     drawHero(); drawRep();
     requestAnimationFrame(loop);
   }
+  // #704: the stable Release (badge, button, downloads) and the beta's short SHA.
+  const RELEASES = 'https://github.com/AlambritoDito/lila-modeler/releases';
+  function applyVersions(v) {
+    const stable = v?.stable, beta = v?.beta;
+    if (typeof stable?.tag === 'string' && typeof stable.version === 'string') {
+      const page = `${RELEASES}/tag/${encodeURIComponent(stable.tag)}`;
+      $('#badge-stable').href = page;
+      $('#badge-version').textContent = `v${stable.version}`;
+      $('#ver-stable').textContent = `v${stable.version}`;
+      $('#dl-mac').href = typeof stable.downloads?.dmg === 'string' ? stable.downloads.dmg : page;
+      $('#dl-win').href = typeof stable.downloads?.exe === 'string' ? stable.downloads.exe : page;
+    }
+    if (typeof beta?.sha === 'string') $('#ver-beta').textContent = beta.sha.slice(0, 7);
+  }
+  fetch('versions.json', { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).then(applyVersions, () => {});
+
   applyLang();
   pushHud();
   requestAnimationFrame(loop);

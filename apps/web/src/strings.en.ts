@@ -2190,6 +2190,11 @@ export const en = {
     finCorto: 'End',
   },
   /** #653: the read-only viewer for phones and tablets (`Visor.tsx`). */
+  canal: {
+    betaTexto: 'Beta: the preview built from the latest code on main. Projects here are kept apart from the stable app.',
+    irEstable: 'Open the stable app',
+    cerrar: 'Close the beta notice',
+  },
   visor: {
     modo: 'Viewer mode',
     editor: 'Full editor',

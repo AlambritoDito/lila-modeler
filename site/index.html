@@ -2,7 +2,8 @@
 <!--
   Landing page of Lila Modeler (LILA-067), from the Claude Design mock `Landing.dc.html`, published
   to GitHub Pages by `.github/workflows/pages.yml` via `tools/build-pages.mjs`, which copies this
-  folder to the root of the site, the built web app to `app/`, the screenshots from
+  folder to the root of the site, the stable web app (latest Release) to `app/`, the beta (from
+  `main`) to `beta/`, the versions of both to `versions.json`, the screenshots from
   `docs/design/en/` to `img/` and the branding exports to `branding/`. Hand-written on purpose: no
   site generator, no framework, no external request. The English text lives here and works without
   JavaScript; `landing.js` adds the animations and swaps `data-i18n` elements to Spanish.
@@ -61,8 +62,8 @@
         <div class="wrap">
           <div class="logo-plate"><img src="branding/logo-horizontal.png" alt="Lila Modeler" width="1086" height="362" fetchpriority="high" /></div>
           <br />
-          <a class="badge" href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16">
-            <b>v1.0.0-beta.16</b><span data-i18n="badge">Desktop beta: macOS · Windows (untested) · What's new →</span>
+          <a class="badge" id="badge-stable" href="https://github.com/AlambritoDito/lila-modeler/releases">
+            <b id="badge-version">Releases</b><span data-i18n="badge">Desktop beta: macOS · Windows (untested) · What's new →</span>
           </a>
           <h1 data-i18n="h1">Watch your process <span class="hl">run</span> before it runs.</h1>
           <p class="lede" data-i18n="lede">
@@ -71,7 +72,8 @@
             <strong>AS-IS vs TO-BE comparisons at 95% confidence</strong>. No account, no server.
           </p>
           <div class="ctas">
-            <a class="btn btn-primary" href="app/">▶ <span data-i18n="ctaDemo">Open the app</span></a>
+            <a class="btn btn-primary" href="app/">▶ <span data-i18n="ctaDemo">Open the app</span><span class="cta-ver" id="ver-stable"></span></a>
+            <a class="btn" href="beta/"><span data-i18n="ctaBeta">Beta: latest from main</span><span class="cta-ver" id="ver-beta"></span></a>
             <a class="btn" href="#quickstart" data-i18n="ctaQuick">Quick start</a>
             <a class="btn btn-ghost" href="docs/COMING-FROM-BIZAGI.html"><span data-i18n="ctaBizagi">Coming from Bizagi?</span> →</a>
           </div>
@@ -200,8 +202,8 @@
             <p class="sec-p" data-i18n="qsP">Clone, npm ci &amp;&amp; npm run build, then validate, run and compare the restaurant example. Or hand the same engine to an agent over MCP.</p>
             <div class="qs-links">
               <span>web</span><a href="app/" data-i18n="qsWeb">Use it in your browser, no install</a>
-              <span>mac</span><a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16" data-i18n="qsMac">Download the macOS beta (Apple Silicon, not notarized)</a>
-              <span>win</span><a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16" data-i18n="qsWin">Download the Windows installer (x64 — unsigned and not tested on a real PC yet; SmartScreen will warn)</a>
+              <span>mac</span><a id="dl-mac" href="https://github.com/AlambritoDito/lila-modeler/releases" data-i18n="qsMac">Download the macOS beta (Apple Silicon, not notarized)</a>
+              <span>win</span><a id="dl-win" href="https://github.com/AlambritoDito/lila-modeler/releases" data-i18n="qsWin">Download the Windows installer (x64 — unsigned and not tested on a real PC yet; SmartScreen will warn)</a>
               <span>docs</span><a href="docs/" data-i18n="qsDocs">Read the documentation</a>
             </div>
           </div>

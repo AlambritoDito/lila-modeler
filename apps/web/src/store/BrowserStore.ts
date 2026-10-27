@@ -20,13 +20,16 @@ import { encodeLila } from '@lila-modeler/engine/project';
 import { strings } from '../i18n';
 import { readLila, readProject } from '../project';
 import type { ProcessData, ProcessSummary, ProjectSessionStore, ProjectDocument } from './ProjectStore';
+import { storageKey } from '../channel';
 
 /**
  * The version lives in the key, not inside the value: a future format change picks a new key
  * (`lila.project.v2`) and the old one is left alone. Same `lila.` prefix as the settings
- * (`lila.tema`, `lila.densidad`, `lila.temas`, `lila.idioma`).
+ * (`lila.tema`, `lila.densidad`, `lila.temas`, `lila.idioma`). The beta build on Pages keeps its
+ * own copy under its base path (`channel.ts`, #704), so it never overwrites or recovers the
+ * stable app's session.
  */
-const CLAVE = 'lila.project.v1';
+const CLAVE = storageKey('project.v1');
 
 /** The project container written by «Save project» (ADR-027, `docs/PROJECT_FORMAT.md`). */
 const LILA_EXT = '.lila';
