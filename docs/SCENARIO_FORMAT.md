@@ -166,14 +166,19 @@ Map `BPMN id → parameters`. The keys are diagram ids: nodes (`Task_…`, `Star
 
 Message and throw events (ADR-033, `SEMANTICS.md` § 9.2): a message start takes the start fields above and a message end the end's; an intermediate throw event (none or message) takes no field of its own, and `resources`, `interTriggerTimer` or `triggerCount` on it are `E-CAMPO-NO-APLICA`.
 
-**Specified for 1.0, not implemented yet** (ADR-033). These fields are fixed by the ADR and land with the issue named in each row. Until then the element they configure is still `E-NOSOP`, the strict schema rejects `loop`, `instances` and `errorProbability` with `E-CLAVE-DESCONOCIDA`, and the entry of a timer boundary event on a sub-process is `E-ELEMENTO-DESCONOCIDO` (the boundary is not in the IR yet). They are additive: `version` stays `1` (§ 9).
+Error boundary events and timer boundary events on a sub-process (ADR-033 § 5 and § 6, `SEMANTICS.md` § 9 and § 9.3, #702):
+
+| Field | Type | Applies to | Default | Description |
+|---|---|---|---|---|
+| `errorProbability` | number in `[0, 1]` | interrupting error boundary event on a task or an embedded sub-process | — (never fires and `W-ERROR-SIN-PROBABILIDAD`) | Share of the host's completions (or sub-process exits) that leave through this boundary, drawn once per completion from the stream `<hostId>#error`. The values of one host's error boundaries add up to at most 1 (`E-PROB-ERROR-SUMA`); out of range is `E-PROB-RANGO`; on any other element `E-CAMPO-NO-APLICA`. `resources` on the boundary is `E-CAMPO-NO-APLICA`; `processingTime`, `calendar` and `fixedCost` are accepted and change nothing. |
+| `processingTime`, `calendar` (widened) | as above | timer boundary event on an embedded sub-process | as above (`W-BORDE-SIN-TIEMPO`) | The deadline over the sub-process, measured from the moment a token of the case enters it. Interrupting, it cancels everything of the case inside; the sub-process itself still takes no parameter (`E-SUBPROC-PARAMETRO`). |
+
+**Specified for 1.0, not implemented yet** (ADR-033). These fields are fixed by the ADR and land with the issue named in each row. Until then the element they configure is still `E-NOSOP` and the strict schema rejects `loop` and `instances` with `E-CLAVE-DESCONOCIDA`. They are additive: `version` stays `1` (§ 9).
 
 | Field | Type | Applies to | Default | Description |
 |---|---|---|---|---|
 | `loop` | object with exactly one of `count` (integer ≥ 1) or `probability` (number in `[0, 1]`) | task or call activity with a standard loop marker | — (one iteration and `W-BUCLE-SIN-PARAMETROS`) | #700. `count`: the task runs exactly that many times per entry. `probability`: after each completed iteration, another runs with this probability (mean `1/(1 − p)` executions). BPMN `loopMaximum` caps both. `probability: 1` without `loopMaximum` is `E-BUCLE-SIN-SALIDA`; out of range is `E-PROB-RANGO`. Each iteration is an instance in the results (ADR-033 § 3). |
 | `instances` | distribution (§ 3) | multi-instance task or call activity, parallel or sequential | the BPMN `loopCardinality` when it is an integer literal, else 1 and `W-MULTI-SIN-CARDINALIDAD` | #701. Number of instances per entry, `N = floor(max(0, x) + 0.5)`. Each instance is an instance in the results (ADR-033 § 4). |
-| `errorProbability` | number in `[0, 1]` | interrupting error boundary event on a task or an embedded sub-process | — (never fires and `W-ERROR-SIN-PROBABILIDAD`) | #702. Share of the host's completions (or sub-process exits) that leave through this boundary. The values of one host's error boundaries add up to at most 1 (`E-PROB-ERROR-SUMA`); out of range is `E-PROB-RANGO` (ADR-033 § 5). |
-| `processingTime`, `calendar` (widened) | as above | timer boundary event on an embedded sub-process | as above (`W-BORDE-SIN-TIEMPO`) | #702. The deadline over the sub-process, measured from the moment a token of the case enters it (ADR-033 § 6). |
 
 Assigning a whole lane: the web panel can fill `resources` for **every task of a lane** in one action (resources section, "Assign lane"). It is a bulk edit of this same per-task field — the lane is a label of the diagram (`docs/SEMANTICS.md` § 2) and is never stored in the scenario — and tasks that already have `resources` are listed and require confirmation before being replaced.
 

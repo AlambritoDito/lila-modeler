@@ -20,6 +20,7 @@ import {
 import type { BottleneckEntry, EventLogRow, RunResult } from './result.js';
 import {
   assertSupportedCalendarScenario,
+  assertSupportedErrorScenario,
   assertSupportedResourceScenario,
   runReplication,
   type AbortSignalLike,
@@ -266,6 +267,7 @@ export function simulate(ir: ProcessIR, scenario: SimScenario, options: Simulate
   const locale = options.locale;
   assertSupportedResourceScenario(scenario, locale);
   assertSupportedCalendarScenario(scenario, locale);
+  assertSupportedErrorScenario(ir, scenario, locale);
   // Contrato del event log (docs/RESULTS_FORMAT.md § 7): `result.log` solo se materializa cuando
   // nadie más se hizo cargo de las filas. Con `onEvent` el consumidor ya las recibe una a una —la
   // CLI las escribe directas a `log.csv`— y retenerlas otra vez duplicaría hasta 6 M de objetos.

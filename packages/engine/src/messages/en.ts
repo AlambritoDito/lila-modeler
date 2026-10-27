@@ -29,6 +29,7 @@ const NODE_TYPES: Record<string, string> = {
   and: 'AND gateway',
   timer: 'timer',
   throw: 'intermediate throw event',
+  errorBoundary: 'error boundary event',
   eventGateway: 'event-based gateway',
 };
 
@@ -283,6 +284,10 @@ export const en: Catalog = {
       `${flowId} cannot be reached before ${gatewayId} on any sequential path; the condition only applies if a parallel branch traverses it (${path}).`,
     'W-OR-PROB-PARCIAL': (path, flowId, gatewayId) =>
       `${flowId} declares no probability, but ${gatewayId} has other outgoing flows that do; the undeclared flow is always taken, because a missing probability counts as 1 (${path}).`,
+
+    'E-PROB-ERROR-SUMA/lint': (path, hostId, sum) =>
+      `the error probabilities of the boundary events on ${hostId} add up to ${sum}, more than 1 (${path}).`,
+    'E-CAMPO-NO-APLICA/solo-error': (path) => `only accepted on an error boundary event (${path}).`,
 
     'E-CLAVE-DESCONOCIDA': (keys) => `key not recognised by the schema: ${keys}.`,
   },

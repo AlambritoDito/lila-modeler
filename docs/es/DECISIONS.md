@@ -919,7 +919,7 @@ instancias), y elegirlo es cosa de quien modela. `instances` en una tarea sin el
   `terminate` y la parada tratan cada instancia abierta como dicen R-EVT-6 y R-ARR-5.
 - **Degradación.** Ni `instances` ni `cardinality`: una instancia, más `W-MULTI-SIN-CARDINALIDAD`.
 
-### 5. Evento de error adjunto (#702)
+### 5. Evento de error adjunto (#702, implementado)
 
 **Perfil e IR.** Un `bpmn:boundaryEvent` con exactamente un `errorEventDefinition` (con cualquier
 `errorRef` o sin él), interruptor (`cancelActivity` ausente, `"true"` o `"1"`), adjunto a una tarea
@@ -970,7 +970,7 @@ evento adjunto sigue siendo `E-NOSOP` `boundaryEvent`.
   `W-ERROR-SIN-PROBABILIDAD`. Si ningún evento adjunto del anfitrión la declara, no se sortea
   nada.
 
-### 6. Temporizador adjunto a un subproceso embebido (#702)
+### 6. Temporizador adjunto a un subproceso embebido (#702, implementado)
 
 **Perfil e IR.** El temporizador adjunto de R-BND-1 y R-BND-10, con las mismas condiciones, adjunto
 a un subproceso embebido del perfil en lugar de a una tarea. Sigue siendo un nodo `timer` con
@@ -1039,7 +1039,7 @@ adjunto a un subproceso sin flujo de entrada o sin flujo de salida sigue siendo 
   error una vez por salida; los marcadores de bucle y de multi-instancia en un subproceso esperan
   a un usuario que los necesite.
 
-*(pruebas: `packages/engine/test/message-throw-events.test.ts` para § 2; cada parte posterior nombra las suyas)*
+*(pruebas: `packages/engine/test/message-throw-events.test.ts` para § 2; `packages/engine/test/error-boundary-subprocess.test.ts` para § 5 y § 6; cada parte posterior nombra las suyas)*
 
 ---
 

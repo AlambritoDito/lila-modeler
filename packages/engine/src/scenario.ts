@@ -409,6 +409,9 @@ function buildSchemas(locale: Locale) {
     conditions: z
       .array(z.strictObject({ flowTaken: z.string(), probability: z.number() }))
       .optional(),
+    // ADR-033 § 5 (#702) — share of the host's completions that leave through this error boundary
+    // (R-ERR-1…5). No `.min(0).max(1)` for the same reason as `probability`: `E-PROB-RANGO`.
+    errorProbability: z.number().optional(),
     // § 4 — reservados.
     priority: z.unknown().optional(),
     preempt: z.unknown().optional(),
@@ -523,6 +526,7 @@ export type ScenarioProblemCode =
   | 'E-CAMPO-NO-APLICA'
   | 'E-PROB-EN-NODO'
   | 'E-PROB-RANGO'
+  | 'E-PROB-ERROR-SUMA'
   | 'E-SUBPROC-PARAMETRO'
   | 'E-TIMER-RECURSO'
   | 'E-SIN-PARADA'
@@ -1018,6 +1022,25 @@ export function validateScenario(
       });
     }
 
+    // ADR-033 § 5 (#702) — `errorProbability` only on an error boundary, and within [0, 1].
+    if (element.errorProbability !== undefined) {
+      if (node?.type !== 'errorBoundary') {
+        problems.push({
+          code: 'E-CAMPO-NO-APLICA',
+          path: `elements.${id}.errorProbability`,
+          severity: 'error',
+          message: M['E-CAMPO-NO-APLICA/solo-error'](`elements.${id}.errorProbability`),
+        });
+      } else if (element.errorProbability < 0 || element.errorProbability > 1) {
+        problems.push({
+          code: 'E-PROB-RANGO',
+          path: `elements.${id}.errorProbability`,
+          severity: 'error',
+          message: M['E-PROB-RANGO'](`elements.${id}.errorProbability`, element.errorProbability),
+        });
+      }
+    }
+
     // R14 — `selection` sin `resources` es error.
     if (element.selection !== undefined && element.resources === undefined) {
       problems.push({
@@ -1034,6 +1057,24 @@ export function validateScenario(
   for (const [gatewayId, node] of Object.entries(ir.nodes)) {
     if (node.type === 'xor') checkXorGateway(problems, gatewayId, node.outgoing, elements, M);
     if (node.type === 'or') checkOrGateway(problems, gatewayId, node.outgoing, elements, M);
+  }
+
+  // ADR-033 § 5 (#702) — the declared `errorProbability` of one host's error boundaries add up to
+  // at most 1, the same tolerance as R-XOR-4; `core/sim.ts` repeats the check before simulating.
+  const errorSums = new Map<string, number>();
+  for (const [id, node] of Object.entries(ir.nodes)) {
+    const p = elements[id]?.errorProbability;
+    if (node.type !== 'errorBoundary' || node.attachedTo === undefined || p === undefined) continue;
+    errorSums.set(node.attachedTo, (errorSums.get(node.attachedTo) ?? 0) + p);
+  }
+  for (const [hostId, sum] of errorSums) {
+    if (sum <= 1 + 1e-9) continue;
+    problems.push({
+      code: 'E-PROB-ERROR-SUMA',
+      path: `elements.${hostId}`,
+      severity: 'error',
+      message: M['E-PROB-ERROR-SUMA/lint'](`elements.${hostId}`, hostId, String(Number(sum.toFixed(6)))),
+    });
   }
 
   // R6 — al menos uno de `run.duration` o un `triggerCount`.

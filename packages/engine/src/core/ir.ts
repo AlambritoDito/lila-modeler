@@ -24,7 +24,13 @@ export type NodeType =
   /** None or message `bpmn:intermediateThrowEvent`: a no-op milestone that only counts (R-THR-1). */
   | 'throw'
   /** Exclusive `bpmn:eventBasedGateway`: it arms its branch events and the first one wins (R-EVG-1). */
-  | 'eventGateway';
+  | 'eventGateway'
+  /**
+   * Interrupting error `bpmn:boundaryEvent` on a task or an embedded sub-process (ADR-033 § 5): a
+   * share of the host's completions leaves through it (R-ERR-1…5). Like a boundary timer it has
+   * `attachedTo` and no `incoming`.
+   */
+  | 'errorBoundary';
 
 /** Nodo del proceso, keyed por su `id` BPMN en `ProcessIR.nodes`. */
 export interface Node {
@@ -37,6 +43,9 @@ export interface Node {
   /**
    * Solo en un `timer` que nació de un boundary event: id de la tarea a la que está adjunto
    * (R-BND-1). El nodo no tiene `incoming`: lo arma el host, no un flujo.
+   *
+   * ADR-033: also on an `errorBoundary`, and the host may be an embedded sub-process, whose id is
+   * then a key of `ProcessIR.subprocesses` instead of a node (R-BND-15, R-ERR-1).
    */
   attachedTo?: string;
   /**
@@ -97,12 +106,31 @@ export interface IrSource {
   warnings: SourceWarning[];
 }
 
+/**
+ * ADR-033 § 6: an embedded sub-process after flattening, as the engine needs it to open and close
+ * its instances (R-BND-15). The flows are listed in IR order.
+ */
+export interface SubprocessIR {
+  /** The enclosing embedded sub-process, when it is nested. */
+  parent?: string;
+  /** Flows from a node outside the sub-process to a node inside it. */
+  entryFlows: string[];
+  /** Flows from a node inside the sub-process to a node outside it. */
+  exitFlows: string[];
+}
+
 /** Proceso completo. `nodes` y `flows` comparten el espacio de ids de BPMN. */
 export interface ProcessIR {
   id: string;
   name: string;
   nodes: Record<string, Node>;
   flows: Record<string, Flow>;
+  /**
+   * ADR-033 § 6: every embedded sub-process of the process, by id. Written only when a boundary
+   * event (timer or error) is attached to a sub-process; absent in every other IR, which stays as
+   * it was.
+   */
+  subprocesses?: Record<string, SubprocessIR>;
   source: IrSource;
 }
 

@@ -96,6 +96,11 @@ export const coreEs: CoreCatalog = {
     'W-JOIN-BLOQUEADO/evento': (nodeId, cases) =>
       `${nodeId}: ninguna rama declara tiempo de proceso; ${cases} ${cases === 1 ? 'caso quedó' : 'casos quedaron'} con su token esperando en la compuerta.`,
 
+    'E-PROB-ERROR-SUMA': (hostId, sum) =>
+      `${hostId}: las probabilidades de error de sus eventos adjuntos suman ${sum}, más de 1.`,
+    'W-ERROR-SIN-PROBABILIDAD': (nodeId, hostId) =>
+      `${nodeId}: evento de error adjunto sin errorProbability; nunca dispara sobre ${hostId}.`,
+
     'W-RECURSO-SATURADO': (poolId, rho) =>
       `${poolId}: la cola crece sin estabilizarse (λ/μ·c ≈ ${rho})`,
     'W-RECURSO-SATURADO/utilizacion': (poolId, percent) =>

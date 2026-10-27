@@ -87,6 +87,11 @@ export const coreEn: CoreCatalog = {
     'W-JOIN-BLOQUEADO/evento': (nodeId, cases) =>
       `${nodeId}: no branch event declares processingTime; ${cases} ${cases === 1 ? 'case was' : 'cases were'} left with their token waiting at the gateway.`,
 
+    'E-PROB-ERROR-SUMA': (hostId, sum) =>
+      `${hostId}: the error probabilities of its boundary events add up to ${sum}, more than 1.`,
+    'W-ERROR-SIN-PROBABILIDAD': (nodeId, hostId) =>
+      `${nodeId}: error boundary event without errorProbability; it never fires on ${hostId}.`,
+
     'W-RECURSO-SATURADO': (poolId, rho) =>
       `${poolId}: the queue grows without settling (λ/μ·c ≈ ${rho})`,
     'W-RECURSO-SATURADO/utilizacion': (poolId, percent) =>

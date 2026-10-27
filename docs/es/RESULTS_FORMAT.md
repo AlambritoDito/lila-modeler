@@ -89,9 +89,9 @@ sea el mismo en toda replicación. Ese 0 es la identidad numérica del conjunto 
 duración observada: `total = 0` es cierto (no se procesó nada), pero `min`, `max` y `mean` no
 describen ninguna instancia. Del mismo modo, la `sd` de una sola instancia vale 0 porque no hay
 dispersión que medir. Con varias replicaciones ninguno de los dos entra al agregado (sección 8).
-Gateways, start, end, terminate, eventos intermedios de lanzamiento (`SEMANTICS.md` R-THR-1) y
-timers de borde cuentan `started`/`completed` pero nunca producen duraciones: sus ceros son
-exactos y siempre entran.
+Gateways, start, end, terminate, eventos intermedios de lanzamiento (`SEMANTICS.md` R-THR-1),
+timers de borde y eventos de error adjuntos (R-ERR-5) cuentan `started`/`completed` pero nunca
+producen duraciones: sus ceros son exactos y siempre entran.
 
 Bizagi no distingue `resourceWait` de `offHoursWait` (ver sección 3: "Espera fuera de horario separada de espera por recurso — Bizagi ✗ / Lila ✓"); es una métrica extra de Lila.
 
@@ -264,7 +264,7 @@ log; los otros dos la acotan por el pico de **una** replicación.
 | `resourceId` | string \| null | — | `id` del pool efectivamente asignado; `null` en la sentinel de una actividad sin recurso o que seguía esperando. |
 | `allocationIndex` | integer \| null | — | Posición de la asignación en el array `resources` del elemento; `null` para sentinel. |
 | `resourceQuantity` | integer \| null | unidades | Cantidad ocupada del pool; `null` para el sentinel. |
-| `status` | `"completed"` \| `"terminated"` \| `"interrupted"` \| `"inFlight"` | — | Razón de cierre observable: final normal, `terminate` BPMN, un temporizador de borde interruptor (`SEMANTICS.md` R-BND-5), o parada/cancelación. `startedAt = null` distingue la espera no asignada. |
+| `status` | `"completed"` \| `"terminated"` \| `"interrupted"` \| `"inFlight"` | — | Razón de cierre observable: final normal, `terminate` BPMN, un temporizador de borde interruptor (`SEMANTICS.md` R-BND-5) o un subproceso cancelado por su plazo o por un error (R-BND-17, R-ERR-4), o parada/cancelación. `startedAt = null` distingue la espera no asignada. |
 | `enabledAt` | number | segundos desde `run.start` | Instante en que el token llegó al elemento y quedó habilitado para empezar. |
 | `startedAt` | number \| null | segundos desde `run.start` | Instante en que empezó a procesarse; `null` si la actividad se cerró todavía en cola. Nunca es posterior a `observedUntil`: una concesión que cae en tiempo cerrado apunta a la siguiente apertura, y si esa apertura queda más allá del corte de la corrida la fila informa el corte, no un futuro. |
 | `endedAt` | number \| null | segundos desde `run.start` | Instante en que terminó normalmente; solo existe con `status = "completed"`. |

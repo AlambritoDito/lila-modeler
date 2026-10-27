@@ -892,7 +892,7 @@ what it says (R-TOK-7 counts events, not instances), and choosing it is the mode
 - **Degradation.** Neither `instances` nor `cardinality`: one instance, plus
   `W-MULTI-SIN-CARDINALIDAD`.
 
-### 5. Error boundary event (#702)
+### 5. Error boundary event (#702, implemented)
 
 **Profile and IR.** A `bpmn:boundaryEvent` with exactly one `errorEventDefinition` (any or no
 `errorRef`), interrupting (`cancelActivity` absent, `"true"` or `"1"`), attached to a supported
@@ -940,7 +940,7 @@ entry flow and one exit flow (§ 6); without them the boundary stays `E-NOSOP` `
 - **Degradation.** No `errorProbability` on a boundary: it never fires (probability 0), plus
   `W-ERROR-SIN-PROBABILIDAD`. If no boundary of the host declares it, nothing is drawn.
 
-### 6. Timer boundary event on an embedded sub-process (#702)
+### 6. Timer boundary event on an embedded sub-process (#702, implemented)
 
 **Profile and IR.** The boundary timer of R-BND-1 and R-BND-10, with the same conditions, attached
 to an embedded sub-process in the profile instead of a task. It stays a `timer` node with
@@ -1001,7 +1001,7 @@ boundary on a sub-process with no entry flow or no exit flow stays `E-NOSOP` `bo
   that exits once per parallel branch after flattening (R-PLAN-1) decides its error once per exit;
   loop and multi-instance markers on a sub-process wait for a user who needs them.
 
-*(tests: `packages/engine/test/message-throw-events.test.ts` for § 2; each later part names its own)*
+*(tests: `packages/engine/test/message-throw-events.test.ts` for § 2; `packages/engine/test/error-boundary-subprocess.test.ts` for § 5 and § 6; each later part names its own)*
 
 ---
 

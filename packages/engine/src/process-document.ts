@@ -163,7 +163,7 @@ export function flowOrder(ir: ProcessIR): string[] {
 
 /** The extended-attribute element type of each IR node type, when the BPMN type is not known (#509). */
 const NODE_CATEGORY: Record<ProcessIR['nodes'][string]['type'], ElementCategory> = {
-  start: 'event', end: 'event', terminate: 'event', timer: 'event', throw: 'event',
+  start: 'event', end: 'event', terminate: 'event', timer: 'event', throw: 'event', errorBoundary: 'event',
   task: 'task',
   xor: 'gateway', or: 'gateway', and: 'gateway', eventGateway: 'gateway',
 };
@@ -341,7 +341,8 @@ function build(input: ProcessDocumentInput, visit?: SectionVisitor): ProcessDocu
     line(C.docLane(), laneTitleOf(lane));
     line(C.docSubprocess(), sub === undefined ? undefined : subName(sub));
     const host = ir.nodes[id]?.attachedTo;
-    if (host !== undefined) line(C.docAttachedTo(), ir.nodes[host]?.name || original(host));
+    // ADR-033 § 6: the host can be a flattened sub-process, which is no node.
+    if (host !== undefined) line(C.docAttachedTo(), ir.nodes[host] === undefined ? subName(host) : ir.nodes[host]!.name || original(host));
     line(C.docDocumentation(), notes.documentation);
     for (const text of textNotes[original(id)] ?? []) line(C.docNote(), text);
     line(C.docResponsibilities(), notes.responsibilities?.map((r) => `${r.type}: ${r.roleRef}`).join(', '));

@@ -166,14 +166,19 @@ Mapa `id BPMN → parámetros`. Las claves son ids del diagrama: nodos (`Task_�
 
 Eventos de mensaje y de lanzamiento (ADR-033, `SEMANTICS.md` § 9.2): un start de mensaje admite los campos de start de arriba y un end de mensaje los del end; un evento intermedio de lanzamiento (*none* o de mensaje) no tiene campos propios, y `resources`, `interTriggerTimer` o `triggerCount` en él son `E-CAMPO-NO-APLICA`.
 
-**Especificados para 1.0, aún sin implementar** (ADR-033). El ADR fija estos campos y llegan con el issue que nombra cada fila. Hasta entonces el elemento que configuran sigue siendo `E-NOSOP`, el esquema estricto rechaza `loop`, `instances` y `errorProbability` con `E-CLAVE-DESCONOCIDA`, y la entrada de un temporizador adjunto a un subproceso es `E-ELEMENTO-DESCONOCIDO` (el evento adjunto aún no está en el IR). Son aditivos: `version` sigue en `1` (§ 9).
+Eventos de error adjuntos y temporizadores adjuntos a un subproceso (ADR-033 § 5 y § 6, `SEMANTICS.md` § 9 y § 9.3, #702):
+
+| Campo | Tipo | Aplica a | Default | Descripción |
+|---|---|---|---|---|
+| `errorProbability` | number en `[0, 1]` | evento de error adjunto e interruptor sobre una tarea o un subproceso embebido | — (nunca dispara y `W-ERROR-SIN-PROBABILIDAD`) | Cuota de las finalizaciones del anfitrión (o de las salidas del subproceso) que salen por este evento adjunto, sorteada una vez por finalización del flujo `<hostId>#error`. Los valores de los eventos de error de un mismo anfitrión suman como mucho 1 (`E-PROB-ERROR-SUMA`); fuera de rango es `E-PROB-RANGO`; en cualquier otro elemento, `E-CAMPO-NO-APLICA`. `resources` en el evento adjunto es `E-CAMPO-NO-APLICA`; `processingTime`, `calendar` y `fixedCost` se aceptan y no cambian nada. |
+| `processingTime`, `calendar` (ampliados) | como arriba | temporizador adjunto a un subproceso embebido | como arriba (`W-BORDE-SIN-TIEMPO`) | El plazo sobre el subproceso, medido desde que un token del caso entra en él. Si interrumpe, cancela todo lo del caso que esté dentro; el subproceso en sí sigue sin admitir parámetros (`E-SUBPROC-PARAMETRO`). |
+
+**Especificados para 1.0, aún sin implementar** (ADR-033). El ADR fija estos campos y llegan con el issue que nombra cada fila. Hasta entonces el elemento que configuran sigue siendo `E-NOSOP` y el esquema estricto rechaza `loop` e `instances` con `E-CLAVE-DESCONOCIDA`. Son aditivos: `version` sigue en `1` (§ 9).
 
 | Campo | Tipo | Aplica a | Default | Descripción |
 |---|---|---|---|---|
 | `loop` | objeto con exactamente uno de `count` (integer ≥ 1) o `probability` (number en `[0, 1]`) | tarea o call activity con marcador de bucle estándar | — (una iteración y `W-BUCLE-SIN-PARAMETROS`) | #700. `count`: la tarea corre exactamente esas veces por entrada. `probability`: tras cada iteración completada corre otra con esta probabilidad (`1/(1 − p)` ejecuciones en promedio). El `loopMaximum` de BPMN pone tope a los dos. `probability: 1` sin `loopMaximum` es `E-BUCLE-SIN-SALIDA`; fuera de rango es `E-PROB-RANGO`. Cada iteración es una instancia en los resultados (ADR-033 § 3). |
 | `instances` | distribución (§ 3) | tarea o call activity multi-instancia, paralela o secuencial | el `loopCardinality` de BPMN cuando es un literal entero; si no, 1 y `W-MULTI-SIN-CARDINALIDAD` | #701. Número de instancias por entrada, `N = floor(max(0, x) + 0.5)`. Cada instancia es una instancia en los resultados (ADR-033 § 4). |
-| `errorProbability` | number en `[0, 1]` | evento de error adjunto e interruptor sobre una tarea o un subproceso embebido | — (nunca dispara y `W-ERROR-SIN-PROBABILIDAD`) | #702. Cuota de las finalizaciones del anfitrión (o de las salidas del subproceso) que salen por este evento adjunto. Los valores de los eventos de error de un mismo anfitrión suman como mucho 1 (`E-PROB-ERROR-SUMA`); fuera de rango es `E-PROB-RANGO` (ADR-033 § 5). |
-| `processingTime`, `calendar` (ampliados) | como arriba | temporizador adjunto a un subproceso embebido | como arriba (`W-BORDE-SIN-TIEMPO`) | #702. El plazo sobre el subproceso, medido desde que un token del caso entra en él (ADR-033 § 6). |
 
 Asignar un carril entero: el panel web puede rellenar `resources` en **todas las tareas de un carril** en una sola acción (sección de recursos, «Asignar carril»). Es una edición en bloque de este mismo campo por tarea —el carril es una etiqueta del diagrama (`docs/SEMANTICS.md` § 2) y no se guarda nunca en el escenario— y las tareas que ya tienen `resources` se listan y piden confirmación antes de reemplazarlas.
 

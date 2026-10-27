@@ -1017,6 +1017,9 @@
               "additionalProperties": false
             }
           },
+          "errorProbability": {
+            "type": "number"
+          },
           "priority": {},
           "preempt": {},
           "batch": {}

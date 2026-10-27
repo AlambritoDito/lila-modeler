@@ -33,6 +33,7 @@ const TIPOS_NODO: Record<string, string> = {
   and: 'gateway AND',
   timer: 'temporizador',
   throw: 'evento intermedio de lanzamiento',
+  errorBoundary: 'evento de error adjunto',
   eventGateway: 'gateway basado en eventos',
 };
 
@@ -288,6 +289,10 @@ export const es: Catalog = {
       `${flowId} no se alcanza antes de ${gatewayId} por ningún camino secuencial; la condición solo aplica si una rama paralela lo recorre (${path}).`,
     'W-OR-PROB-PARCIAL': (path, flowId, gatewayId) =>
       `${flowId} no declara probabilidad, pero ${gatewayId} tiene otras salidas que sí; el flujo sin declarar siempre se toma, porque la probabilidad ausente vale 1 (${path}).`,
+
+    'E-PROB-ERROR-SUMA/lint': (path, hostId, sum) =>
+      `las probabilidades de error de los eventos adjuntos a ${hostId} suman ${sum}, más de 1 (${path}).`,
+    'E-CAMPO-NO-APLICA/solo-error': (path) => `solo se admite en un evento de error adjunto (${path}).`,
 
     'E-CLAVE-DESCONOCIDA': (keys) => `clave no reconocida por el esquema: ${keys}.`,
   },
