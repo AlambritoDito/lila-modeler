@@ -665,8 +665,8 @@ escalamiento siguen fuera del perfil (§3, #639).
 - **R-MSG-1 — Un inicio de mensaje es un inicio.** Un `bpmn:startEvent` con exactamente un
   `messageEventDefinition`, en línea o por `eventDefinitionRef`, es un `start`: un generador de
   casos con los mismos campos (`interTriggerTimer`, `triggerCount`, `calendar`), su propio flujo de
-  aleatorios y los mismos avisos que un inicio *none* (§10). Dentro de un subproceso embebido es el
-  inicio interno que el aplanado elimina (R-PLAN-2). *(prueba: #698)*
+  aleatorios y los mismos avisos que un inicio *none* (§10). Dentro de un subproceso embebido se
+  aplana exactamente como un inicio interno *none* (R-PLAN-1, R-PLAN-2). *(prueba: #698)*
 - **R-MSG-2 — Un fin de mensaje es un fin.** Un `bpmn:endEvent` con exactamente un
   `messageEventDefinition` es un `end`: consume el token (R-EVT-4) y tiene su propia entrada en
   `process.byEndEvent`. *(prueba: #698)*
@@ -678,15 +678,19 @@ escalamiento siguen fuera del perfil (§3, #639).
   la construcción `intermediateThrowEvent` (§3). *(prueba: #698)*
 - **R-THR-2 — Un evento de lanzamiento no tiene campos propios.** `resources` sobre él es
   `E-CAMPO-NO-APLICA` (R-REC-10), y también `interTriggerTimer` y `triggerCount` (R5 de
-  `SCENARIO_FORMAT.md`). Su `fixedCost` no cobra nada, como en un inicio o un fin, porque solo las
-  filas de una actividad llevan `elementCost` (R-COST-3). *(prueba: #698)*
+  `SCENARIO_FORMAT.md`). `processingTime`, `calendar` y `fixedCost` se aceptan y no cambian nada,
+  como en un evento de fin: el lanzamiento no consume tiempo, y su `fixedCost` no cobra nada porque
+  solo las filas de una actividad llevan `elementCost` (R-COST-3). El panel Simular no ofrece
+  ningún campo en él. *(prueba: #698)*
 - **R-THR-3 — Los mismos números con eventos de mensaje o *none*.** Un evento de lanzamiento no
   sortea nada, así que no mueve el flujo de ningún otro elemento (§16). El mismo diagrama dibujado
-  con eventos de mensaje o *none*, con los mismos ids, da resultados idénticos byte a byte. Quitar
-  un evento de lanzamiento de una secuencia (unir sus dos flujos en uno) deja igual todo otro
-  número, salvo cuando dos tokens empatan en ese instante exacto en la misma cola: su salto de más
-  añade un evento, que solo puede cambiar el `seq` de los eventos posteriores del mismo instante
-  (R-TOK-3). *(prueba: #698)*
+  con eventos de mensaje o *none*, con los mismos ids y referencias de mensaje que se resuelven (un
+  `messageRef` sin resolver añade un aviso `W-PARSE`, R-NOSOP-6), da resultados idénticos byte a
+  byte. Quitar un evento de lanzamiento de una secuencia (unir sus dos flujos en uno) no siempre es
+  neutro: su salto de más añade un evento, que cambia el `seq` de los eventos posteriores del mismo
+  instante (R-TOK-3). Si otro token llega al mismo elemento, cola o join en ese instante exacto,
+  los dos pueden intercambiar su lugar, y con él qué caso recibe qué sorteo del flujo de ese
+  elemento; sin ese empate todo otro número queda igual. *(prueba: #698)*
 
 ---
 
@@ -807,8 +811,8 @@ calendar }`. En la tarea: `resources: [{ ref, quantity }]` y `selection: "and" |
   de estructura: `resourceWait = started − enabled`. *(prueba: LILA-036, LILA-041)*
 - **R-REC-9 — Un mismo pool no se pide dos veces.** Dos entradas con la misma `ref` en una tarea es
   error `E-REC-DUPLICADO`: la cantidad se expresa con `quantity`. *(prueba: LILA-013)*
-- **R-REC-10 — Elementos sin recursos.** `start`, `end`, `terminate`, gateways y `timer` nunca
-  consumen recursos. Solo `task` (y por tanto `callActivity`) admite `resources`.
+- **R-REC-10 — Elementos sin recursos.** `start`, `end`, `terminate`, `throw`, gateways y `timer`
+  nunca consumen recursos. Solo `task` (y por tanto `callActivity`) admite `resources`.
   *(prueba: LILA-021, LILA-026)*
 - **R-REC-11 — Filas por asignación.** Cada asignación efectiva de pool produce una fila plana con
   `resourceId` y `resourceQuantity`; una actividad sin pool produce exactamente una fila sentinel

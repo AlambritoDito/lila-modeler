@@ -59,7 +59,7 @@ nothing. `get_scenario` reads one scenario, as stored or `resolved: true`, with 
 When the person brings a BPMN drawn elsewhere (a Bizagi export, say), do not rebuild it as an
 outline: add it as another process of the `.lila` with `put_process_bpmn` and `mode: "add"`. It
 gets a base scenario with default arrivals and task times, to fill in at step 5 before a run.
-A diagram the simulator cannot run (message or signal events, say; a Bizagi collaboration does
+A diagram the simulator cannot run (signal or escalation events, say; a Bizagi collaboration does
 simulate, through its main pool) is kept for documentation
 with `allowUnsimulatable: true`, its errors in `notes`. `get_process_bpmn` hands out the XML of a
 process, and `mode: "replace"` takes it back (see [Raw BPMN of a process](MCP.md#raw-bpmn-of-a-process)).

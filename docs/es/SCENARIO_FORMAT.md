@@ -166,7 +166,7 @@ Mapa `id BPMN → parámetros`. Las claves son ids del diagrama: nodos (`Task_�
 
 Eventos de mensaje y de lanzamiento (ADR-033, `SEMANTICS.md` § 9.2): un start de mensaje admite los campos de start de arriba y un end de mensaje los del end; un evento intermedio de lanzamiento (*none* o de mensaje) no tiene campos propios, y `resources`, `interTriggerTimer` o `triggerCount` en él son `E-CAMPO-NO-APLICA`.
 
-**Especificados para 1.0, aún sin implementar** (ADR-033). El ADR fija estos campos y llegan con el issue que nombra cada fila; hasta entonces el esquema estricto los rechaza con `E-CLAVE-DESCONOCIDA`, y el elemento que configuran sigue siendo `E-NOSOP`. Son aditivos: `version` sigue en `1` (§ 9).
+**Especificados para 1.0, aún sin implementar** (ADR-033). El ADR fija estos campos y llegan con el issue que nombra cada fila. Hasta entonces el elemento que configuran sigue siendo `E-NOSOP`, el esquema estricto rechaza `loop`, `instances` y `errorProbability` con `E-CLAVE-DESCONOCIDA`, y la entrada de un temporizador adjunto a un subproceso es `E-ELEMENTO-DESCONOCIDO` (el evento adjunto aún no está en el IR). Son aditivos: `version` sigue en `1` (§ 9).
 
 | Campo | Tipo | Aplica a | Default | Descripción |
 |---|---|---|---|---|
@@ -425,5 +425,6 @@ Cambios ya aplicados dentro de v1:
 - **`loop`, `instances` y `errorProbability`, y `processingTime`/`calendar` en un temporizador
   adjunto a un subproceso** (ADR-033, § 2.5; #700, #701, #702). Campos opcionales nuevos:
   `version` **sigue en 1**, y un escenario que no los usa da el mismo resultado byte a byte. Un
-  motor anterior rechaza un escenario que los usa con `E-CLAVE-DESCONOCIDA`, y el elemento del
-  modelo con `E-NOSOP`.
+  motor anterior rechaza el elemento del modelo con `E-NOSOP`, y el escenario con
+  `E-CLAVE-DESCONOCIDA` para las tres claves nuevas o `E-ELEMENTO-DESCONOCIDO` para la entrada de
+  un temporizador adjunto a un subproceso.

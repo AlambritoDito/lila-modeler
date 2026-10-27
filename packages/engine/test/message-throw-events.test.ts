@@ -21,6 +21,7 @@ import type { ProcessIR } from '../src/core/ir.js';
 import type { RunResult } from '../src/core/result.js';
 import type { SimScenario } from '../src/core/sim.js';
 import { simulate } from '../src/index.js';
+import { messages } from '../src/messages/index.js';
 import { ScenarioSchema, scenarioErrors, validateScenario } from '../src/scenario.js';
 
 type Trigger = 'none' | 'message';
@@ -209,6 +210,50 @@ ${
       expect((result.log ?? []).filter((row) => row.elementId === 'Throw_Milestone')).toEqual([]);
       expect(result.warnings).toEqual([]);
     }
+  });
+
+  test('R-THR-2: resources and arrival fields are refused; time, calendar and fixed cost change nothing', async () => {
+    const ir = await irOf(line('message'));
+    const base = {
+      ...ORDERS_SCENARIO,
+      run: { start: '2026-09-07T08:00:00-06:00', seed: 1 },
+      calendars: { office: { intervals: [{ days: ['MON'], from: '09:00', to: '10:00' }] } },
+      resources: { desk: { capacity: 1, costPerHour: 60 } },
+      elements: {
+        Start: { interTriggerTimer: { type: 'constant', value: 100 }, triggerCount: 3 },
+        Task_A: { processingTime: { type: 'constant', value: 30 } },
+        Task_B: { processingTime: { type: 'constant', value: 40 } },
+      },
+    };
+    const withThrow = (fields: Record<string, unknown>) =>
+      ScenarioSchema.parse({ ...base, elements: { ...base.elements, Throw_Milestone: fields } });
+
+    const refused = validateScenario(
+      withThrow({ resources: [{ ref: 'desk' }], interTriggerTimer: { type: 'constant', value: 5 }, triggerCount: 2 }),
+      ir,
+    ).filter((problem) => problem.severity === 'error');
+    expect(refused.map((problem) => [problem.code, problem.path])).toEqual([
+      ['E-CAMPO-NO-APLICA', 'elements.Throw_Milestone.interTriggerTimer'],
+      ['E-CAMPO-NO-APLICA', 'elements.Throw_Milestone.triggerCount'],
+      ['E-CAMPO-NO-APLICA', 'elements.Throw_Milestone.resources'],
+    ]);
+
+    const ignored = run(ir, {
+      ...base,
+      elements: {
+        ...base.elements,
+        Throw_Milestone: { processingTime: { type: 'constant', value: 999 }, calendar: 'office', fixedCost: 7 },
+      },
+    });
+    const plain = run(ir, base);
+    expect(ignored.elements.Throw_Milestone!.fixedCostTotal).toBe(0);
+    expect(ignored.process.totalCost).toBe(plain.process.totalCost);
+    expect(JSON.stringify(ignored)).toBe(JSON.stringify(plain));
+  });
+
+  test('the throw has its own label in the process description, in both languages', () => {
+    expect(messages('en').mcp.nodeType('throw')).toBe('intermediate throw event');
+    expect(messages('es').mcp.nodeType('throw')).toBe('evento intermedio de lanzamiento');
   });
 
   test('removing the throw moves no other number, with random times and a shared pool', async () => {

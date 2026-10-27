@@ -289,7 +289,7 @@ export-bpmn` y `lila process import` (`docs/es/CLI.md`) hacen lo mismo desde una
     lo dice con palabras. Si aun así un escenario tiene un error que con el modelo viejo no tenía,
     la llamada se rechaza.
   - **`allowUnsimulatable: true`** guarda un modelo que el simulador no puede correr — eventos de
-    mensaje o señal, ciclos, un diagrama dibujado para documentar — como lo guarda la app. (Una
+    señal o escalamiento, ciclos, un diagrama dibujado para documentar — como lo guarda la app. (Una
     colaboración no es uno de ellos: una colaboración de Bizagi simula su pool principal.) Acepta cualquier error de validación, y en un reemplazo también un error de escenario;
     cada uno vuelve en `notes` (`no se simula: E-NOSOP: …`). Un archivo que no es XML, no es BPMN
     o no tiene `bpmn:process` se sigue rechazando. Nada marca el proceso: «no se simula» es lo que

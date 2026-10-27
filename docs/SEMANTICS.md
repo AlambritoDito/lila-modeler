@@ -670,8 +670,8 @@ profile (§3, #639).
 - **R-MSG-1 — A message start is a start.** A `bpmn:startEvent` with exactly one
   `messageEventDefinition`, inline or by `eventDefinitionRef`, is a `start`: a case generator with
   the same fields (`interTriggerTimer`, `triggerCount`, `calendar`), its own random stream and the
-  same warnings as a *none* start (§10). Inside an embedded sub-process it is the inner start that
-  flattening removes (R-PLAN-2). *(test: #698)*
+  same warnings as a *none* start (§10). Inside an embedded sub-process it is flattened exactly
+  like a *none* inner start (R-PLAN-1, R-PLAN-2). *(test: #698)*
 - **R-MSG-2 — A message end is an end.** A `bpmn:endEvent` with exactly one
   `messageEventDefinition` is an `end`: it consumes the token (R-EVT-4) and has its own entry in
   `process.byEndEvent`. *(test: #698)*
@@ -682,15 +682,19 @@ profile (§3, #639).
   and emits no event-log row. Any other trigger, or several, stays `E-NOSOP` with construction
   `intermediateThrowEvent` (§3). *(test: #698)*
 - **R-THR-2 — A throw event has no field of its own.** `resources` on it is `E-CAMPO-NO-APLICA`
-  (R-REC-10) and so are `interTriggerTimer` and `triggerCount` (R5 of `SCENARIO_FORMAT.md`). Its
-  `fixedCost` charges nothing, as on a start or an end, because only activity rows carry an
-  `elementCost` (R-COST-3). *(test: #698)*
+  (R-REC-10) and so are `interTriggerTimer` and `triggerCount` (R5 of `SCENARIO_FORMAT.md`).
+  `processingTime`, `calendar` and `fixedCost` are accepted and change nothing, as on an end event:
+  the throw takes no time, and its `fixedCost` charges nothing because only activity rows carry an
+  `elementCost` (R-COST-3). The Simulate panel offers no field on it. *(test: #698)*
 - **R-THR-3 — Same numbers with message or none events.** A throw draws nothing, so it shifts no
   other element's stream (§16). The same diagram drawn with message or with *none* events, with the
-  same ids, produces byte-identical results. Removing a throw from a sequence (joining its two
-  flows into one) leaves every other number unchanged, except when two tokens tie at that exact
-  instant on the same queue: its extra hop adds one event, which can only change the `seq` of
-  later events at the same instant (R-TOK-3). *(test: #698)*
+  same ids and message references that resolve (an unresolved `messageRef` adds a `W-PARSE`
+  warning, R-NOSOP-6), produces byte-identical results. Removing a throw from a sequence (joining
+  its two flows into one) is not always neutral: its extra hop adds one event, which changes the
+  `seq` of later events at the same instant (R-TOK-3). If another token reaches the same element,
+  queue or join at that exact instant, the two can swap places, and with them which case gets
+  which draw of that element's stream; without such a tie every other number stays the same.
+  *(test: #698)*
 
 ---
 
@@ -815,8 +819,8 @@ calendar }`. On the task: `resources: [{ ref, quantity }]` and `selection: "and"
   structure document: `resourceWait = started − enabled`. *(test: LILA-036, LILA-041)*
 - **R-REC-9 — The same pool is never requested twice.** Two entries with the same `ref` on a task
   is error `E-REC-DUPLICADO`: the amount is expressed with `quantity`. *(test: LILA-013)*
-- **R-REC-10 — Elements with no resources.** `start`, `end`, `terminate`, gateways and `timer`
-  never consume resources. Only `task` (and therefore `callActivity`) admits `resources`.
+- **R-REC-10 — Elements with no resources.** `start`, `end`, `terminate`, `throw`, gateways and
+  `timer` never consume resources. Only `task` (and therefore `callActivity`) admits `resources`.
   *(test: LILA-021, LILA-026)*
 - **R-REC-11 — Rows per assignment.** Every effective pool assignment produces a flat row with
   `resourceId` and `resourceQuantity`; an activity with no pool produces exactly one sentinel row

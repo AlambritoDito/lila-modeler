@@ -32,6 +32,7 @@ const TIPOS_NODO: Record<string, string> = {
   or: 'gateway OR',
   and: 'gateway AND',
   timer: 'temporizador',
+  throw: 'evento intermedio de lanzamiento',
   eventGateway: 'gateway basado en eventos',
 };
 

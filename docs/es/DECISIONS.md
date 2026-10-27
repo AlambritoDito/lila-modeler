@@ -728,7 +728,8 @@ ninguna decisión más.
    sorteaba y conserva sus resultados bit a bit (R-DET-3, R-DEG-5).
 4. **Degradación.** Un escenario sin el campo nuevo recibe el comportamiento neutro que indica cada
    sección, más un aviso que nombra el elemento, que el motor emite la primera vez que un token
-   llega al elemento y que se deduplica como cualquier otro aviso (§ 17). Nunca un error y nunca
+   llega al elemento —para un evento adjunto, la primera vez que un token entra en su anfitrión,
+   como ya hace `W-BORDE-SIN-TIEMPO`— y que se deduplica como cualquier otro aviso (§ 17). Nunca un error y nunca
    variabilidad inventada.
 5. **Lo que sigue siendo `E-NOSOP` después de 1.0.** Los eventos de señal y de escalamiento en
    cualquier posición; los eventos de error de inicio, intermedios y de fin (el error se sortea en
@@ -751,15 +752,30 @@ ninguna decisión más.
    | `W-ERROR-SIN-PROBABILIDAD` | motor (#702) | `${nodeId}: error boundary event without errorProbability; it never fires on ${hostId}.` | `${nodeId}: evento de error adjunto sin errorProbability; nunca dispara sobre ${hostId}.` |
 
    `E-BUCLE-SIN-SALIDA` cita `elements.<id>.loop.probability`; `E-PROB-ERROR-SUMA` cita
-   `elements.<hostId>` e imprime la suma con hasta 6 decimales. `core/` repite las dos
-   comprobaciones antes del primer evento y lanza los mismos códigos para un escenario armado a
-   mano (el patrón del preflight de R-REC-2).
+   `elements.<hostId>` e imprime la suma como `String(Number(sum.toFixed(6)))` en los dos idiomas
+   (punto como separador decimal, sin ceros al final). `core/` repite las dos comprobaciones antes
+   del primer evento y lanza, con el código dentro del mensaje como sus otras guardas:
+   `E-BUCLE-SIN-SALIDA: ${nodeId}: a loop with probability 1 and no loopMaximum never ends.` /
+   `E-BUCLE-SIN-SALIDA: ${nodeId}: un bucle con probabilidad 1 y sin loopMaximum nunca termina.`
+   y `E-PROB-ERROR-SUMA: ${hostId}: the error probabilities of its boundary events add up to ${sum}, more than 1.` /
+   `E-PROB-ERROR-SUMA: ${hostId}: las probabilidades de error de sus eventos adjuntos suman ${sum}, más de 1.`
+
+   Un campo nuevo en un elemento que no lo admite es `E-CAMPO-NO-APLICA` con una variante por
+   campo, como `/solo-inicio`: `/solo-bucle` `only accepted on a task with a loop marker (${path}).`
+   / `solo se admite en una tarea con marcador de bucle (${path}).`; `/solo-multi`
+   `only accepted on a multi-instance task (${path}).` / `solo se admite en una tarea multi-instancia (${path}).`;
+   `/solo-error` `only accepted on an error boundary event (${path}).` /
+   `solo se admite en un evento de error adjunto (${path}).` Un `loop` sin `count` ni
+   `probability`, o con los dos, es un error de esquema en `elements.<id>.loop` con el mensaje
+   `declare exactly one of count or probability` / `declara exactamente uno de count o probability`.
 7. **Formas del IR.** Cada parte añade miembros opcionales al IR, escritos solo cuando el elemento
-   está presente, así que todo otro IR queda como está. Se nombran abajo. Los consumidores
-   exhaustivos de `NodeType` (`process-document.ts`, el `ClaseElemento` del panel Simular en
-   `apps/web/src/scenarioFields.ts`) reciben los miembros nuevos en el mismo PR: `throw` no ofrece
-   ningún campo (#698), `errorBoundary` ofrece `errorProbability` y una tarea ofrece `loop` o
-   `instances` cuando tiene ese marcador (#703 añade los controles).
+   está presente, así que todo otro IR queda como está. Se nombran abajo. Un tipo de nodo nuevo
+   llega en el mismo PR a todos los sitios que nombran los tipos de nodo: `NODE_CATEGORY` en
+   `process-document.ts`, las etiquetas de tipo de nodo de `describe_process` (`NODE_TYPES` en
+   `messages/en.ts`, `TIPOS_NODO` en `messages/es.ts`), y en la web `ClaseElemento` y
+   `fieldsForKind` (`scenarioFields.ts`) y `TIPO_BPMN` (`ScenarioPanel.tsx`). En el panel, `throw`
+   no ofrece ningún campo (#698), `errorBoundary` ofrece `errorProbability` y una tarea ofrece
+   `loop` o `instances` cuando tiene ese marcador (#703 añade los controles).
 8. **Ids de regla.** `SEMANTICS.md` recibe las reglas de cada parte con los ids dados aquí:
    R-MSG-1…2 y R-THR-1…3 (§ 9.2, #698), R-LOOP-1…6 (§ 4.1, #700), R-MI-1…6 (§ 4.2, #701),
    R-ERR-1…5 (§ 9.3, #702) y R-BND-15…19 (§ 9, después de R-BND-14, #702).
@@ -770,8 +786,8 @@ ninguna decisión más.
   `messageEventDefinition` (en línea o por referencia) es el nodo `start` del IR: un generador de
   casos con `interTriggerTimer`, `triggerCount` y `calendar`, su propio flujo y los avisos de § 10.
   El mensaje en sí no se simula: no hay emisor ni correlación, y los message flows siguen sin
-  llevar tokens (R-PERF-3). Dentro de un subproceso embebido es el inicio interno que el aplanado
-  elimina (R-PLAN-2).
+  llevar tokens (R-PERF-3). Dentro de un subproceso embebido se aplana exactamente como un inicio
+  interno *none* (R-PLAN-1, R-PLAN-2).
 - **R-MSG-2 — Un fin de mensaje es un fin.** Un `bpmn:endEvent` con exactamente un
   `messageEventDefinition` es el nodo `end` del IR (R-EVT-4) y tiene su entrada en
   `process.byEndEvent`.
@@ -781,16 +797,17 @@ ninguna decisión más.
   salida, con sus marcas OR: sin tiempo, sin recurso, sin sorteo, sin fila en el log de eventos.
   Cualquier otro disparador, o más de uno, sigue siendo `E-NOSOP` con la construcción
   `intermediateThrowEvent`.
-- **R-THR-2 — Sin campos propios.** Un lanzamiento no admite ninguno de los campos de § 2.5:
-  `resources` es `E-CAMPO-NO-APLICA` (R-REC-10) y los campos de llegada son `E-CAMPO-NO-APLICA`
-  (R5), como en un fin. Un `fixedCost` no cobra nada, como en un inicio o un fin, porque solo las
-  filas de una actividad llevan `elementCost` (R-COST-3).
-- **R-THR-3 — Determinismo.** Un lanzamiento no sortea nada, así que no mueve ningún flujo. Su
-  salto de más añade un evento `enter`, que solo puede cambiar el `seq` de los eventos posteriores
-  del mismo instante (R-TOK-3). El mismo diagrama dibujado con eventos de mensaje o *none*, con los
-  mismos ids, da resultados idénticos byte a byte; quitar un lanzamiento de una secuencia (unir sus
-  dos flujos) deja igual todo otro número salvo que dos tokens empaten en ese instante exacto en la
-  misma cola.
+- **R-THR-2 — Sin campos propios.** `resources` es `E-CAMPO-NO-APLICA` (R-REC-10) y los campos de
+  llegada son `E-CAMPO-NO-APLICA` (R5), como en un fin. `processingTime`, `calendar` y `fixedCost`
+  se aceptan y no cambian nada, como en un fin: sin tiempo y sin cobro, porque solo las filas de
+  una actividad llevan `elementCost` (R-COST-3). El panel Simular no ofrece ningún campo en él.
+- **R-THR-3 — Determinismo.** Un lanzamiento no sortea nada, así que no mueve ningún flujo. El
+  mismo diagrama dibujado con eventos de mensaje o *none*, con los mismos ids y referencias de
+  mensaje que se resuelven, da resultados idénticos byte a byte. Su salto de más añade un evento
+  `enter`, que cambia el `seq` de los eventos posteriores del mismo instante (R-TOK-3): quitar un
+  lanzamiento de una secuencia (unir sus dos flujos) deja igual todo otro número salvo que otro
+  token llegue al mismo elemento, cola o join en ese instante exacto, y entonces los dos pueden
+  intercambiar su lugar y con él los sorteos del flujo de ese elemento.
 - **Resultados.** `elements[throwId]` cuenta pasos; sus duraciones son ceros exactos como las de un
   gateway, y `W-REPLICACIONES-SIN-OBSERVACIONES` no se le aplica. No hay degradación: no hay campo
   que pueda faltar.
@@ -799,8 +816,9 @@ ninguna decisión más.
 
 **Perfil e IR.** `standardLoopCharacteristics` en una tarea o call activity soportada (en un
 subproceso embebido sigue siendo `E-NOSOP` `loopMarker`). El nodo de la tarea recibe
-`loop: { maximum?: number }`; `maximum` es `loopMaximum` cuando es un entero ≥ 1, y falta en otro
-caso (ausente, `0` o negativo significa sin tope). `testBefore` y `loopCondition` se leen y se
+`loop: { maximum?: number }`; `maximum` es `loopMaximum` leído del literal en bruto del XML (como
+`cancelActivity`, R-BND-10) cuando, recortado, es un literal entero decimal ≥ 1 (`/^\d+$/`), y
+falta en otro caso: ausente, `0`, un signo, una fracción o cualquier otro texto significa sin tope. `testBefore` y `loopCondition` se leen y se
 ignoran, así que la primera iteración siempre corre: decide el `loop` del escenario, como las
 probabilidades sustituyen a `conditionExpression` (R-PERF-4).
 
@@ -826,8 +844,9 @@ un elemento sin marcador de bucle es `E-CAMPO-NO-APLICA`.
   `<taskId>#loop` y la iteración siguiente se habilita en el mismo instante si `u < p`. El modo
   `count` nunca sortea, y no se sortea cuando un tope ya decide. La iteración siguiente la habilita
   un evento nuevo del heap encolado en ese instante, así que `(t, seq)` (R-TOK-3) la ordena como a
-  cualquier otra habilitación; no vuelve a contar la llegada a la tarea ni rearma sus eventos
-  adjuntos (R-LOOP-5).
+  cualquier otra habilitación; no es una entrada nueva: no cuenta ningún flujo ni rearma ningún
+  evento adjunto (R-LOOP-5). Con un evento de error adjunto a la tarea, el error se decide primero
+  (R-ERR-2): si dispara, el bucle termina y no se sortea `#loop`.
 - **R-LOOP-3 — Un token, un paso por los flujos.** El caso conserva un token en la tarea durante
   todo el bucle; sale por el primer flujo de salida tras la última iteración, así que los flujos
   de entrada y de salida cuentan una vez por entrada.
@@ -856,29 +875,33 @@ subproceso sigue siendo `E-NOSOP` `multiInstanceMarker`). El nodo de la tarea re
 `multiInstance: { sequential: boolean; cardinality?: number }`. `isSequential` se lee del literal
 en bruto del XML como `cancelActivity` (R-BND-10): ausente, `"false"` o `"0"` es paralela, `"true"`
 o `"1"` secuencial, y cualquier otro literal es `E-NOSOP` `multiInstanceMarker`. `cardinality` es
-el cuerpo de `loopCardinality` cuando, recortado, es un literal entero decimal (`0` incluido); una
-expresión o un cuerpo vacío lo dejan ausente. `completionCondition`, las entradas y salidas de
+el cuerpo de `loopCardinality` cuando, recortado, cumple `/^\d+$/` (`0` incluido); un signo
+(`"+3"`, `"-2"`), una expresión o un cuerpo vacío lo dejan ausente. `completionCondition`, las entradas y salidas de
 datos y `behavior` se ignoran.
 
 **Campo del escenario.** `elements[<tarea>].instances`: una distribución (§ 3 de
 `SCENARIO_FORMAT.md`). En cada entrada, `N = floor(max(0, x) + 0.5)` (redondeo de la mitad hacia
-arriba). Precedencia: `instances` si se declara, si no `cardinality`, si no `N = 1`. `instances` en
-una tarea sin el marcador es `E-CAMPO-NO-APLICA`.
+arriba). Precedencia: `instances` si se declara, si no `cardinality`, si no `N = 1`. `N` no tiene
+tope: como `triggerCount`, un valor enorme cuesta lo que dice (R-TOK-7 cuenta eventos, no
+instancias), y elegirlo es cosa de quien modela. `instances` en una tarea sin el marcador es
+`E-CAMPO-NO-APLICA`.
 
 - **R-MI-1 — Sorteo de N.** Una muestra de `instances` por entrada, de `<taskId>#instances`, antes
   de la duración de cualquier instancia. Con `cardinality` o con el valor por omisión no se sortea
   nada.
 - **R-MI-2 — Paralela.** Las `N` instancias se habilitan en el instante de llegada en orden `1…N`:
   cada una es una instancia de actividad con su propia muestra de `processingTime` del flujo de la
-  tarea, en ese orden, y sus solicitudes de recurso se encolan en ese orden: comparten `enabledAt`
-  y el evento que las habilitó, así que el orden de instancia es su desempate FIFO (R-REC-3).
-  Compiten entre ellas y con otros tokens.
+  tarea, en ese orden. La habilitación de cada instancia toma su propio `seq`, en orden de
+  instancia, así que sus solicitudes comparten `enabledAt` y siguen totalmente ordenadas por
+  `(enabledAt, seq)` (R-REC-3, R-TOK-3: no hay desempate nuevo). Compiten entre ellas y con otros
+  tokens.
 - **R-MI-3 — Secuencial.** La instancia 1 se habilita en el instante de llegada y la instancia
   `k + 1` en el instante en que se completa la `k`, como una habilitación nueva (se encola detrás
   de las solicitudes que ya esperan); cada duración se muestrea al habilitarse su instancia.
 - **R-MI-4 — Finalización.** El token sale por el primer flujo de salida en el instante en que se
   completa la última instancia. Con `N = 0` sale en el mismo instante: sin instancias, sin filas,
-  sin `started`; los flujos sí cuentan.
+  sin `started`, sin eventos adjuntos armados y sin sorteo de plazo ni de error; los flujos sí
+  cuentan.
 - **R-MI-5 — Resultados.** `elements[tarea].started`/`completed` cuentan instancias; las
   estadísticas por instancia y las filas del log de eventos son por instancia;
   `fixedCostTotal = fixedCost × instancias completadas`. El caso conserva un token (R-TOK-2) y los
@@ -908,8 +931,12 @@ anfitrión y sin `incoming`; es alcanzable exactamente cuando lo es su anfitrió
 **Campo del escenario.** `elements[<evento adjunto>].errorProbability`: un número en `[0, 1]`
 (`E-PROB-RANGO`). Es un nombre nuevo porque `probability` sigue siendo un campo de sequence flow
 (R4, R-XOR-8). En cualquier otro elemento es `E-CAMPO-NO-APLICA`; `resources` en el evento adjunto
-es `E-CAMPO-NO-APLICA` (R-REC-10). Las `errorProbability` declaradas en los eventos de error de un
-mismo anfitrión suman como mucho 1 (`E-PROB-ERROR-SUMA` por encima de `1 + 1e-9`).
+es `E-CAMPO-NO-APLICA` (R-REC-10); `processingTime`, `calendar` y `fixedCost` se aceptan y no
+cambian nada, como en un evento de lanzamiento (R-THR-2), y `W-ELEMENTO-SIN-PARAMETROS` no se le
+aplica (`W-ERROR-SIN-PROBABILIDAD` sí). Las `errorProbability` declaradas en los eventos de error
+de un mismo anfitrión suman como mucho 1 (`E-PROB-ERROR-SUMA` por encima de `1 + 1e-9`). Un
+anfitrión subproceso necesita al menos un flujo de entrada y uno de salida (§ 6); sin ellos el
+evento adjunto sigue siendo `E-NOSOP` `boundaryEvent`.
 
 - **R-ERR-1 — Cuándo se decide el error.** En un anfitrión tarea, en cada **finalización** de una
   de sus instancias de actividad (cada iteración de un bucle, cada instancia de una tarea
@@ -921,7 +948,10 @@ mismo anfitrión suman como mucho 1 (`E-PROB-ERROR-SUMA` por encima de `1 + 1e-9
   eventos adjuntos se recorren en orden de documento y dispara el primero cuya `errorProbability`
   acumulada supera `u`; si ninguno lo hace, el token sigue su camino normal. Las probabilidades
   son cuotas de las finalizaciones, como las de un XOR (R-XOR-7), y hay un solo sorteo, tenga el
-  anfitrión los eventos adjuntos que tenga.
+  anfitrión los eventos adjuntos que tenga. Cuando los valores declarados suman 1 con margen
+  `1e-9` y el redondeo deja `u` por encima de la última suma acumulada, dispara el último evento
+  adjunto con `errorProbability > 0` (la regla de redondeo de R-XOR-7); con una suma menor, una `u`
+  por encima de ella significa que no hay error.
 - **R-ERR-3 — Error en una tarea.** La instancia hizo su trabajo: cuenta `completed`, cierra con
   `status = "completed"`, entra a las estadísticas de duración, cobra su `fixedCost` y libera sus
   unidades al terminar, como siempre: no hay trabajo cancelado que reportar. El token sale por el
@@ -952,7 +982,12 @@ aplanado redirigió hacia dentro del subproceso, `exitFlows` los que redirigió 
 internos hacia fuera, y `parent` el subproceso que lo contiene. Un nodo está **dentro** de un
 subproceso cuando su `subprocessId` es ese subproceso u otro anidado en él (siguiendo `parent`). Un
 mismo flujo puede entrar, o salir, de varios subprocesos anidados a la vez: se abren del más
-externo al más interno y se dejan del más interno al más externo.
+externo al más interno y se dejan del más interno al más externo. Un flujo también puede ser la
+salida de un subproceso y la entrada del siguiente (dos subprocesos aplanados seguidos): el token
+sale primero, con su decisión de error (R-ERR-4), y entra solo si no fue enviado a un evento de
+error, así que un subproceso en el que nunca entra no abre instancia ni sortea plazo. Un evento
+adjunto a un subproceso sin flujo de entrada o sin flujo de salida sigue siendo `E-NOSOP`
+`boundaryEvent`.
 
 - **R-BND-15 — La instancia del subproceso.** Por caso: una instancia se abre cuando un token del
   caso cruza un flujo de entrada mientras el caso no tiene ninguna instancia abierta de ese

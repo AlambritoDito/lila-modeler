@@ -166,7 +166,7 @@ Map `BPMN id → parameters`. The keys are diagram ids: nodes (`Task_…`, `Star
 
 Message and throw events (ADR-033, `SEMANTICS.md` § 9.2): a message start takes the start fields above and a message end the end's; an intermediate throw event (none or message) takes no field of its own, and `resources`, `interTriggerTimer` or `triggerCount` on it are `E-CAMPO-NO-APLICA`.
 
-**Specified for 1.0, not implemented yet** (ADR-033). These fields are fixed by the ADR and land with the issue named in each row; until then the strict schema rejects them with `E-CLAVE-DESCONOCIDA`, and the element they configure is still `E-NOSOP`. They are additive: `version` stays `1` (§ 9).
+**Specified for 1.0, not implemented yet** (ADR-033). These fields are fixed by the ADR and land with the issue named in each row. Until then the element they configure is still `E-NOSOP`, the strict schema rejects `loop`, `instances` and `errorProbability` with `E-CLAVE-DESCONOCIDA`, and the entry of a timer boundary event on a sub-process is `E-ELEMENTO-DESCONOCIDO` (the boundary is not in the IR yet). They are additive: `version` stays `1` (§ 9).
 
 | Field | Type | Applies to | Default | Description |
 |---|---|---|---|---|
@@ -425,5 +425,6 @@ Changes already applied within v1:
 - **`loop`, `instances` and `errorProbability`, and `processingTime`/`calendar` on a timer boundary
   event of a sub-process** (ADR-033, § 2.5; #700, #701, #702). New optional fields: `version`
   **stays at 1**, and a scenario that does not use them produces the same result byte for byte. An
-  older engine rejects a scenario that uses them with `E-CLAVE-DESCONOCIDA`, and the model's
-  element with `E-NOSOP`.
+  older engine rejects the model's element with `E-NOSOP`, and the scenario with
+  `E-CLAVE-DESCONOCIDA` for the three new keys or `E-ELEMENTO-DESCONOCIDO` for a sub-process
+  boundary timer's entry.

@@ -257,7 +257,7 @@ the same from a terminal.
     `scenarioRemovals`, `{ scenario, id, removed, entry }`, exactly as `edit_process` lists them,
     and `notes` says the same in words. If a scenario still gets an error it did not have with the
     old model, the call is refused.
-  - **`allowUnsimulatable: true`** keeps a model the simulator cannot run — message or signal
+  - **`allowUnsimulatable: true`** keeps a model the simulator cannot run — signal or escalation
     events, loops, a diagram drawn for documentation — the way the app saves one. (A collaboration
     is not one of them: a Bizagi collaboration simulates its main pool.)
     Any validation error is accepted, and so is a scenario error on replace; each comes back in
