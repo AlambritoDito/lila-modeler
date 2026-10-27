@@ -1017,6 +1017,20 @@
               "additionalProperties": false
             }
           },
+          "loop": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "probability": {
+                "type": "number"
+              }
+            },
+            "additionalProperties": false
+          },
           "priority": {},
           "preempt": {},
           "batch": {}

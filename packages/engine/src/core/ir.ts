@@ -44,6 +44,12 @@ export interface Node {
    * R-BND-10). Ausente es interruptor, que es el valor por omisión de `cancelActivity` en BPMN.
    */
   interrupting?: boolean;
+  /**
+   * Only on a `task` with a standard loop marker (ADR-033 § 3, R-LOOP-1…6): the scenario's
+   * `loop` decides how many iterations run. `maximum` is the `loopMaximum` cap, present only when
+   * the raw literal is a decimal integer ≥ 1; absent means no cap.
+   */
+  loop?: { maximum?: number };
   /** Ids de los flujos entrantes, en orden de aparición. */
   incoming: string[];
   /** Ids de los flujos salientes, en orden de aparición. */

@@ -75,6 +75,7 @@ definida; todo lo demás cae en la sección 3 de este documento.
 | `bpmn:intermediateCatchEvent` con `timerEventDefinition` o `messageEventDefinition`, como rama de ese gateway | `timer` | espera con el tiempo propio de la rama, sin recurso (§9.1) |
 | `bpmn:task` y todas sus variantes (`userTask`, `serviceTask`, `sendTask`, `receiveTask`, `manualTask`, `scriptTask`, `businessRuleTask`) | `task` | trabajo con duración y recursos (§11) |
 | `bpmn:callActivity` | `task` | tarea con tiempo global (§4) |
+| `bpmn:task` (cualquier variante) o `bpmn:callActivity` con `standardLoopCharacteristics` | `task` con `loop` | se repite según el `loop` del escenario (§4.1, R-LOOP-1) |
 | `bpmn:subProcess` embebido (`triggeredByEvent="false"`, sin marcadores) | — | aplanado (§4) |
 | `bpmn:exclusiveGateway` | `xor` | divergente: §6; convergente: mezcla pass-through |
 | `bpmn:inclusiveGateway` | `or` | §7 |
@@ -155,7 +156,7 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
 | `bpmn:eventBasedGateway` que no sea exclusivo, sin instanciar y con cada flujo de salida hacia un evento de rama de tiempo o de mensaje: `instantiate="true"`, `eventGatewayType="Parallel"`, cualquier otro elemento de rama, o sin flujo de salida | `eventBasedGateway` | `event-based gateway` | `gateway basado en eventos` |
 | `bpmn:complexGateway` | `complexGateway` | `complex gateway` | `gateway complejo` |
 | `multiInstanceLoopCharacteristics` | `multiInstanceMarker` | `multi-instance marker` | `marcador de multi-instancia` |
-| `standardLoopCharacteristics` | `loopMarker` | `loop marker on the activity` | `marcador de bucle en la actividad` |
+| `standardLoopCharacteristics` en un subproceso embebido (en una tarea o call activity está en el perfil, §4.1) | `loopMarker` | `loop marker on the activity` | `marcador de bucle en la actividad` |
 | `bpmn:transaction` | `transactionSubProcess` | `transaction subprocess` | `subproceso transaccional` |
 | `bpmn:adHocSubProcess` | `adHocSubProcess` | `ad-hoc subprocess` | `subproceso ad-hoc` |
 | `bpmn:subProcess` con `triggeredByEvent="true"` | `eventSubProcess` | `event subprocess` | `subproceso de eventos` |
@@ -311,6 +312,59 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
 - **R-PLAN-5 — El aplanado no cambia los números.** Un proceso con subproceso embebido y el mismo
   proceso aplanado a mano producen el mismo `RunResult` salvo los ids de los nodos internos.
   *(prueba: LILA-019)*
+
+### 4.1 Marcador de bucle estándar (ADR-033)
+
+Un `bpmn:task` (cualquier variante) o `bpmn:callActivity` con `standardLoopCharacteristics` se
+repite como dice el `elements[<tarea>].loop` del escenario: exactamente `count` iteraciones, u otra
+iteración con `probability` tras cada una (`SCENARIO_FORMAT.md` § 2.5). Su nodo del IR lleva
+`loop: { maximum? }`: `maximum` es el `loopMaximum` leído del literal en bruto del XML (como
+`cancelActivity`, R-BND-10) cuando, sin espacios, es un literal entero decimal ≥ 1; ausente, `0`,
+un signo, una fracción o cualquier otro texto significa sin tope (también un literal mayor que `Number.MAX_SAFE_INTEGER`, al que ninguna corrida llega: con `probability: 1` es `E-BUCLE-SIN-SALIDA` en vez de una corrida sin fin). `testBefore` y `loopCondition` se
+leen y se ignoran, así que la primera iteración siempre corre: decide el escenario, como las
+probabilidades sustituyen a `conditionExpression` (R-PERF-4). En un subproceso embebido el marcador
+sigue siendo `E-NOSOP` con la construcción `loopMarker` (§3).
+
+- **R-LOOP-1 — Cada iteración es una instancia de actividad.** La iteración 1 se habilita cuando
+  llega el token. Cada iteración tiene su propio `activityInstanceId`, su propia solicitud de
+  recurso encolada en orden FIFO por su propia habilitación (R-REC-3), su propia muestra de
+  `processingTime` del stream de la tarea, su calendario (R-CAL-4/5) y su `fixedCost` al
+  completarse. Las unidades se liberan al final de cada iteración, así que otro token puede
+  tomarlas antes de la siguiente (no hay retención). *(prueba: #700)*
+- **R-LOOP-2 — La decisión.** Al completarse la iteración `k`: si `k` es igual a `count` o a
+  `maximum`, el token sale; si no, con `probability`, se sortea un uniforme `u` del stream derivado
+  `<taskId>#loop` (ADR-033 § 1.3: un stream propio, sembrado como los de R-DET-2) y la siguiente iteración se habilita en el mismo instante si
+  `u < p`. `count` nunca sortea, y no se sortea cuando un tope ya decide. La siguiente iteración
+  se habilita con un evento nuevo del heap empujado en ese instante, así que `(t, seq)` (R-TOK-3)
+  la ordena como a cualquier otra habilitación; no es una entrada nueva: no cuenta ningún flujo
+  ni se vuelve a armar ningún evento de borde (R-LOOP-5). Con un evento de error adjunto a la
+  tarea (#702), el error se decide primero: si dispara, el bucle termina y no se sortea `#loop`.
+  `probability: 1` sin `maximum` es `E-BUCLE-SIN-SALIDA`, en el lint y en `core/` antes del primer
+  evento. *(prueba: #700)*
+- **R-LOOP-3 — Un token, un paso por los flujos.** El caso conserva un solo token en la tarea
+  durante todo el bucle; sale por el primer flujo de salida tras la última iteración, así que los
+  flujos de entrada y de salida cuentan una vez por entrada. *(prueba: #700)*
+- **R-LOOP-4 — Resultados.** `elements[tarea].started`/`completed` cuentan iteraciones (las
+  "Instances started/completed" de Bizagi); `processing`, `resourceWait`, `offHoursWait` y
+  `queueLength` son por iteración; `fixedCostTotal = fixedCost × iteraciones completadas`. El event
+  log tiene un grupo de filas por iteración. No se añade ningún campo de resultados ni se renombra
+  ninguna columna. *(prueba: #700)*
+- **R-LOOP-5 — Los eventos de borde cubren todo el bucle.** El bucle está abierto desde la
+  habilitación de la iteración 1 hasta que sale el token, y eso es lo que comprueba R-BND-4. Un
+  temporizador de borde se arma una vez por entrada, desde el `enabledAt` de la iteración 1
+  (R-BND-2), antes que el `done` de la iteración, así que un empate interrumpe (R-BND-7).
+  Interruptor, cierra la iteración en curso como `interrupted` (R-BND-5) y no corre ninguna
+  iteración más; no interruptor, dispara a lo sumo una vez por entrada. Un evento de error adjunto
+  (#702) sortea por iteración completada y, si hay error, no corre ninguna iteración más.
+  *(prueba: #700)*
+- **R-LOOP-6 — Terminate y parada.** La iteración abierta se trata como dicen R-EVT-6 y R-ARR-5; no
+  corre ninguna iteración más. Las iteraciones de tiempo cero cuentan igual para el presupuesto de
+  R-TOK-7. *(prueba: #700)*
+
+Degradación: una tarea con el marcador y sin `loop` en el escenario corre exactamente una iteración,
+como si no tuviera el marcador (mismos bytes), más el aviso `W-BUCLE-SIN-PARAMETROS` que nombra la
+tarea cada vez que le llega un token (§17). Un escenario que no declara ningún `loop` no sortea
+nada de `#loop`, así que conserva sus resultados bit a bit (R-DET-3).
 
 ---
 
@@ -1174,6 +1228,7 @@ Errores (abortan; los de validación se devuelven en `errors[]`, los de ejecuci�
 | `E-CAMPO-NO-APLICA` | campo declarado en un elemento que no lo admite (R4, R5, R14) |
 | `E-CAL-VACIO` | calendario sin intervalos, calendario cuyas aperturas caen todas en sus propios festivos (R-CAL-14, cita `calendars.<nombre>`), o intersección de calendarios vacía (cita la tarea) |
 | `E-SIN-PARADA` | ni `run.duration` ni ningún `triggerCount` |
+| `E-BUCLE-SIN-SALIDA` | `loop.probability: 1` en una tarea cuyo marcador de bucle no tiene `loopMaximum`: el bucle nunca termina (R-LOOP-2); el lint cita `elements.<id>.loop.probability` y `core/` repite la comprobación antes del primer evento |
 | `E-RESERVADO` | campo reservado (§15, texto exacto en R-RES-2) |
 
 Textos exactos de los dos errores de R-CAL-11 (`packages/engine/src/scenario.ts` para el lint,
@@ -1338,6 +1393,31 @@ W-REPLICACIONES-SIN-OBSERVACIONES: <endId>: ningún caso terminó aquí en <m> d
 Con `n = 1` los textos en español terminan en `solo la otra replicación` en vez de `solo las otras 1`.
 `R ≥ 2` siempre (`0 < n < R`); una sola replicación diría `of 1 replication` / `de 1 replicación`.
 
+Marcador de bucle (ADR-033 § 3, §4.1). `E-BUCLE-SIN-SALIDA`, `loop` en un elemento sin marcador de
+bucle (`E-CAMPO-NO-APLICA`, variante `/solo-bucle`) y `W-BUCLE-SIN-PARAMETROS` tienen estos textos
+exactos: la línea del lint del primer error (su `code` viaja en su propio campo), el guardia de
+`core/`, la variante de `E-CAMPO-NO-APLICA` y el aviso, en `en` y en `es`:
+
+```
+a loop with probability 1 and no loopMaximum never ends (elements.<id>.loop.probability).
+E-BUCLE-SIN-SALIDA: <taskId>: a loop with probability 1 and no loopMaximum never ends.
+only accepted on a task with a loop marker (elements.<id>.loop).
+W-BUCLE-SIN-PARAMETROS: <taskId>: loop marker with no loop in the scenario; it runs once.
+```
+
+```
+un bucle con probabilidad 1 y sin loopMaximum nunca termina (elements.<id>.loop.probability).
+E-BUCLE-SIN-SALIDA: <taskId>: un bucle con probabilidad 1 y sin loopMaximum nunca termina.
+solo se admite en una tarea con marcador de bucle (elements.<id>.loop).
+W-BUCLE-SIN-PARAMETROS: <taskId>: marcador de bucle sin loop en el escenario; se ejecuta una vez.
+```
+
+`core/` también lanza `E-BUCLE-SIN-SALIDA` con una `probability` mayor que 1 y sin tope, que el
+lint reporta como `E-PROB-RANGO`: una divergencia lint/`core/` declarada más, además de las dos del párrafo final de esta sección. Un `loop` sin ninguno o con los dos de `count` y `probability`
+es un error de esquema en `elements.<id>.loop`: `declare exactly one of count or probability` /
+``declara exactamente uno de `count` o `probability` ``. El aviso sale cada vez que un token llega
+a la tarea y se agrega como cualquier otro.
+
 `W-START-SIN-LLEGADAS` salta solo cuando el `start` no declara **ni** `interTriggerTimer` **ni**
 `triggerCount`: con `triggerCount` a solas hay llegadas (todas en `t = 0`, R-ARR-1) y no hay aviso.
 
@@ -1398,6 +1478,7 @@ guardia de `core/` (unificarlos toca `core/`; ver R-CAL-10).
 | R-PLAN-1, R-PLAN-2, R-PLAN-5 | subproceso embebido aplanado | LILA-019 |
 | R-PLAN-3 | subproceso sin tiempo propio | LILA-019 (`E-SUBPROC-PARAMETRO`: LILA-198) |
 | R-PLAN-4 | call activity = tarea con tiempo global | LILA-019 |
+| R-LOOP-1 … R-LOOP-6 | marcador de bucle estándar en una tarea (ADR-033 § 3) | #700 (`packages/engine/test/loop-marker.test.ts`) |
 | R-TOK-1 | reloj en segundos desde `run.start` | LILA-037 |
 | R-TOK-2 | caso = conjunto de tokens | LILA-026 |
 | R-TOK-3 | heap `(t, seq)` | LILA-023, LILA-030 |
