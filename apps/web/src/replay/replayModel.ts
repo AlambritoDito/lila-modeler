@@ -221,8 +221,10 @@ export function buildReplay(
   /** The first outgoing flow of every error boundary, by host (ADR-033 § 5). */
   const errorExits = new Map<string, string[]>();
   for (const node of Object.values(ir.nodes)) {
-    const flow = node.outgoing[0];
-    if (node.type !== 'errorBoundary' || node.attachedTo === undefined || flow === undefined) continue;
+    if (node.type !== 'errorBoundary' || node.attachedTo === undefined) continue;
+    // Hand-built IRs (tests, older callers) may omit `outgoing`, as `outputs` already allows.
+    const flow = node.outgoing?.[0];
+    if (flow === undefined) continue;
     errorExits.set(node.attachedTo, [...(errorExits.get(node.attachedTo) ?? []), flow]);
   }
   const reachable = (from: string, to: string): boolean => outputs(from)
