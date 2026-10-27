@@ -31,7 +31,7 @@ setLocale('en');
 
 type Json = Record<string, unknown>;
 
-/** A loop task, a multi-instance task, and a task with an error boundary event; one plain task. */
+/** A loop task, a multi-instance task, and a task with two error boundary events; one plain task. */
 const MODELO = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="urn:lila:test">
   <bpmn:process id="Process_703" isExecutable="true">
@@ -48,6 +48,8 @@ const MODELO = `<?xml version="1.0" encoding="UTF-8"?>
     <bpmn:endEvent id="End_Ok" />
     <bpmn:boundaryEvent id="Err_Work" name="Rejected" attachedToRef="Task_Work"><bpmn:errorEventDefinition /></bpmn:boundaryEvent>
     <bpmn:sequenceFlow id="F6" sourceRef="Err_Work" targetRef="End_Err" />
+    <bpmn:boundaryEvent id="Err_Late" name="Late" attachedToRef="Task_Work"><bpmn:errorEventDefinition /></bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="F7" sourceRef="Err_Late" targetRef="End_Err" />
     <bpmn:endEvent id="End_Err" />
   </bpmn:process>
 </bpmn:definitions>`;
@@ -216,7 +218,7 @@ describe('loop (ADR-033 § 3)', () => {
     expect(sinVacias(actual)).toEqual(INICIAL);
   });
 
-  it('a probability writes loop.probability; out of range and 1 without loopMaximum are errors; emptying it takes the loop back', () => {
+  it('a probability writes loop.probability; out of range and 1 without loopMaximum are errors; emptying it removes the loop and keeps the box', () => {
     montar();
     irAPaso('times');
     elegirElemento('Task_Loop');
@@ -229,8 +231,41 @@ describe('loop (ADR-033 § 3)', () => {
     teclear('campo-elements.Task_Loop.loop.probability', '0.5');
     expect(elemento('Task_Loop')).toEqual({ loop: { probability: 0.5 } });
     expect(erroresDe('campo-elements.Task_Loop.loop.probability')).toEqual([]);
+    // Emptying the number to retype it: the loop goes, the mode and the box stay (QA of #703).
     teclear('campo-elements.Task_Loop.loop.probability', '');
     expect(sinVacias(actual)).toEqual(INICIAL);
+    expect((document.getElementById('campo-elements.Task_Loop.loop') as HTMLSelectElement).value).toBe('probability');
+    teclear('campo-elements.Task_Loop.loop.probability', '0.25');
+    expect(elemento('Task_Loop')).toEqual({ loop: { probability: 0.25 } });
+    elegir('campo-elements.Task_Loop.loop', 'ninguno');
+    expect(sinVacias(actual)).toEqual(INICIAL);
+    expect(document.getElementById('campo-elements.Task_Loop.loop.probability')).toBeNull();
+  });
+
+  it('retyping the number over an inherited loop of the other mode still leaves exactly one key', () => {
+    const padre: Json = { ...INICIAL, elements: { ...(INICIAL['elements'] as Json), Task_Loop: { loop: { count: 3 } } } };
+    montar({ [PADRE]: padre, [ARCHIVO]: { version: 1, name: 'TO-BE', extends: PADRE } });
+    irAPaso('times');
+    elegirElemento('Task_Loop');
+    elegir('campo-elements.Task_Loop.loop', 'probability');
+    teclear('campo-elements.Task_Loop.loop.probability', '');
+    teclear('campo-elements.Task_Loop.loop.probability', '0.4');
+    expect(elemento('Task_Loop')).toEqual({ loop: { count: null, probability: 0.4 } });
+    expect(erroresDe('campo-elements.Task_Loop.loop')).toEqual([]);
+  });
+
+  it('the loopMaximum of the diagram is said under the control', async () => {
+    const conTope = MODELO.replace('<bpmn:standardLoopCharacteristics />', '<bpmn:standardLoopCharacteristics loopMaximum="5" />');
+    const original = ir;
+    ir = (await validateBpmnModel(conTope)).ir;
+    try {
+      montar();
+      irAPaso('times');
+      elegirElemento('Task_Loop');
+      expect(document.body.textContent).toContain(en.escenario.bucle.tope(5));
+    } finally {
+      ir = original;
+    }
   });
 
   it('switching mode over an inherited loop writes the other key as null, so the resolved loop has exactly one', () => {
@@ -290,6 +325,26 @@ describe('errorProbability (ADR-033 § 5)', () => {
     expect(erroresDe('campo-elements.Err_Work.errorProbability').join(' ')).toContain('outside [0, 1]');
     teclear('campo-elements.Err_Work.errorProbability', '');
     expect(sinVacias(actual)).toEqual(INICIAL);
+  });
+});
+
+describe('E-PROB-ERROR-SUMA is fixed in Routes, on the activity that hosts the boundaries', () => {
+  it('▶ Simulate opens Routes on the host, which lists its boundaries marked, with the sum error', () => {
+    montar({ [ARCHIVO]: { ...INICIAL, elements: { ...(INICIAL['elements'] as Json), Err_Work: { errorProbability: 0.7 }, Err_Late: { errorProbability: 0.6 } } } });
+    irAPaso('times');
+    const simular = document.querySelector<HTMLButtonElement>('button.sim-simular')!;
+    act(() => { simular.click(); });
+    expect(document.querySelector('.pasos button[data-paso="routes"]')?.getAttribute('aria-selected')).toBe('true');
+    const filas = [...document.querySelectorAll('.lista-paso li')];
+    expect(filas.map((li) => li.querySelector('button')?.dataset['id'])).toEqual(['Err_Work', 'Err_Late']);
+    expect(filas.map((li) => li.querySelector('.resumen')?.textContent)).toEqual([en.escenario.errorEn('70 %', 'Ship'), en.escenario.errorEn('60 %', 'Ship')]);
+    expect(filas.every((li) => li.querySelector('.resumen.falta') !== null)).toBe(true);
+    expect(document.body.textContent).toContain('1.3');
+    // One row opens its boundary; fixing it clears the mark.
+    act(() => { filas[1]!.querySelector('button')!.click(); });
+    teclear('campo-elements.Err_Late.errorProbability', '0.3');
+    elegirElemento('Task_Work');
+    expect(document.querySelectorAll('.lista-paso .resumen.falta')).toHaveLength(0);
   });
 });
 

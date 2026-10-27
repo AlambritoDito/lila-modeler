@@ -859,6 +859,8 @@ export const en = {
     listaErrores: 'Error boundary events',
     /** An error boundary without `errorProbability` never fires (`W-ERROR-SIN-PROBABILIDAD`). */
     sinProbabilidadError: 'No probability: it never fires',
+    /** «25 % · on Ship»: an error boundary's row, with the activity it is attached to. */
+    errorEn: (valor: string, actividad: string): string => `${valor} · on ${actividad}`,
     /** «every 5 min · 100 cases»: the arrival line of one start event in the Arrivals list. */
     resumenLlegada: (cada: string, casos: number | null): string =>
       casos === null ? cada : `${cada} · ${casos} ${casos === 1 ? 'case' : 'cases'}`,
@@ -1019,6 +1021,8 @@ export const en = {
       calendar: 'Without a calendar the element is available 24×7.',
       loop: 'How many times the task runs each time a case reaches it. Without it, it runs once.',
       instances: 'How many instances run each time a case reaches the task, rounded to a whole number. Without it, the diagram\u2019s loopCardinality, or one.',
+      'loop.count': 'A whole number, 1 or more. Declare count or probability, not both.',
+      'loop.probability': 'Between 0 and 1, checked after each iteration. Declare count or probability, not both.',
       errorProbability: 'Between 0 and 1: the share of the completions of the activity it is attached to that leave through this event. The error events of one activity add up to 1 at most; without it, it never fires.',
     } as Record<string, string>,
 
@@ -1028,7 +1032,7 @@ export const en = {
       porProbabilidad: 'Again with a probability',
       conteo: 'Iterations',
       probabilidad: 'Probability of another iteration',
-      ayudaConteo: 'A whole number, 1 or more: the task runs exactly that many times.',
+      ayudaConteo: 'A whole number, 1 or more: the task runs that many times, or up to the diagram\u2019s loopMaximum if that is lower.',
       ayudaProbabilidad: 'Between 0 and 1, checked after each iteration: 0.5 runs the task twice on average. 1 needs a loopMaximum in the diagram.',
       tope: (n: number): string => `The diagram caps the loop at ${n} ${n === 1 ? 'iteration' : 'iterations'} (loopMaximum).`,
     },

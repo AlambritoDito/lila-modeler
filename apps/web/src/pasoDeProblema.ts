@@ -82,7 +82,7 @@ function pasoDeClase(clase: ClaseElemento | null): PasoId | null {
  *
  * `codigo` covers the one problem whose path does not say where it is fixed: `E-PROB-ERROR-SUMA`
  * cites the host (`elements.<hostId>`, ADR-033 § 1.6), and its error probabilities are set in
- * Routes, on the host's error boundary events.
+ * Routes, where the host selected lists its error boundary events.
  */
 export function pasoDeProblema(ruta: string, ir: ProcessIR | null, codigo?: string): PasoId | null {
   if (codigo === 'E-PROB-ERROR-SUMA') return 'routes';

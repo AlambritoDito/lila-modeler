@@ -4,14 +4,17 @@
  *
  * The schema is a strict object with **exactly one** of `count` and `probability`, a zod refinement
  * that the JSON Schema the form is generated from cannot express: the generic form would draw both
- * boxes and let both be filled. This control is a mode picker plus one number. Picking a mode
- * writes the whole object, so `ctx.editar` writes the other key as `null` when a parent declares
- * it (§ 6, `conBorrados`); emptying the number removes the whole `loop`, not just its key, which
- * would leave an object the schema rejects.
+ * boxes and let both be filled. This control is a mode picker plus one number. Picking a mode and
+ * typing a number both write the whole object, so `ctx.editar` writes the other key as `null` when
+ * a parent declares it (§ 6, `conBorrados`). Emptying the number removes the whole `loop`, not just
+ * its key, which would leave an object the schema rejects; the mode stays picked (local state) so
+ * the box stays where it is and the next keystroke writes the loop again. «Not set» forgets it.
  *
  * A `loop` of any other shape (both keys, neither, a value written by hand) is left to the generic
  * fieldset of `Campo`, where it can be seen and fixed: `formaBucle` returns `null` for it.
  */
+import { useState } from 'react';
+
 import { EntradaNumero, Problemas } from './Campo.js';
 import { esObjeto, leer, rutaTexto, type Contexto, type Ruta } from './escenarioModelo.js';
 import { useStrings } from './i18n';
@@ -49,12 +52,25 @@ export function CampoBucle({
 }): React.JSX.Element {
   const S = useStrings();
   const B = S.escenario.bucle;
-  const forma = formaBucle(leer(ctx.resuelto, ruta)) ?? 'ninguno';
   const id = `campo-${rutaTexto(ruta)}`;
+  /** The mode picked while its number is empty, for this path only (another task resets it). */
+  const [vacio, setVacio] = useState<{ id: string; forma: 'count' | 'probability' } | null>(null);
+  const escrita = formaBucle(leer(ctx.resuelto, ruta)) ?? 'ninguno';
+  const forma = escrita === 'ninguno' && vacio?.id === id ? vacio.forma : escrita;
   const nodo = ctx.ir?.nodes[String(ruta[1])];
   const tope = nodo?.loop?.maximum;
-  // Emptying the number takes the whole `loop` with it (see the module comment).
-  const ctxNumero: Contexto = { ...ctx, quitar: () => { ctx.quitar(ruta); } };
+  // The number writes the whole `loop`, and emptying it takes the whole `loop` with it while the
+  // mode stays picked (see the module comment).
+  const ctxNumero: Contexto = {
+    ...ctx,
+    editar: (_ruta, valor) => {
+      if (forma !== 'ninguno') ctx.editar(ruta, { [forma]: valor });
+    },
+    quitar: () => {
+      if (forma !== 'ninguno') setVacio({ id, forma });
+      ctx.quitar(ruta);
+    },
+  };
   return (
     <div className="campo-schema">
       <label htmlFor={id}>{etiqueta}</label>
@@ -63,6 +79,7 @@ export function CampoBucle({
         value={forma}
         onChange={(e) => {
           const elegido = e.target.value;
+          setVacio(null);
           if (elegido === 'count' || elegido === 'probability') ctx.editar(ruta, AL_ELEGIR[elegido]);
           else ctx.quitar(ruta);
         }}

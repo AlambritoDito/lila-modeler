@@ -135,7 +135,7 @@ ofrecen sus campos en el elemento seleccionado, con la misma validación que cua
 | Tarea multi-instancia, paralela o secuencial | Tiempos, «Instancias»: un número o una distribución por caso; sin él, el `loopCardinality` del diagrama, o una | `instances` |
 | Evento de error adjunto interruptor en una tarea o un subproceso embebido | Rutas, «Probabilidad de error»: la parte de las finalizaciones de la actividad que salen por él; Rutas lista todos los eventos de error adjuntos del proceso | `errorProbability` |
 | Evento temporizador adjunto a un subproceso embebido | Tiempos: su tiempo de procesamiento es el plazo, desde que un caso entra en el subproceso | `processingTime` |
-| Inicio de mensaje, fin de mensaje, evento intermedio de lanzamiento sin tipo o de mensaje | Llegadas para el inicio de mensaje; los demás no llevan parámetros | — |
+| Inicio de mensaje, fin de mensaje, evento intermedio de lanzamiento sin tipo o de mensaje | Llegadas para el inicio de mensaje; un fin de mensaje lleva lo mismo que cualquier fin (su costo fijo), y un evento de lanzamiento no lleva parámetros | — |
 
 Cada iteración de un bucle y cada instancia de una tarea multi-instancia cuenta como una instancia
 en la tabla Process elements. Bizagi Modeler no simula tareas multi-instancia, y ninguno de estos

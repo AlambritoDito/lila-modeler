@@ -135,7 +135,7 @@ steps offer their fields on the selected element, with the same validation as an
 | Multi-instance task, parallel or sequential | Times, «Instances»: a number or a distribution per case; without it, the diagram's `loopCardinality`, or one | `instances` |
 | Interrupting error boundary event on a task or an embedded sub-process | Routes, «Error probability»: the share of the activity's completions that leave through it; Routes lists every error boundary event of the process | `errorProbability` |
 | Timer boundary event on an embedded sub-process | Times: its processing time is the deadline, from the moment a case enters the sub-process | `processingTime` |
-| Message start, message end, none or message intermediate throw event | Arrivals for the message start; the others take no parameter | — |
+| Message start, message end, none or message intermediate throw event | Arrivals for the message start; a message end takes what any end event takes (its fixed cost), and a throw event takes no parameter | — |
 
 Each iteration of a loop and each instance of a multi-instance task counts as one instance in the
 Process elements table. Bizagi Modeler does not simulate multi-instance tasks, and none of these

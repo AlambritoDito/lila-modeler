@@ -737,9 +737,7 @@ export function ScenarioPanel({
   function irAProblema(problema: Problema): void {
     const destino = pasoDeProblemaPanel(problema.ruta);
     if (destino !== null) setPaso(destino);
-    // `E-PROB-ERROR-SUMA` cites the host, but is fixed on its error boundaries: the Routes overview
-    // lists them, while the host selected in Routes would offer nothing.
-    onSeleccionar(problema.codigo === 'E-PROB-ERROR-SUMA' ? null : elementoDeProblema(problema.ruta, ir));
+    onSeleccionar(elementoDeProblema(problema.ruta, ir));
   }
   function pasoDeProblemaPanel(ruta: string): PasoId | null {
     for (const p of PASO_IDS) if (porPaso.porPaso[p].some((x) => x.ruta === ruta)) return p;
@@ -864,11 +862,22 @@ export function ScenarioPanel({
   const visibles = idSeleccionado === null || contenedor !== null ? [] : fieldsForStep(paso, clase, marcadores);
   const definidos = idSeleccionado === null ? [] : CAMPOS_DE_PASO[paso].filter((campo) => leer(resuelto, ['elements', idSeleccionado, campo]) !== undefined);
   const esCompuerta = clase === 'xor' || clase === 'or';
+  /**
+   * ADR-033 § 5: in Routes, an activity with error boundary events shows them (with its
+   * `E-PROB-ERROR-SUMA`, which cites the activity): their probabilities are its routes.
+   */
+  const bordesError =
+    paso !== 'routes' || ir === null || idSeleccionado === null
+      ? []
+      : Object.entries(ir.nodes)
+          .filter(([, nodo]) => nodo.type === 'errorBoundary' && nodo.attachedTo === idSeleccionado)
+          .map(([id]) => id);
   /** Whether the selected element has anything to set in this step; if not, the panel says where. */
   const tieneAlgo =
     idSeleccionado !== null &&
     (paso === 'run' ||
       (paso === 'routes' && esCompuerta && ir !== null) ||
+      bordesError.length > 0 ||
       visibles.some((campo) => !['priority', 'preempt', 'batch', 'conditions'].includes(campo)) ||
       definidos.length > 0);
   const nombreSeleccion = idSeleccionado === null ? '' : rotulo(idSeleccionado).principal;
@@ -912,7 +921,7 @@ export function ScenarioPanel({
         return (
           <>
             <PasoRutas ctx={ctx} ir={ir} seleccion={null} onSeleccionar={onSeleccionar} avanzado={avanzado} />
-            <ListaErrores ids={idsPorTipo(['errorBoundary'])} {...lista} />
+            <ListaErrores ids={idsPorTipo(['errorBoundary'])} ir={ir} {...lista} />
           </>
         );
       case 'resources':
@@ -949,6 +958,14 @@ export function ScenarioPanel({
     }
     if (paso === 'arrivals' && clase === 'start') {
       return <FichaLlegada id={id} nombre={nombreSeleccion} ctx={ctx} />;
+    }
+    if (bordesError.length > 0) {
+      return (
+        <>
+          <ListaErrores ids={bordesError} ir={ir} {...lista} />
+          <Problemas ruta={['elements', id]} ctx={ctx} />
+        </>
+      );
     }
     return (
       <>

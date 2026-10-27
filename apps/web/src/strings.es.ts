@@ -834,6 +834,8 @@ export const es: Strings = {
     listaErrores: 'Eventos de error adjuntos',
     /** Un evento de error sin `errorProbability` nunca dispara (`W-ERROR-SIN-PROBABILIDAD`). */
     sinProbabilidadError: 'Sin probabilidad: nunca dispara',
+    /** «25 % · en Enviar»: la fila de un evento de error, con la actividad a la que está adjunto. */
+    errorEn: (valor: string, actividad: string): string => `${valor} · en ${actividad}`,
     resumenLlegada: (cada: string, casos: number | null): string =>
       casos === null ? cada : `${cada} · ${casos} ${casos === 1 ? 'caso' : 'casos'}`,
     irARecursos: 'Ir a Recursos',
@@ -991,6 +993,8 @@ export const es: Strings = {
       calendar: 'Sin calendario el elemento está disponible 24×7.',
       loop: 'Cuántas veces se ejecuta la tarea cada vez que llega un caso. Sin él, se ejecuta una vez.',
       instances: 'Cuántas instancias se ejecutan cada vez que llega un caso, redondeado a un número entero. Sin él, el loopCardinality del diagrama, o una.',
+      'loop.count': 'Un número entero, 1 o más. Declara count o probability, no los dos.',
+      'loop.probability': 'Entre 0 y 1, tras cada iteración. Declara count o probability, no los dos.',
       errorProbability: 'Entre 0 y 1: la parte de las finalizaciones de la actividad a la que está adjunto que salen por este evento. Los eventos de error de una actividad suman 1 como mucho; sin ella, nunca dispara.',
     } as Record<string, string>,
 
@@ -1000,7 +1004,7 @@ export const es: Strings = {
       porProbabilidad: 'Otra vez con una probabilidad',
       conteo: 'Iteraciones',
       probabilidad: 'Probabilidad de otra iteración',
-      ayudaConteo: 'Un número entero, 1 o más: la tarea se ejecuta exactamente esas veces.',
+      ayudaConteo: 'Un número entero, 1 o más: la tarea se ejecuta esas veces, o hasta el loopMaximum del diagrama si es menor.',
       ayudaProbabilidad: 'Entre 0 y 1, tras cada iteración: 0,5 ejecuta la tarea dos veces de media. 1 necesita un loopMaximum en el diagrama.',
       tope: (n: number): string => `El diagrama limita el bucle a ${n} ${n === 1 ? 'iteración' : 'iteraciones'} (loopMaximum).`,
     },

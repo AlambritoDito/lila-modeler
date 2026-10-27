@@ -392,7 +392,8 @@ export function Propiedades({
 /**
  * La ayuda de un campo. Va por clave, salvo dentro de una entrada de `conditions`, donde
  * `probability` significa otra cosa que la del flujo (ADR-028) y se busca antes como
- * `conditions.<clave>`.
+ * `conditions.<clave>`. The same holds inside a `loop` drawn as a generic fieldset (ADR-033 § 3),
+ * looked up first as `loop.<clave>`.
  */
 function ayudaDe(
   S: ReturnType<typeof useStrings>,
@@ -401,6 +402,10 @@ function ayudaDe(
 ): string | undefined {
   if (ruta.at(-2) === 'conditions') {
     const propia = S.escenario.ayudas[`conditions.${clave}`];
+    if (propia !== undefined) return propia;
+  }
+  if (ruta.at(-1) === 'loop') {
+    const propia = S.escenario.ayudas[`loop.${clave}`];
     if (propia !== undefined) return propia;
   }
   return S.escenario.ayudas[clave];
