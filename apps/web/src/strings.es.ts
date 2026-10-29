@@ -2142,7 +2142,7 @@ export const es: Strings = {
     finCorto: 'Fin',
   },
   canal: {
-    betaTexto: 'Beta: la vista previa construida con lo último de main. Los proyectos de aquí se guardan aparte de la app estable.',
+    betaTexto: 'Beta: lo que viene después de la versión 1.0, empezando por el repositorio de la organización, construido con lo último de main. Los proyectos de aquí se guardan aparte de la app estable.',
     irEstable: 'Abrir la app estable',
     cerrar: 'Cerrar el aviso de beta',
   },
