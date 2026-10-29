@@ -11,7 +11,7 @@
  * exactly `elements[id].started/completed` of the run that was just stored — which is read back
  * from the `.lila` the app saves, not from anything the page says about itself.
  *
- *   npm run build:pages && node tools/e2e-replay.mjs
+ *   npm run build:pages -- --stable-tag HEAD && node tools/e2e-replay.mjs
  *
  * `CHROME_PATH` overrides the browser (the default is the macOS Google Chrome bundle), and
  * `LILA_E2E_PORT` / `LILA_E2E_CDP_PORT` move the static server and the debugging port.
@@ -142,7 +142,7 @@ function connect(ws) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
-  if (!existsSync(SITE)) throw new Error('_site is missing: run `npm run build:pages` first.');
+  if (!existsSync(SITE)) throw new Error('_site is missing: run `npm run build:pages -- --stable-tag HEAD` first.');
   const work = mkdtempSync(join(tmpdir(), 'lila-replay-'));
   const downloads = join(work, 'downloads');
   mkdirSync(downloads);

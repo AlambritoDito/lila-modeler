@@ -89,7 +89,12 @@ const DISTRIBUTION_COLUMNS = ['distribution', 'unit', ...PARAMETERS, 'points'] a
 
 /** Columns of each table, in the order the template writes them. */
 export const TABLE_COLUMNS: Readonly<Record<TableId, readonly string[]>> = {
-  elements: ['id', 'name', 'kind', ...DISTRIBUTION_COLUMNS, 'fixedCost', 'calendar', 'probability', 'selection'],
+  // ADR-033 (#703): `loopCount`/`loopProbability` are `loop` (exactly one), `instances` a constant
+  // number of instances, `errorProbability` the share of an error boundary event.
+  elements: [
+    'id', 'name', 'kind', ...DISTRIBUTION_COLUMNS, 'fixedCost', 'calendar', 'probability', 'selection',
+    'loopCount', 'loopProbability', 'instances', 'errorProbability',
+  ],
   arrivals: ['id', 'name', ...DISTRIBUTION_COLUMNS, 'triggerCount', 'fixedCost', 'calendar'],
   resources: ['id', 'name', 'type', 'capacity', 'costPerHour', 'fixedCost', 'calendar'],
   assignments: ['elementId', 'elementName', 'resourceId', 'resourceName', 'quantity'],
@@ -394,7 +399,7 @@ export function templateSheets(scenario: Record<string, unknown>, ir: ProcessIR)
 
   const elementIds = [
     ...Object.entries(ir.nodes)
-      .filter(([id, node]) => node.type !== 'start' && (['task', 'timer', 'end', 'terminate'].includes(node.type) || id in elements))
+      .filter(([id, node]) => node.type !== 'start' && (['task', 'timer', 'end', 'terminate', 'errorBoundary'].includes(node.type) || id in elements))
       .map(([id]) => id),
     ...Object.entries(ir.flows)
       .filter(([id, flow]) => {
@@ -405,6 +410,10 @@ export function templateSheets(scenario: Record<string, unknown>, ir: ProcessIR)
   ];
   const elementRows = elementIds.map((id) => {
     const element = own(elements, id) ?? {};
+    const loop = isObject(element['loop']) ? element['loop'] : {};
+    // Only a constant fits in one cell; any other distribution stays empty, so the import leaves it
+    // as it is (rule 1) and the panel is where it is edited.
+    const instances = isObject(element['instances']) && element['instances']['type'] === 'constant' ? element['instances']['value'] : undefined;
     return [
       id,
       nameOf(id),
@@ -414,6 +423,10 @@ export function templateSheets(scenario: Record<string, unknown>, ir: ProcessIR)
       optional(element['calendar']),
       optional(element['probability']),
       optional(element['selection']),
+      optional(loop['count']),
+      optional(loop['probability']),
+      optional(instances),
+      optional(element['errorProbability']),
     ];
   });
 
@@ -1122,6 +1135,17 @@ function planElements(context: Context, t: Table, seen: Seen): void {
         if (value === undefined) errors.add('selection', M.unknownValue(selection, 'and, or'));
         else fields['selection'] = value;
       }
+      // ADR-033 § 3: a loop is exactly one of `count` and `probability`, so one column replaces the
+      // whole `loop` and both columns filled is an error of the row.
+      const loopCount = numberField(t, cells, 'loopCount', errors, M, 'integer');
+      const loopProbability = numberField(t, cells, 'loopProbability', errors, M, 'probability');
+      if (loopCount !== undefined && loopProbability !== undefined) errors.add('loopProbability', M.loopBoth());
+      else if (loopCount !== undefined) fields['loop'] = { count: loopCount };
+      else if (loopProbability !== undefined) fields['loop'] = { probability: loopProbability };
+      const instances = numberField(t, cells, 'instances', errors, M, 'nonNegative');
+      if (instances !== undefined) fields['instances'] = { type: 'constant', value: instances };
+      const errorProbability = numberField(t, cells, 'errorProbability', errors, M, 'probability');
+      if (errorProbability !== undefined) fields['errorProbability'] = errorProbability;
     }
     if (!flush(context, t, row, errors)) continue;
 

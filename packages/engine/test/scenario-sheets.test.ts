@@ -755,3 +755,103 @@ describe('messages', () => {
     }
   });
 });
+
+describe('#703 (ADR-033): loop, instances and errorProbability in the Elements sheet', () => {
+  const MODEL = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="urn:lila:test">
+  <bpmn:process id="Process_703" isExecutable="true">
+    <bpmn:startEvent id="Start" />
+    <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="Task_Plain" />
+    <bpmn:task id="Task_Plain" />
+    <bpmn:sequenceFlow id="F2" sourceRef="Task_Plain" targetRef="Task_Loop" />
+    <bpmn:task id="Task_Loop" name="Review"><bpmn:standardLoopCharacteristics /></bpmn:task>
+    <bpmn:sequenceFlow id="F3" sourceRef="Task_Loop" targetRef="Task_Multi" />
+    <bpmn:task id="Task_Multi"><bpmn:multiInstanceLoopCharacteristics isSequential="true" /></bpmn:task>
+    <bpmn:sequenceFlow id="F4" sourceRef="Task_Multi" targetRef="Task_Work" />
+    <bpmn:task id="Task_Work" />
+    <bpmn:sequenceFlow id="F5" sourceRef="Task_Work" targetRef="End_Ok" />
+    <bpmn:endEvent id="End_Ok" />
+    <bpmn:boundaryEvent id="Err_Work" attachedToRef="Task_Work"><bpmn:errorEventDefinition /></bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="F6" sourceRef="Err_Work" targetRef="End_Err" />
+    <bpmn:endEvent id="End_Err" />
+  </bpmn:process>
+</bpmn:definitions>`;
+
+  function base(elements: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      version: 1,
+      name: 'Markers',
+      model: 'model.bpmn',
+      run: { start: '2026-09-07T08:00:00-06:00', seed: 1 },
+      elements: { Start: { triggerCount: 3 }, ...elements },
+    };
+  }
+
+  test('the template writes the four columns, gives the error boundary its row, and comes back identical', async () => {
+    const { ir } = await parseBpmn(MODEL);
+    const scenario = base({
+      Task_Loop: { loop: { count: 3 } },
+      Task_Multi: { instances: { type: 'constant', value: 2 } },
+      Err_Work: { errorProbability: 0.25 },
+    });
+    const [elements] = readWorkbook(scenarioTemplate(scenario, ir));
+    const header = elements!.rows[0]!;
+    const cell = (id: string, column: string): unknown => elements!.rows.find((row) => row[0] === id)?.[header.indexOf(column)] ?? null;
+    expect(header.slice(-4)).toEqual(['loopCount', 'loopProbability', 'instances', 'errorProbability']);
+    expect(cell('Task_Loop', 'loopCount')).toBe(3);
+    expect(cell('Task_Loop', 'loopProbability')).toBeNull();
+    expect(cell('Task_Multi', 'instances')).toBe(2);
+    expect(cell('Err_Work', 'kind')).toBe('errorBoundary');
+    expect(cell('Err_Work', 'errorProbability')).toBe(0.25);
+    const plan = planScenarioImport(readWorkbook(scenarioTemplate(scenario, ir)), scenario, ir);
+    expect(plan.issues).toEqual([]);
+    expect(plan.changes).toEqual([]);
+
+    // A loop by probability, and instances that are not a constant: the second is left empty and
+    // so left as it is.
+    const other = base({ Task_Loop: { loop: { probability: 0.5 } }, Task_Multi: { instances: { type: 'uniform', min: 1, max: 4 } } });
+    const again = planScenarioImport(readWorkbook(scenarioTemplate(other, ir)), other, ir);
+    expect(again.issues).toEqual([]);
+    expect(again.changes).toEqual([]);
+  });
+
+  test('the import writes loop, instances and errorProbability, and the result passes validateScenario', async () => {
+    const { ir } = await parseBpmn(MODEL);
+    const scenario = base({ Task_Loop: { loop: { probability: 0.5 } } });
+    const sheets = csv(
+      'elements.csv',
+      'id;loopCount;loopProbability;instances;errorProbability\nTask_Loop;4;;;\nTask_Multi;;;3;\nErr_Work;;;;25%\n',
+    );
+    const plan = planScenarioImport(sheets, scenario, ir);
+    expect(plan.issues).toEqual([]);
+    expect(plan.changes.map((change) => [change.path.join('.'), change.after])).toEqual([
+      ['elements.Task_Loop.loop', { count: 4 }],
+      ['elements.Task_Multi.instances', { type: 'constant', value: 3 }],
+      ['elements.Err_Work.errorProbability', 0.25],
+    ]);
+    const after = applyImportChanges(scenario, plan.changes);
+    const parsed = parseScenario(after);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(validateScenario(parsed.data, ir).filter((problem) => problem.severity === 'error')).toEqual([]);
+  });
+
+  test('both loop columns, a bad count or probability are row errors; a field on an element without its marker blocks', async () => {
+    const { ir } = await parseBpmn(MODEL);
+    const plan = planScenarioImport(
+      csv('elements.csv', 'id;loopCount;loopProbability;errorProbability\nTask_Loop;2;0,5;\nTask_Multi;0;;\nErr_Work;;;1,5\n'),
+      base(),
+      ir,
+    );
+    expect(plan.issues.map((issue) => [issue.kind, issue.row, issue.column])).toEqual([
+      ['error', 2, 'loopProbability'],
+      ['error', 3, 'loopCount'],
+      ['error', 4, 'errorProbability'],
+    ]);
+    expect(plan.issues[0]!.message).toBe(SHEET_MESSAGES.en.loopBoth());
+    expect(plan.changes).toEqual([]);
+
+    const misplaced = planScenarioImport(csv('elements.csv', 'id;loopCount;instances;errorProbability\nTask_Plain;2;3;0,5\n'), base(), ir);
+    expect(misplaced.changes).toHaveLength(3);
+    expect(misplaced.issues.filter((issue) => issue.kind === 'lint')).toHaveLength(3);
+  });
+});

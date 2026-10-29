@@ -3,7 +3,7 @@
  * connection. This file is a template — `vite build` writes the real `sw.js` next to `index.html`
  * (`serviceWorker.ts`), with the app version and the list of built files filled in below.
  *
- * - One cache per build, `lila-modeler-<version>-<hash of the built files>`: a version bump, or a
+ * - One cache per build, `<prefix><version>-<hash of the built files>`: a version bump, or a
  *   deploy that changed any file without one, is a new `sw.js` (its text changes), so the browser
  *   installs it, it precaches that version's files, and once every window
  *   of the old version has closed it takes over and deletes the caches of older versions. There is
@@ -16,10 +16,13 @@
  * - Vite's hashed files under `assets/` cannot change under the same name: they are served from
  *   the cache, and one that was not precached is cached the first time it is fetched.
  * - Other origins (the update check on GitHub) and non-GET requests are left alone.
+ * - The prefix is `lila-modeler-` for the stable app and `lila[<base>]-` for the beta build on
+ *   Pages (`src/channel.ts`, #704): both share one origin, hence one Cache Storage, and each worker
+ *   only deletes caches with its own prefix.
  */
 const VERSION = '__LILA_VERSION__';
 const PRECACHE = /* __LILA_PRECACHE__ */ [];
-const PREFIX = 'lila-modeler-';
+const PREFIX = /* __LILA_CACHE_PREFIX__ */ 'lila-modeler-';
 const CACHE = PREFIX + VERSION;
 const scope = () => self.registration.scope;
 const enScope = (url) => new URL(url, scope()).href;

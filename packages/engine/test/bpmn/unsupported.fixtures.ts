@@ -128,8 +128,12 @@ export const UNSUPPORTED_FIXTURES: UnsupportedFixture[] = [
     ],
   },
   {
-    row: 'bpmn:intermediateThrowEvent (sin disparador o con cualquiera)',
-    xml: processWith('Event_Throw', `<bpmn:intermediateThrowEvent id="Event_Throw" />`),
+    // R-THR-1 (ADR-033): the none and message throws simulate; any other trigger is this row.
+    row: 'bpmn:intermediateThrowEvent con un disparador que no sea none ni message',
+    xml: processWith(
+      'Event_Throw',
+      `<bpmn:intermediateThrowEvent id="Event_Throw"><bpmn:linkEventDefinition id="Def_Throw_Link" name="L" /></bpmn:intermediateThrowEvent>`,
+    ),
     messages: [
       message('Event_Throw', 'bpmn:intermediateThrowEvent', 'evento intermedio de lanzamiento'),
     ],
@@ -145,20 +149,23 @@ export const UNSUPPORTED_FIXTURES: UnsupportedFixture[] = [
     messages: [message('Gateway_Complex', 'bpmn:complexGateway', 'gateway complejo')],
   },
   {
+    // ADR-033 § 4 (#701): on a task or call activity the marker is in the profile; on a
+    // sub-process it still is this row.
     row: 'multiInstanceLoopCharacteristics',
     xml: processWith(
-      'Task_Multi',
-      `<bpmn:task id="Task_Multi"><bpmn:multiInstanceLoopCharacteristics id="Loop_Multi" /></bpmn:task>`,
+      'Sub_Multi',
+      `<bpmn:subProcess id="Sub_Multi"><bpmn:multiInstanceLoopCharacteristics id="Loop_Multi" /></bpmn:subProcess>`,
     ),
-    messages: [message('Task_Multi', 'bpmn:task', 'marcador de multi-instancia')],
+    messages: [message('Sub_Multi', 'bpmn:subProcess', 'marcador de multi-instancia')],
   },
   {
+    // ADR-033 § 3: on a task the loop marker is simulated (#700); on a sub-process it stays out.
     row: 'standardLoopCharacteristics',
     xml: processWith(
-      'Task_Loop',
-      `<bpmn:task id="Task_Loop"><bpmn:standardLoopCharacteristics id="Loop_Standard" /></bpmn:task>`,
+      'SubProcess_Loop',
+      `<bpmn:subProcess id="SubProcess_Loop"><bpmn:standardLoopCharacteristics id="Loop_Standard" /></bpmn:subProcess>`,
     ),
-    messages: [message('Task_Loop', 'bpmn:task', 'marcador de bucle en la actividad')],
+    messages: [message('SubProcess_Loop', 'bpmn:subProcess', 'marcador de bucle en la actividad')],
   },
   {
     row: 'bpmn:transaction',

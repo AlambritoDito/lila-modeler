@@ -68,12 +68,12 @@ as when you edit a field by hand ([SCENARIO_FORMAT.md](SCENARIO_FORMAT.md) § 6)
 
 ### Elements
 
-One row per task, timer, end event and outgoing flow of a gateway.
+One row per task, timer, end event, error boundary event and outgoing flow of a gateway.
 
 | Column | Meaning |
 |---|---|
 | `id`, `name` | BPMN id and name of the element. One of them is enough. |
-| `kind` | `task`, `timer`, `end`, `flow`… Informative only: the import ignores it. |
+| `kind` | `task`, `timer`, `end`, `errorBoundary`, `flow`… Informative only: the import ignores it. |
 | `distribution` | Processing time distribution (`processingTime`): `constant`, `uniform`, `triangular`, `exponential`, `normal`, `truncatedNormal`, `lognormal`, `gamma`, `erlang`, `weibull`, `beta`, `poisson`, `binomial` or `user`. Spanish names also work: `constante`, `uniforme`, `exponencial`, `normal truncada`, `usuario`. |
 | `unit` | Unit of the times in this row: `s`, `min`, `h` or `day`. Empty means `run.baseTimeUnit`, the unit the panel shows. |
 | `value` … `p` | One column per distribution parameter: `value`, `min`, `mode`, `max`, `mean`, `sd`, `shape`, `scale`, `k`, `alpha`, `beta`, `n`, `p`. Fill in the ones of the chosen distribution and leave the rest empty. `value`, `min`, `mode`, `max`, `mean` and `sd` are times in `unit`. |
@@ -82,9 +82,17 @@ One row per task, timer, end event and outgoing flow of a gateway.
 | `calendar` | Calendar key; it must exist in the scenario or in the `Calendars` sheet. |
 | `probability` | For a flow that leaves a gateway: between 0 and 1, or a percentage. |
 | `selection` | `and` or `or`, when the task uses several pools. |
+| `loopCount` | For a task with a loop marker: how many times it runs, whole number ≥ 1 (`loop.count`). |
+| `loopProbability` | For a task with a loop marker: the probability of another iteration after each one, between 0 and 1 or a percentage (`loop.probability`). Fill in `loopCount` or `loopProbability`, not both: either one replaces the task's whole `loop`. |
+| `instances` | For a multi-instance task: how many instances run per case, a number ≥ 0 (a constant `instances`). An `instances` that is another distribution is left empty in the template and is edited in the panel. |
+| `errorProbability` | For an error boundary event: the share of its activity's completions that leave through it, between 0 and 1 or a percentage. |
 
 A distribution always needs its type: parameters without `distribution` are an error, and so is a
 parameter the distribution does not have.
+
+`loopCount`, `loopProbability` and `instances` only apply to a task with the matching marker in the
+diagram, and `errorProbability` only to an error boundary event ([SCENARIO_FORMAT.md](SCENARIO_FORMAT.md)
+§ 2.5): on any other element the import reports the error and Apply stays disabled.
 
 ### Arrivals
 

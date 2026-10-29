@@ -218,6 +218,15 @@ export function buildReplay(
     frontierCache.set(id, found);
     return found;
   };
+  /** The first outgoing flow of every error boundary, by host (ADR-033 § 5). */
+  const errorExits = new Map<string, string[]>();
+  for (const node of Object.values(ir.nodes)) {
+    if (node.type !== 'errorBoundary' || node.attachedTo === undefined) continue;
+    // Hand-built IRs (tests, older callers) may omit `outgoing`, as `outputs` already allows.
+    const flow = node.outgoing?.[0];
+    if (flow === undefined) continue;
+    errorExits.set(node.attachedTo, [...(errorExits.get(node.attachedTo) ?? []), flow]);
+  }
   const reachable = (from: string, to: string): boolean => outputs(from)
     .some((flow) => frontier(ir.flows[flow]?.to ?? '').has(to));
 
@@ -235,14 +244,21 @@ export function buildReplay(
       enabledAt.set(activity.enabledAt, group);
     }
     type Source = { id: string; at: number; crossing: boolean };
-    const sources: Source[] = list.filter((a) => a.completed)
+    // ADR-033 R-LOOP-2/3: an iteration of a looping task that hands over to the next one at its
+    // end is not a token leaving; the token leaves once, after the last iteration.
+    const nextIteration = (a: Occurrence): boolean => ir.nodes[a.elementId]?.loop !== undefined
+      && list.some((b) => b !== a && b.elementId === a.elementId && b.enabledAt === a.endAt);
+    const sources: Source[] = list.filter((a) => a.completed && !nextIteration(a))
       .map((a) => ({ id: a.elementId, at: a.endAt, crossing: false }));
     const firstAt = Math.min(...list.map((a) => a.enabledAt));
     const starts = Object.keys(ir.nodes).filter((id) => ir.nodes[id]?.type === 'start'
       && enabledAt.get(firstAt)!.some((a) => reachable(id, a.elementId)));
     if (starts.length === 1) sources.push({ id: starts[0]!, at: firstAt, crossing: true });
 
-    const boundaries = Object.entries(ir.nodes).filter(([, node]) => node.attachedTo !== undefined);
+    // Error boundaries (ADR-033 § 5) are not deadlines: a completed host may leave through them,
+    // which `follow` decides from evidence like a branch.
+    const boundaries = Object.entries(ir.nodes)
+      .filter(([, node]) => node.attachedTo !== undefined && node.type !== 'errorBoundary');
     const candidates: { host: Occurrence; id: string; at: number; evidence: Occurrence[] }[] = [];
     for (const host of list) {
       const attached = boundaries.filter(([, node]) => node.attachedTo === host.elementId);
@@ -313,7 +329,9 @@ export function buildReplay(
       };
       const follow = (id: string, flows: readonly string[], seen: ReadonlySet<string>): void => {
         const node = ir.nodes[id]!;
-        let selected = outputs(id);
+        // ADR-033 § 5: a completed host with error boundaries continues either along its own flow
+        // or through one of them; only downstream evidence tells which.
+        let selected = [...outputs(id), ...(errorExits.get(id) ?? [])];
         if (selected.length > 1 && node.type !== 'and') {
           const evidenced = selected.filter((flow) => {
             const targets = frontier(ir.flows[flow]?.to ?? '');
@@ -329,6 +347,9 @@ export function buildReplay(
         if (selected.length !== 1) hop(flows, source.at);
         for (const flow of selected) {
           const target = ir.flows[flow]?.to;
+          const from = ir.flows[flow]?.from;
+          // The error boundary itself is a passage on the way out of its host.
+          if (from !== undefined && from !== id) cross(from, source.at);
           if (target !== undefined) walk(target, [...(selected.length === 1 ? flows : []), flow], seen);
         }
       };

@@ -11,7 +11,7 @@
 import { BpmnModdle, type ModdleElement, type ModdleWarning } from 'bpmn-moddle';
 import lila from './lila.moddle.json' with { type: 'json' };
 import { newId, sanitizeXmlIds } from './ids.js';
-import type { Flow, Node, NodeType, ProcessIR, SourceWarning } from '../core/ir.js';
+import type { Flow, MultiInstance, Node, NodeType, ProcessIR, SourceWarning, SubprocessIR } from '../core/ir.js';
 import type { ConstructionId } from '../messages/constructions.js';
 
 /** Toda variante de tarea se aplana a `task` (R-PERF-1); la call activity también (R-PLAN-4). */
@@ -128,6 +128,8 @@ interface ProfileContext {
   rawInstantiate: ReadonlyMap<string, string>;
   /** R-EVG-1: the supported event-based gateways and the branch catch events they arm. */
   inProfile: ReadonlySet<ModdleElement>;
+  /** ADR-033 § 4: `activity id -> raw isSequential literal` of its multi-instance marker. */
+  rawSequential: ReadonlyMap<string, string>;
 }
 
 const NO_CONTEXT: ProfileContext = {
@@ -136,6 +138,7 @@ const NO_CONTEXT: ProfileContext = {
   rawCancel: NO_RAW_LITERALS,
   rawInstantiate: NO_RAW_LITERALS,
   inProfile: new Set(),
+  rawSequential: NO_RAW_LITERALS,
 };
 
 /**
@@ -152,37 +155,49 @@ function interruptingOf(
 }
 
 /**
- * Tarea a la que está adjunto un boundary event **dentro del perfil** (R-BND-1, R-BND-10), o
- * `undefined` si el boundary se queda fuera: no es de tiempo, trae más de un disparador, cuelga
- * de algo que no es una tarea soportada (un subproceso se aplana, así que no vale) o no tiene ni
- * un flujo de salida por el que continuar el token.
+ * Host of a boundary event **in the profile** (R-BND-1, R-BND-10) and whether it is a timer or an
+ * error boundary, or `undefined` if the boundary stays out: it is neither a timer nor an error
+ * event, it has more than one trigger, it hangs from something other than a supported task or an
+ * embedded sub-process in the profile, it has an incoming flow, or it has no outgoing flow to
+ * continue the token through.
  *
  * Interrumpir o no da igual aquí: las dos formas entran al perfil y se distinguen con
  * `node.interrupting`. El `"false"` (o `"0"`) explícito es el borde no interruptor y su ausencia
  * —como `"true"` o `"1"`— el interruptor; lo que sí deja al borde fuera es un `cancelActivity`
  * con cualquier otro literal (R-BND-10).
+ *
+ * ADR-033 § 5 and § 6: the host may also be an embedded sub-process in the profile, and an
+ * interrupting boundary with one `errorEventDefinition` enters too (`errorRef` is not read). A
+ * non-interrupting error boundary stays out. Whether a sub-process host has the entry and exit
+ * flows it needs is only known after flattening (`subprocessPassages`).
  */
-function boundaryTimerHost(
+function boundaryHost(
   el: ModdleElement,
   ctx: ProfileContext = NO_CONTEXT,
-): ModdleElement | undefined {
+): { host: ModdleElement; kind: 'timer' | 'error' } | undefined {
   const definitions = eventDefinitionsOf(el);
   const host = el.attachedToRef;
+  const definition = definitions[0]?.$type;
+  const kind =
+    definition === 'bpmn:TimerEventDefinition' ? 'timer' : definition === 'bpmn:ErrorEventDefinition' ? 'error' : undefined;
+  const interrupting = interruptingOf(el, ctx.rawCancel);
   if (
     el.parallelMultiple === true ||
     definitions.length !== 1 ||
-    definitions[0]?.$type !== 'bpmn:TimerEventDefinition' ||
+    kind === undefined ||
     host === undefined ||
-    !TASK_TYPES.has(host.$type) ||
-    unsupportedConstruction(host) !== undefined ||
+    !(TASK_TYPES.has(host.$type) || host.$type === 'bpmn:SubProcess') ||
+    unsupportedConstruction(host, ctx) !== undefined ||
     !ctx.hasOutgoing.has(el) ||
     // R-BND-1/R-BND-10: only the host may activate a boundary, never an incoming flow.
     (ctx.inDegree.get(el) ?? 0) !== 0 ||
-    interruptingOf(el, ctx.rawCancel) === undefined
+    interrupting === undefined ||
+    // ADR-033 § 5: only an interrupting error boundary is in the profile.
+    (kind === 'error' && !interrupting)
   ) {
     return undefined;
   }
-  return host;
+  return { host, kind };
 }
 
 /**
@@ -261,15 +276,23 @@ function unsupportedConstruction(
   // profile, so neither the `eventBasedGateway` row nor the `messageEvent` one applies to them.
   if (ctx.inProfile.has(el)) return undefined;
   if (el.$type === 'bpmn:BoundaryEvent') {
-    return boundaryTimerHost(el, ctx) === undefined ? 'boundaryEvent' : undefined;
+    return boundaryHost(el, ctx) === undefined ? 'boundaryEvent' : undefined;
   }
-  if (el.$type === 'bpmn:IntermediateThrowEvent') return 'intermediateThrowEvent';
+  if (el.$type === 'bpmn:IntermediateThrowEvent') {
+    return isThrowInProfile(el) ? undefined : 'intermediateThrowEvent';
+  }
 
   const definitions = eventDefinitionsOf(el);
   if (el.parallelMultiple === true || definitions.length > 1) {
     return 'multipleTriggerEvent';
   }
+  // R-MSG-1/R-MSG-2: a message start is a case generator like a none start and a message end
+  // consumes the token like a none end; the message itself is not simulated.
+  const messageStartOrEnd =
+    (el.$type === 'bpmn:StartEvent' || el.$type === 'bpmn:EndEvent') &&
+    definitions[0]?.$type === 'bpmn:MessageEventDefinition';
   for (const definition of definitions) {
+    if (messageStartOrEnd) break;
     const construction = EVENT_DEFINITION_CONSTRUCTIONS[definition.$type];
     if (construction !== undefined) return construction;
   }
@@ -277,10 +300,17 @@ function unsupportedConstruction(
   const byType = TYPE_CONSTRUCTIONS[el.$type];
   if (byType !== undefined) return byType;
 
-  if (el.loopCharacteristics?.$type === 'bpmn:MultiInstanceLoopCharacteristics') {
+  // ADR-033 § 4: a task or call activity simulates its multi-instance marker (R-MI-1…6); on a
+  // sub-process, or with an `isSequential` outside `xsd:boolean`, it stays out of the profile.
+  if (
+    el.loopCharacteristics?.$type === 'bpmn:MultiInstanceLoopCharacteristics' &&
+    multiInstanceOf(el, ctx.rawSequential) === undefined
+  ) {
     return 'multiInstanceMarker';
   }
-  if (el.loopCharacteristics?.$type === 'bpmn:StandardLoopCharacteristics') {
+  // ADR-033 § 3: a task or call activity simulates its standard loop marker (R-LOOP-1); on an
+  // embedded sub-process the marker stays out of the profile.
+  if (el.loopCharacteristics?.$type === 'bpmn:StandardLoopCharacteristics' && !TASK_TYPES.has(el.$type)) {
     return 'loopMarker';
   }
   if (el.$type === 'bpmn:SubProcess' && el.triggeredByEvent === true) {
@@ -295,6 +325,7 @@ function unsupportedConstruction(
   if (
     el.$type === 'bpmn:EndEvent' &&
     definitions.length > 0 &&
+    !messageStartOrEnd &&
     !hasEventDefinition(el, 'bpmn:TerminateEventDefinition')
   ) {
     return 'endEventTrigger';
@@ -302,11 +333,51 @@ function unsupportedConstruction(
   if (
     el.$type === 'bpmn:StartEvent' &&
     definitions.length > 0 &&
+    !messageStartOrEnd &&
     !hasEventDefinition(el, 'bpmn:TimerEventDefinition')
   ) {
     return 'startEventTrigger';
   }
   return undefined;
+}
+
+/**
+ * R-THR-1: an intermediate throw event enters the profile with no trigger (none) or with exactly
+ * one message trigger. Any other trigger (signal, escalation, link, compensation…), or several of
+ * them, keeps it out with construction `intermediateThrowEvent` (§3).
+ */
+function isThrowInProfile(el: ModdleElement): boolean {
+  const definitions = eventDefinitionsOf(el);
+  return (
+    definitions.length === 0 ||
+    (definitions.length === 1 && definitions[0]!.$type === 'bpmn:MessageEventDefinition')
+  );
+}
+
+/**
+ * ADR-033 § 4: the multi-instance marker of a task or call activity, or `undefined` when the
+ * element has none or the marker keeps it out of the profile: on any other element (a sub-process
+ * stays `E-NOSOP` `multiInstanceMarker`), or with an `isSequential` literal outside `xsd:boolean`.
+ * `isSequential` is read from the raw XML literal like `cancelActivity` (see `XSD_BOOLEAN`), since
+ * moddle collapses `"1"` into `false`. `cardinality` is the `loopCardinality` body only when,
+ * trimmed, it is a decimal integer literal (`0` included); a sign, an expression or an empty
+ * body leaves it absent. `completionCondition`, data inputs and outputs and `behavior` are ignored.
+ */
+function multiInstanceOf(
+  el: ModdleElement,
+  rawSequential: ReadonlyMap<string, string>,
+): MultiInstance | undefined {
+  const marker = el.loopCharacteristics;
+  if (marker?.$type !== 'bpmn:MultiInstanceLoopCharacteristics' || !TASK_TYPES.has(el.$type)) {
+    return undefined;
+  }
+  const raw = rawSequential.get(el.id);
+  const sequential = raw === undefined ? marker.isSequential === true : XSD_BOOLEAN.get(raw);
+  if (sequential === undefined) return undefined;
+  const body = marker.loopCardinality?.body?.trim();
+  return body !== undefined && /^\d+$/.test(body)
+    ? { sequential, cardinality: Number(body) }
+    : { sequential };
 }
 
 /** Tipo del IR para un elemento moddle, o `undefined` si está fuera del perfil soportado. */
@@ -321,6 +392,9 @@ function nodeTypeOf(el: ModdleElement): NodeType | undefined {
       return 'start';
     case 'bpmn:EndEvent':
       return hasEventDefinition(el, 'bpmn:TerminateEventDefinition') ? 'terminate' : 'end';
+    // R-THR-1: only a none or message throw gets here (`isThrowInProfile`); a no-op milestone.
+    case 'bpmn:IntermediateThrowEvent':
+      return 'throw';
     // R-EVG-2: a branch event of an event-based gateway is a delay too, message or timer alike;
     // only the branch of a supported gateway gets here with a message trigger (R-EVG-1).
     case 'bpmn:IntermediateCatchEvent':
@@ -329,10 +403,11 @@ function nodeTypeOf(el: ModdleElement): NodeType | undefined {
       )
         ? 'timer'
         : undefined;
-    // Solo llega aquí el boundary que ya pasó por `boundaryTimerHost` (R-BND-1): es un retardo
+    // Solo llega aquí el boundary que ya pasó por `boundaryHost` (R-BND-1): es un retardo
     // más, con la diferencia de que su token lo arma el host en vez de un flujo entrante.
+    // ADR-033 § 5: the error boundary that passed it is its own node type.
     case 'bpmn:BoundaryEvent':
-      return 'timer';
+      return hasEventDefinition(el, 'bpmn:ErrorEventDefinition') ? 'errorBoundary' : 'timer';
     default:
       return undefined;
   }
@@ -402,12 +477,19 @@ interface Collector {
   order: Map<ModdleElement, number>;
   /** Elementos fuera del perfil soportado, ya descartados del IR. */
   unsupportedEls: Set<ModdleElement>;
-  /** `id del boundary -> host moddle y si interrumpe`, para resolver `attachedTo` tras el recorrido. */
-  boundaryHosts: Map<string, { host: ModdleElement; interrupting: boolean }>;
+  /**
+   * `id del boundary -> host moddle y si interrumpe`, para resolver `attachedTo` tras el recorrido;
+   * `el` is the boundary itself, which `subprocessPassages` may still send to `unsupported`.
+   */
+  boundaryHosts: Map<string, { el: ModdleElement; host: ModdleElement; interrupting: boolean }>;
   /** `id del boundary -> literal en bruto de `cancelActivity``, leído del texto del XML. */
   rawCancel: ReadonlyMap<string, string>;
   /** `id del event gateway -> literal en bruto de `instantiate``, leído del texto del XML. */
   rawInstantiate: ReadonlyMap<string, string>;
+  /** ADR-033 § 3: `host activity id -> raw `loopMaximum` literal` (`rawLoopMaximum`). */
+  rawLoopMaximum: ReadonlyMap<string, string>;
+  /** ADR-033 § 4: `activity id -> raw isSequential literal` (`rawMultiInstanceSequential`). */
+  rawSequential: ReadonlyMap<string, string>;
   unsupported: { at: number; element: UnsupportedElement }[];
 }
 
@@ -505,6 +587,7 @@ function walk(container: ModdleElement, subprocessId: string | undefined, c: Col
     rawCancel: c.rawCancel,
     rawInstantiate: c.rawInstantiate,
     inProfile: eventGatewayProfile(container, targets, inDegree, outDegree, c.rawInstantiate),
+    rawSequential: c.rawSequential,
   };
 
   for (const el of container.flowElements ?? []) {
@@ -564,8 +647,19 @@ function walk(container: ModdleElement, subprocessId: string | undefined, c: Col
       incoming: [],
       outgoing: [],
     };
+    // ADR-033 § 3: the loop marker reaches the IR only on a task; `testBefore` and
+    // `loopCondition` are ignored, the scenario's `loop` decides (R-LOOP-2).
+    if (type === 'task' && el.loopCharacteristics?.$type === 'bpmn:StandardLoopCharacteristics') {
+      const maximum = loopMaximumOf(c.rawLoopMaximum.get(el.id));
+      c.nodes[id]!.loop = maximum === undefined ? {} : { maximum };
+    }
+    // ADR-033 § 4: only a task with the marker carries `multiInstance`; every other node keeps
+    // its exact shape.
+    const multiInstance = type === 'task' ? multiInstanceOf(el, c.rawSequential) : undefined;
+    if (multiInstance !== undefined) c.nodes[id]!.multiInstance = multiInstance;
     if (el.$type === 'bpmn:BoundaryEvent' && el.attachedToRef !== undefined) {
       c.boundaryHosts.set(id, {
+        el,
         host: el.attachedToRef,
         interrupting: interruptingOf(el, c.rawCancel) !== false,
       });
@@ -617,6 +711,68 @@ function flattenBox(box: SubprocessBox, c: Collector): void {
   for (const [id, flow] of Object.entries(c.flows)) {
     if (flow.from === box.id || flow.to === box.id) delete c.flows[id];
   }
+}
+
+/**
+ * ADR-033 § 6: the entry and exit flows of every embedded sub-process, once flattening is done,
+ * or `undefined` when no boundary event is attached to a sub-process (the IR then stays as it
+ * was). A flow enters a sub-process when its target is inside it and its source is not, and
+ * leaves it the other way round; "inside" follows `parent` (R-BND-15). Read from the flattened
+ * flows rather than from the redirections themselves because flattening a nested sub-process
+ * first rewires a flow that the outer flattening later deletes.
+ *
+ * A boundary whose sub-process has no entry or no exit flow leaves the profile here, as
+ * `E-NOSOP` `boundaryEvent`, with its outgoing flows (§ 3), exactly as if `boundaryHost` had
+ * refused it.
+ */
+function subprocessPassages(c: Collector): Record<string, SubprocessIR> | undefined {
+  const onSubprocess = [...c.boundaryHosts.keys()].filter((id) => {
+    const host = c.nodes[id]?.attachedTo;
+    return host !== undefined && c.boxIds.has(host);
+  });
+  if (onSubprocess.length === 0) return undefined;
+
+  const chainOf = (nodeId: string): Set<string> => {
+    const chain = new Set<string>();
+    for (let s = c.nodes[nodeId]?.subprocessId; s !== undefined && !chain.has(s); s = c.subprocesses[s]?.parent) chain.add(s);
+    return chain;
+  };
+  const passages = (): Record<string, SubprocessIR> => {
+    const out: Record<string, SubprocessIR> = {};
+    for (const [id, info] of Object.entries(c.subprocesses)) {
+      out[id] = { ...(info.parent === undefined ? {} : { parent: info.parent }), entryFlows: [], exitFlows: [] };
+    }
+    for (const [flowId, flow] of Object.entries(c.flows)) {
+      const from = chainOf(flow.from);
+      const to = chainOf(flow.to);
+      for (const s of to) if (!from.has(s)) out[s]?.entryFlows.push(flowId);
+      for (const s of from) if (!to.has(s)) out[s]?.exitFlows.push(flowId);
+    }
+    return out;
+  };
+
+  const before = passages();
+  let dropped = false;
+  for (const id of onSubprocess) {
+    const passage = before[c.nodes[id]!.attachedTo!];
+    if (passage !== undefined && passage.entryFlows.length > 0 && passage.exitFlows.length > 0) continue;
+    const { el } = c.boundaryHosts.get(id)!;
+    delete c.nodes[id];
+    addUnsupported(el, 'boundaryEvent', c);
+    for (const flow of c.sequenceFlows) {
+      if (flow.sourceRef !== el) continue;
+      const flowId = c.idOf.get(flow);
+      if (flowId !== undefined) delete c.flows[flowId];
+      c.unsupported.push({
+        at: c.order.get(flow) ?? c.order.size,
+        element: { id: flow.id, qname: flow.$type, name: flow.name ?? '' },
+      });
+    }
+    dropped = true;
+  }
+  if (!dropped) return before;
+  const remaining = onSubprocess.some((id) => c.nodes[id] !== undefined);
+  return remaining ? passages() : undefined;
 }
 
 /** A scenario as far as choosing the process goes: only its `elements` keys count. */
@@ -852,6 +1008,68 @@ export function rawAttributeLiterals(xml: string, localName: string, attribute: 
   return literals;
 }
 
+/** Any opening or closing tag, with its prefix, local name and attributes (quote-aware). */
+const ANY_TAG = /<(\/?)(?:[\w.-]+:)?([\w.-]+)((?:[^>"']|"[^"]*"|'[^']*')*)>/g;
+
+/**
+ * ADR-033 § 3: `id of the enclosing activity -> raw `loopMaximum` literal` of every
+ * `<…standardLoopCharacteristics …>` in the **sanitized** XML. moddle reads `loopMaximum` (an
+ * `xsd:integer`) with `parseInt`, so `"3.5"`, `"+3"` and `"3abc"` arrive as `3`; the cap is read
+ * raw, as `cancelActivity` is (R-BND-10). The marker usually has no id of its own (bpmn-js writes
+ * none), so it is keyed by its parent element, found with a stack of the open tags.
+ */
+export function rawLoopMaximum(xml: string): Map<string, string> {
+  return rawMarkerLiterals(xml, 'standardLoopCharacteristics', 'loopMaximum');
+}
+
+/**
+ * ADR-033 § 4: `id of the enclosing activity -> raw `isSequential` literal` of every
+ * `<…multiInstanceLoopCharacteristics …>`, for the same reasons: moddle collapses the
+ * `xsd:boolean` (`"1"` arrives as `false`) and the marker rarely has an id of its own.
+ */
+export function rawMultiInstanceSequential(xml: string): Map<string, string> {
+  return rawMarkerLiterals(xml, 'multiInstanceLoopCharacteristics', 'isSequential');
+}
+
+/**
+ * `id of the parent element -> raw literal of `attribute`` on every `<…localName …>` of the
+ * sanitized XML, keyed by the element that encloses it, found with a stack of the open tags.
+ * Markers that do not declare the attribute are not in the map ("absent").
+ */
+function rawMarkerLiterals(xml: string, localName: string, attribute: string): Map<string, string> {
+  const literals = new Map<string, string>();
+  const open: (string | undefined)[] = [];
+  for (const [, closing, name, attrs = ''] of xml.replace(NO_ES_MARKUP, ' ').matchAll(ANY_TAG)) {
+    if (closing === '/') {
+      open.pop();
+      continue;
+    }
+    let id: string | undefined;
+    let raw: string | undefined;
+    for (const [, key, dq, sq] of attrs.matchAll(ATTR)) {
+      if (key === 'id') id ??= dq ?? sq;
+      else if (key === attribute) raw ??= dq ?? sq;
+    }
+    const host = open[open.length - 1];
+    if (name === localName && host !== undefined && raw !== undefined) literals.set(host, raw);
+    if (!attrs.trimEnd().endsWith('/')) open.push(id);
+  }
+  return literals;
+}
+
+/**
+ * ADR-033 § 3: the loop cap from the raw `loopMaximum` literal. Only a trimmed decimal integer
+ * literal (`/^\d+$/`) of at least 1 caps the loop; absent, `0`, a sign, a fraction or any other
+ * text means no cap. So does a literal beyond `Number.MAX_SAFE_INTEGER`: no run reaches it, and
+ * reading it as no cap makes `probability: 1` an `E-BUCLE-SIN-SALIDA` instead of an endless run.
+ */
+function loopMaximumOf(raw: string | undefined): number | undefined {
+  const trimmed = raw?.trim();
+  if (trimmed === undefined || !/^\d+$/.test(trimmed)) return undefined;
+  const maximum = Number(trimmed);
+  return Number.isSafeInteger(maximum) && maximum >= 1 ? maximum : undefined;
+}
+
 /**
  * Apertura (con sus atributos capturados) o cierre de un `<…:process …>` **de BPMN**, con el
  * prefijo (o la ausencia de prefijo) que declare este archivo: un `<x:process>` de una extensión
@@ -1012,6 +1230,8 @@ export async function parseBpmn(xmlIn: string, options: ParseBpmnOptions = {}): 
     boundaryHosts: new Map(),
     rawCancel: rawAttributeLiterals(xml, 'boundaryEvent', 'cancelActivity'),
     rawInstantiate: rawAttributeLiterals(xml, 'eventBasedGateway', 'instantiate'),
+    rawLoopMaximum: rawLoopMaximum(xml),
+    rawSequential: rawMultiInstanceSequential(xml),
     unsupported: [],
   };
 
@@ -1056,11 +1276,13 @@ export async function parseBpmn(xmlIn: string, options: ParseBpmnOptions = {}): 
   // `validate` lo marca inalcanzable, que es exactamente el diagnóstico que toca.
   for (const [id, { host, interrupting }] of c.boundaryHosts) {
     const hostId = c.idOf.get(host);
-    if (hostId === undefined || c.nodes[hostId] === undefined) continue;
+    // ADR-033 § 6: a flattened sub-process is no node, but it is still a host.
+    if (hostId === undefined || (c.nodes[hostId] === undefined && !c.boxIds.has(hostId))) continue;
     c.nodes[id]!.attachedTo = hostId;
     // R-BND-10: solo el borde no interruptor lo lleva; ausente es interruptor, como en BPMN.
     if (!interrupting) c.nodes[id]!.interrupting = false;
   }
+  const subprocesses = subprocessPassages(c);
 
   // `incoming`/`outgoing` se derivan al final, con los flujos ya recableados, en orden de
   // aparición en el documento.
@@ -1080,6 +1302,7 @@ export async function parseBpmn(xmlIn: string, options: ParseBpmnOptions = {}): 
       name: main.name ?? '',
       nodes: c.nodes,
       flows: c.flows,
+      ...(subprocesses === undefined ? {} : { subprocesses }),
       source: {
         exporter: definitions.exporter ?? '',
         exporterVersion: definitions.exporterVersion ?? '',

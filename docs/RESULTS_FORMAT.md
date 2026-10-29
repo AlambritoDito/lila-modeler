@@ -87,9 +87,10 @@ Operative definitions (all computed over the element's instances that **complete
 replication. That 0 is the numeric identity of the empty set, not an observed duration: `total = 0`
 is a true statement (nothing was processed), but `min`, `max` and `mean` describe no instance. In
 the same way, `sd` over a single instance is 0 because there is no spread to measure. With several
-replications neither enters the aggregate (section 8). Gateways, start, end and terminate events and
-boundary timers count `started`/`completed` but never produce durations: their zeros are exact and
-always enter.
+replications neither enters the aggregate (section 8). Gateways, start, end and terminate events,
+intermediate throw events (`SEMANTICS.md` R-THR-1), boundary timers and error boundary events
+(R-ERR-5) count `started`/`completed` but never produce durations: their zeros are exact and always
+enter.
 
 Bizagi Modeler does not distinguish `resourceWait` from `offHoursWait` (see section 3: "Off-hours wait kept separate from resource wait — Bizagi Modeler ✗ / Lila ✓"); it is an extra Lila metric.
 
@@ -269,7 +270,7 @@ size; the other two bound it by the peak of **one** replication.
 | `resourceId` | string \| null | — | `id` of the pool actually assigned; `null` in the sentinel of an activity with no resource, or one that was still waiting. |
 | `allocationIndex` | integer \| null | — | Position of the assignment in the element's `resources` array; `null` for the sentinel. |
 | `resourceQuantity` | integer \| null | units | Quantity occupied of the pool; `null` for the sentinel. |
-| `status` | `"completed"` \| `"terminated"` \| `"interrupted"` \| `"inFlight"` | — | Observable closing reason: normal end, BPMN `terminate`, an interrupting boundary timer (`SEMANTICS.md` R-BND-5), or stop/cancellation. `startedAt = null` distinguishes an unassigned wait. |
+| `status` | `"completed"` \| `"terminated"` \| `"interrupted"` \| `"inFlight"` | — | Observable closing reason: normal end, BPMN `terminate`, an interrupting boundary timer (`SEMANTICS.md` R-BND-5) or a sub-process cancelled by its deadline or by an error (R-BND-17, R-ERR-4), or stop/cancellation. `startedAt = null` distinguishes an unassigned wait. |
 | `enabledAt` | number | seconds since `run.start` | Instant the token reached the element and became enabled to start. |
 | `startedAt` | number \| null | seconds since `run.start` | Instant processing began; `null` if the activity was closed out while still queued. Never later than `observedUntil`: a grant that falls in closed time points to the next opening, and if that opening lies beyond the run's cutoff, the row reports the cutoff, not a future instant. |
 | `endedAt` | number \| null | seconds since `run.start` | Instant it ended normally; only exists with `status = "completed"`. |

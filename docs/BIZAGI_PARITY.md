@@ -64,10 +64,16 @@ cite it; it does not imply a public promise that Lila matches Bizagi Modeler.
 | Interrupting boundary timer on a task | ✓ | ✓ | — | Implemented (#81, first slice: `SEMANTICS.md` R-BND-1…9) |
 | Non-interrupting boundary timer on a task | ✓ | ✓ | — | Implemented (#81, second slice: `SEMANTICS.md` R-BND-10…14) |
 | Event-based gateway (timer and message branches) | ✓ | ✓ | — | Implemented (#81, third slice: `SEMANTICS.md` R-EVG-1…7) |
-| Standalone message/signal/link events, non-timer boundary events, boundary events on a sub-process, parallel or instantiating event-based gateway | partial | explicit validation error until a user asks for it | — | Not planned (v1) |
+| Message start and end events; intermediate throw events (none and message) | not checked against a published run | ✓ a message start is a none start (arrivals), a message end a none end, and a throw event a milestone that only counts; the message itself is not simulated | 1.0 | Implemented (#698: `SEMANTICS.md` R-MSG-1…2, R-THR-1…3; ADR-033) |
+| Standard loop marker on a task or call activity | not checked against a published run | ✓ a count or a probability of repeating per entry, capped by `loopMaximum`; each iteration is an instance ("Instances started/completed" count iterations) | 1.0 | Implemented (#700: `SEMANTICS.md` R-LOOP-1…6; ADR-033 § 3) |
+| Multi-instance task (parallel or sequential) | not checked against a published run (multi-instance: see the last row) | ✓ `N` instances per entry, all at once (competing for resources) or one after another, from `loopCardinality` or the scenario's `instances` distribution; each instance is an instance ("Instances started/completed" count instances) | 1.0 | Implemented (#701: `SEMANTICS.md` R-MI-1…6; ADR-033) |
+| Error boundary event on a task or a sub-process | not checked against a published run | ✓ an interrupting error boundary takes a share `errorProbability` of the host's completions (of a sub-process's exits); an error on a sub-process cancels what is still inside; thrown errors and error codes are not simulated | 1.0 | Implemented (#702: `SEMANTICS.md` R-ERR-1…5; ADR-033) |
+| Boundary timer (interrupting or not) on an embedded sub-process | not checked against a published run | ✓ a deadline over the flattened sub-process from the moment a case enters it; interrupting, it cancels the work inside, releasing its resources, with nothing counted twice | 1.0 | Implemented (#702: `SEMANTICS.md` R-BND-15…19; ADR-033) |
+| Signal and escalation events, standalone message catch and link events, boundary events other than a timer or an interrupting error, loop and multi-instance markers on a sub-process, parallel or instantiating event-based gateway | partial | explicit validation error until a user asks for it | — | Not planned (1.0: signal and escalation stay out, #639) |
 | Parameters from event logs (Bizagi 4.0 process mining) | ✓ | mining phase (separate Python process) | — | Not planned (v1) |
 | **No** (Bizagi does not simulate these either) | | | | |
-| Multi-instance, complex gateway, choreography/conversation, transactional, ad-hoc; reading the proprietary `.bpm` | ✗ | ✗ | — | Out of scope |
+| Complex gateway, choreography/conversation, transactional, ad-hoc; reading the proprietary `.bpm` | ✗ | ✗ | — | Out of scope |
+| Multi-instance | ✗ | ✓ although Bizagi does not simulate it (owner's decision, ADR-033) | 1.0 | Implemented (#701) |
 
 ---
 

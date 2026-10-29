@@ -10,7 +10,7 @@
  * run, the scenario revisions, the model — survived the round trip through the file, not through
  * `localStorage`.
  *
- *   npm run build:pages && node tools/e2e-lila.mjs
+ *   npm run build:pages -- --stable-tag HEAD && node tools/e2e-lila.mjs
  *
  * `LILA_E2E_PORT` (static server) and `LILA_E2E_CDP_PORT` (Chrome's debugging port) move the two
  * ports when one of them is already taken.
@@ -116,7 +116,7 @@ function connect(ws) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
-  if (!existsSync(SITE)) throw new Error('_site is missing: run `npm run build:pages` first.');
+  if (!existsSync(SITE)) throw new Error('_site is missing: run `npm run build:pages -- --stable-tag HEAD` first.');
   const work = mkdtempSync(join(tmpdir(), 'lila-e2e-'));
   const downloads = join(work, 'downloads');
   mkdirSync(downloads);

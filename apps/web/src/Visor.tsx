@@ -27,6 +27,7 @@ import { datosVistaRapida } from './vistaRapida';
 import { EJEMPLOS, proyectoDeEjemplo, type EjemploId } from './ejemplos';
 import { readLila, readProject } from './project';
 import { finishStartup } from './startup';
+import { storageKey } from './channel';
 import { urlReporteActual } from './reportarProblema';
 import { PREFERENCIAS, setLocale, useStrings, type Preferencia } from './i18n';
 import type { ProjectDocument } from './store/ProjectStore';
@@ -97,7 +98,7 @@ function engancharGestos(contenedor: HTMLElement, canvas: Canvas): () => void {
 }
 
 /** Set once the mobile notice was closed (button or Esc): it only shows on the first visit. */
-export const AVISO_VISTO = 'lila.avisoMovil';
+export const AVISO_VISTO = storageKey('avisoMovil');
 
 interface Elegido { id: string; nombre: string; tipo: string; documentacion: string }
 
@@ -126,7 +127,7 @@ export function Visor({ inicial }: { inicial: ProjectDocument | null }): React.J
 
   useEffect(() => {
     try {
-      const guardado = localStorage.getItem('lila.idioma');
+      const guardado = localStorage.getItem(storageKey('idioma'));
       if (PREFERENCIAS.includes(guardado as Preferencia)) setLocale(guardado as Preferencia);
     } catch { /* Browser storage can be disabled. */ }
     const contenedor = caja.current!;

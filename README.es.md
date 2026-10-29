@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://alambritodito.github.io/lila-modeler/app/"><img src="https://img.shields.io/badge/Pru%C3%A9bala-app_web-6f42c1" alt="Pruébala"></a>
-  <a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16"><img src="https://img.shields.io/badge/Descargar-Beta_16_(macOS_%C2%B7_Windows_sin_probar)-0969da" alt="Descargar Beta 16 (macOS; Windows sin probar)"></a>
+  <a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-rc.1"><img src="https://img.shields.io/badge/Descargar-1.0.0--rc.1_(macOS_%C2%B7_Windows_sin_probar)-0969da" alt="Descargar 1.0.0-rc.1 (macOS; Windows sin probar)"></a>
   <a href="docs/"><img src="https://img.shields.io/badge/Docs-docs%2F-6e7781" alt="Docs"></a>
   <a href="docs/es/COMING-FROM-BIZAGI.md"><img src="https://img.shields.io/badge/Vienes_de-Bizagi_Modeler-bf8700" alt="Vienes de Bizagi"></a>
   <a href="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml"><img src="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -75,18 +75,18 @@ Compartir es pasar un archivo `.lila` portable, no edición simultánea — no h
 sincronización en tiempo real. Usa **Archivo ▸ Guardar** (web, tooltip: Guardar proyecto) o
 **Guardar como…** (escritorio) para obtener un `.lila`, envíalo como enviarías cualquier archivo,
 y tu colega lo abre con **Archivo ▸ Abrir** (tooltip: Abrir proyecto) en la app web, **Archivo ▸ Abrir proyecto…** en la app de
-escritorio, o con doble clic en el Finder (ver la guía de la beta: la ruta open-file se verificó en la Beta 1; el doble clic físico en Finder no).
+escritorio, o con doble clic en el Finder (ver la guía de macOS: la ruta open-file se verificó con `open -a`; el doble clic físico en Finder no).
 ¿Encontraste un problema reproducible en el camino?
 [Abre un issue](https://github.com/AlambritoDito/lila-modeler/issues/new/choose)
 — la plantilla de bug pide un archivo `.bpmn` mínimo o un escenario que lo muestre.
 
-### Beta de escritorio
+### App de escritorio
 
-Cada beta es un prerelease de GitHub. La [Beta 16](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16)
-(no `/releases/latest`: GitHub excluye los prereleases de ese enlace) adjunta dos instaladores y un
+La versión actual es la [1.0.0-rc.1](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-rc.1), un prerelease de GitHub
+(no `/releases/latest`: GitHub excluye los prereleases de ese enlace). Adjunta dos instaladores y un
 archivo `SHA256SUMS` para verificarlos. Cómo está cada plataforma:
 
-- **macOS (Apple Silicon)** — `Lila-Modeler-1.0.0-beta.16-mac-arm64.dmg`. La plataforma en la que se
+- **macOS (Apple Silicon)** — `Lila-Modeler-1.0.0-rc.1-mac-arm64.dmg`. La plataforma en la que se
   desarrolla y se prueba el proyecto. La app lleva un sello ad hoc pero **no está notarizada**, así
   que el primer arranque se bloquea: tras el primer intento bloqueado (doble clic en la app), ve a
   **Ajustes del Sistema ▸ Privacidad y seguridad** y pulsa **Abrir de todos modos** junto al mensaje
@@ -103,7 +103,7 @@ archivo `SHA256SUMS` para verificarlos. Cómo está cada plataforma:
   SmartScreen. Todavía no se ha probado en una máquina Windows real:
   [`docs/es/GUIA-PROBADOR-WINDOWS-PWA.md`](docs/es/GUIA-PROBADOR-WINDOWS-PWA.md) guía paso a paso a
   quien no es desarrollador y termina con una plantilla de reporte.
-- **Instalador de Windows (x64, secundario)** — `Lila-Modeler-1.0.0-beta.16-win-x64.exe`, el instalador NSIS construido por CI.
+- **Instalador de Windows (x64, secundario)** — `Lila-Modeler-1.0.0-rc.1-win-x64.exe`, el instalador NSIS construido por CI.
   **No está firmado** y **todavía no se ha probado en una máquina Windows real**: nadie lo ha
   ejecutado en una instalación limpia, así que espera asperezas. SmartScreen de Windows mostrará
   «Windows protegió su PC»; **Más información ▸ Ejecutar de todas formas** permite continuar.
@@ -117,8 +117,17 @@ archivo `SHA256SUMS` para verificarlos. Cómo está cada plataforma:
   en macOS y Linux); en otros navegadores Abrir usa el selector de archivos y Guardar descarga el
   `.lila`.
 
-La app de escritorio se registra como editor de archivos `.bpmn` y `.lila` y, desde la beta.10, te
+La app de escritorio se registra como editor de archivos `.bpmn` y `.lila` y te
 avisa cuando hay una versión nueva (no se actualiza sola).
+
+### Para quienes prueban el RC
+
+La 1.0.0-rc.1 es la candidata a la 1.0.0: hasta la versión final solo recibe arreglos de errores.
+Si algo falla o se lee mal, usa **Informar de un problema…** (escritorio: **Ayuda ▸ Informar de un
+problema…**; web: el menú de la app, o ⌘K / Ctrl+K y escribe «informar»). Abre el formulario de bug
+de GitHub con la versión y tu plataforma ya rellenadas; no se envía nada hasta que pulses
+**Submit**. Adjunta el `.lila` o `.bpmn` más pequeño que muestre el problema y di qué esperabas que
+pasara.
 
 ### CLI
 
@@ -223,13 +232,14 @@ usuarios, en [`docs/es/COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md).
 | Publicación de documentos (Word/PDF/web) | ✓ | ✓ documento del proceso en Word (.docx) o en un HTML imprimible de una página; sin plantillas ni repositorio compartido |
 | Compuerta basada en eventos (ramas de tiempo y de mensaje) | ✓ | ✓ gana la primera rama que vence |
 | Eventos de mensaje/señal/enlace sueltos | parcial | ✗ error de validación explícito |
-| Multi-instancia, compuerta compleja, coreografía | ✗ | ✗ fuera de alcance |
+| Tarea multi-instancia (paralela o secuencial) | ✗ | ✓ `N` instancias por entrada, desde `loopCardinality` o una distribución |
+| Compuerta compleja, coreografía | ✗ | ✗ fuera de alcance |
 
 ### Límites conocidos
 
 - **Perfil BPMN soportado**: start/end (none y terminate), timer intermedio, timer de borde
   (interruptor o no), compuerta basada en eventos con ramas de tiempo o de mensaje, tareas (todas
-  las variantes), call activity, subproceso embebido, compuertas XOR/OR/AND, lanes y pools. Lo demás es un error de validación explícito, nunca un fallo silencioso
+  las variantes), call activity, tarea o call activity multi-instancia, subproceso embebido, compuertas XOR/OR/AND, lanes y pools. Lo demás es un error de validación explícito, nunca un fallo silencioso
   ([`docs/es/SEMANTICS.md`](docs/es/SEMANTICS.md) §§ 2–3).
 - **Los calendarios conservan el offset UTC de `run.start`**: hay recurrencia semanal, mensual y
   anual y festivos, pero no zona horaria por calendario ni horario de verano (`timezone` es un
@@ -275,7 +285,7 @@ El inglés es el idioma base; las versiones en español viven en `docs/es/`.
   diferencias documentadas.
 - [`COMING-FROM-BIZAGI.md`](docs/es/COMING-FROM-BIZAGI.md) — guía pantalla por pantalla para
   usuarios de Bizagi.
-- [`GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md) — la beta de escritorio.
+- [`GUIA-BETA-MAC.md`](docs/es/GUIA-BETA-MAC.md) — instalar la app de escritorio sin firma en macOS.
 - [`GUIA-PROBADOR-WINDOWS-PWA.md`](docs/es/GUIA-PROBADOR-WINDOWS-PWA.md) — instalar la app web en Windows desde Chrome o Edge, abrir y guardar archivos `.lila`, y reportar qué pasa.
 - [`GUIA-PROBADOR-WINDOWS.md`](docs/es/GUIA-PROBADOR-WINDOWS.md) — probar el instalador de Windows, sin firmar y sin probar, y reportar qué pasa.
 - [`EXAMPLES_POLICY.md`](docs/es/EXAMPLES_POLICY.md), [`ORACLES.md`](docs/es/ORACLES.md),

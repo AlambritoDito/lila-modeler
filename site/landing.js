@@ -3,19 +3,41 @@
  * `Landing.dc.html`: the live replay in the hero, the replication histogram, the KPI bars, the
  * typing terminal, the screenshot switcher, the mobile menu and the English/Spanish toggle.
  * The page reads fine without it. Colours come from the CSS tokens (Lila Light / Lila Dark).
+ * It also reads `versions.json` (#704, written by `tools/build-pages.mjs`) to show the stable
+ * Release and the beta's commit next to their buttons; without it the links keep pointing at
+ * the Releases page.
  */
 (() => {
   const $ = (s) => document.querySelector(s);
   const LANG_KEY = 'lila-landing-lang';
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  // #704: the stable Release (badge, button, downloads) and the beta's short SHA. First, so an
+  // error in the animations below cannot keep the versions from showing.
+  const RELEASES = 'https://github.com/AlambritoDito/lila-modeler/releases';
+  function applyVersions(v) {
+    const stable = v?.stable, beta = v?.beta;
+    if (typeof stable?.tag === 'string' && typeof stable.version === 'string') {
+      const page = `${RELEASES}/tag/${encodeURIComponent(stable.tag)}`;
+      $('#badge-stable').href = page;
+      $('#badge-version').textContent = `v${stable.version}`;
+      $('#ver-stable').textContent = `v${stable.version}`;
+      $('#dl-mac').href = typeof stable.downloads?.dmg === 'string' ? stable.downloads.dmg : page;
+      $('#dl-win').href = typeof stable.downloads?.exe === 'string' ? stable.downloads.exe : page;
+    }
+    if (typeof beta?.sha === 'string') $('#ver-beta').textContent = beta.sha.slice(0, 7);
+  }
+  fetch('versions.json', { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).then(applyVersions, () => {});
+
+
   // Spanish strings; the English ones are the page's own markup, captured at load.
   const ES = {
     nav1: 'Capacidades', nav2: 'Cómo corre', nav3: 'Comparar', nav4: 'Inicio rápido', nav5: 'Pantallas',
-    badge: 'Beta de escritorio: macOS · Windows (sin probar) · Novedades →',
+    badge: 'Estable 1.0: web · macOS · Windows (sin probar) · Novedades →',
     h1: 'Mira tu proceso <span class="hl">correr</span> antes de que corra.',
     lede: 'Simulador de eventos discretos para BPMN, de código abierto. Dibuja el proceso, define tiempos, recursos y calendarios, y reproduce cada caso sobre el diagrama — con <strong>comparaciones AS-IS vs TO-BE al 95% de confianza</strong>. Sin cuenta, sin servidor.',
-    ctaDemo: 'Abrir la app', ctaQuick: 'Inicio rápido', ctaBizagi: '¿Vienes de Bizagi?',
+    ctaDemo: 'Abrir la app estable', ctaBeta: 'Beta: lo que viene', ctaQuick: 'Inicio rápido', ctaBizagi: '¿Vienes de Bizagi?',
+    ctaNote: 'La app estable es la versión 1.0. La beta se construye con lo último del código y adelanta lo que viene después, empezando por el repositorio de la organización; sus proyectos se guardan aparte de los de la estable.',
     tagPlatforms: 'Navegador · Escritorio · CLI · MCP', tagSeeded: 'Con semilla y reproducible',
     live: 'Reproducción en vivo', hudClock: 'Reloj', hudDone: 'Completados', hudCycle: 'Ciclo prom.', speed: 'Velocidad',
     lgToken: 'Token de caso', lgWait: 'Esperando un recurso', lgBusy: 'Recurso ocupado', lgCount: 'completados / iniciados', swipe: 'desliza el diagrama',
@@ -32,7 +54,7 @@
     k1: 'Tiempo de ciclo', k2: 'Cola en Tomar pedido', k3: 'Uso de cajeros', k4: 'Costo por caso',
     illus: 'Cifras ilustrativas · corre lila compare sobre examples/pedido para las reales.',
     qsH: 'Tres comandos hasta un benchmark.', qsP: 'Clona, npm ci &amp;&amp; npm run build, y luego valida, corre y compara el ejemplo del restaurante. O dale el mismo motor a un agente por MCP.',
-    qsWeb: 'Úsala en tu navegador, sin instalar nada', qsMac: 'Descarga la beta para macOS (Apple Silicon, sin notarizar)', qsWin: 'Descarga el instalador de Windows (x64: sin firmar y sin probar todavía en un PC real; SmartScreen mostrará un aviso)', qsDocs: 'Lee la documentación',
+    qsWeb: 'Úsala en tu navegador, sin instalar nada', qsMac: 'Descarga para macOS (Apple Silicon, sin notarizar)', qsWin: 'Descarga el instalador de Windows (x64: sin firmar y sin probar todavía en un PC real; SmartScreen mostrará un aviso)', qsDocs: 'Lee la documentación',
     scH: 'Modela. Simula. Reproduce. Decide.',
     s1: 'Modelar', s2: 'Simular', s3: 'Animar', s4: 'Resultados', s5: 'Comparar',
     faqH: 'Preguntas, resueltas.',
@@ -40,8 +62,8 @@
     q2: '¿Dónde vive mi trabajo?', a2: 'En el almacenamiento local del navegador mientras trabajas — eso no es un respaldo. Archivo ▸ Guardar descarga el proyecto completo como un archivo .lila portable.',
     q3: '¿Necesito Bizagi?', a3: 'No. Lila sigue el mismo flujo de cuatro niveles y el formato de tablas para que los usuarios de Bizagi se sientan en casa, pero es totalmente independiente.',
     q4: '¿Pueden dos personas editar el mismo proyecto?', a4: 'No a la vez. Compartir es pasar un archivo .lila; no hay backend ni sincronización en tiempo real.',
-    q5: '¿Qué plataformas soporta?', a5: 'Cualquier navegador de escritorio moderno para la app web (Chrome es el que se ha probado; Safari está pendiente). La beta de escritorio es para macOS en Apple Silicon — sin notarizar, así que el primer arranque necesita «Abrir de todos modos»; ve la <a href="docs/es/GUIA-BETA-MAC.html">guía de la beta</a>, y no desactives Gatekeeper — y para Windows x64, cuyo instalador está sin firmar y todavía no se ha probado en un PC Windows real: SmartScreen mostrará un aviso, y la <a href="docs/es/GUIA-PROBADOR-WINDOWS.html">guía para probar en Windows</a> explica cómo probarlo y reportar. El AppImage de Linux lo construye CI, pero está sin probar y no se adjunta al release.',
-    ftLicense: 'Software libre bajo Apache-2.0. © Perfer Process.', ftRes: 'Recursos', ftDocs: 'Documentación', ftSem: 'Semántica del motor', ftMcp: 'Servidor MCP', ftBeta: 'Guía de la beta de escritorio', ftWin: 'Guía para probar en Windows', ftProj: 'Proyecto',
+    q5: '¿Qué plataformas soporta?', a5: 'Cualquier navegador de escritorio moderno para la app web (Chrome es el que se ha probado; Safari está pendiente). La app de escritorio es para macOS en Apple Silicon — sin notarizar, así que el primer arranque necesita «Abrir de todos modos»; ve la <a href="docs/es/GUIA-BETA-MAC.html">guía de instalación en macOS</a>, y no desactives Gatekeeper — y para Windows x64, cuyo instalador está sin firmar y todavía no se ha probado en un PC Windows real: SmartScreen mostrará un aviso, y la <a href="docs/es/GUIA-PROBADOR-WINDOWS.html">guía para probar en Windows</a> explica cómo probarlo y reportar. El AppImage de Linux lo construye CI, pero está sin probar y no se adjunta al release.',
+    ftLicense: 'Software libre bajo Apache-2.0. © Perfer Process.', ftRes: 'Recursos', ftDocs: 'Documentación', ftSem: 'Semántica del motor', ftMcp: 'Servidor MCP', ftBeta: 'Guía de instalación en macOS', ftWin: 'Guía para probar en Windows', ftProj: 'Proyecto',
     ftTm: 'Bizagi y Bizagi Modeler son marcas de Bizagi. Lila Modeler es independiente y no está afiliado ni respaldado por Bizagi. El editor usa bpmn-js (MIT), cuya licencia mantiene visible la marca “Powered by bpmn.io” en el lienzo.',
   };
   const SHOTS = {

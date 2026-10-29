@@ -1,6 +1,7 @@
 /** Tiny pre-React startup controller. The HTML overlay survives the React root mounting. */
 import { startupEn } from './strings.en';
 import { startupEs } from './strings.es';
+import { storageKey } from './channel';
 const copy = { en: startupEn, es: startupEs };
 let timer: ReturnType<typeof setTimeout> | undefined;
 let finished = false;
@@ -49,7 +50,7 @@ export function startStartup(): void {
   failed = false;
   let preferred = navigator.language;
   try {
-    const saved = localStorage.getItem('lila.idioma');
+    const saved = localStorage.getItem(storageKey('idioma'));
     if (saved === 'en' || saved === 'es') preferred = saved;
   } catch { /* Browser storage can be disabled. */ }
   setStartupLocale(preferred);

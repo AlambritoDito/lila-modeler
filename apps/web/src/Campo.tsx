@@ -6,6 +6,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 
+import { CampoBucle, esBucle, formaBucle } from './CampoBucle.js';
 import { CampoCapacidadRecurso, esCapacidadRecurso } from './CampoCapacidadRecurso.js';
 import { CampoFestivos, CampoIntervalos, esFestivosCalendario, esIntervalosCalendario } from './CamposCalendario.js';
 import {
@@ -369,6 +370,9 @@ export function Propiedades({
             ((siDefinido == null || siDefinido.includes(clave)) &&
               leer(ctx.resuelto, [...ruta, clave]) !== undefined),
         )
+        // A reserved `conditions` that is not written draws nothing (`CampoReservado`), so its
+        // help would stand alone: on an error boundary in Routes (#703), say.
+        .filter(([clave]) => !(esCondicionesReservadas([...ruta, clave], ctx) && estadoReservado(ctx, [...ruta, clave]) === 'ausente'))
         .map(([clave, sub]) => (
           // One box per field and its help, so the wide panel (design 2a) can lay them out in a grid.
           <div key={clave} className="propiedad">
@@ -391,7 +395,8 @@ export function Propiedades({
 /**
  * La ayuda de un campo. Va por clave, salvo dentro de una entrada de `conditions`, donde
  * `probability` significa otra cosa que la del flujo (ADR-028) y se busca antes como
- * `conditions.<clave>`.
+ * `conditions.<clave>`. The same holds inside a `loop` drawn as a generic fieldset (ADR-033 § 3),
+ * looked up first as `loop.<clave>`.
  */
 function ayudaDe(
   S: ReturnType<typeof useStrings>,
@@ -400,6 +405,10 @@ function ayudaDe(
 ): string | undefined {
   if (ruta.at(-2) === 'conditions') {
     const propia = S.escenario.ayudas[`conditions.${clave}`];
+    if (propia !== undefined) return propia;
+  }
+  if (ruta.at(-1) === 'loop') {
+    const propia = S.escenario.ayudas[`loop.${clave}`];
     if (propia !== undefined) return propia;
   }
   return S.escenario.ayudas[clave];
@@ -614,6 +623,12 @@ export function Campo({
   // calendarios ya declarados, no como el formulario genérico de un `{calendar, capacity}` suelto.
   if (esCapacidadRecurso(ruta, esquema)) {
     return <CampoCapacidadRecurso esquema={esquema} ruta={ruta} ctx={ctx} />;
+  }
+
+  // ADR-033 § 3 (#703): `loop` is exactly one of `count` and `probability`, which the schema the
+  // form reads cannot say; a `loop` of another shape falls through to the generic fieldset.
+  if (esBucle(ruta) && formaBucle(valor) !== null) {
+    return <CampoBucle ruta={ruta} etiqueta={etiqueta} ctx={ctx} />;
   }
 
   // ADR-028: `conditions` solo se edita donde el motor la acepta; en el resto de elementos es un

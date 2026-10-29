@@ -32,6 +32,8 @@ const TIPOS_NODO: Record<string, string> = {
   or: 'gateway OR',
   and: 'gateway AND',
   timer: 'temporizador',
+  throw: 'evento intermedio de lanzamiento',
+  errorBoundary: 'evento de error adjunto',
   eventGateway: 'gateway basado en eventos',
 };
 
@@ -268,6 +270,9 @@ export const es: Catalog = {
       `la selección de recursos solo tiene sentido junto con los recursos de la tarea (${path}).`,
     'E-CAMPO-NO-APLICA/solo-flujo-xor': (path) =>
       `solo se admite en un flujo de secuencia que sale de una compuerta exclusiva divergente (${path}).`,
+    'E-CAMPO-NO-APLICA/solo-bucle': (path) =>
+      `solo se admite en una tarea con marcador de bucle (${path}).`,
+    'E-CAMPO-NO-APLICA/solo-multi': (path) => `solo se admite en una tarea multi-instancia (${path}).`,
     'E-TIMER-RECURSO': (path) => `un temporizador es un retardo y no consume recursos (${path}).`,
     'E-REC-DESCONOCIDO/recurso': (path, ref) =>
       `el recurso ${ref} no existe en la lista de recursos (${path}).`,
@@ -277,6 +282,8 @@ export const es: Catalog = {
       `la cantidad ${quantity} excede la capacidad ${capacity} de ${ref} (${path}).`,
     'E-XOR-SUMA-CERO': (path) =>
       `las probabilidades del XOR suman 0; no hay ruta posible (${path}).`,
+    'E-BUCLE-SIN-SALIDA': (path) =>
+      `un bucle con probabilidad 1 y sin loopMaximum nunca termina (${path}).`,
     'E-SIN-PARADA': (path) =>
       `falta una condición de parada; declara la duración de la corrida o las llegadas máximas (${path}).`,
     'W-SIN-SEED': (path) =>
@@ -287,6 +294,10 @@ export const es: Catalog = {
       `${flowId} no se alcanza antes de ${gatewayId} por ningún camino secuencial; la condición solo aplica si una rama paralela lo recorre (${path}).`,
     'W-OR-PROB-PARCIAL': (path, flowId, gatewayId) =>
       `${flowId} no declara probabilidad, pero ${gatewayId} tiene otras salidas que sí; el flujo sin declarar siempre se toma, porque la probabilidad ausente vale 1 (${path}).`,
+
+    'E-PROB-ERROR-SUMA/lint': (path, hostId, sum) =>
+      `las probabilidades de error de los eventos adjuntos a ${hostId} suman ${sum}, más de 1 (${path}).`,
+    'E-CAMPO-NO-APLICA/solo-error': (path) => `solo se admite en un evento de error adjunto (${path}).`,
 
     'E-CLAVE-DESCONOCIDA': (keys) => `clave no reconocida por el esquema: ${keys}.`,
   },
@@ -347,6 +358,8 @@ export const es: Catalog = {
     startInvalidOffset: (start, offset) =>
       `la fecha de inicio ${start} no tiene un desfase horario válido; ${offset} no es un desplazamiento horario.`,
     currencyIso: () => 'la moneda debe ser un código ISO 4217',
+    // The field names go in backticks: a bare English identifier in a Spanish text fails #519.
+    loopExactlyOne: () => 'declara exactamente uno de `count` o `probability`',
     intervalFrom: () => 'la hora de inicio del intervalo debe ser "HH:MM"',
     intervalTo: () => 'la hora de fin del intervalo debe ser "HH:MM" (se admite "24:00")',
     intervalOrder: () =>

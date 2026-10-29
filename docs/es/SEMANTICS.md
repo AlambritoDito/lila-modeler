@@ -63,15 +63,22 @@ definida; todo lo demás cae en la sección 3 de este documento.
 |---|---|---|
 | `bpmn:startEvent` sin disparador (*none*) | `start` | generador de casos (sección 10) |
 | `bpmn:startEvent` con `timerEventDefinition` | `start` | generador de casos, idéntico al *none* |
+| `bpmn:startEvent` con un único `messageEventDefinition` | `start` | generador de casos, idéntico al *none* (§9.2, R-MSG-1) |
 | `bpmn:endEvent` sin disparador (*none*) | `end` | consume el token (§9) |
+| `bpmn:endEvent` con un único `messageEventDefinition` | `end` | consume el token, idéntico al *none* (§9.2, R-MSG-2) |
+| `bpmn:intermediateThrowEvent` sin disparador (*none*) o con un único `messageEventDefinition` | `throw` | hito: cuenta el paso, no consume tiempo (§9.2, R-THR-1) |
 | `bpmn:endEvent` con `terminateEventDefinition` | `terminate` | mata todos los tokens del caso (§9) |
 | `bpmn:intermediateCatchEvent` con `timerEventDefinition` | `timer` | retardo sin recurso (§9) |
 | `bpmn:boundaryEvent` interruptor, con un único `timerEventDefinition`, adjunto a una tarea y con flujo de salida | `timer` con `attachedTo` | plazo que corta la tarea (§9) |
 | `bpmn:boundaryEvent` no interruptor (`cancelActivity="false"` o `"0"`), con un único `timerEventDefinition`, adjunto a una tarea y con flujo de salida | `timer` con `attachedTo` e `interrupting: false` | plazo que crea un token en paralelo y deja la tarea corriendo (§9) |
+| El mismo `bpmn:boundaryEvent` de tiempo, interruptor o no, adjunto a un subproceso embebido con al menos un flujo de entrada y uno de salida | `timer` con `attachedTo` = el subproceso | plazo sobre el subproceso; si interrumpe, cancela el trabajo de dentro (§9, R-BND-15…19) |
+| `bpmn:boundaryEvent` interruptor, con un único `errorEventDefinition`, adjunto a una tarea o a un subproceso embebido con flujo de entrada y de salida, y con flujo de salida | `errorBoundary` con `attachedTo` | una fracción de las terminaciones del host sale por él (§9.3, R-ERR-1…5) |
 | `bpmn:eventBasedGateway` exclusivo y que no instancia, con cada flujo de salida hacia un evento de rama | `eventGateway` | corre sus ramas; el primer retardo que vence se lleva el token (§9.1) |
 | `bpmn:intermediateCatchEvent` con `timerEventDefinition` o `messageEventDefinition`, como rama de ese gateway | `timer` | espera con el tiempo propio de la rama, sin recurso (§9.1) |
 | `bpmn:task` y todas sus variantes (`userTask`, `serviceTask`, `sendTask`, `receiveTask`, `manualTask`, `scriptTask`, `businessRuleTask`) | `task` | trabajo con duración y recursos (§11) |
 | `bpmn:callActivity` | `task` | tarea con tiempo global (§4) |
+| `bpmn:task` (cualquier variante) o `bpmn:callActivity` con `standardLoopCharacteristics` | `task` con `loop` | se repite según el `loop` del escenario (§4.1, R-LOOP-1) |
+| `multiInstanceLoopCharacteristics` en una tarea o call activity, con `isSequential` ausente, `"false"`, `"0"`, `"true"` o `"1"` | `task` con `multiInstance` | `N` instancias por entrada, todas a la vez o una tras otra (§4.2, R-MI-1…6) |
 | `bpmn:subProcess` embebido (`triggeredByEvent="false"`, sin marcadores) | — | aplanado (§4) |
 | `bpmn:exclusiveGateway` | `xor` | divergente: §6; convergente: mezcla pass-through |
 | `bpmn:inclusiveGateway` | `or` | §7 |
@@ -138,8 +145,8 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
 
 | Construcción detectada | `id` | `{construction}` (`en`) | `{construcción}` (`es`) |
 |---|---|---|---|
-| `bpmn:boundaryEvent` que no sea un temporizador con una salida adjunto a una tarea, interrumpa o no: de mensaje/error/señal/…, sobre un subproceso o sin flujo de salida | `boundaryEvent` | `event attached to an activity (boundary event)` | `evento adjunto a actividad (boundary event)` |
-| `messageEventDefinition` en cualquier evento que no sea un evento de rama de un event-based gateway soportado (§9.1) | `messageEvent` | `message event` | `evento de mensaje` |
+| `bpmn:boundaryEvent` que no sea un temporizador (interrumpa o no) ni un evento de error interruptor adjunto a una tarea o a un subproceso embebido con flujo de salida: de mensaje/señal/…, de error no interruptor, sobre un subproceso sin flujo de entrada o sin flujo de salida, o sin flujo de salida | `boundaryEvent` | `event attached to an activity (boundary event)` | `evento adjunto a actividad (boundary event)` |
+| `messageEventDefinition` en un evento intermedio de captura que no sea un evento de rama de un event-based gateway soportado (§9.1); con ese único disparador, un evento de inicio, de fin o intermedio de lanzamiento está en el perfil (§9.2) | `messageEvent` | `message event` | `evento de mensaje` |
 | `signalEventDefinition` | `signalEvent` | `signal event` | `evento de señal` |
 | `linkEventDefinition` | `linkEvent` | `link event` | `evento de enlace` |
 | `errorEventDefinition` | `errorEvent` | `error event` | `evento de error` |
@@ -148,11 +155,11 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
 | `conditionalEventDefinition` | `conditionalEvent` | `conditional event` | `evento condicional` |
 | `cancelEventDefinition` | `cancelEvent` | `cancel event` | `evento de cancelación` |
 | `multipleEventDefinition` / `parallelMultipleEventDefinition` | `multipleTriggerEvent` | `event with multiple triggers` | `evento con disparadores múltiples` |
-| `bpmn:intermediateThrowEvent` (sin disparador o con cualquiera) | `intermediateThrowEvent` | `intermediate throw event` | `evento intermedio de lanzamiento` |
+| `bpmn:intermediateThrowEvent` con un disparador que no sea *none* ni un único mensaje (señal, escalamiento, enlace, compensación…), o con varios | `intermediateThrowEvent` | `intermediate throw event` | `evento intermedio de lanzamiento` |
 | `bpmn:eventBasedGateway` que no sea exclusivo, sin instanciar y con cada flujo de salida hacia un evento de rama de tiempo o de mensaje: `instantiate="true"`, `eventGatewayType="Parallel"`, cualquier otro elemento de rama, o sin flujo de salida | `eventBasedGateway` | `event-based gateway` | `gateway basado en eventos` |
 | `bpmn:complexGateway` | `complexGateway` | `complex gateway` | `gateway complejo` |
-| `multiInstanceLoopCharacteristics` | `multiInstanceMarker` | `multi-instance marker` | `marcador de multi-instancia` |
-| `standardLoopCharacteristics` | `loopMarker` | `loop marker on the activity` | `marcador de bucle en la actividad` |
+| `multiInstanceLoopCharacteristics` en un subproceso, o con un literal de `isSequential` distinto de `true`, `1`, `false` o `0` (en una tarea o call activity está en el perfil, §4.2) | `multiInstanceMarker` | `multi-instance marker` | `marcador de multi-instancia` |
+| `standardLoopCharacteristics` en un subproceso embebido (en una tarea o call activity está en el perfil, §4.1) | `loopMarker` | `loop marker on the activity` | `marcador de bucle en la actividad` |
 | `bpmn:transaction` | `transactionSubProcess` | `transaction subprocess` | `subproceso transaccional` |
 | `bpmn:adHocSubProcess` | `adHocSubProcess` | `ad-hoc subprocess` | `subproceso ad-hoc` |
 | `bpmn:subProcess` con `triggeredByEvent="true"` | `eventSubProcess` | `event subprocess` | `subproceso de eventos` |
@@ -160,8 +167,8 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
 | `bpmn:conversation`, `bpmn:callConversation`, `bpmn:subConversation` | `conversationDiagram` | `conversation diagram` | `diagrama de conversación` |
 | `startQuantity` distinto de 1 | `startQuantity` | `startQuantity attribute other than 1` | ``atributo `startQuantity` distinto de 1`` |
 | `completionQuantity` distinto de 1 | `completionQuantity` | `completionQuantity attribute other than 1` | ``atributo `completionQuantity` distinto de 1`` |
-| `bpmn:endEvent` con un disparador que no sea *none* ni `terminate` | `endEventTrigger` | `end event with that trigger` | `evento de fin con ese disparador` |
-| `bpmn:startEvent` con un disparador que no sea *none* ni `timer` | `startEventTrigger` | `start event with that trigger` | `evento de inicio con ese disparador` |
+| `bpmn:endEvent` con un disparador que no sea *none*, mensaje ni `terminate` | `endEventTrigger` | `end event with that trigger` | `evento de fin con ese disparador` |
+| `bpmn:startEvent` con un disparador que no sea *none*, mensaje ni `timer` | `startEventTrigger` | `start event with that trigger` | `evento de inicio con ese disparador` |
 
   El detalle que distingue cada fila del catálogo se conserva desde el parser; los fixtures que
   verifican el texto exacto de las 24 filas son parte de LILA-163. La fila 25 del catálogo,
@@ -299,7 +306,9 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
   (`ProcessIR.nodes[x].subprocessId`). **Límite conocido**: ese campo guarda solo el subproceso
   *inmediato*, así que con subprocesos anidados el lint reconoce el más interno; declarar
   parámetros en uno exterior sale hoy como `E-ELEMENTO-DESCONOCIDO`. Cerrarlo pide llevar la
-  cadena completa al IR (`bpmn/parse.ts`), que es otro ticket.
+  cadena completa al IR (`bpmn/parse.ts`), que es otro ticket. Cuando hay un evento adjunto a un
+  subproceso, el IR ya lleva todos los subprocesos (`subprocesses`, §9 antes de R-BND-15), y
+  entonces también se reconocen los exteriores.
   *(prueba: LILA-019, LILA-198)*
 - **R-PLAN-4 — Call activity = tarea con tiempo global.** Un `bpmn:callActivity` se traduce a
   `task` y **no** se expande el proceso llamado, aunque esté en el archivo. Su duración es su
@@ -308,6 +317,122 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
 - **R-PLAN-5 — El aplanado no cambia los números.** Un proceso con subproceso embebido y el mismo
   proceso aplanado a mano producen el mismo `RunResult` salvo los ids de los nodos internos.
   *(prueba: LILA-019)*
+
+### 4.1 Marcador de bucle estándar (ADR-033)
+
+Un `bpmn:task` (cualquier variante) o `bpmn:callActivity` con `standardLoopCharacteristics` se
+repite como dice el `elements[<tarea>].loop` del escenario: exactamente `count` iteraciones, u otra
+iteración con `probability` tras cada una (`SCENARIO_FORMAT.md` § 2.5). Su nodo del IR lleva
+`loop: { maximum? }`: `maximum` es el `loopMaximum` leído del literal en bruto del XML (como
+`cancelActivity`, R-BND-10) cuando, sin espacios, es un literal entero decimal ≥ 1; ausente, `0`,
+un signo, una fracción o cualquier otro texto significa sin tope (también un literal mayor que `Number.MAX_SAFE_INTEGER`, al que ninguna corrida llega: con `probability: 1` es `E-BUCLE-SIN-SALIDA` en vez de una corrida sin fin). `testBefore` y `loopCondition` se
+leen y se ignoran, así que la primera iteración siempre corre: decide el escenario, como las
+probabilidades sustituyen a `conditionExpression` (R-PERF-4). En un subproceso embebido el marcador
+sigue siendo `E-NOSOP` con la construcción `loopMarker` (§3).
+
+- **R-LOOP-1 — Cada iteración es una instancia de actividad.** La iteración 1 se habilita cuando
+  llega el token. Cada iteración tiene su propio `activityInstanceId`, su propia solicitud de
+  recurso encolada en orden FIFO por su propia habilitación (R-REC-3), su propia muestra de
+  `processingTime` del stream de la tarea, su calendario (R-CAL-4/5) y su `fixedCost` al
+  completarse. Las unidades se liberan al final de cada iteración, así que otro token puede
+  tomarlas antes de la siguiente (no hay retención). *(prueba: #700)*
+- **R-LOOP-2 — La decisión.** Al completarse la iteración `k`: si `k` es igual a `count` o a
+  `maximum`, el token sale; si no, con `probability`, se sortea un uniforme `u` del stream derivado
+  `<taskId>#loop` (ADR-033 § 1.3: un stream propio, sembrado como los de R-DET-2) y la siguiente iteración se habilita en el mismo instante si
+  `u < p`. `count` nunca sortea, y no se sortea cuando un tope ya decide. La siguiente iteración
+  se habilita con un evento nuevo del heap empujado en ese instante, así que `(t, seq)` (R-TOK-3)
+  la ordena como a cualquier otra habilitación; no es una entrada nueva: no cuenta ningún flujo
+  ni se vuelve a armar ningún evento de borde (R-LOOP-5). Con un evento de error adjunto a la
+  tarea (#702), el error se decide primero: si dispara, el bucle termina y no se sortea `#loop`.
+  `probability: 1` sin `maximum` es `E-BUCLE-SIN-SALIDA`, en el lint y en `core/` antes del primer
+  evento. *(prueba: #700)*
+- **R-LOOP-3 — Un token, un paso por los flujos.** El caso conserva un solo token en la tarea
+  durante todo el bucle; sale por el primer flujo de salida tras la última iteración, así que los
+  flujos de entrada y de salida cuentan una vez por entrada. *(prueba: #700)*
+- **R-LOOP-4 — Resultados.** `elements[tarea].started`/`completed` cuentan iteraciones (las
+  "Instances started/completed" de Bizagi); `processing`, `resourceWait`, `offHoursWait` y
+  `queueLength` son por iteración; `fixedCostTotal = fixedCost × iteraciones completadas`. El event
+  log tiene un grupo de filas por iteración. No se añade ningún campo de resultados ni se renombra
+  ninguna columna. *(prueba: #700)*
+- **R-LOOP-5 — Los eventos de borde cubren todo el bucle.** El bucle está abierto desde la
+  habilitación de la iteración 1 hasta que sale el token, y eso es lo que comprueba R-BND-4. Un
+  temporizador de borde se arma una vez por entrada, desde el `enabledAt` de la iteración 1
+  (R-BND-2), antes que el `done` de la iteración, así que un empate interrumpe (R-BND-7).
+  Interruptor, cierra la iteración en curso como `interrupted` (R-BND-5) y no corre ninguna
+  iteración más; no interruptor, dispara a lo sumo una vez por entrada. Un evento de error adjunto
+  (#702) sortea por iteración completada y, si hay error, no corre ninguna iteración más.
+  *(prueba: #700)*
+- **R-LOOP-6 — Terminate y parada.** La iteración abierta se trata como dicen R-EVT-6 y R-ARR-5; no
+  corre ninguna iteración más. Las iteraciones de tiempo cero cuentan igual para el presupuesto de
+  R-TOK-7. *(prueba: #700)*
+
+Degradación: una tarea con el marcador y sin `loop` en el escenario corre exactamente una iteración,
+como si no tuviera el marcador (mismos bytes), más el aviso `W-BUCLE-SIN-PARAMETROS` que nombra la
+tarea cada vez que le llega un token (§17). Un escenario que no declara ningún `loop` no sortea
+nada de `#loop`, así que conserva sus resultados bit a bit (R-DET-3).
+
+### 4.2 Tarea multi-instancia (ADR-033)
+
+Una tarea o call activity con `multiInstanceLoopCharacteristics` ejecuta `N` **instancias** por
+cada entrada de un token: todas a la vez (paralela) o una tras otra (secuencial), y el token sale
+cuando terminan todas. Bizagi no simula este marcador; Lila sí desde 1.0 por decisión del dueño
+(ADR-033, `BIZAGI_PARITY.md`).
+
+El nodo del IR es una `task` con `multiInstance: { sequential, cardinality? }`. `isSequential` se
+lee del literal en bruto del XML, como `cancelActivity` (R-BND-10): ausente, `"false"` o `"0"` es
+paralela, `"true"` o `"1"` secuencial, y cualquier otro literal es `E-NOSOP`
+`multiInstanceMarker`. `cardinality` es el cuerpo de `loopCardinality` cuando, recortado, es un
+literal entero decimal (`/^\d+$/`, `0` incluido); un signo (`"+3"`, `"-2"`), una expresión o un
+cuerpo vacío lo dejan ausente. `completionCondition`, las entradas y salidas de datos y `behavior`
+se ignoran. En un subproceso el marcador sigue siendo `E-NOSOP` (§3).
+
+- **R-MI-1 — Sorteo de N.** `N` sale de `elements[<tarea>].instances`, una distribución
+  (`SCENARIO_FORMAT.md` § 2.5), si el escenario la declara; si no, de `cardinality`; si no,
+  `N = 1` (degradación, abajo). Con `instances` se toma una muestra `x` por entrada del flujo
+  derivado `<taskId>#instances` (sembrado como en R-DET-2 con esa clave, ADR-033 § 1.3), antes
+  de la duración de cualquier instancia, y `N = floor(max(0, x) + 0.5)` (redondeo hacia arriba en el medio). Con
+  `cardinality` o el valor por omisión no se sortea nada. `N` no tiene tope: como `triggerCount`,
+  un valor enorme cuesta lo que dice. R-TOK-7 sigue contando eventos, así que una entrada paralela
+  cuyas instancias terminan todas en el mismo instante aborta con `E-LIMITE-SIN-AVANCE` cuando
+  superan el presupuesto por caso. `instances` en cualquier
+  elemento sin el marcador es `E-CAMPO-NO-APLICA`. *(prueba: #701)*
+- **R-MI-2 — Paralela.** Las `N` instancias se habilitan en el instante de llegada en orden
+  `1…N`. Cada una es una instancia de actividad con su propio `activityInstanceId` y su propia
+  muestra de `processingTime` del flujo de la tarea, sorteadas en ese orden. Cada habilitación
+  toma su propio lugar en la cola de recursos, en orden de instancia, así que las solicitudes
+  comparten `enabledAt` y siguen totalmente ordenadas por `(enabledAt, seq)` (R-REC-3): no hay
+  desempate nuevo. Compiten entre sí y con los demás tokens. *(prueba: #701)*
+- **R-MI-3 — Secuencial.** La instancia 1 se habilita en el instante de llegada y la `k + 1` en el
+  instante en que termina la `k`, después de que `k` suelte sus unidades, como una habilitación
+  nueva: se forma detrás de las solicitudes que ya esperan. Cada duración se sortea al habilitar
+  su instancia. *(prueba: #701)*
+- **R-MI-4 — Fin.** El token sale por el primer flujo saliente, con sus marcas OR, en el instante
+  en que termina la última instancia. Con `N = 0` sale en el mismo instante: sin instancias, sin
+  filas, sin `started`, sin armar eventos de borde y sin sorteo de borde; los flujos sí cuentan.
+  *(prueba: #701)*
+- **R-MI-5 — Resultados.** `elements[tarea].started`/`completed` cuentan instancias ("Instances
+  started/completed" de Bizagi); `processing`, `resourceWait`, `offHoursWait` y
+  `queueLength` son por instancia, igual que las filas del log de eventos;
+  `fixedCostTotal = fixedCost × instancias completadas`. El caso conserva un solo token en la
+  tarea (R-TOK-2), así que los flujos de entrada y de salida cuentan una vez por entrada.
+  Oráculos comprobados a mano, con una duración constante `d`: secuencial `N = 3` sin recursos
+  tarda `3d`; paralela `N = 3` con una unidad tarda `3d`, con tres unidades `d`. *(prueba: #701)*
+- **R-MI-6 — Eventos de borde, terminate y parada.** La actividad está abierta desde la entrada
+  hasta que el token sale, y eso es lo que comprueba R-BND-4. Un temporizador de borde se arma una
+  vez por entrada, desde el instante de entrada y antes del `done` de cualquier instancia, así que
+  un plazo exactamente igual al trabajo interrumpe (R-BND-7). Si interrumpe, cierra todas las
+  instancias abiertas como `interrupted` (suelta las unidades concedidas y retira las solicitudes
+  en cola, R-BND-5) y las instancias secuenciales aún no habilitadas no se crean nunca; si no
+  interrumpe, dispara a lo sumo una vez por entrada (R-BND-11). Un evento de error adjunto sortea
+  por cada instancia completada (R-ERR-1); con error, todas las demás instancias abiertas se
+  cierran como `interrupted`, no arranca ninguna más y el token sale una sola vez, por el evento
+  adjunto (R-ERR-3). `terminate`, la parada y la cancelación de un subproceso que la contiene
+  (R-BND-17) tratan cada instancia abierta como dicen R-EVT-6 y R-ARR-5, y las instancias
+  restantes no corren nunca. *(prueba: #701)*
+- **Degradación.** Ni `instances` ni un `loopCardinality` numérico: una instancia, exactamente como
+  si el marcador no estuviera, más el aviso `W-MULTI-SIN-CARDINALIDAD` que cita la tarea, emitido
+  cada vez que un token llega a ella y agregado como cualquier otro aviso (§17). Nunca un error y
+  nunca variabilidad inventada (R-DEG-5).
 
 ---
 
@@ -509,11 +634,12 @@ de la solicitud de servicio), sin introducir variables de caso ni un lenguaje de
   *(prueba: LILA-026, LILA-028)*
 - **R-BND-1 — Temporizador de borde interruptor.** Un `bpmn:boundaryEvent` con exactamente un
   `timerEventDefinition`, interruptor (`cancelActivity` ausente o `true`), adjunto a una tarea
-  soportada —nunca a un subproceso embebido, que se aplana (§4)— y con al menos un flujo de
+  soportada —o, desde ADR-033, a un subproceso embebido (R-BND-15…19)— y con al menos un flujo de
   salida, entra al perfil como nodo `timer` con `attachedTo` = el id del host y **sin**
   `incoming`: su token lo crea el host, no un flujo. Es alcanzable exactamente cuando lo es su
-  host, así que nunca es `E-INALCANZABLE` por sí solo. Cualquier otro boundary event sigue siendo
-  `E-NOSOP` con la construcción `boundaryEvent` (§3). *(prueba: #81)*
+  host, así que nunca es `E-INALCANZABLE` por sí solo. Cualquier otro boundary event, salvo el
+  evento de error interruptor de §9.3, sigue siendo `E-NOSOP` con la construcción `boundaryEvent`
+  (§3). *(prueba: #81)*
 - **R-BND-2 — El plazo cuenta desde que se habilita el host.** Se mide desde el `enabledAt` de la
   actividad host, no desde que consigue sus recursos: un token que espera en la cola de un pool
   ocupado ya está consumiendo su plazo. *(prueba: #81)*
@@ -584,6 +710,49 @@ de la solicitud de servicio), sin introducir variables de caso ni un lenguaje de
   viajando al parar la corrida deja el caso `inFlight`, como cualquier otro token (R-OR-8,
   R-AND-4). *(prueba: #81)*
 
+Las cinco reglas siguientes ponen el mismo temporizador de borde sobre un subproceso embebido
+(ADR-033 § 6). El subproceso se aplana (§4) y no es un nodo, así que el borde es un `timer` con
+`attachedTo` = el id del subproceso, y el IR gana `subprocesses`: para cada subproceso embebido del
+proceso, su `parent` y sus flujos de entrada y de salida. Un flujo **entra** a un subproceso cuando
+su destino está dentro y su origen no, y **sale** de él al revés; un nodo está dentro de un
+subproceso cuando su `subprocessId` es ese subproceso o uno anidado en él. Un mismo flujo puede
+salir de varios subprocesos anidados, o entrar a varios, a la vez: se sale primero del más interno
+y se entra primero al más externo, y un flujo que sale de un subproceso y entra al siguiente (dos
+seguidos) sale primero. `subprocesses` solo se escribe cuando hay un evento adjunto (de tiempo o de
+error, §9.3) sobre un subproceso, así que cualquier otro IR, y cualquier resultado, queda como
+estaba. Un borde sobre un subproceso sin flujo de entrada o sin flujo de salida sigue siendo
+`E-NOSOP` `boundaryEvent` (§3), junto con sus flujos de salida.
+
+- **R-BND-15 — La instancia del subproceso.** Por caso: una instancia se abre cuando un token del
+  caso cruza un flujo de entrada mientras el caso no tiene ninguna instancia abierta de ese
+  subproceso; un token que cruza uno mientras está abierta se une a ella. Sigue abierta mientras
+  quede al menos un token del caso dentro —en un nodo de dentro, retenido por una actividad o un
+  join de dentro, o viajando por un flujo cuyo destino está dentro— y se cierra cuando el último
+  sale por un flujo de salida (o se consume dentro), o cuando el caso muere. *(prueba: #702)*
+- **R-BND-16 — El plazo.** Se arma al abrirse la instancia, con una muestra de `processingTime` del
+  flujo de aleatorios propio del borde, 24×7 salvo que el borde declare `calendar` (R-BND-3), y solo
+  vence mientras esa instancia siga abierta (R-BND-4); un plazo muerto no mueve el reloj (R-BND-9).
+  Su evento se encola en la apertura, antes de la habilitación del token que la abrió, así que un
+  plazo exactamente igual al trabajo de dentro vence (R-BND-7, R-BND-13). *(prueba: #702)*
+- **R-BND-17 — Interruptor: se cancela todo lo de dentro.** En el instante del vencimiento se
+  cancela todo lo del caso que esté dentro del subproceso: toda instancia de actividad abierta se
+  cierra `interrupted` con la contabilidad de R-BND-5 (unidades concedidas liberadas y solicitudes
+  en cola retiradas, costo por hora hasta ese instante, sin `fixedCost`, `started` sin
+  `completed`); las habilitaciones pendientes de nodos de dentro se descartan; los contadores de
+  los joins AND/OR y los gateways basados en eventos bloqueados de dentro se descartan; las
+  instancias de subprocesos anidados se cierran y sus plazos se descartan. El caso pierde esos
+  tokens, y un token sale por el primer flujo de salida del borde con las marcas OR del token que
+  abrió la instancia. El tiempo ocupado de cada fila acaba en su `observedUntil`, así que nada se
+  cuenta dos veces ni en costos ni en utilización. *(prueba: #702)*
+- **R-BND-18 — No interruptor.** Vence a lo sumo una vez por instancia y añade un token sin marcas
+  OR (R-BND-11, R-BND-12); el subproceso sigue corriendo y el caso termina con su último token
+  (R-BND-14). *(prueba: #702)*
+- **R-BND-19 — Resultados.** Como en R-BND-6: el borde cuenta un `started` y un `completed` por
+  vencimiento y no emite fila; las instancias canceladas conservan sus propias filas con `status =
+  "interrupted"`. `elements[<subproceso>]` sigue sin admitir parámetros (`E-SUBPROC-PARAMETRO`,
+  R-PLAN-3); el borde es su propio id. Sin `processingTime` en el borde nunca vence, con
+  `W-BORDE-SIN-TIEMPO` nombrando al subproceso como host (R-BND-8). *(prueba: #702)*
+
 ### 9.1 Gateway basado en eventos
 
 El gateway que espera a lo que pase primero. Bizagi lo simula dándole un tiempo a cada evento
@@ -651,6 +820,92 @@ hace simulable la construcción sin mensajes, señales ni bus de eventos.
   bucle vuelve a armar sus ramas, con un sorteo nuevo por rama, cada vez que le llega un token, y
   las carreras de dos pasadas distintas (o de dos casos distintos) no comparten más que los flujos
   de aleatorios de los que sortean. *(prueba: #81)*
+
+### 9.2 Eventos de mensaje y de lanzamiento (ADR-033)
+
+Los archivos de Bizagi usan eventos de inicio y de fin de mensaje, y eventos intermedios de
+lanzamiento como hitos. Lila los simula sin simular el mensaje: no hay emisor, ni correlación, ni
+cola, y los message flows siguen sin llevar tokens (R-PERF-3). Los eventos de señal y de
+escalamiento siguen fuera del perfil (§3, #639).
+
+- **R-MSG-1 — Un inicio de mensaje es un inicio.** Un `bpmn:startEvent` con exactamente un
+  `messageEventDefinition`, en línea o por `eventDefinitionRef`, es un `start`: un generador de
+  casos con los mismos campos (`interTriggerTimer`, `triggerCount`, `calendar`), su propio flujo de
+  aleatorios y los mismos avisos que un inicio *none* (§10). Dentro de un subproceso embebido se
+  aplana exactamente como un inicio interno *none* (R-PLAN-1, R-PLAN-2). *(prueba: #698)*
+- **R-MSG-2 — Un fin de mensaje es un fin.** Un `bpmn:endEvent` con exactamente un
+  `messageEventDefinition` es un `end`: consume el token (R-EVT-4) y tiene su propia entrada en
+  `process.byEndEvent`. *(prueba: #698)*
+- **R-THR-1 — Un evento intermedio de lanzamiento es un hito.** Un `bpmn:intermediateThrowEvent`
+  sin disparador, o con exactamente un `messageEventDefinition`, es un nodo `throw`. Un token que
+  llega cuenta un `started` y un `completed` y sale en el mismo instante por su primer flujo de
+  salida, con sus marcas OR. No consume tiempo, no ocupa recursos, no sortea ningún aleatorio y no
+  emite fila en el log de eventos. Cualquier otro disparador, o varios, sigue siendo `E-NOSOP` con
+  la construcción `intermediateThrowEvent` (§3). *(prueba: #698)*
+- **R-THR-2 — Un evento de lanzamiento no tiene campos propios.** `resources` sobre él es
+  `E-CAMPO-NO-APLICA` (R-REC-10), y también `interTriggerTimer` y `triggerCount` (R5 de
+  `SCENARIO_FORMAT.md`). `processingTime`, `calendar` y `fixedCost` se aceptan y no cambian nada,
+  como en un evento de fin: el lanzamiento no consume tiempo, y su `fixedCost` no cobra nada porque
+  solo las filas de una actividad llevan `elementCost` (R-COST-3). El panel Simular no ofrece
+  ningún campo en él. *(prueba: #698)*
+- **R-THR-3 — Los mismos números con eventos de mensaje o *none*.** Un evento de lanzamiento no
+  sortea nada, así que no mueve el flujo de ningún otro elemento (§16). El mismo diagrama dibujado
+  con eventos de mensaje o *none*, con los mismos ids y referencias de mensaje que se resuelven (un
+  `messageRef` sin resolver añade un aviso `W-PARSE`, R-NOSOP-6), da resultados idénticos byte a
+  byte. Quitar un evento de lanzamiento de una secuencia (unir sus dos flujos en uno) no siempre es
+  neutro: su salto de más añade un evento, que cambia el `seq` de los eventos posteriores del mismo
+  instante (R-TOK-3). Si otro token llega al mismo elemento, cola o join en ese instante exacto,
+  los dos pueden intercambiar su lugar, y con él qué caso recibe qué sorteo del flujo de ese
+  elemento; sin ese empate todo otro número queda igual. *(prueba: #698)*
+
+### 9.3 Evento de error adjunto (ADR-033)
+
+Lila no simula errores lanzados, códigos de error ni eventos de fin de error: el error es una
+probabilidad en el borde, que se sortea cuando termina el trabajo del host. Un `bpmn:boundaryEvent`
+interruptor con exactamente un `errorEventDefinition` (con o sin `errorRef`), adjunto a una tarea
+soportada o a un subproceso embebido con flujo de entrada y de salida (§9, antes de R-BND-15), con
+al menos un flujo de salida y ninguno de entrada, es un nodo `errorBoundary` con `attachedTo` = el
+host. Es alcanzable exactamente cuando lo es su host. Cualquier otra cosa (no interruptor, otro
+literal de `cancelActivity`, sin flujo de salida) sigue siendo `E-NOSOP` `boundaryEvent` (§3).
+
+Su campo del escenario es `elements[<borde>].errorProbability`, un número en `[0, 1]`
+(`E-PROB-RANGO`); en cualquier otro elemento es `E-CAMPO-NO-APLICA`. Los valores declarados en los
+bordes de error de un mismo host suman como mucho 1 (`E-PROB-ERROR-SUMA` por encima de `1 + 1e-9`,
+desde el lint y otra vez desde `core/` antes del primer evento). `resources` en el borde es
+`E-CAMPO-NO-APLICA` (R-REC-10); `processingTime`, `calendar` y `fixedCost` se aceptan y no cambian
+nada, como en un evento de lanzamiento (R-THR-2); `W-ELEMENTO-SIN-PARAMETROS` no se le aplica.
+
+- **R-ERR-1 — Cuándo se decide el error.** Con una tarea como host, en cada **terminación** de una
+  de sus instancias de actividad; una instancia interrumpida, terminada o todavía en curso no decide
+  nada. Con un subproceso como host, cada vez que un token del caso sale de él por un flujo de
+  salida. *(prueba: #702)*
+- **R-ERR-2 — Un sorteo por decisión.** Si al menos uno de los bordes de error del host declara
+  `errorProbability`, se sortea un uniforme `u` del flujo derivado `<hostId>#error` (ADR-033 § 1.3)
+  por decisión; los bordes se recorren en orden de documento y vence el primero cuya
+  `errorProbability` acumulada supere `u`; si no vence ninguno, el token sigue su camino normal. Un
+  sorteo, tenga el host los bordes que tenga. Cuando los valores declarados suman 1 con margen
+  `1e-9` y el redondeo deja `u` por encima de la última suma acumulada, vence el último borde con
+  `errorProbability > 0` (la regla de redondeo de R-XOR-7). Si ningún borde del host declara el
+  campo, no se sortea nada. *(prueba: #702)*
+- **R-ERR-3 — Error en una tarea.** La instancia hizo su trabajo: cuenta `completed`, se cierra con
+  `status = "completed"`, entra en las estadísticas de duración, cobra su `fixedCost` y libera sus
+  unidades al terminar, como siempre. El token sale por el primer flujo de salida del borde en vez
+  del del host (el flujo de salida del host no cuenta), con las marcas OR del token del host
+  (R-BND-6). *(prueba: #702)*
+- **R-ERR-4 — Error en un subproceso.** El token que sale va al borde en vez de al destino de la
+  salida; el flujo de salida sí cuenta, porque el token llegó al fin interno. Todo lo del caso que
+  siga dentro del subproceso se cancela como dice R-BND-17, y el token que sale por el borde
+  conserva las marcas OR del token que salía. Cuando el flujo sale también de subprocesos que lo
+  envuelven, decide primero el más interno, y un token enviado a su borde de error no ha salido de
+  los demás; un flujo que además entra al subproceso siguiente solo entra si el token no fue
+  enviado a un borde de error. Los demás flujos de la misma división que todavía no se habían
+  seguido se cancelan con el resto y no cuentan. *(prueba: #702)*
+- **R-ERR-5 — Resultados.** El borde cuenta un `started` y un `completed` por disparo, en el mismo
+  instante, y no emite fila en el event log; como un temporizador de borde, no está sujeto a
+  `W-REPLICACIONES-SIN-OBSERVACIONES`. Sin `errorProbability` nunca dispara (probabilidad 0) y el
+  motor avisa `W-ERROR-SIN-PROBABILIDAD` cada vez que un token entra a su host (la habilitación de
+  una tarea, la apertura de una instancia de subproceso), agregado como cualquier otro aviso (§17).
+  *(prueba: #702)*
 
 ---
 
@@ -771,8 +1026,8 @@ calendar }`. En la tarea: `resources: [{ ref, quantity }]` y `selection: "and" |
   de estructura: `resourceWait = started − enabled`. *(prueba: LILA-036, LILA-041)*
 - **R-REC-9 — Un mismo pool no se pide dos veces.** Dos entradas con la misma `ref` en una tarea es
   error `E-REC-DUPLICADO`: la cantidad se expresa con `quantity`. *(prueba: LILA-013)*
-- **R-REC-10 — Elementos sin recursos.** `start`, `end`, `terminate`, gateways y `timer` nunca
-  consumen recursos. Solo `task` (y por tanto `callActivity`) admite `resources`.
+- **R-REC-10 — Elementos sin recursos.** `start`, `end`, `terminate`, `throw`, `errorBoundary`,
+  gateways y `timer` nunca consumen recursos. Solo `task` (y por tanto `callActivity`) admite `resources`.
   *(prueba: LILA-021, LILA-026)*
 - **R-REC-11 — Filas por asignación.** Cada asignación efectiva de pool produce una fila plana con
   `resourceId` y `resourceQuantity`; una actividad sin pool produce exactamente una fila sentinel
@@ -1102,7 +1357,7 @@ Desde LILA-211 los textos de todos estos códigos viven en un catálogo por idio
 traducción; los dos son normativos, cada uno para su idioma, y esta sección da los dos textos donde
 los fija literalmente. El código (`E-…`, `W-…`) y el id de regla (`R-…`) **no** se traducen nunca.
 Un test (`packages/engine/test/messages.test.ts`) mantiene en paso esta sección, el catálogo y el
-código: los 61 códigos del catálogo son exactamente los que emite `packages/engine/src`, `en` y
+código: los 67 códigos del catálogo son exactamente los que emite `packages/engine/src`, `en` y
 `es` declaran las mismas entradas, y ningún literal `"CÓDIGO: …"` vive fuera del catálogo.
 
 Errores (abortan; los de validación se devuelven en `errors[]`, los de ejecución se lanzan; la CLI sale con 1):
@@ -1119,7 +1374,8 @@ Errores (abortan; los de validación se devuelven en `errors[]`, los de ejecuci�
 | `E-SIN-START` / `E-SIN-END` | proceso sin start, o sin `end` ni `terminate` |
 | `E-ELEMENTO-DESCONOCIDO` | clave de `elements` que no existe en el IR |
 | `E-CLAVE-DESCONOCIDA` | clave no reconocida por el esquema |
-| `E-PROB-RANGO` | `probability` fuera de `[0,1]` |
+| `E-PROB-RANGO` | `probability` (o `errorProbability`, §9.3) fuera de `[0,1]` |
+| `E-PROB-ERROR-SUMA` | las `errorProbability` declaradas en los bordes de error de un mismo host suman más de 1 (§9.3); el lint cita `elements.<hostId>` y el guardia de `core/`, el id del host |
 | `E-PROB-EN-NODO` | `probability` declarada en un nodo |
 | `E-XOR-SUMA-CERO` | XOR cuyas probabilidades suman 0 |
 | `E-SUBPROC-PARAMETRO` | `processingTime`/`resources`/`fixedCost` en un subproceso embebido |
@@ -1131,9 +1387,10 @@ Errores (abortan; los de validación se devuelven en `errors[]`, los de ejecuci�
 | `E-CAPACIDAD-Y-CALENDARIO` | `capacity` por intervalos y `calendar` del pool declarados a la vez (R-CAL-11, R16 de `SCENARIO_FORMAT.md`) |
 | `E-REF-DESCONOCIDA` | `calendar` que no existe en `calendars` (lint de `validateScenario`), incluido el de cada tramo de `capacity` |
 | `E-CAL-DESCONOCIDO` | lo mismo, cazado por el guardia de `core/sim.ts` (ver R-CAL-10 y R-CAL-11) |
-| `E-CAMPO-NO-APLICA` | campo declarado en un elemento que no lo admite (R4, R5, R14) |
+| `E-CAMPO-NO-APLICA` | campo declarado en un elemento que no lo admite (R4, R5, R14; `errorProbability` fuera de un borde de error, §9.3; `instances` fuera de una tarea multi-instancia, R-MI-1) |
 | `E-CAL-VACIO` | calendario sin intervalos, calendario cuyas aperturas caen todas en sus propios festivos (R-CAL-14, cita `calendars.<nombre>`), o intersección de calendarios vacía (cita la tarea) |
 | `E-SIN-PARADA` | ni `run.duration` ni ningún `triggerCount` |
+| `E-BUCLE-SIN-SALIDA` | `loop.probability: 1` en una tarea cuyo marcador de bucle no tiene `loopMaximum`: el bucle nunca termina (R-LOOP-2); el lint cita `elements.<id>.loop.probability` y `core/` repite la comprobación antes del primer evento |
 | `E-RESERVADO` | campo reservado (§15, texto exacto en R-RES-2) |
 
 Textos exactos de los dos errores de R-CAL-11 (`packages/engine/src/scenario.ts` para el lint,
@@ -1161,6 +1418,24 @@ un `capacity` que no es entero ≥ 1 o una lista vacía los rechaza antes el esq
 mensaje genérico, y `E-REC-CAPACIDAD` es el guardia de `core/` para quien construye el escenario a
 mano. Es el único desajuste que queda; ver el párrafo final de esta sección.
 
+Textos exactos de los códigos del borde de error (ADR-033 § 1.6, §9.3): el `message` del lint, el
+guardia de `core/`, el aviso del motor y la variante de `E-CAMPO-NO-APLICA`, en `en` y en `es`. La
+suma se imprime como `String(Number(sum.toFixed(6)))` en los dos idiomas:
+
+```
+the error probabilities of the boundary events on <hostId> add up to <sum>, more than 1 (elements.<hostId>).
+E-PROB-ERROR-SUMA: <hostId>: the error probabilities of its boundary events add up to <sum>, more than 1.
+W-ERROR-SIN-PROBABILIDAD: <nodeId>: error boundary event without errorProbability; it never fires on <hostId>.
+only accepted on an error boundary event (elements.<id>.errorProbability).
+```
+
+```
+las probabilidades de error de los eventos adjuntos a <hostId> suman <sum>, más de 1 (elements.<hostId>).
+E-PROB-ERROR-SUMA: <hostId>: las probabilidades de error de sus eventos adjuntos suman <sum>, más de 1.
+W-ERROR-SIN-PROBABILIDAD: <nodeId>: evento de error adjunto sin errorProbability; nunca dispara sobre <hostId>.
+solo se admite en un evento de error adjunto (elements.<id>.errorProbability).
+```
+
 `E-LIMITE-SIN-AVANCE` es un error de ejecución y puede ocurrir después de emitir callbacks; no es un error del validador estático.
 Los demás errores de la tabla salen del lint (`validateScenario`) o del validador del IR, salvo
 `E-CLAVE-DESCONOCIDA`, que lo caza el esquema cerrado antes del lint: el código va delante del
@@ -1185,7 +1460,10 @@ ramas no tienen tiempo, R-EVG-6: cada caso tiene su propio texto),
 `W-TIMER-SIN-TIEMPO` (un timer intermedio sin `processingTime` retarda 0 segundos, R-EVT-2; como
 rama de un gateway basado en eventos nunca dispara, R-EVG-5),
 `W-BORDE-SIN-TIEMPO` (temporizador de borde sin `processingTime`: nunca
-dispara sobre su host, interrumpa o no, R-BND-8), `W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
+dispara sobre su host, interrumpa o no, R-BND-8; el host puede ser un subproceso, R-BND-19),
+`W-ERROR-SIN-PROBABILIDAD` (borde de error sin `errorProbability`: nunca dispara, R-ERR-5), `W-MULTI-SIN-CARDINALIDAD` (tarea
+multi-instancia sin `instances` ni un `loopCardinality` numérico: ejecuta una instancia, §4.2),
+`W-TAREA-SIN-TIEMPO`, `W-NORMAL-NEGATIVA`, `W-USER-NORMALIZADA`,
 `W-SIN-SEED`, `W-ELEMENTO-SIN-PARAMETROS`, `W-COND-INALCANZABLE` (un `flowTaken` que no puede
 preceder a su gateway, R-COND-4), `W-OR-PROB-PARCIAL` (un OR con `probability` en algunas salidas
 pero no en todas, R-OR-2), `W-UTILIZACION-MAYOR-UNO`, `W-PARSE`,
@@ -1298,6 +1576,31 @@ W-REPLICACIONES-SIN-OBSERVACIONES: <endId>: ningún caso terminó aquí en <m> d
 Con `n = 1` los textos en español terminan en `solo la otra replicación` en vez de `solo las otras 1`.
 `R ≥ 2` siempre (`0 < n < R`); una sola replicación diría `of 1 replication` / `de 1 replicación`.
 
+Marcador de bucle (ADR-033 § 3, §4.1). `E-BUCLE-SIN-SALIDA`, `loop` en un elemento sin marcador de
+bucle (`E-CAMPO-NO-APLICA`, variante `/solo-bucle`) y `W-BUCLE-SIN-PARAMETROS` tienen estos textos
+exactos: la línea del lint del primer error (su `code` viaja en su propio campo), el guardia de
+`core/`, la variante de `E-CAMPO-NO-APLICA` y el aviso, en `en` y en `es`:
+
+```
+a loop with probability 1 and no loopMaximum never ends (elements.<id>.loop.probability).
+E-BUCLE-SIN-SALIDA: <taskId>: a loop with probability 1 and no loopMaximum never ends.
+only accepted on a task with a loop marker (elements.<id>.loop).
+W-BUCLE-SIN-PARAMETROS: <taskId>: loop marker with no loop in the scenario; it runs once.
+```
+
+```
+un bucle con probabilidad 1 y sin loopMaximum nunca termina (elements.<id>.loop.probability).
+E-BUCLE-SIN-SALIDA: <taskId>: un bucle con probabilidad 1 y sin loopMaximum nunca termina.
+solo se admite en una tarea con marcador de bucle (elements.<id>.loop).
+W-BUCLE-SIN-PARAMETROS: <taskId>: marcador de bucle sin loop en el escenario; se ejecuta una vez.
+```
+
+`core/` también lanza `E-BUCLE-SIN-SALIDA` con una `probability` mayor que 1 y sin tope, que el
+lint reporta como `E-PROB-RANGO`: una divergencia lint/`core/` declarada más, además de las dos del párrafo final de esta sección. Un `loop` sin ninguno o con los dos de `count` y `probability`
+es un error de esquema en `elements.<id>.loop`: `declare exactly one of count or probability` /
+``declara exactamente uno de `count` o `probability` ``. El aviso sale cada vez que un token llega
+a la tarea y se agrega como cualquier otro.
+
 `W-START-SIN-LLEGADAS` salta solo cuando el `start` no declara **ni** `interTriggerTimer` **ni**
 `triggerCount`: con `triggerCount` a solas hay llegadas (todas en `t = 0`, R-ARR-1) y no hay aviso.
 
@@ -1358,6 +1661,8 @@ guardia de `core/` (unificarlos toca `core/`; ver R-CAL-10).
 | R-PLAN-1, R-PLAN-2, R-PLAN-5 | subproceso embebido aplanado | LILA-019 |
 | R-PLAN-3 | subproceso sin tiempo propio | LILA-019 (`E-SUBPROC-PARAMETRO`: LILA-198) |
 | R-PLAN-4 | call activity = tarea con tiempo global | LILA-019 |
+| R-LOOP-1 … R-LOOP-6 | marcador de bucle estándar en una tarea (ADR-033 § 3) | #700 (`packages/engine/test/loop-marker.test.ts`) |
+| R-MI-1 … R-MI-6 | tarea multi-instancia, paralela y secuencial (ADR-033) | #701 (`packages/engine/test/multi-instance.test.ts`) |
 | R-TOK-1 | reloj en segundos desde `run.start` | LILA-037 |
 | R-TOK-2 | caso = conjunto de tokens | LILA-026 |
 | R-TOK-3 | heap `(t, seq)` | LILA-023, LILA-030 |
@@ -1376,7 +1681,10 @@ guardia de `core/` (unificarlos toca `core/`; ver R-CAL-10).
 | R-EVT-5, R-EVT-6 | terminate | LILA-026 |
 | R-BND-1 … R-BND-9 | temporizador de borde interruptor | #81 |
 | R-BND-10 … R-BND-14 | temporizador de borde no interruptor | #81 |
+| R-BND-15 … R-BND-19 | temporizador de borde sobre un subproceso embebido (ADR-033) | #702 (`packages/engine/test/error-boundary-subprocess.test.ts`) |
+| R-ERR-1 … R-ERR-5 | evento de error adjunto a una tarea o a un subproceso (ADR-033) | #702 (`packages/engine/test/error-boundary-subprocess.test.ts`) |
 | R-EVG-1 … R-EVG-7 | gateway basado en eventos con ramas de tiempo y de mensaje | #81 (`packages/engine/test/event-gateway.test.ts`) |
+| R-MSG-1, R-MSG-2, R-THR-1 … R-THR-3 | inicio y fin de mensaje; evento intermedio de lanzamiento *none* y de mensaje (ADR-033) | #698 (`packages/engine/test/message-throw-events.test.ts`) |
 | R-ARR-1 … R-ARR-5 | llegadas y parada (`duration` \| `triggerCount`, lo primero) | LILA-026 (`triggerCount` sin timer: LILA-186) |
 | R-ARR-6 | llegadas con calendario | LILA-041 |
 | R-ARR-7 | warmup | LILA-027 |

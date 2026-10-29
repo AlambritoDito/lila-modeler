@@ -26,6 +26,7 @@ test('eventDefinitionRef conserva timers/terminate soportados y el detalle no so
   <bpmn:timerEventDefinition id="Timer_Global" />
   <bpmn:terminateEventDefinition id="Terminate_Global" />
   <bpmn:messageEventDefinition id="Message_Global" />
+  <bpmn:signalEventDefinition id="Signal_Global" />
   <bpmn:process id="Process_Refs" isExecutable="true">
     <bpmn:startEvent id="Start_Timer"><bpmn:eventDefinitionRef>Timer_Global</bpmn:eventDefinitionRef></bpmn:startEvent>
     <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_Timer" targetRef="Catch_Timer" />
@@ -33,6 +34,7 @@ test('eventDefinitionRef conserva timers/terminate soportados y el detalle no so
     <bpmn:sequenceFlow id="Flow_2" sourceRef="Catch_Timer" targetRef="End_Terminate" />
     <bpmn:endEvent id="End_Terminate"><bpmn:eventDefinitionRef>Terminate_Global</bpmn:eventDefinitionRef></bpmn:endEvent>
     <bpmn:startEvent id="Start_Message"><bpmn:eventDefinitionRef>Message_Global</bpmn:eventDefinitionRef></bpmn:startEvent>
+    <bpmn:startEvent id="Start_Signal"><bpmn:eventDefinitionRef>Signal_Global</bpmn:eventDefinitionRef></bpmn:startEvent>
   </bpmn:process>
 </bpmn:definitions>`;
   const parsed = await parseBpmn(xml);
@@ -40,8 +42,10 @@ test('eventDefinitionRef conserva timers/terminate soportados y el detalle no so
   expect(parsed.ir.nodes.Start_Timer?.type).toBe('start');
   expect(parsed.ir.nodes.Catch_Timer?.type).toBe('timer');
   expect(parsed.ir.nodes.End_Terminate?.type).toBe('terminate');
+  // R-MSG-1 (ADR-033): a message start by reference is a start too; a signal one stays out.
+  expect(parsed.ir.nodes.Start_Message?.type).toBe('start');
   expect(await errorsOf(xml)).toEqual([
-    'Start_Message (bpmn:startEvent): evento de mensaje no soportado por el simulador.',
+    'Start_Signal (bpmn:startEvent): evento de señal no soportado por el simulador.',
   ]);
 });
 
@@ -80,8 +84,8 @@ test('la precedencia es determinista, conserva nombres con comillas y ordena ent
       <bpmn:messageEventDefinition id="Message_1" />
       <bpmn:signalEventDefinition id="Signal_1" />
     </bpmn:boundaryEvent>
-    <bpmn:intermediateThrowEvent id="Throw_Message">
-      <bpmn:messageEventDefinition id="Message_2" />
+    <bpmn:intermediateThrowEvent id="Throw_Signal">
+      <bpmn:signalEventDefinition id="Signal_2" />
     </bpmn:intermediateThrowEvent>
     <bpmn:endEvent id="End_Timer"><bpmn:timerEventDefinition id="Timer_1" /></bpmn:endEvent>
   </bpmn:process>
@@ -95,9 +99,10 @@ test('la precedencia es determinista, conserva nombres con comillas y ordena ent
   expect(await errorsOf(xml)).toEqual([
     'Choreo_First (bpmn:choreography, "Raíz "uno""): diagrama de coreografía no soportado por el simulador.',
     'Choreo_Task (bpmn:choreographyTask): diagrama de coreografía no soportado por el simulador.',
-    'Task_Many (bpmn:task): marcador de bucle en la actividad no soportado por el simulador.',
+    // ADR-033 § 3: the loop marker is in the profile on a task, so `startQuantity` comes next.
+    'Task_Many (bpmn:task): atributo `startQuantity` distinto de 1 no soportado por el simulador.',
     'Boundary_Many (bpmn:boundaryEvent): evento adjunto a actividad (boundary event) no soportado por el simulador.',
-    'Throw_Message (bpmn:intermediateThrowEvent): evento intermedio de lanzamiento no soportado por el simulador.',
+    'Throw_Signal (bpmn:intermediateThrowEvent): evento intermedio de lanzamiento no soportado por el simulador.',
     'End_Timer (bpmn:endEvent): evento de fin con ese disparador no soportado por el simulador.',
     'SubConversation_Last (bpmn:subConversation): diagrama de conversación no soportado por el simulador.',
     'Conversation_Nested (bpmn:conversation): diagrama de conversación no soportado por el simulador.',

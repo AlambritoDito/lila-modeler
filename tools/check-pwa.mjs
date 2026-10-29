@@ -20,7 +20,7 @@
  *      editor back.
  *      `LILA_VISOR_SHOT=<file.png>` also saves a screenshot of it.
  *
- *   npm run build:pages && npm run check:pwa
+ *   npm run build:pages -- --stable-tag HEAD && npm run check:pwa
  *
  * `LILA_E2E_PORT`, `LILA_E2E_CDP_PORT` and `CHROME_PATH` as in `tools/e2e-lila.mjs`. Prints a
  * JSON report and exits non-zero on the first failed expectation. What it cannot do is the part a
@@ -100,7 +100,7 @@ function connect(ws) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
-  if (!existsSync(join(SITE, 'app/sw.js'))) throw new Error('_site/app is missing or stale: run `npm run build:pages` first.');
+  if (!existsSync(join(SITE, 'app/sw.js'))) throw new Error('_site/app is missing or stale: run `npm run build:pages -- --stable-tag HEAD` first.');
   const work = mkdtempSync(join(tmpdir(), 'lila-pwa-'));
   const downloads = join(work, 'downloads');
   mkdirSync(downloads);

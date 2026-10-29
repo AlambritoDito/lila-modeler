@@ -2,11 +2,12 @@
 <!--
   Landing page of Lila Modeler (LILA-067), from the Claude Design mock `Landing.dc.html`, published
   to GitHub Pages by `.github/workflows/pages.yml` via `tools/build-pages.mjs`, which copies this
-  folder to the root of the site, the built web app to `app/`, the screenshots from
+  folder to the root of the site, the stable web app (latest Release) to `app/`, the beta (from
+  `main`) to `beta/`, the versions of both to `versions.json`, the screenshots from
   `docs/design/en/` to `img/` and the branding exports to `branding/`. Hand-written on purpose: no
   site generator, no framework, no external request. The English text lives here and works without
   JavaScript; `landing.js` adds the animations and swaps `data-i18n` elements to Spanish.
-  To preview locally, run `npm run build:pages` and serve `_site/`.
+  To preview locally, run `npm run build:pages -- --stable-tag <tag>` and serve `_site/`.
 -->
 <html lang="en">
   <head>
@@ -61,8 +62,8 @@
         <div class="wrap">
           <div class="logo-plate"><img src="branding/logo-horizontal.png" alt="Lila Modeler" width="1086" height="362" fetchpriority="high" /></div>
           <br />
-          <a class="badge" href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16">
-            <b>v1.0.0-beta.16</b><span data-i18n="badge">Desktop beta: macOS · Windows (untested) · What's new →</span>
+          <a class="badge" id="badge-stable" href="https://github.com/AlambritoDito/lila-modeler/releases">
+            <b id="badge-version">Releases</b><span data-i18n="badge">Stable 1.0: web · macOS · Windows (untested) · What's new →</span>
           </a>
           <h1 data-i18n="h1">Watch your process <span class="hl">run</span> before it runs.</h1>
           <p class="lede" data-i18n="lede">
@@ -71,10 +72,12 @@
             <strong>AS-IS vs TO-BE comparisons at 95% confidence</strong>. No account, no server.
           </p>
           <div class="ctas">
-            <a class="btn btn-primary" href="app/">▶ <span data-i18n="ctaDemo">Open the app</span></a>
+            <a class="btn btn-primary" href="app/">▶ <span data-i18n="ctaDemo">Open the stable app</span><span class="cta-ver" id="ver-stable"></span></a>
+            <a class="btn" href="beta/"><span data-i18n="ctaBeta">Beta: what comes next</span><span class="cta-ver" id="ver-beta"></span></a>
             <a class="btn" href="#quickstart" data-i18n="ctaQuick">Quick start</a>
             <a class="btn btn-ghost" href="docs/COMING-FROM-BIZAGI.html"><span data-i18n="ctaBizagi">Coming from Bizagi?</span> →</a>
           </div>
+          <p class="cta-note" data-i18n="ctaNote">The stable app is version 1.0. The beta is built from the latest code and previews what comes after it, starting with the organization repository; its projects are kept apart from the stable app's.</p>
           <div class="tags">
             <span>Apache-2.0</span><span data-i18n="tagPlatforms">Browser · Desktop · CLI · MCP</span><span data-i18n="tagSeeded">Seeded &amp; reproducible</span>
           </div>
@@ -200,8 +203,8 @@
             <p class="sec-p" data-i18n="qsP">Clone, npm ci &amp;&amp; npm run build, then validate, run and compare the restaurant example. Or hand the same engine to an agent over MCP.</p>
             <div class="qs-links">
               <span>web</span><a href="app/" data-i18n="qsWeb">Use it in your browser, no install</a>
-              <span>mac</span><a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16" data-i18n="qsMac">Download the macOS beta (Apple Silicon, not notarized)</a>
-              <span>win</span><a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16" data-i18n="qsWin">Download the Windows installer (x64 — unsigned and not tested on a real PC yet; SmartScreen will warn)</a>
+              <span>mac</span><a id="dl-mac" href="https://github.com/AlambritoDito/lila-modeler/releases" data-i18n="qsMac">Download for macOS (Apple Silicon, not notarized)</a>
+              <span>win</span><a id="dl-win" href="https://github.com/AlambritoDito/lila-modeler/releases" data-i18n="qsWin">Download the Windows installer (x64 — unsigned and not tested on a real PC yet; SmartScreen will warn)</a>
               <span>docs</span><a href="docs/" data-i18n="qsDocs">Read the documentation</a>
             </div>
           </div>
@@ -247,7 +250,7 @@
           <details><summary data-i18n="q2">Where does my work live?</summary><p data-i18n="a2">In the browser's local storage while you work — that is not a backup. File ▸ Save downloads the whole project as a portable .lila file.</p></details>
           <details><summary data-i18n="q3">Do I need Bizagi?</summary><p data-i18n="a3">No. Lila follows the same four-level workflow and result table layout so Bizagi users feel at home, but it is fully independent.</p></details>
           <details><summary data-i18n="q4">Can two people edit the same project?</summary><p data-i18n="a4">Not simultaneously. Sharing means passing a .lila file around; there is no backend and no real-time sync.</p></details>
-          <details><summary data-i18n="q5">Which platforms are supported?</summary><p data-i18n="a5">Any modern desktop browser for the web app (Chrome is the one tested; Safari is pending). The desktop beta ships for macOS on Apple Silicon — not notarized, so the first launch needs “Open Anyway”; see the <a href="docs/BETA-MAC-GUIDE.html">beta guide</a>, and do not disable Gatekeeper — and for Windows x64, whose installer is unsigned and has not been tested on a real Windows PC yet: SmartScreen will warn, and the <a href="docs/WINDOWS-TESTER-GUIDE.html">Windows tester guide</a> explains how to try it and report back. The Linux AppImage is built by CI but untested and not attached to the release.</p></details>
+          <details><summary data-i18n="q5">Which platforms are supported?</summary><p data-i18n="a5">Any modern desktop browser for the web app (Chrome is the one tested; Safari is pending). The desktop app ships for macOS on Apple Silicon — not notarized, so the first launch needs “Open Anyway”; see the <a href="docs/BETA-MAC-GUIDE.html">macOS install guide</a>, and do not disable Gatekeeper — and for Windows x64, whose installer is unsigned and has not been tested on a real Windows PC yet: SmartScreen will warn, and the <a href="docs/WINDOWS-TESTER-GUIDE.html">Windows tester guide</a> explains how to try it and report back. The Linux AppImage is built by CI but untested and not attached to the release.</p></details>
         </div>
       </section>
     </main>
@@ -263,7 +266,7 @@
           <a href="docs/" data-i18n="ftDocs">Documentation</a>
           <a href="docs/SEMANTICS.html" data-i18n="ftSem">Engine semantics</a>
           <a href="docs/MCP.html" data-i18n="ftMcp">MCP server</a>
-          <a href="docs/BETA-MAC-GUIDE.html" data-i18n="ftBeta">Desktop beta guide</a>
+          <a href="docs/BETA-MAC-GUIDE.html" data-i18n="ftBeta">macOS install guide</a>
           <a href="docs/WINDOWS-TESTER-GUIDE.html" data-i18n="ftWin">Windows tester guide</a>
         </div>
         <div>

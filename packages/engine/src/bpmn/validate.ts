@@ -225,6 +225,7 @@ function parseWarningNotice(
 /**
  * Ids alcanzables siguiendo los flujos salientes desde cada `start`. Un boundary no tiene flujo
  * entrante, interrumpa o no: se alcanza al alcanzar su host (R-BND-1), así que se encola con él.
+ * The host of an error boundary works the same way, and so does a sub-process host (ADR-033).
  */
 function reachableFrom(ir: ProcessIR, starts: string[]): Set<string> {
   const attached = new Map<string, string[]>();
@@ -243,6 +244,13 @@ function reachableFrom(ir: ProcessIR, starts: string[]): Set<string> {
     const id = pending.pop()!;
     for (const flowId of ir.nodes[id]?.outgoing ?? []) visit(ir.flows[flowId]?.to);
     for (const boundaryId of attached.get(id) ?? []) visit(boundaryId);
+    // ADR-033 § 6: a boundary on a sub-process is reached when anything inside it is.
+    if (ir.subprocesses === undefined) continue;
+    const chain = new Set<string>();
+    for (let s = ir.nodes[id]?.subprocessId; s !== undefined && !chain.has(s); s = ir.subprocesses[s]?.parent) {
+      chain.add(s);
+      for (const boundaryId of attached.get(s) ?? []) visit(boundaryId);
+    }
   }
   return seen;
 }

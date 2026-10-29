@@ -32,6 +32,8 @@ export type ClaseElemento =
   | 'and'
   | 'eventGateway'
   | 'timer'
+  | 'throw'
+  | 'errorBoundary'
   | 'flow';
 
 /**
@@ -43,11 +45,26 @@ export type ClaseElemento =
  *
  * A gateway gets `[]`: none of the element fields applies to it. Its outgoing flows' probability
  * is edited from the gateway view of the panel, which writes `elements[flowId].probability`.
+ *
+ * `marcadores` (ADR-033 § 1.7, #703) says what the class alone cannot: whether the task carries a
+ * standard loop marker (`loop`) or a multi-instance marker (`instances`). Without it a task offers
+ * neither, which is what the engine says of a task without the marker (`E-CAMPO-NO-APLICA`).
  */
-export function fieldsForKind(clase: ClaseElemento | null): readonly string[] | null {
+export function fieldsForKind(
+  clase: ClaseElemento | null,
+  marcadores: MarcadoresTarea = SIN_MARCADORES,
+): readonly string[] | null {
   switch (clase) {
     case 'task':
-      return ['processingTime', 'resources', 'selection', 'fixedCost', 'calendar'];
+      return [
+        'processingTime',
+        ...(marcadores.bucle ? ['loop'] : []),
+        ...(marcadores.multiInstancia ? ['instances'] : []),
+        'resources',
+        'selection',
+        'fixedCost',
+        'calendar',
+      ];
     case 'start':
       return ['interTriggerTimer', 'triggerCount', 'calendar', 'fixedCost'];
     case 'timer':
@@ -59,6 +76,13 @@ export function fieldsForKind(clase: ClaseElemento | null): readonly string[] | 
       // ADR-028: `conditions` only means something on a flow leaving a diverging XOR, and the
       // class alone does not say which; a flow elsewhere gets `E-CAMPO-NO-APLICA` from the lint.
       return ['probability', 'conditions'];
+    // ADR-033 § 5: the share of the host's completions that leave through this boundary. Its
+    // `processingTime`, `calendar` and `fixedCost` change nothing, so they are not offered.
+    case 'errorBoundary':
+      return ['errorProbability'];
+    // ADR-033 R-THR-2: a none or message intermediate throw event is a milestone with no field of
+    // its own; its `fixedCost` would charge nothing, as on a start or an end.
+    case 'throw':
     case 'xor':
     case 'or':
     case 'and':
@@ -69,6 +93,21 @@ export function fieldsForKind(clase: ClaseElemento | null): readonly string[] | 
     default:
       return null;
   }
+}
+
+/** The markers of a task that decide whether it offers `loop` or `instances` (ADR-033 § 3, § 4). */
+export interface MarcadoresTarea {
+  /** A standard loop marker: the IR node has `loop`. */
+  bucle: boolean;
+  /** A multi-instance marker, parallel or sequential: the IR node has `multiInstance`. */
+  multiInstancia: boolean;
+}
+
+const SIN_MARCADORES: MarcadoresTarea = { bucle: false, multiInstancia: false };
+
+/** The markers of `nodo`, an IR node (`ir.nodes[id]`), or none when there is no node. */
+export function marcadoresDe(nodo: { loop?: unknown; multiInstance?: unknown } | undefined): MarcadoresTarea {
+  return { bucle: nodo?.loop !== undefined, multiInstancia: nodo?.multiInstance !== undefined };
 }
 
 /* ------------------------------------------------------------------ *
@@ -84,9 +123,12 @@ const RESERVADOS = new Set(['priority', 'preempt', 'batch', 'conditions']);
  * unreachable by hiding the others:
  *
  * - `arrivals`: what a start event takes — how often a case arrives and how many do.
- * - `times`: how long each activity (and timer) takes and what it costs per case, plus the
- *   reserved fields of § 4, which have no step of their own and are only ever shown to be deleted.
- * - `routes`: how the work branches — the probability and conditions of the flows.
+ * - `times`: how long each activity (and timer) takes and what it costs per case, how many times a
+ *   looping task repeats and how many instances a multi-instance task runs (ADR-033 § 3, § 4),
+ *   plus the reserved fields of § 4, which have no step of their own and are only ever shown to
+ *   be deleted.
+ * - `routes`: how the work branches — the probability and conditions of the flows, and the share
+ *   of a host's completions that leave through an error boundary (ADR-033 § 5).
  * - `resources`: which pools a task takes, and `selection` (whether it needs all of them or any
  *   one, R14). The Lote M analysis put `selection` in Routes, but it is the resource choice of a
  *   task, not a gateway's: R14 rejects it without `resources`, so it lives next to them.
@@ -95,8 +137,10 @@ const RESERVADOS = new Set(['priority', 'preempt', 'batch', 'conditions']);
  */
 export const CAMPOS_DE_PASO: Record<PasoId, readonly string[]> = {
   arrivals: ['interTriggerTimer', 'triggerCount'],
-  times: ['processingTime', 'fixedCost', 'priority', 'preempt', 'batch'],
-  routes: ['probability', 'conditions'],
+  // ADR-033 § 3 and § 4: a task offers `loop` with a loop marker and `instances` with a
+  // multi-instance marker (`fieldsForKind`); a `loop` problem (`E-BUCLE-SIN-SALIDA`) lands here.
+  times: ['processingTime', 'fixedCost', 'priority', 'preempt', 'batch', 'loop', 'instances'],
+  routes: ['probability', 'conditions', 'errorProbability'],
   resources: ['resources', 'selection'],
   calendars: ['calendar'],
   run: [],
@@ -110,9 +154,13 @@ export const CAMPOS_DE_PASO: Record<PasoId, readonly string[]> = {
  * With `clase === null` (no IR yet, or an id that is not in it) nothing is filtered by class —
  * same rule as `fieldsForKind` — and the step's own list is what comes out.
  */
-export function fieldsForStep(paso: PasoId, clase: ClaseElemento | null): readonly string[] {
+export function fieldsForStep(
+  paso: PasoId,
+  clase: ClaseElemento | null,
+  marcadores?: MarcadoresTarea,
+): readonly string[] {
   const delPaso = CAMPOS_DE_PASO[paso];
-  const delTipo = fieldsForKind(clase);
+  const delTipo = fieldsForKind(clase, marcadores);
   if (delTipo === null) return delPaso;
   // The reserved ones (§ 4) apply to no class and are drawn only when they are already written,
   // so they survive the filter: otherwise an inherited `priority` would have no step to be

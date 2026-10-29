@@ -51,6 +51,9 @@ export const coreEs: CoreCatalog = {
     'E-CAL-DESCONOCIDO': (subject, calendar) =>
       `${subject}: el calendario ${calendar} no existe.`,
 
+    'E-BUCLE-SIN-SALIDA/elemento': (nodeId) =>
+      `${nodeId}: un bucle con probabilidad 1 y sin loopMaximum nunca termina.`,
+
     'E-REC-LIBERACION': (requestId) => `${requestId} no tiene una asignación activa.`,
     'E-REC-SOLICITUD-DUPLICADA': (requestId) => `ya existe la solicitud ${requestId}.`,
     'E-REC-SIN-ASIGNACION': (requestId) => `${requestId}: falta un recurso.`,
@@ -89,12 +92,21 @@ export const coreEs: CoreCatalog = {
       `${nodeId}: sin tiempo de proceso; nunca dispara como rama de ${gatewayId}.`,
     'W-BORDE-SIN-TIEMPO': (nodeId, hostId) =>
       `${nodeId}: temporizador de borde sin tiempo de proceso; nunca dispara sobre ${hostId}.`,
+    'W-BUCLE-SIN-PARAMETROS': (nodeId) =>
+      `${nodeId}: marcador de bucle sin loop en el escenario; se ejecuta una vez.`,
+    'W-MULTI-SIN-CARDINALIDAD': (nodeId) =>
+      `${nodeId}: tarea multi-instancia sin instances en el escenario ni loopCardinality numérico; ejecuta una instancia.`,
     'W-OR-JOIN-SIN-FORK': (nodeId) =>
       `${nodeId}: llegó un token sin marca de división; se comporta como mezcla.`,
     'W-JOIN-BLOQUEADO': (nodeId, cases) =>
       `${nodeId}: ${cases} ${cases === 1 ? 'caso quedó' : 'casos quedaron'} con tokens esperando en la compuerta de unión.`,
     'W-JOIN-BLOQUEADO/evento': (nodeId, cases) =>
       `${nodeId}: ninguna rama declara tiempo de proceso; ${cases} ${cases === 1 ? 'caso quedó' : 'casos quedaron'} con su token esperando en la compuerta.`,
+
+    'E-PROB-ERROR-SUMA': (hostId, sum) =>
+      `${hostId}: las probabilidades de error de sus eventos adjuntos suman ${sum}, más de 1.`,
+    'W-ERROR-SIN-PROBABILIDAD': (nodeId, hostId) =>
+      `${nodeId}: evento de error adjunto sin errorProbability; nunca dispara sobre ${hostId}.`,
 
     'W-RECURSO-SATURADO': (poolId, rho) =>
       `${poolId}: la cola crece sin estabilizarse (λ/μ·c ≈ ${rho})`,

@@ -48,9 +48,10 @@
  *   instantiating or parallel one, one with a branch to a receive task or to a catch event with
  *   several ways in or out) and any other message catch event is left out (`outlineUnsupported`),
  *   with its flows;
- * - only a boundary timer the simulator runs (`boundaryTimerHost` in `parse.ts`: on a task or a
- *   call activity, no incoming flow, one way out) reads as a `boundary`; one on a sub-process
- *   (#639), with an incoming flow or with several outgoing flows is left out;
+ * - only a boundary timer on a task or a call activity, with no incoming flow and one way out,
+ *   reads as a `boundary`; one on a sub-process (which the simulator runs since #702, but an
+ *   outline cannot say), an error boundary, one with an incoming flow or with several outgoing
+ *   flows is left out;
  * - the timer expressions in the XML (`timeDuration`, `timeDate`, `timeCycle`) of timer starts,
  *   timer steps and boundary timers are left out: durations live in the scenario, never in the XML;
  * - text annotations with no text are left out, and so are those that repeat a text already

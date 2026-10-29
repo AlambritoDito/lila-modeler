@@ -72,6 +72,16 @@ export interface SimElement {
    * en una salida de un XOR divergente; gana la primera entrada cuyo `flowTaken` esté recorrido.
    */
   conditions?: readonly { readonly flowTaken: string; readonly probability: number }[] | undefined;
+  /** ADR-033 § 5 (R-ERR-1…5): share of the host's completions that leave through this error boundary. */
+  errorProbability?: number | undefined;
+  /**
+   * ADR-033 § 3 (R-LOOP-1…6): how a task with a standard loop marker repeats. Exactly one of
+   * `count` (iterations per entry) and `probability` (of another iteration after each one); the
+   * scenario schema enforces it. Read only on a task whose IR node has `loop`.
+   */
+  loop?: { readonly count?: number | undefined; readonly probability?: number | undefined } | undefined;
+  /** ADR-033 § 4 (R-MI-1): instances per entry of a multi-instance task, `floor(max(0, x) + 0.5)`. */
+  instances?: Distribution | undefined;
 }
 
 /** Un tramo de `resources[pool].capacity` por intervalos: `capacity` unidades durante `calendar`. */
@@ -292,6 +302,49 @@ export function assertSupportedResourceScenario(scenario: SimScenario, locale: L
   }
 }
 
+/**
+ * ADR-033 § 5 (#702): the declared `errorProbability` of one host's error boundaries add up to at
+ * most 1 (`E-PROB-ERROR-SUMA` above `1 + 1e-9`). `validateScenario` reports the same with the
+ * path; this guard repeats it because `core/` does not import the validator, and runs before any
+ * public callback like the two preflights next to it.
+ */
+export function assertSupportedErrorScenario(ir: ProcessIR, scenario: SimScenario, locale: Locale = 'en'): void {
+  const sums = new Map<string, number>();
+  for (const [nodeId, node] of Object.entries(ir.nodes)) {
+    const p = scenario.elements?.[nodeId]?.errorProbability;
+    if (node.type !== 'errorBoundary' || node.attachedTo === undefined || p === undefined) continue;
+    sums.set(node.attachedTo, (sums.get(node.attachedTo) ?? 0) + p);
+  }
+  for (const [hostId, sum] of sums) {
+    if (sum <= 1 + 1e-9) continue;
+    throw new RangeError(
+      coded('E-PROB-ERROR-SUMA', coreMessages(locale).codes['E-PROB-ERROR-SUMA'](hostId, String(Number(sum.toFixed(6))))),
+    );
+  }
+}
+
+/**
+ * ADR-033 § 3 (R-LOOP-2): preflight of the loop marker, with the same contract as the resource
+ * one (before any public callback). `validateScenario` reports `E-BUCLE-SIN-SALIDA` for the same
+ * defect; `core/` repeats it because a loop that never ends would never let the run stop. A
+ * `probability` above 1 (`E-PROB-RANGO` in the lint) never ends either, so it trips the same guard.
+ */
+export function assertSupportedLoopScenario(
+  ir: ProcessIR,
+  scenario: SimScenario,
+  locale: Locale = 'en',
+): void {
+  for (const [nodeId, node] of Object.entries(ir.nodes)) {
+    if (node.loop === undefined || node.loop.maximum !== undefined) continue;
+    const loop = scenario.elements?.[nodeId]?.loop;
+    if (loop?.count === undefined && (loop?.probability ?? 0) >= 1) {
+      throw new RangeError(
+        coded('E-BUCLE-SIN-SALIDA', coreMessages(locale).codes['E-BUCLE-SIN-SALIDA/elemento'](nodeId)),
+      );
+    }
+  }
+}
+
 /* ------------------------------------------------------------------ *
  * Calendarios (§12, LILA-041)
  * ------------------------------------------------------------------ */
@@ -458,6 +511,17 @@ type SimEvent =
        * Absent everywhere else, which is every token that did not come out of one.
        */
       readonly duration?: number;
+      /**
+       * R-BND-17: the epoch of the innermost sub-process holding `nodeId` when the token was sent.
+       * If that sub-process was cancelled since, the enabling is discarded. Only present when the
+       * IR tracks sub-processes (`ProcessIR.subprocesses`) and the node is inside one.
+       */
+      readonly epoch?: number;
+      /**
+       * ADR-033 R-LOOP-2: the next iteration of a loop already open, keyed by the activity
+       * instance of its iteration 1. Not a new entry: no flow counted, no boundary re-armed.
+       */
+      readonly loopEntry?: string;
     }
   | {
       readonly t: number;
@@ -475,7 +539,39 @@ type SimEvent =
       readonly nodeId: string;
     }
   /** R-CAL-11: la capacidad del pool acaba de subir; hay que despertar su cola. */
-  | { readonly t: number; readonly kind: 'capacity'; readonly poolId: string };
+  | { readonly t: number; readonly kind: 'capacity'; readonly poolId: string }
+  /** R-BND-16: the boundary timer `nodeId` on a sub-process reaches the deadline of `instance`. */
+  | {
+      readonly t: number;
+      readonly kind: 'deadline';
+      readonly caseId: number;
+      readonly nodeId: string;
+      readonly subprocessId: string;
+      readonly instance: number;
+    }
+  /**
+   * R-MI-6: the boundary timer `nodeId` of a multi-instance task falls due over the whole entry
+   * `entryId`, not over one of its instances.
+   */
+  | {
+      readonly t: number;
+      readonly kind: 'multiBoundary';
+      readonly entryId: string;
+      readonly caseId: number;
+      readonly nodeId: string;
+    };
+
+/** ADR-033 § 6: one case's state in one embedded sub-process (R-BND-15). */
+interface SubprocessState {
+  /** Tokens of the case inside: at a node, held by an activity or a join, or on a flow into it. */
+  tokens: number;
+  /** Id of the open instance, or `undefined` while none is open. */
+  instance: number | undefined;
+  /** OR marks of the token that opened the instance (R-BND-17). */
+  marks: readonly number[];
+  /** Bumped when the sub-process is cancelled: enablings inside sent before it are stale. */
+  epoch: number;
+}
 
 interface ActivityState {
   readonly id: string;
@@ -491,6 +587,41 @@ interface ActivityState {
   allocation?: ResourceAllocation;
   startedAt: number | null;
   closed: boolean;
+  /** ADR-033 R-LOOP-1: the loop this iteration belongs to (iteration 1's instance id). */
+  loopEntry?: string;
+  /** ADR-033 § 4: the multi-instance entry this activity is one instance of. */
+  readonly entry?: MultiInstanceEntry;
+}
+
+/**
+ * ADR-033 § 4: one entry of a token into a multi-instance task. The case keeps one token there
+ * (R-MI-5) until its last instance completes (R-MI-4), or a boundary or an error takes it (R-MI-6).
+ */
+interface MultiInstanceEntry {
+  readonly id: string;
+  readonly caseId: number;
+  readonly nodeId: string;
+  readonly marks: readonly number[];
+  readonly sequential: boolean;
+  /** `N` of this entry (R-MI-1). */
+  readonly total: number;
+  /** Instances enabled so far; a sequential entry enables the next one as each completes. */
+  enabled: number;
+  /** Ids of the instances still open, in the order they were enabled. */
+  readonly open: Set<string>;
+  closed: boolean;
+}
+
+/**
+ * ADR-033 R-LOOP-1/5: one entry of a token into a task whose scenario declares `loop`, shared by
+ * all its iterations and keyed by iteration 1's activity instance id. A boundary timer armed at
+ * iteration 1 acts on `current`, so it covers the whole loop.
+ */
+interface LoopEntry {
+  /** Iterations enabled so far. */
+  iteration: number;
+  /** Activity instance of the iteration in flight (or the last one, once the token left). */
+  current: string;
 }
 
 /** Estado vivo de un caso mientras corre. */
@@ -519,6 +650,8 @@ interface CaseState {
    * escenario declara algún `conditions`; sin eso no se crea ni se toca (R-DEG-2).
    */
   flowsTaken?: Set<string> | undefined;
+  /** ADR-033 § 6: by sub-process id; only when the IR tracks sub-processes (R-BND-15). */
+  subprocesses?: Map<string, SubprocessState> | undefined;
 }
 
 const NO_MARKS: readonly number[] = [];
@@ -563,8 +696,11 @@ export function runReplication(
 
   // La API core no depende del validador zod; comparte el preflight de recursos con `simulate`.
   assertSupportedResourceScenario(scenario, locale);
+  assertSupportedErrorScenario(ir, scenario, locale);
   // R-CAL-4 / R-CAL-10: compilado una sola vez por replicación. Vacío ⇒ 24×7 en todas partes.
   const calendars = assertSupportedCalendarScenario(scenario, locale);
+  // ADR-033 R-LOOP-2: a loop that can never end is rejected before the first event.
+  assertSupportedLoopScenario(ir, scenario, locale);
 
   // Cache por `(nodeId, pools)`: una tarea AND con los mismos dos pools intersecta una vez, no
   // una vez por instancia. Con el mapa vacío ni siquiera se construye la clave.
@@ -623,11 +759,17 @@ export function runReplication(
    */
   const blockedGateways = new Map<string, Set<number>>();
 
-  /** R-BND-1: temporizadores de borde de cada tarea, en orden de documento. */
+  /**
+   * R-BND-1: temporizadores de borde de cada tarea, en orden de documento. ADR-033 § 6: also of
+   * each sub-process, keyed by its id.
+   */
   const boundariesByHost = new Map<string, string[]>();
+  /** ADR-033 § 5: the error boundaries of each host (task or sub-process), in document order. */
+  const errorBoundariesByHost = new Map<string, string[]>();
   for (const [nodeId, node] of Object.entries(ir.nodes)) {
     if (node.attachedTo === undefined) continue;
-    boundariesByHost.set(node.attachedTo, [...(boundariesByHost.get(node.attachedTo) ?? []), nodeId]);
+    const byHost = node.type === 'errorBoundary' ? errorBoundariesByHost : boundariesByHost;
+    byHost.set(node.attachedTo, [...(byHost.get(node.attachedTo) ?? []), nodeId]);
   }
 
   const rows: EventLogRow[] = [];
@@ -661,6 +803,28 @@ export function runReplication(
   const resourceManager = new ResourceManager(poolDefinitions, locale);
   const activities = new Map<string, ActivityState>();
   let nextActivityInstanceId = 1;
+
+  /* --- loop marker (ADR-033 § 3) ------------------------------------ */
+
+  /** Open loops by iteration 1's activity instance id; empty in a model without `loop`. */
+  const loops = new Map<string, LoopEntry>();
+  /**
+   * R-LOOP-5: a boundary event is armed once per entry, on iteration 1; on a loop it acts on the
+   * iteration in flight. Any other boundary keeps its own activity instance.
+   */
+  const boundaryTarget = (activityInstanceId: string): string =>
+    loops.get(activityInstanceId)?.current ?? activityInstanceId;
+  /**
+   * R-LOOP-2: when iteration `k` completes, does another one run? `count` and `maximum` cap it
+   * without drawing; otherwise one uniform from the derived stream `<taskId>#loop` (R-DET-2,
+   * ADR-033 § 1.3) decides with `probability`.
+   */
+  const loopAgain = (nodeId: string, maximum: number | undefined, k: number): boolean => {
+    const loop = spec[nodeId]?.loop;
+    if (loop?.count !== undefined) return k < Math.min(loop.count, maximum ?? Infinity);
+    if (loop?.probability === undefined || (maximum !== undefined && k >= maximum)) return false;
+    return rngFor(`${nodeId}#loop`).next() < loop.probability;
+  };
 
   /**
    * R-CAL-11: los eventos de subida de capacidad se agendan **solo cuando hay alguien esperando**
@@ -924,12 +1088,22 @@ export function runReplication(
     t: number,
     duration?: number,
   ): void => {
+    // ADR-033 § 6: every flow of one call leaves the same node. If crossing one of them sent its
+    // token to an error boundary and cancelled the sub-process holding that node (R-ERR-4), the
+    // tokens the remaining flows would carry were cancelled with it and are never sent.
+    const sourceId = flowIds.length > 0 && subprocesses !== undefined ? ir.flows[flowIds[0]!]?.from : undefined;
+    const sourceEpoch = sourceId === undefined ? undefined : epochAt(caseId, sourceId);
     for (const flowId of flowIds) {
+      if (sourceEpoch !== undefined && epochAt(caseId, sourceId!) !== sourceEpoch) break;
       if (isMeasuredCase(caseId)) flows[flowId] = (flows[flowId] ?? 0) + 1;
       // R-COND-3: se anota siempre, también en los casos de warm-up: ellos también ramifican.
       if (hasConditions) caseStates[caseId - 1]?.flowsTaken?.add(flowId);
       const to = ir.flows[flowId]?.to;
+      // ADR-033 § 6: leaving and entering sub-processes; `false` when the token went to an error
+      // boundary of the sub-process it was leaving instead (R-ERR-4).
+      if (subprocesses !== undefined && !crossSubprocesses(flowId, caseId, marks, t)) continue;
       if (to !== undefined) {
+        const epoch = subprocesses === undefined ? undefined : epochAt(caseId, to);
         heap.push({
           t,
           kind: 'enter',
@@ -937,6 +1111,7 @@ export function runReplication(
           nodeId: to,
           marks,
           ...(duration === undefined ? {} : { duration }),
+          ...(epoch === undefined ? {} : { epoch }),
         });
       }
     }
@@ -946,6 +1121,475 @@ export function runReplication(
   const forward = (node: Node, caseId: number, marks: readonly number[], t: number): void => {
     const flowId = node.outgoing[0];
     if (flowId !== undefined) emit([flowId], caseId, marks, t);
+  };
+
+  /* --- error boundaries and sub-process instances (ADR-033 § 5, § 6) -- */
+
+  /**
+   * R-ERR-2: the error boundary of `hostId` that one completion (or exit) fires, or `undefined`
+   * for the normal path. One uniform from `<hostId>#error`, and only when at least one of the
+   * host's error boundaries declares `errorProbability`, so a scenario without the field draws
+   * nothing (ADR-033 § 1.3).
+   */
+  const drawError = (hostId: string): string | undefined => {
+    const boundaries = errorBoundariesByHost.get(hostId);
+    if (boundaries === undefined) return undefined;
+    const weights = boundaries.map((boundaryId) => spec[boundaryId]?.errorProbability);
+    if (weights.every((p) => p === undefined)) return undefined;
+    const u = rngFor(`${hostId}#error`).next();
+    let acc = 0;
+    for (let i = 0; i < boundaries.length; i++) {
+      acc += weights[i] ?? 0;
+      if (u < acc) return boundaries[i]!;
+    }
+    // R-XOR-7's rounding rule: with a sum of 1, the last boundary with p > 0.
+    if (Math.abs(acc - 1) <= 1e-9) {
+      for (let i = boundaries.length - 1; i >= 0; i--) if ((weights[i] ?? 0) > 0) return boundaries[i]!;
+    }
+    return undefined;
+  };
+
+  /** Degradation (ADR-033 § 5): every error boundary of `hostId` without `errorProbability`. */
+  const warnErrorWithoutProbability = (hostId: string): void => {
+    for (const boundaryId of errorBoundariesByHost.get(hostId) ?? []) {
+      if (spec[boundaryId]?.errorProbability !== undefined) continue;
+      warn(coded('W-ERROR-SIN-PROBABILIDAD', M['W-ERROR-SIN-PROBABILIDAD'](boundaryId, hostId)));
+    }
+  };
+
+  /** R-ERR-5 / R-BND-19: a boundary counts one `started` and one `completed` per firing, no row. */
+  const countBoundaryFiring = (boundaryId: string, caseId: number): void => {
+    if (!isMeasuredCase(caseId)) return;
+    const counters = elements[boundaryId]!;
+    counters.started++;
+    counters.completed++;
+  };
+
+  // ADR-033 § 6: everything below only runs when a boundary event is attached to a sub-process
+  // (`ProcessIR.subprocesses`); every other model keeps the code path it had (R-DEG-5).
+  const subprocesses = ir.subprocesses;
+  /** The sub-processes holding a node, innermost first (R-BND-15: following `parent`). */
+  const containerCache = new Map<string, readonly string[]>();
+  const containersOf = (nodeId: string): readonly string[] => {
+    let chain = containerCache.get(nodeId);
+    if (chain === undefined) {
+      const found: string[] = [];
+      for (let s = ir.nodes[nodeId]?.subprocessId; s !== undefined && !found.includes(s); s = subprocesses?.[s]?.parent) {
+        found.push(s);
+      }
+      chain = found;
+      containerCache.set(nodeId, chain);
+    }
+    return chain;
+  };
+  /**
+   * What crossing a flow does: the sub-processes it leaves, innermost first, and those it enters,
+   * outermost first (ADR-033 § 6). Computed once per flow.
+   */
+  const crossingCache = new Map<string, { leaves: readonly string[]; enters: readonly string[] }>();
+  const crossingOf = (flowId: string): { leaves: readonly string[]; enters: readonly string[] } => {
+    let crossing = crossingCache.get(flowId);
+    if (crossing === undefined) {
+      const flow = ir.flows[flowId];
+      const from = flow === undefined ? [] : containersOf(flow.from);
+      const to = flow === undefined ? [] : containersOf(flow.to);
+      crossing = {
+        leaves: from.filter((s) => !to.includes(s)),
+        enters: to.filter((s) => !from.includes(s)).reverse(),
+      };
+      crossingCache.set(flowId, crossing);
+    }
+    return crossing;
+  };
+  const subprocessState = (caseId: number, subprocessId: string): SubprocessState => {
+    const owner = caseStates[caseId - 1]!;
+    owner.subprocesses ??= new Map();
+    let sub = owner.subprocesses.get(subprocessId);
+    if (sub === undefined) {
+      sub = { tokens: 0, instance: undefined, marks: NO_MARKS, epoch: 0 };
+      owner.subprocesses.set(subprocessId, sub);
+    }
+    return sub;
+  };
+  /** Epoch of the innermost sub-process holding `nodeId`, or `undefined` outside every one. */
+  const epochAt = (caseId: number, nodeId: string): number | undefined => {
+    const innermost = containersOf(nodeId)[0];
+    return innermost === undefined ? undefined : subprocessState(caseId, innermost).epoch;
+  };
+  /**
+   * `delta` tokens of the case appear (or disappear) at `nodeId`: every sub-process holding it
+   * counts them, and one left with no token closes its instance (R-BND-15).
+   */
+  const adjustInside = (caseId: number, nodeId: string, delta: number): void => {
+    if (subprocesses === undefined) return;
+    for (const subprocessId of containersOf(nodeId)) {
+      const sub = subprocessState(caseId, subprocessId);
+      sub.tokens += delta;
+      if (sub.tokens <= 0) sub.instance = undefined;
+    }
+  };
+  let nextSubprocessInstance = 1;
+  /**
+   * R-BND-15 / R-BND-16: a token of the case enters `subprocessId`. With no open instance this
+   * opens one and arms its deadlines, before the token's own enabling is queued, so a deadline
+   * exactly as long as the work fires (R-BND-7).
+   */
+  const enterSubprocess = (subprocessId: string, caseId: number, marks: readonly number[], t: number): void => {
+    const sub = subprocessState(caseId, subprocessId);
+    sub.tokens += 1;
+    if (sub.instance !== undefined) return;
+    const instance = nextSubprocessInstance++;
+    sub.instance = instance;
+    sub.marks = marks;
+    for (const boundaryId of boundariesByHost.get(subprocessId) ?? []) {
+      const dist = spec[boundaryId]?.processingTime;
+      // R-BND-8: with no time there is no deadline; the warning names the sub-process as host.
+      if (dist === undefined) {
+        warn(coded('W-BORDE-SIN-TIEMPO', M['W-BORDE-SIN-TIEMPO'](boundaryId, subprocessId)));
+        continue;
+      }
+      const delay = Math.max(0, sample(dist, rngFor(boundaryId)));
+      const calendar = hasCalendars ? calendarFor(boundaryId, NO_POOLS) : undefined;
+      heap.push({
+        t: calendar === undefined ? t + delay : addWorkingTime(calendar, nextOpen(calendar, t), delay),
+        kind: 'deadline',
+        caseId,
+        nodeId: boundaryId,
+        subprocessId,
+        instance,
+      });
+    }
+    warnErrorWithoutProbability(subprocessId);
+  };
+  /**
+   * R-BND-17: cancel everything of the case inside `subprocessId` at `t`, and send one token
+   * through `boundaryId` with `marks`. Used by an interrupting deadline and by an error on exit
+   * (R-ERR-4).
+   */
+  const interruptSubprocess = (
+    subprocessId: string,
+    boundaryId: string,
+    caseId: number,
+    marks: readonly number[],
+    t: number,
+  ): void => {
+    const owner = caseStates[caseId - 1]!;
+    const inside = (nodeId: string): boolean => containersOf(nodeId).includes(subprocessId);
+    const lost = subprocessState(caseId, subprocessId).tokens;
+    // Open activity instances close `interrupted` with R-BND-5's accounting.
+    const requestIds: string[] = [];
+    for (const activityId of [...owner.activityIds]) {
+      const activity = activities.get(activityId);
+      if (activity === undefined || activity.closed || !inside(activity.nodeId)) continue;
+      closeActivity(activity, t, 'interrupted');
+      if (activity.requestId !== undefined) requestIds.push(activity.requestId);
+      // R-MI-6 / R-BND-17: remaining multi-instance instances never run.
+      if (activity.entry !== undefined) closeEntry(activity.entry);
+    }
+    // Join counters and blocked event gateways inside are discarded with their tokens.
+    for (const joinId of [...owner.andCounts.keys()]) if (inside(joinId)) owner.andCounts.delete(joinId);
+    for (const key of [...owner.orCounts.keys()]) {
+      if (inside(key.slice(0, key.lastIndexOf('#')))) owner.orCounts.delete(key);
+    }
+    for (const [gatewayId, cases] of blockedGateways) if (inside(gatewayId)) cases.delete(caseId);
+    // The sub-process and the ones nested in it close; the epoch makes their pending enablings
+    // stale and the instance id their deadlines.
+    for (const [nestedId, sub] of owner.subprocesses ?? []) {
+      if (nestedId !== subprocessId && !isNestedIn(nestedId, subprocessId)) continue;
+      sub.tokens = 0;
+      sub.instance = undefined;
+      sub.epoch += 1;
+    }
+    // The case loses those tokens and gains the boundary's, which is outside `subprocessId` but
+    // inside every sub-process that encloses it: they never reach zero here.
+    owner.tokens += 1 - lost;
+    for (const enclosing of containersOf(boundaryId)) subprocessState(caseId, enclosing).tokens += 1 - lost;
+    startAllocations(resourceManager.cancel(requestIds, t));
+    countBoundaryFiring(boundaryId, caseId);
+    forward(ir.nodes[boundaryId]!, caseId, marks, t);
+  };
+  /** Is `subprocessId` nested (at any depth) inside `ancestorId`? */
+  const isNestedIn = (subprocessId: string, ancestorId: string): boolean => {
+    const seen = new Set<string>();
+    for (let s = subprocesses?.[subprocessId]?.parent; s !== undefined && !seen.has(s); s = subprocesses?.[s]?.parent) {
+      if (s === ancestorId) return true;
+      seen.add(s);
+    }
+    return false;
+  };
+  /**
+   * The token of `caseId` crosses `flowId` (ADR-033 § 6): it leaves sub-processes innermost first,
+   * each deciding its error (R-ERR-1, R-ERR-4), then enters the new ones outermost first. `false`
+   * when an error boundary took the token, which then never reaches the flow's target.
+   */
+  const crossSubprocesses = (flowId: string, caseId: number, marks: readonly number[], t: number): boolean => {
+    const { leaves, enters } = crossingOf(flowId);
+    for (const subprocessId of leaves) {
+      const boundaryId = drawError(subprocessId);
+      if (boundaryId !== undefined) {
+        interruptSubprocess(subprocessId, boundaryId, caseId, marks, t);
+        return false;
+      }
+      const sub = subprocessState(caseId, subprocessId);
+      sub.tokens -= 1;
+      if (sub.tokens <= 0) sub.instance = undefined;
+    }
+    for (const subprocessId of enters) enterSubprocess(subprocessId, caseId, marks, t);
+    return true;
+  };
+
+  /* --- actividades: tareas y timers ------------------------------- */
+
+  /** Abre una instancia de actividad del caso, habilitada en `t`; no agenda nada todavía. */
+  const createActivity = (
+    node: Node,
+    nodeId: string,
+    caseId: number,
+    marks: readonly number[],
+    t: number,
+    duration: number,
+    entry?: MultiInstanceEntry,
+  ): ActivityState => {
+    const declaredResources = node.type === 'task' ? (spec[nodeId]?.resources ?? []) : [];
+    // R-REC-4 / R-REC-6: los requisitos conservan el orden declarado en el escenario. La
+    // adquisición AND es atómica en `ResourceManager` (no hay retención parcial que deshacer)
+    // y la selección OR concede una sola alternativa, la primera declarada que esté libre.
+    const requirements: ResourceRequirement[] = declaredResources.map((use) => ({
+      poolId: use.ref,
+      quantity: use.quantity ?? 1,
+    }));
+    // R-CAL-4: mientras la tarea espera no se sabe qué pool la atenderá, así que una OR
+    // arrastra solo el calendario del elemento; `startAllocations` lo afina al conceder. En
+    // AND y sin recursos la combinación ya es definitiva.
+    const calendar = hasCalendars
+      ? calendarFor(
+          nodeId,
+          spec[nodeId]?.selection === 'or' ? NO_POOLS : requirements.map((requirement) => requirement.poolId),
+        )
+      : undefined;
+    // R-CAL-5 / R-EVT-3: sin recursos (y en un timer) el trabajo arranca en la apertura.
+    const startedAt = requirements.length > 0
+      ? null
+      : calendar === undefined
+        ? t
+        : nextOpen(calendar, t);
+    const activity: ActivityState = {
+      id: String(nextActivityInstanceId++),
+      caseId,
+      nodeId,
+      marks,
+      enabledAt: t,
+      duration,
+      requirements,
+      calendar,
+      startedAt,
+      closed: false,
+      ...(entry === undefined ? {} : { entry }),
+    };
+    activities.set(activity.id, activity);
+    caseStates[caseId - 1]?.activityIds.add(activity.id);
+    return activity;
+  };
+
+  /**
+   * R-BND-2/3/7: el borde cuenta desde que la tarea queda habilitada, con su propio flujo
+   * de aleatorios (por eso las corridas sin bordes no cambian) y a reloj de pared salvo que
+   * el borde declare calendario. Se encola **antes** que el `done` para que, con el mismo
+   * instante, el desempate por orden de inserción lo gane el borde: interrumpa (R-BND-7) o
+   * no (R-BND-13, donde «ganar» es encontrar al host todavía abierto y disparar). On a
+   * multi-instance task it is armed once per entry, over the whole entry (R-MI-6).
+   */
+  const armBoundaries = (
+    hostId: string,
+    caseId: number,
+    t: number,
+    target: { readonly activityInstanceId: string } | { readonly entryId: string },
+  ): void => {
+    for (const boundaryId of boundariesByHost.get(hostId) ?? []) {
+      const boundaryDist = spec[boundaryId]?.processingTime;
+      // R-BND-8: sin tiempo no hay plazo que vencer; el borde nunca dispara.
+      if (boundaryDist === undefined) {
+        warn(coded('W-BORDE-SIN-TIEMPO', M['W-BORDE-SIN-TIEMPO'](boundaryId, hostId)));
+        continue;
+      }
+      const delay = Math.max(0, sample(boundaryDist, rngFor(boundaryId)));
+      const boundaryCalendar = hasCalendars ? calendarFor(boundaryId, NO_POOLS) : undefined;
+      const at = boundaryCalendar === undefined
+        ? t + delay
+        : addWorkingTime(boundaryCalendar, nextOpen(boundaryCalendar, t), delay);
+      heap.push(
+        'entryId' in target
+          ? { t: at, kind: 'multiBoundary', entryId: target.entryId, caseId, nodeId: boundaryId }
+          : { t: at, kind: 'boundary', activityInstanceId: target.activityInstanceId, caseId, nodeId: boundaryId },
+      );
+    }
+  };
+
+  /** Agenda el fin de una actividad sin recursos, o pone en cola su solicitud. */
+  const scheduleActivity = (activity: ActivityState): void => {
+    if (activity.requirements.length === 0) {
+      heap.push({
+        t: activity.calendar === undefined
+          ? activity.enabledAt + activity.duration
+          : addWorkingTime(activity.calendar, activity.startedAt!, activity.duration),
+        kind: 'done',
+        activityInstanceId: activity.id,
+        caseId: activity.caseId,
+        nodeId: activity.nodeId,
+      });
+      return;
+    }
+    activity.requestId = activity.id;
+    startAllocations(resourceManager.enqueue({
+      id: activity.id,
+      enabledAt: activity.enabledAt,
+      requirements: activity.requirements,
+      selection: spec[activity.nodeId]?.selection,
+    }, activity.enabledAt));
+    // R-CAL-11: si se quedó en cola, hay que despertarla cuando suba la capacidad de alguno
+    // de sus pools; sin capacidad variable no agenda nada.
+    if (activity.allocation === undefined) {
+      for (const requirement of activity.requirements) scheduleCapacityRise(requirement.poolId, activity.enabledAt);
+    }
+  };
+
+  /* --- multi-instance tasks (ADR-033 § 4) --------------------------- */
+
+  /** Open multi-instance entries by id; an entry leaves the map when it closes. */
+  const entries = new Map<string, MultiInstanceEntry>();
+  let nextEntryId = 1;
+
+  /** R-EVT-1: timer sin recurso. R-DEG-3 / R-EVT-2: sin processingTime dura 0. */
+  const sampleTaskDuration = (nodeId: string): number => {
+    const dist = spec[nodeId]?.processingTime;
+    if (dist === undefined) {
+      if (tareasSinTiempo.length === 0) warn(coded('W-TAREA-SIN-TIEMPO', M['W-TAREA-SIN-TIEMPO/elemento'](nodeId)));
+      return 0;
+    }
+    return Math.max(0, sample(dist, rngFor(nodeId)));
+  };
+
+  /**
+   * R-MI-2/R-MI-3: enables the next instance of `entry` at `t`, with its own `processingTime`
+   * sample from the task's stream. Its enabling takes its own place in the resource queue, so
+   * instances enabled at the same instant are ordered by `(enabledAt, seq)` (R-REC-3).
+   */
+  const enableInstance = (
+    entry: MultiInstanceEntry,
+    node: Node,
+    t: number,
+    duration = sampleTaskDuration(entry.nodeId),
+  ): void => {
+    entry.enabled += 1;
+    if (isMeasuredCase(entry.caseId)) elements[entry.nodeId]!.started++;
+    const activity = createActivity(node, entry.nodeId, entry.caseId, entry.marks, t, duration, entry);
+    entry.open.add(activity.id);
+    scheduleActivity(activity);
+  };
+
+  /** The entry is over: it leaves the map, and its boundary events find it closed (R-BND-9). */
+  const closeEntry = (entry: MultiInstanceEntry): void => {
+    entry.closed = true;
+    entries.delete(entry.id);
+  };
+
+  /**
+   * R-MI-6: every instance of `entry` still open closes `interrupted`, their requests (and, on an
+   * error, the units of the instance that just completed) are dropped together (as `terminate` does, so a unit freed by one is never granted to a sibling that is
+   * being cancelled), and instances not yet enabled are never created.
+   */
+  const interruptEntry = (entry: MultiInstanceEntry, t: number, completedRequestId?: string): void => {
+    closeEntry(entry);
+    const requestIds: string[] = completedRequestId === undefined ? [] : [completedRequestId];
+    for (const activityId of entry.open) {
+      const activity = activities.get(activityId);
+      if (activity === undefined || activity.closed) continue;
+      closeActivity(activity, t, 'interrupted');
+      if (activity.requestId !== undefined) requestIds.push(activity.requestId);
+    }
+    entry.open.clear();
+    startAllocations(resourceManager.cancel(requestIds, t));
+  };
+
+  /**
+   * R-MI-1…R-MI-4: a token reaches a multi-instance task. `N` is one sample of `instances` from
+   * the derived stream `<taskId>#instances`, drawn before any instance's duration; with
+   * `cardinality` or the default nothing is drawn. With `N = 0` the token leaves in the same
+   * instant: no instance, no row, no `started` and no boundary armed.
+   */
+  const enterMultiInstance = (
+    node: Node,
+    nodeId: string,
+    caseId: number,
+    marks: readonly number[],
+    t: number,
+  ): void => {
+    const multiInstance = node.multiInstance!;
+    const instances = spec[nodeId]?.instances;
+    let total: number;
+    if (instances !== undefined) {
+      total = Math.floor(Math.max(0, sample(instances, rngFor(`${nodeId}#instances`))) + 0.5);
+    } else if (multiInstance.cardinality !== undefined) {
+      total = multiInstance.cardinality;
+    } else {
+      warn(coded('W-MULTI-SIN-CARDINALIDAD', M['W-MULTI-SIN-CARDINALIDAD'](nodeId)));
+      total = 1;
+    }
+    if (total === 0) {
+      forward(node, caseId, marks, t);
+      return;
+    }
+    const entry: MultiInstanceEntry = {
+      id: String(nextEntryId++),
+      caseId,
+      nodeId,
+      marks,
+      sequential: multiInstance.sequential,
+      total,
+      enabled: 0,
+      open: new Set(),
+      closed: false,
+    };
+    entries.set(entry.id, entry);
+    // Instance 1's duration is sampled first, as on a plain task, so `N = 1` gives the plain
+    // task's warnings in the same order; the draws come from other streams either way.
+    const first = sampleTaskDuration(nodeId);
+    warnErrorWithoutProbability(nodeId);
+    // R-MI-6: armed once per entry, from the entry instant, before any instance's `done`.
+    armBoundaries(nodeId, caseId, t, { entryId: entry.id });
+    enableInstance(entry, node, t, first);
+    if (!entry.sequential) for (let k = 1; k < total; k++) enableInstance(entry, node, t);
+  };
+
+  /**
+   * R-MI-3/R-MI-4/R-MI-6: an instance of `entry` completed at `t` (its units already released,
+   * unless an error was drawn for it).
+   * With an error drawn for it (R-ERR-1), every other open instance closes `interrupted` and the
+   * token leaves once, through the boundary. Otherwise a sequential entry enables the next
+   * instance as a new enabling, behind the requests already waiting, and the token leaves through
+   * the first outgoing flow when the last instance completes.
+   */
+  const completeInstance = (
+    entry: MultiInstanceEntry,
+    activity: ActivityState,
+    node: Node,
+    errorId: string | undefined,
+    t: number,
+  ): void => {
+    entry.open.delete(activity.id);
+    if (errorId !== undefined) {
+      interruptEntry(entry, t, activity.requestId);
+      countBoundaryFiring(errorId, entry.caseId);
+      forward(ir.nodes[errorId]!, entry.caseId, entry.marks, t);
+      return;
+    }
+    if (entry.enabled < entry.total) {
+      if (entry.sequential) enableInstance(entry, node, t);
+      return;
+    }
+    if (entry.open.size > 0) return;
+    closeEntry(entry);
+    forward(node, entry.caseId, entry.marks, t);
   };
 
   /* --- generadores de llegadas (R-PERF-5) --------------------------- */
@@ -1033,7 +1677,7 @@ export function runReplication(
     // capacidad: una corrida sin `run.duration` no debe estirar `stoppedAt` hasta un temporizador
     // que nunca iba a disparar (R-ARR-3).
     if (next.kind === 'boundary') {
-      const pending = activities.get(next.activityInstanceId);
+      const pending = activities.get(boundaryTarget(next.activityInstanceId));
       if (pending === undefined || pending.closed) continue;
     }
     // R-EVT-5 / R-BND-9: el `done` de una actividad que ya cerró otro evento —el `terminate` que
@@ -1046,6 +1690,25 @@ export function runReplication(
       if (pending === undefined || pending.closed) continue;
       const owner = caseStates[next.caseId - 1];
       if (owner === undefined || !owner.alive) continue;
+    }
+    // R-MI-6: the same for the boundary of a multi-instance entry that already closed, or whose
+    // case a `terminate` killed.
+    if (next.kind === 'multiBoundary') {
+      const pending = entries.get(next.entryId);
+      if (pending === undefined || pending.closed || caseStates[next.caseId - 1]?.alive !== true) continue;
+    }
+    // R-BND-16: a deadline whose sub-process instance already closed (the last token left, the
+    // case died, or an enclosing sub-process was cancelled) is not a model event either.
+    if (next.kind === 'deadline') {
+      const owner = caseStates[next.caseId - 1];
+      if (owner === undefined || !owner.alive || owner.subprocesses?.get(next.subprocessId)?.instance !== next.instance) {
+        continue;
+      }
+    }
+    // R-BND-17: an enabling sent into a sub-process that was cancelled since is discarded.
+    if (next.kind === 'enter' && next.epoch !== undefined) {
+      const owner = caseStates[next.caseId - 1];
+      if (owner === undefined || !owner.alive || epochAt(next.caseId, next.nodeId) !== next.epoch) continue;
     }
     clock = next.t;
     options.onStep?.(clock);
@@ -1072,7 +1735,18 @@ export function runReplication(
         activityIds: new Set(),
         flowsTaken: hasConditions ? new Set() : undefined,
       });
-      heap.push({ t: next.t, kind: 'enter', caseId, nodeId: next.startId, marks: NO_MARKS });
+      // ADR-033 § 6: a start left inside a sub-process (one that flattening did not rewire) puts
+      // the case's token inside it from birth.
+      const epoch = subprocesses === undefined ? undefined : epochAt(caseId, next.startId);
+      adjustInside(caseId, next.startId, 1);
+      heap.push({
+        t: next.t,
+        kind: 'enter',
+        caseId,
+        nodeId: next.startId,
+        marks: NO_MARKS,
+        ...(epoch === undefined ? {} : { epoch }),
+      });
 
       // R-ARR-2: el generador para al emitir `triggerCount` casos o cuando la siguiente
       // llegada cae en `t ≥ t_stop`, lo primero que ocurra.
@@ -1128,13 +1802,48 @@ export function runReplication(
       if (activity === undefined || activity.closed) continue;
       if (isMeasuredCase(next.caseId)) counters.completed++;
       closeActivity(activity, next.t, 'completed');
+      // ADR-033 R-LOOP-2 + R-ERR-1: each completed iteration decides its error first; on error the
+      // loop ends without drawing `#loop` and the token leaves through the boundary with the host
+      // token's OR marks. Otherwise another iteration is a new enabling of the same task at this
+      // instant, pushed to the heap like any other; the token only leaves after the last one.
+      // The draw only reads `<taskId>#error`, so taking it before the release moves nothing else.
+      const errorId = node.type === 'task' ? drawError(next.nodeId) : undefined;
       if (activity.requestId !== undefined) {
-        startAllocations(resourceManager.release([activity.requestId], next.t));
+        // R-MI-6: on an error, a multi-instance instance gives its units back in the same batch
+        // as its siblings' (`interruptEntry`), so none of them starts on the freed unit.
+        if (activity.entry === undefined || errorId === undefined) {
+          startAllocations(resourceManager.release([activity.requestId], next.t));
+        }
       }
-      // Completar una tarea incluye recorrer sus flujos salientes instantáneos (R-TOK-4).
-      // Una cancelación activada por onEvent se observa después de cerrar esa transición
-      // atómica, nunca entre el contador/row de la tarea y su forward.
-      forward(node, next.caseId, activity.marks, next.t);
+      const loop = activity.loopEntry === undefined ? undefined : loops.get(activity.loopEntry);
+      if (activity.entry !== undefined) {
+        completeInstance(activity.entry, activity, node, errorId, next.t);
+      } else if (errorId === undefined && loop !== undefined && loopAgain(next.nodeId, node.loop?.maximum, loop.iteration)) {
+        loop.iteration += 1;
+        // R-BND-17: the next iteration carries the epoch of its sub-process, so a cancellation
+        // queued at this same instant discards it like any other pending enabling.
+        const epoch = subprocesses === undefined ? undefined : epochAt(next.caseId, next.nodeId);
+        heap.push({
+          t: next.t,
+          kind: 'enter',
+          caseId: next.caseId,
+          nodeId: next.nodeId,
+          marks: activity.marks,
+          loopEntry: activity.loopEntry!,
+          ...(epoch === undefined ? {} : { epoch }),
+        });
+      } else {
+        if (loop !== undefined) loops.delete(activity.loopEntry!);
+        // Completar una tarea incluye recorrer sus flujos salientes instantáneos (R-TOK-4).
+        // Una cancelación activada por onEvent se observa después de cerrar esa transición
+        // atómica, nunca entre el contador/row de la tarea y su forward.
+        if (errorId === undefined) {
+          forward(node, next.caseId, activity.marks, next.t);
+        } else {
+          countBoundaryFiring(errorId, next.caseId);
+          forward(ir.nodes[errorId]!, next.caseId, activity.marks, next.t);
+        }
+      }
       if (isAborted()) {
         cancelled = true;
         stoppedAt = clock;
@@ -1144,7 +1853,7 @@ export function runReplication(
     }
 
     if (next.kind === 'boundary') {
-      const activity = activities.get(next.activityInstanceId);
+      const activity = activities.get(boundaryTarget(next.activityInstanceId));
       if (activity === undefined || activity.closed) continue;
       // R-BND-6: el borde cuenta un disparo entero (un `started` y un `completed` en el mismo
       // instante) y no emite fila de log propia, interrumpa o no.
@@ -1162,6 +1871,7 @@ export function runReplication(
         // que nadie podría consumir y que dejaría el caso en vuelo para siempre (R-EVT-4).
         if (node.outgoing[0] !== undefined) {
           state.tokens += 1;
+          adjustInside(next.caseId, next.nodeId, 1);
           forward(node, next.caseId, NO_MARKS, next.t);
         }
       } else {
@@ -1172,6 +1882,8 @@ export function runReplication(
         if (activity.requestId !== undefined) {
           startAllocations(resourceManager.cancel([activity.requestId], next.t));
         }
+        // ADR-033 R-LOOP-5: interrupting a loop closes the iteration in flight; no further one runs.
+        if (activity.loopEntry !== undefined) loops.delete(activity.loopEntry);
         forward(node, next.caseId, activity.marks, next.t);
       }
       if (isAborted()) {
@@ -1179,6 +1891,59 @@ export function runReplication(
         stoppedAt = clock;
         break simulation;
       }
+      continue;
+    }
+
+    if (next.kind === 'deadline') {
+      if (node.interrupting === false) {
+        // R-BND-18: at most once per instance (one deadline per instance), a new token with no OR
+        // marks, and the sub-process keeps running.
+        countBoundaryFiring(next.nodeId, next.caseId);
+        if (node.outgoing[0] !== undefined) {
+          state.tokens += 1;
+          adjustInside(next.caseId, next.nodeId, 1);
+          forward(node, next.caseId, NO_MARKS, next.t);
+        }
+      } else {
+        // R-BND-17: the token that leaves carries the marks of the one that opened the instance.
+        const opened = subprocessState(next.caseId, next.subprocessId).marks;
+        interruptSubprocess(next.subprocessId, next.nodeId, next.caseId, opened, next.t);
+      }
+      if (isAborted()) {
+        cancelled = true;
+        stoppedAt = clock;
+        break simulation;
+      }
+      continue;
+    }
+
+    if (next.kind === 'multiBoundary') {
+      const entry = entries.get(next.entryId);
+      if (entry === undefined || entry.closed) continue;
+      // R-MI-6 / R-BND-6: one whole firing, with no log row of its own.
+      countBoundaryFiring(next.nodeId, next.caseId);
+      if (node.interrupting === false) {
+        // R-BND-11/12: the entry keeps running and the firing adds a token with no OR marks.
+        if (node.outgoing[0] !== undefined) {
+          state.tokens += 1;
+          adjustInside(next.caseId, next.nodeId, 1);
+          forward(node, next.caseId, NO_MARKS, next.t);
+        }
+      } else {
+        interruptEntry(entry, next.t);
+        forward(node, next.caseId, entry.marks, next.t);
+      }
+      if (isAborted()) {
+        cancelled = true;
+        stoppedAt = clock;
+        break simulation;
+      }
+      continue;
+    }
+
+    // ADR-033 § 4: a multi-instance task counts its instances, not the token's entry (R-MI-5).
+    if (node.multiInstance !== undefined) {
+      enterMultiInstance(node, next.nodeId, next.caseId, next.marks, next.t);
       continue;
     }
 
@@ -1206,91 +1971,34 @@ export function runReplication(
         // drawn — the very draw that won the race — so it is not sampled a second time here.
         const duration =
           next.duration ?? (dist === undefined ? 0 : Math.max(0, sample(dist, rngFor(next.nodeId))));
-        const declaredResources = node.type === 'task' ? (spec[next.nodeId]?.resources ?? []) : [];
-        // R-REC-4 / R-REC-6: los requisitos conservan el orden declarado en el escenario. La
-        // adquisición AND es atómica en `ResourceManager` (no hay retención parcial que deshacer)
-        // y la selección OR concede una sola alternativa, la primera declarada que esté libre.
-        const requirements: ResourceRequirement[] = declaredResources.map((use) => ({
-          poolId: use.ref,
-          quantity: use.quantity ?? 1,
-        }));
-        // R-CAL-4: mientras la tarea espera no se sabe qué pool la atenderá, así que una OR
-        // arrastra solo el calendario del elemento; `startAllocations` lo afina al conceder. En
-        // AND y sin recursos la combinación ya es definitiva.
-        const calendar = hasCalendars
-          ? calendarFor(
-              next.nodeId,
-              spec[next.nodeId]?.selection === 'or' ? NO_POOLS : requirements.map((requirement) => requirement.poolId),
-            )
-          : undefined;
-        // R-CAL-5 / R-EVT-3: sin recursos (y en un timer) el trabajo arranca en la apertura.
-        const startedAt = requirements.length > 0
-          ? null
-          : calendar === undefined
-            ? next.t
-            : nextOpen(calendar, next.t);
-        const activity: ActivityState = {
-          id: String(nextActivityInstanceId++),
-          caseId: next.caseId,
-          nodeId: next.nodeId,
-          marks: next.marks,
-          enabledAt: next.t,
-          duration,
-          requirements,
-          calendar,
-          startedAt,
-          closed: false,
-        };
-        activities.set(activity.id, activity);
-        state.activityIds.add(activity.id);
-        // R-BND-2/3/7: el borde cuenta desde que la tarea queda habilitada, con su propio flujo
-        // de aleatorios (por eso las corridas sin bordes no cambian) y a reloj de pared salvo que
-        // el borde declare calendario. Se encola **antes** que el `done` para que, con el mismo
-        // instante, el desempate por orden de inserción lo gane el borde: interrumpa (R-BND-7) o
-        // no (R-BND-13, donde «ganar» es encontrar al host todavía abierto y disparar).
-        for (const boundaryId of boundariesByHost.get(next.nodeId) ?? []) {
-          const boundaryDist = spec[boundaryId]?.processingTime;
-          // R-BND-8: sin tiempo no hay plazo que vencer; el borde nunca dispara.
-          if (boundaryDist === undefined) {
-            warn(coded('W-BORDE-SIN-TIEMPO', M['W-BORDE-SIN-TIEMPO'](boundaryId, next.nodeId)));
-            continue;
-          }
-          const delay = Math.max(0, sample(boundaryDist, rngFor(boundaryId)));
-          const boundaryCalendar = hasCalendars ? calendarFor(boundaryId, NO_POOLS) : undefined;
-          heap.push({
-            t: boundaryCalendar === undefined
-              ? next.t + delay
-              : addWorkingTime(boundaryCalendar, nextOpen(boundaryCalendar, next.t), delay),
-            kind: 'boundary',
-            activityInstanceId: activity.id,
-            caseId: next.caseId,
-            nodeId: boundaryId,
-          });
-        }
-        if (requirements.length === 0) {
-          heap.push({
-            t: calendar === undefined ? next.t + duration : addWorkingTime(calendar, startedAt!, duration),
-            kind: 'done',
-            activityInstanceId: activity.id,
-            caseId: activity.caseId,
-            nodeId: activity.nodeId,
-          });
-        } else {
-          activity.requestId = activity.id;
-          startAllocations(resourceManager.enqueue({
-            id: activity.id,
-            enabledAt: next.t,
-            requirements,
-            selection: spec[next.nodeId]?.selection,
-          }, next.t));
-          // R-CAL-11: si se quedó en cola, hay que despertarla cuando suba la capacidad de alguno
-          // de sus pools; sin capacidad variable no agenda nada.
-          if (activity.allocation === undefined) {
-            for (const requirement of requirements) scheduleCapacityRise(requirement.poolId, next.t);
+        const activity = createActivity(node, next.nodeId, next.caseId, next.marks, next.t, duration);
+        // ADR-033 R-LOOP-1: every iteration is its own activity instance. Iteration 1 opens the
+        // loop; a task with the marker and no `loop` in the scenario runs once, with a warning.
+        if (next.loopEntry !== undefined) {
+          activity.loopEntry = next.loopEntry;
+          loops.get(next.loopEntry)!.current = activity.id;
+        } else if (node.loop !== undefined) {
+          if (spec[next.nodeId]?.loop === undefined) {
+            warn(coded('W-BUCLE-SIN-PARAMETROS', M['W-BUCLE-SIN-PARAMETROS'](next.nodeId)));
+          } else {
+            activity.loopEntry = activity.id;
+            loops.set(activity.id, { iteration: 1, current: activity.id });
           }
         }
+        // ADR-033 § 5: an error boundary without its probability warns when its host is entered;
+        // R-LOOP-5: on a loop the boundaries are armed once per entry, at iteration 1.
+        if (node.type === 'task' && next.loopEntry === undefined) warnErrorWithoutProbability(next.nodeId);
+        if (next.loopEntry === undefined) armBoundaries(next.nodeId, next.caseId, next.t, { activityInstanceId: activity.id });
+        scheduleActivity(activity);
         break;
       }
+
+      case 'throw':
+        // R-THR-1: a none or message throw is a milestone: it counts the pass and forwards the
+        // token in the same instant, with no time, no resource, no draw and no log row.
+        if (isMeasuredCase(next.caseId)) counters.completed++;
+        forward(node, next.caseId, next.marks, next.t);
+        break;
 
       case 'xor':
         if (isMeasuredCase(next.caseId)) counters.completed++;
@@ -1353,9 +2061,11 @@ export function runReplication(
           }
           state.andCounts.delete(next.nodeId);
           state.tokens -= node.incoming.length - 1;
+          adjustInside(next.caseId, next.nodeId, -(node.incoming.length - 1));
         }
         if (isMeasuredCase(next.caseId)) counters.completed++;
         state.tokens += node.outgoing.length - 1; // R-AND-1: un token por salida, sin sorteo.
+        adjustInside(next.caseId, next.nodeId, node.outgoing.length - 1);
         emit(node.outgoing, next.caseId, next.marks, next.t);
         break;
       }
@@ -1380,6 +2090,7 @@ export function runReplication(
             }
             state.orCounts.delete(key);
             state.tokens -= expected - 1;
+            adjustInside(next.caseId, next.nodeId, -(expected - 1));
             marks = marks.slice(0, -1); // se desapila la marca (R-OR-4, LIFO).
           }
         }
@@ -1393,6 +2104,7 @@ export function runReplication(
         const activationId = nextActivationId++;
         activationSize.set(activationId, active.length);
         state.tokens += active.length - 1;
+        adjustInside(next.caseId, next.nodeId, active.length - 1);
         emit(active, next.caseId, [...marks, activationId], next.t);
         break;
       }
@@ -1402,6 +2114,7 @@ export function runReplication(
         // cuando el primero toca un end.
         if (isMeasuredCase(next.caseId)) counters.completed++;
         state.tokens -= 1;
+        adjustInside(next.caseId, next.nodeId, -1);
         if (state.tokens <= 0) {
           state.endedAt = next.t;
           // El desenlace es el end que consumió el último token: el caso termina ahí (R-EVT-4).
@@ -1426,6 +2139,9 @@ export function runReplication(
             if (activity === undefined || activity.closed) continue;
             closeActivity(activity, next.t, 'terminated');
             if (activity.requestId !== undefined) requestIds.push(activity.requestId);
+            if (activity.loopEntry !== undefined) loops.delete(activity.loopEntry);
+            // R-MI-6: an open entry always has an open instance, so this closes every one of them.
+            if (activity.entry !== undefined) closeEntry(activity.entry);
           }
           startAllocations(resourceManager.cancel(requestIds, next.t));
         }

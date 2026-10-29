@@ -409,6 +409,19 @@ function buildSchemas(locale: Locale) {
     conditions: z
       .array(z.strictObject({ flowTaken: z.string(), probability: z.number() }))
       .optional(),
+    // ADR-033 § 5 (#702) — share of the host's completions that leave through this error boundary
+    // (R-ERR-1…5). No `.min(0).max(1)` for the same reason as `probability`: `E-PROB-RANGO`.
+    errorProbability: z.number().optional(),
+    // ADR-033 § 3 — standard loop marker (R-LOOP-1…6): exactly one of `count` and `probability`.
+    // As with `probability` above, its range is checked by `validateScenario` (`E-PROB-RANGO`).
+    loop: z
+      .strictObject({ count: z.int().min(1).optional(), probability: z.number().optional() })
+      .refine((loop) => (loop.count === undefined) !== (loop.probability === undefined), {
+        message: zod.loopExactlyOne(),
+      })
+      .optional(),
+    // ADR-033 § 4 (#701): instances per entry of a multi-instance task, `floor(max(0, x) + 0.5)`.
+    instances: DistributionSchema.optional(),
     // § 4 — reservados.
     priority: z.unknown().optional(),
     preempt: z.unknown().optional(),
@@ -523,10 +536,12 @@ export type ScenarioProblemCode =
   | 'E-CAMPO-NO-APLICA'
   | 'E-PROB-EN-NODO'
   | 'E-PROB-RANGO'
+  | 'E-PROB-ERROR-SUMA'
   | 'E-SUBPROC-PARAMETRO'
   | 'E-TIMER-RECURSO'
   | 'E-SIN-PARADA'
   | 'E-XOR-SUMA-CERO'
+  | 'E-BUCLE-SIN-SALIDA'
   | 'W-SIN-SEED'
   | 'W-ELEMENTO-SIN-PARAMETROS'
   | 'W-XOR-NORMALIZADA'
@@ -689,7 +704,7 @@ function checkElementDistributions(
   element: ElementSpec,
   locale: Locale,
 ): void {
-  for (const field of ['processingTime', 'interTriggerTimer'] as const) {
+  for (const field of ['processingTime', 'interTriggerTimer', 'instances'] as const) {
     const dist = element[field];
     if (dist === undefined) continue;
     for (const warning of checkDistribution(dist, locale)) {
@@ -818,6 +833,9 @@ export function validateScenario(
       .map((node) => node.subprocessId)
       .filter((subprocessId): subprocessId is string => subprocessId !== undefined),
   );
+  // ADR-033 § 6: with a boundary event on a sub-process the IR carries every sub-process, the
+  // outer ones of a nesting included, so they are recognised too.
+  for (const subprocessId of Object.keys(ir.subprocesses ?? {})) subprocessIds.add(subprocessId);
 
   for (const [id, element] of Object.entries(elements)) {
     reserved(problems, `elements.${id}`, element, RESERVED.elements, M);
@@ -840,7 +858,17 @@ export function validateScenario(
           message: M['E-SUBPROC-PARAMETRO'](`elements.${id}.${field}`, id),
         });
       }
-      if (subprocessFields.length === 0) {
+      // ADR-033 § 5: a sub-process can host an error boundary, but the probability is the boundary's.
+      const misplacedError = subprocessIds.has(id) && element.errorProbability !== undefined;
+      if (misplacedError) {
+        problems.push({
+          code: 'E-CAMPO-NO-APLICA',
+          path: `elements.${id}.errorProbability`,
+          severity: 'error',
+          message: M['E-CAMPO-NO-APLICA/solo-error'](`elements.${id}.errorProbability`),
+        });
+      }
+      if (subprocessFields.length === 0 && !misplacedError) {
         const other = options.elsewhere?.[id];
         problems.push({
           code: 'E-ELEMENTO-DESCONOCIDO',
@@ -940,6 +968,36 @@ export function validateScenario(
       }
     }
 
+    // ADR-033 § 3 — `loop` only on a task with a standard loop marker; its probability in [0, 1]
+    // (R-XOR-6's `E-PROB-RANGO`), and 1 only with a `loopMaximum` to stop it (R-LOOP-2).
+    if (element.loop !== undefined) {
+      if (node?.loop === undefined) {
+        problems.push({
+          code: 'E-CAMPO-NO-APLICA',
+          path: `elements.${id}.loop`,
+          severity: 'error',
+          message: M['E-CAMPO-NO-APLICA/solo-bucle'](`elements.${id}.loop`),
+        });
+      } else if (element.loop.probability !== undefined) {
+        const path = `elements.${id}.loop.probability`;
+        if (element.loop.probability < 0 || element.loop.probability > 1) {
+          problems.push({
+            code: 'E-PROB-RANGO',
+            path,
+            severity: 'error',
+            message: M['E-PROB-RANGO'](path, element.loop.probability),
+          });
+        } else if (element.loop.probability === 1 && node.loop.maximum === undefined) {
+          problems.push({
+            code: 'E-BUCLE-SIN-SALIDA',
+            path,
+            severity: 'error',
+            message: M['E-BUCLE-SIN-SALIDA'](path),
+          });
+        }
+      }
+    }
+
     // R5 — llegadas solo en starts (el start con timer ya es `start` en el IR).
     for (const field of ['interTriggerTimer', 'triggerCount'] as const) {
       if (element[field] !== undefined && (node === undefined || !GENERATORS.has(node.type))) {
@@ -1018,6 +1076,35 @@ export function validateScenario(
       });
     }
 
+    // ADR-033 § 5 (#702) — `errorProbability` only on an error boundary, and within [0, 1].
+    if (element.errorProbability !== undefined) {
+      if (node?.type !== 'errorBoundary') {
+        problems.push({
+          code: 'E-CAMPO-NO-APLICA',
+          path: `elements.${id}.errorProbability`,
+          severity: 'error',
+          message: M['E-CAMPO-NO-APLICA/solo-error'](`elements.${id}.errorProbability`),
+        });
+      } else if (element.errorProbability < 0 || element.errorProbability > 1) {
+        problems.push({
+          code: 'E-PROB-RANGO',
+          path: `elements.${id}.errorProbability`,
+          severity: 'error',
+          message: M['E-PROB-RANGO'](`elements.${id}.errorProbability`, element.errorProbability),
+        });
+      }
+    }
+
+    // ADR-033 § 4 (#701) — `instances` only on a task with a multi-instance marker.
+    if (element.instances !== undefined && node?.multiInstance === undefined) {
+      problems.push({
+        code: 'E-CAMPO-NO-APLICA',
+        path: `elements.${id}.instances`,
+        severity: 'error',
+        message: M['E-CAMPO-NO-APLICA/solo-multi'](`elements.${id}.instances`),
+      });
+    }
+
     // R14 — `selection` sin `resources` es error.
     if (element.selection !== undefined && element.resources === undefined) {
       problems.push({
@@ -1034,6 +1121,24 @@ export function validateScenario(
   for (const [gatewayId, node] of Object.entries(ir.nodes)) {
     if (node.type === 'xor') checkXorGateway(problems, gatewayId, node.outgoing, elements, M);
     if (node.type === 'or') checkOrGateway(problems, gatewayId, node.outgoing, elements, M);
+  }
+
+  // ADR-033 § 5 (#702) — the declared `errorProbability` of one host's error boundaries add up to
+  // at most 1, the same tolerance as R-XOR-4; `core/sim.ts` repeats the check before simulating.
+  const errorSums = new Map<string, number>();
+  for (const [id, node] of Object.entries(ir.nodes)) {
+    const p = elements[id]?.errorProbability;
+    if (node.type !== 'errorBoundary' || node.attachedTo === undefined || p === undefined) continue;
+    errorSums.set(node.attachedTo, (errorSums.get(node.attachedTo) ?? 0) + p);
+  }
+  for (const [hostId, sum] of errorSums) {
+    if (sum <= 1 + 1e-9) continue;
+    problems.push({
+      code: 'E-PROB-ERROR-SUMA',
+      path: `elements.${hostId}`,
+      severity: 'error',
+      message: M['E-PROB-ERROR-SUMA/lint'](`elements.${hostId}`, hostId, String(Number(sum.toFixed(6)))),
+    });
   }
 
   // R6 — al menos uno de `run.duration` o un `triggerCount`.

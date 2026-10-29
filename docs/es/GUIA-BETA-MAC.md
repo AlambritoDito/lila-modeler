@@ -1,20 +1,20 @@
-# Guía de la beta de escritorio (macOS)
+# Guía de la app de escritorio (macOS)
 
 > Leer en: [English](../BETA-MAC-GUIDE.md)
 
 ¿Usas Windows? Mira la [guía para probar en Windows](GUIA-PROBADOR-WINDOWS.md). El estado por
-plataforma está en el [README](../../README.es.md#beta-de-escritorio).
+plataforma está en el [README](../../README.es.md#app-de-escritorio).
 
-Esta guía parte de la beta verificada sobre el SHA `358353d` (2026-09-07),
+Esta guía describe la app de escritorio (1.0.0-rc.1); parte de la beta verificada sobre el SHA `358353d` (2026-09-07),
 con el branding y la instalación actualizados el 2026-09-14: `DesktopStore` ya está conectado en `main.tsx`
 (`apps/web/src/main.tsx`, "Único punto de elección BrowserStore/DesktopStore"), con guardado
 transaccional, cierre seguro con diálogo nativo, recientes y el seam de pruebas E2E descritos
 abajo. No incluye nada prometido o planificado: donde algo todavía no está conectado, se dice
-explícitamente en «Limitaciones de esta beta».
+explícitamente en «Limitaciones».
 
 ## Requisitos
 
-- Mac con **Apple Silicon (arm64)**. El artefacto de esta beta solo se compila para `arm64`
+- Mac con **Apple Silicon (arm64)**. El instalador solo se compila para `arm64`
   (`apps/desktop/electron-builder.yml`); no hay build de Intel (`x64`).
 - **macOS 13 (Ventura) o más reciente** (`LSMinimumSystemVersion` del `.app` empaquetado).
 - Sin requisitos de instalación adicionales: la app trae Electron con su propio Chromium y Node,
@@ -23,11 +23,11 @@ explícitamente en «Limitaciones de esta beta».
 ## Dónde está el instalador y cómo abrirlo sin firma
 
 El instalador es un `.dmg` generado con `electron-builder` (`npm run dist:mac -w @lila-modeler/desktop`),
-llamado `Lila-Modeler-1.0.0-beta.16-mac-arm64.dmg` para la versión actual (guiones, sin espacios,
+llamado `Lila-Modeler-1.0.0-rc.1-mac-arm64.dmg` para la versión actual (guiones, sin espacios,
 igual que la entrada del archivo `SHA256SUMS`). Descárgalo junto con `SHA256SUMS` desde
-[la versión `v1.0.0-beta.16`](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16)
+[la versión `v1.0.0-rc.1`](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-rc.1)
 — no `/releases/latest`, porque GitHub excluye los prereleases de ese enlace. El release también
-adjunta el instalador de Windows (`Lila-Modeler-1.0.0-beta.16-win-x64.exe`), que está sin firmar y
+adjunta el instalador de Windows (`Lila-Modeler-1.0.0-rc.1-win-x64.exe`), que está sin firmar y
 sin probar en una máquina Windows real: ver la [guía para probar en
 Windows](GUIA-PROBADOR-WINDOWS.md). No hay instalador de Linux en el release (CI construye un
 AppImage, sin probar — ver «Limitaciones» más abajo). El `.dmg` no se distribuye dentro del repositorio (la carpeta `apps/desktop/release/` está
@@ -344,9 +344,9 @@ Esto ya es funcionalidad real: `DesktopStore` está conectado en `main.tsx` y es
   deshacer; el diagrama y los cambios sin guardar se conservan.
 - El editor de colores por token e importar/exportar temas es LILA-114 (#144), pendiente.
 
-## Limitaciones de esta beta
+## Limitaciones
 
-*(a fecha 1.0.0-beta.29, tag `v1.0.0-beta.29`; las notas de verificación de macOS de abajo se
+*(a fecha 1.0.0-rc.1, tag `v1.0.0-rc.1`; las notas de verificación de macOS de abajo se
 registraron para la Beta 1. Revisar si alguna de estas ya se resolvió antes de creer esta lista a
 ciegas en una fecha posterior)*
 
@@ -376,6 +376,15 @@ ciegas en una fecha posterior)*
   ver `docs/MCP.md`, que es propiedad de otro paquete de trabajo (OP-17 incremento 2, issues
   #56/#48).
 
+## Para quienes prueban el RC
+
+La 1.0.0-rc.1 es la candidata a la 1.0.0: hasta la versión final solo recibe arreglos de errores.
+Si algo falla o se lee mal, usa **Informar de un problema…** (escritorio: **Ayuda ▸ Informar de un
+problema…**; web: el menú de la app, o ⌘K / Ctrl+K y escribe «informar»). Abre el formulario de bug
+de GitHub con la versión y tu plataforma ya rellenadas; no se envía nada hasta que pulses
+**Submit**. Adjunta el `.lila` o `.bpmn` más pequeño que muestre el problema y di qué esperabas que
+pasara.
+
 ## Cómo reconstruir desde el código
 
 Desde la raíz del repositorio, en orden:
@@ -389,10 +398,10 @@ npm run dist:mac -w @lila-modeler/desktop   # tsc + copia dist/web + electron-bu
 
 El último comando encadena: `tsc --build` de `apps/desktop`, copia de `apps/web/dist` a
 `apps/desktop/dist/web`, y `electron-builder --mac --arm64`. El resultado queda en
-`apps/desktop/release/` (la versión en `apps/desktop/package.json`: `1.0.0-beta.29` para la Beta 29):
+`apps/desktop/release/` (la versión en `apps/desktop/package.json`: `1.0.0-rc.1` para la candidata):
 
-- `apps/desktop/release/Lila-Modeler-1.0.0-beta.29-mac-arm64.dmg` — el instalador.
-- `apps/desktop/release/Lila-Modeler-1.0.0-beta.29-mac-arm64.dmg.blockmap`.
+- `apps/desktop/release/Lila-Modeler-1.0.0-rc.1-mac-arm64.dmg` — el instalador.
+- `apps/desktop/release/Lila-Modeler-1.0.0-rc.1-mac-arm64.dmg.blockmap`.
 - `apps/desktop/release/mac-arm64/Lila Modeler.app` — la app sin empaquetar en DMG, útil para
   probar rápido.
 - `apps/desktop/release/ORIGEN.txt` — `sha`, `fecha` (ISO) y `arch` (`uname -m`) del build,

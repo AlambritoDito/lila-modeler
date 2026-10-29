@@ -68,14 +68,14 @@ import { BotonElemento, type Rotulo } from './ListaElementos.js';
 import { PasoCalendarios } from './PasoCalendarios.js';
 import { FichaLlegada, ListaLlegadas } from './PasoLlegadas.js';
 import { PasoEjecucion } from './PasoEjecucion.js';
-import { PasoRutas } from './PasoRutas.js';
+import { ListaErrores, PasoRutas } from './PasoRutas.js';
 import { compuertaDeSeleccion, esCompuertaRepartible } from './repartoRutas.js';
 import { ListaTiempos, ResumenTiempo } from './PasoTiempos.js';
 import { agruparPorPaso, elementoDeProblema, tareasSinDuracion } from './pasoDeProblema.js';
 import { PasoRecursos, ListaRecursos } from './PasoRecursos.js';
 import { esEscenarioBase } from './RailEscenarios.js';
 import { entradasHuerfanas, sinHuerfanas } from './simulationGate.js';
-import { CAMPOS_DE_PASO, fieldsForStep, type ClaseElemento } from './scenarioFields.js';
+import { CAMPOS_DE_PASO, fieldsForStep, marcadoresDe, type ClaseElemento } from './scenarioFields.js';
 import { useLocale, useStrings } from './i18n';
 
 // The model, the controls and the element lists live in their own modules since the Lote M split;
@@ -232,6 +232,8 @@ const TIPO_BPMN: Partial<Record<ClaseElemento, string>> = {
   and: 'bpmn:ParallelGateway',
   eventGateway: 'bpmn:EventBasedGateway',
   timer: 'bpmn:IntermediateCatchEvent',
+  throw: 'bpmn:IntermediateThrowEvent',
+  errorBoundary: 'bpmn:BoundaryEvent',
   flow: 'bpmn:SequenceFlow',
 };
 
@@ -247,6 +249,8 @@ function consejoDe(clase: ClaseElemento | null): { clave: string; paso: PasoId |
       return { clave: 'gateway', paso: 'routes' };
     case 'flow':
       return { clave: 'flow', paso: 'routes' };
+    case 'errorBoundary':
+      return { clave: 'errorBoundary', paso: 'routes' };
     case 'end':
     case 'terminate':
       return { clave: 'end', paso: null };
@@ -853,14 +857,27 @@ export function ScenarioPanel({
   const pista = `${etiqueta(atajoPorId('paso:arrivals'), MAC).replace(/1$/, '1…6')} · ${atajoSimular}`;
 
   /* --- What the step shows for the selected element (Lote M: only this step's parameters). --- */
-  const visibles = idSeleccionado === null || contenedor !== null ? [] : fieldsForStep(paso, clase);
+  // ADR-033 § 1.7: a task's loop or multi-instance marker is in its IR node, not in its class.
+  const marcadores = marcadoresDe(idSeleccionado === null ? undefined : ir?.nodes[idSeleccionado]);
+  const visibles = idSeleccionado === null || contenedor !== null ? [] : fieldsForStep(paso, clase, marcadores);
   const definidos = idSeleccionado === null ? [] : CAMPOS_DE_PASO[paso].filter((campo) => leer(resuelto, ['elements', idSeleccionado, campo]) !== undefined);
   const esCompuerta = clase === 'xor' || clase === 'or';
+  /**
+   * ADR-033 § 5: in Routes, an activity with error boundary events shows them (with its
+   * `E-PROB-ERROR-SUMA`, which cites the activity): their probabilities are its routes.
+   */
+  const bordesError =
+    paso !== 'routes' || ir === null || idSeleccionado === null
+      ? []
+      : Object.entries(ir.nodes)
+          .filter(([, nodo]) => nodo.type === 'errorBoundary' && nodo.attachedTo === idSeleccionado)
+          .map(([id]) => id);
   /** Whether the selected element has anything to set in this step; if not, the panel says where. */
   const tieneAlgo =
     idSeleccionado !== null &&
     (paso === 'run' ||
       (paso === 'routes' && esCompuerta && ir !== null) ||
+      bordesError.length > 0 ||
       visibles.some((campo) => !['priority', 'preempt', 'batch', 'conditions'].includes(campo)) ||
       definidos.length > 0);
   const nombreSeleccion = idSeleccionado === null ? '' : rotulo(idSeleccionado).principal;
@@ -901,7 +918,12 @@ export function ScenarioPanel({
       case 'times':
         return <ListaTiempos ids={idsPorTipo(['task', 'timer'])} tareas={tareas} {...lista} />;
       case 'routes':
-        return <PasoRutas ctx={ctx} ir={ir} seleccion={null} onSeleccionar={onSeleccionar} avanzado={avanzado} />;
+        return (
+          <>
+            <PasoRutas ctx={ctx} ir={ir} seleccion={null} onSeleccionar={onSeleccionar} avanzado={avanzado} />
+            <ListaErrores ids={idsPorTipo(['errorBoundary'])} ir={ir} {...lista} />
+          </>
+        );
       case 'resources':
         return (
           <>
@@ -936,6 +958,14 @@ export function ScenarioPanel({
     }
     if (paso === 'arrivals' && clase === 'start') {
       return <FichaLlegada id={id} nombre={nombreSeleccion} ctx={ctx} />;
+    }
+    if (bordesError.length > 0) {
+      return (
+        <>
+          <ListaErrores ids={bordesError} ir={ir} {...lista} />
+          <Problemas ruta={['elements', id]} ctx={ctx} />
+        </>
+      );
     }
     return (
       <>

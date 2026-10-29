@@ -855,6 +855,12 @@ export const en = {
     listaTiempos: 'Times by element',
     listaRecursos: 'Resources by element',
     listaLlegadas: 'Arrivals by start event',
+    /** ADR-033 § 5 (#703): the error boundary events under the Routes overview. */
+    listaErrores: 'Error boundary events',
+    /** An error boundary without `errorProbability` never fires (`W-ERROR-SIN-PROBABILIDAD`). */
+    sinProbabilidadError: 'No probability: it never fires',
+    /** «25 % · on Ship»: an error boundary's row, with the activity it is attached to. */
+    errorEn: (valor: string, actividad: string): string => `${valor} · on ${actividad}`,
     /** «every 5 min · 100 cases»: the arrival line of one start event in the Arrivals list. */
     resumenLlegada: (cada: string, casos: number | null): string =>
       casos === null ? cada : `${cada} · ${casos} ${casos === 1 ? 'case' : 'cases'}`,
@@ -978,6 +984,11 @@ export const en = {
       points: 'Points',
       // ADR-028: conditions on a flow leaving a diverging XOR
       flowTaken: 'Flow already taken',
+      // ADR-033: the loop and multi-instance markers of a task, and the error boundary event
+      loop: 'Loop',
+      count: 'Iterations',
+      instances: 'Instances',
+      errorProbability: 'Error probability',
       // reserved (§ 4)
       priority: 'Priority',
       preempt: 'Preemption',
@@ -1008,7 +1019,23 @@ export const en = {
       quantity: 'Units of the pool this task takes.',
       selection: 'and: waits for every pool. or: takes whichever is free first.',
       calendar: 'Without a calendar the element is available 24×7.',
+      loop: 'How many times the task runs each time a case reaches it. Without it, it runs once.',
+      instances: 'How many instances run each time a case reaches the task, rounded to a whole number. Without it, the diagram\u2019s loopCardinality, or one.',
+      'loop.count': 'A whole number, 1 or more. Declare count or probability, not both.',
+      'loop.probability': 'Between 0 and 1, checked after each iteration. Declare count or probability, not both.',
+      errorProbability: 'Between 0 and 1: the share of the completions of the activity it is attached to that leave through this event. The error events of one activity add up to 1 at most; without it, it never fires.',
     } as Record<string, string>,
+
+    /** ADR-033 § 3 (#703): the loop of a task with a loop marker (`CampoBucle.tsx`). */
+    bucle: {
+      porConteo: 'A fixed number of times',
+      porProbabilidad: 'Again with a probability',
+      conteo: 'Iterations',
+      probabilidad: 'Probability of another iteration',
+      ayudaConteo: 'A whole number, 1 or more: the task runs that many times, or up to the diagram\u2019s loopMaximum if that is lower.',
+      ayudaProbabilidad: 'Between 0 and 1, checked after each iteration: 0.5 runs the task twice on average. 1 needs a loopMaximum in the diagram.',
+      tope: (n: number): string => `The diagram caps the loop at ${n} ${n === 1 ? 'iteration' : 'iterations'} (loopMaximum).`,
+    },
 
     /** The 13 distributions of BPSim plus the constant and the empirical one (§ 3). */
     distribuciones: {
@@ -1826,6 +1853,7 @@ export const en = {
       start: 'A start event is set in Arrivals.',
       gateway: 'Its percentages are edited in Routes.',
       flow: 'A flow is edited in Routes, from its gateway.',
+      errorBoundary: 'An error boundary event is set in Routes: how often its activity ends in that error.',
       end: 'End events have no parameters: they only count the cases that finish.',
       otro: 'Nothing to set here.',
     } as Record<string, string>,
@@ -2188,6 +2216,12 @@ export const en = {
     sinNombre: { 'bpmn:Participant': 'Unnamed pool', 'bpmn:Lane': 'Unnamed lane' },
     /** The end of the replay on the time bar: one word, with the whole sentence in its title. */
     finCorto: 'End',
+  },
+  /** #704: the band over the beta build on Pages (`AvisoBeta.tsx`). */
+  canal: {
+    betaTexto: 'Beta: what comes after version 1.0, starting with the organization repository, built from the latest code on main. Projects here are kept apart from the stable app.',
+    irEstable: 'Open the stable app',
+    cerrar: 'Close the beta notice',
   },
   /** #653: the read-only viewer for phones and tablets (`Visor.tsx`). */
   visor: {

@@ -42,6 +42,9 @@ export const coreEn: CoreCatalog = {
     'E-CAL-VACIO/festivos': (name) => `every opening of the calendar falls on one of its holidays (${name}).`,
     'E-CAL-DESCONOCIDO': (subject, calendar) => `${subject}: the calendar ${calendar} does not exist.`,
 
+    'E-BUCLE-SIN-SALIDA/elemento': (nodeId) =>
+      `${nodeId}: a loop with probability 1 and no loopMaximum never ends.`,
+
     'E-REC-LIBERACION': (requestId) => `${requestId} has no active allocation.`,
     'E-REC-SOLICITUD-DUPLICADA': (requestId) => `the request ${requestId} already exists.`,
     'E-REC-SIN-ASIGNACION': (requestId) => `${requestId}: a pool is missing.`,
@@ -80,12 +83,21 @@ export const coreEn: CoreCatalog = {
       `${nodeId}: no processingTime; it never fires as a branch of ${gatewayId}.`,
     'W-BORDE-SIN-TIEMPO': (nodeId, hostId) =>
       `${nodeId}: boundary timer without processingTime; it never fires on ${hostId}.`,
+    'W-BUCLE-SIN-PARAMETROS': (nodeId) =>
+      `${nodeId}: loop marker with no loop in the scenario; it runs once.`,
+    'W-MULTI-SIN-CARDINALIDAD': (nodeId) =>
+      `${nodeId}: multi-instance task with neither instances in the scenario nor a numeric loopCardinality; it runs one instance.`,
     'W-OR-JOIN-SIN-FORK': (nodeId) =>
       `${nodeId}: a token arrived without a fork mark; it behaves as a merge.`,
     'W-JOIN-BLOQUEADO': (nodeId, cases) =>
       `${nodeId}: ${cases} ${cases === 1 ? 'case was' : 'cases were'} left with tokens waiting at the join.`,
     'W-JOIN-BLOQUEADO/evento': (nodeId, cases) =>
       `${nodeId}: no branch event declares processingTime; ${cases} ${cases === 1 ? 'case was' : 'cases were'} left with their token waiting at the gateway.`,
+
+    'E-PROB-ERROR-SUMA': (hostId, sum) =>
+      `${hostId}: the error probabilities of its boundary events add up to ${sum}, more than 1.`,
+    'W-ERROR-SIN-PROBABILIDAD': (nodeId, hostId) =>
+      `${nodeId}: error boundary event without errorProbability; it never fires on ${hostId}.`,
 
     'W-RECURSO-SATURADO': (poolId, rho) =>
       `${poolId}: the queue grows without settling (λ/μ·c ≈ ${rho})`,
