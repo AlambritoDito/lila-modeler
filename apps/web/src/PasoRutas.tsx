@@ -8,6 +8,8 @@
  *   (↑/↓ ±5, Escape restores, Enter leaves), a stacked bar that adds up to 100 and a status with
  *   the one-click fix («Set «No» to 30 %», «Split evenly»).
  * - A join gateway: a note, it takes no parameters.
+ * - Under the overview, the error boundary events (ADR-033 § 5, #703) with their `errorProbability`
+ *   (`ListaErrores`): they share the cases of their activity like a gateway shares its own.
  *
  * It replaces the gateway view of the old Parameters step (#332): same path
  * (`elements[flowId].probability`), same engine rules (`repartoRutas.ts` mirrors R-XOR/R-OR), and the
@@ -18,7 +20,9 @@ import { useState } from 'react';
 import type { ProcessIR } from '@lila-modeler/engine';
 
 import { Problemas } from './Campo.js';
-import { rutaTexto, type Contexto, type Ruta } from './escenarioModelo.js';
+import { leer, rutaTexto, type Contexto, type Ruta } from './escenarioModelo.js';
+import { formatDisplay } from './formatDisplay.js';
+import { ListaElementos, type PropsListaPaso } from './ListaElementos.js';
 import {
   aFraccion,
   compuertaDeSeleccion,
@@ -47,6 +51,49 @@ export interface PropsPasoRutas {
   onSeleccionar: (id: string | null) => void;
   /** Settings → «Advanced» (#447): ids next to the names. */
   avanzado?: boolean;
+}
+
+/**
+ * ADR-033 § 5 (#703): the error boundary events with their probability in percent, as the gateway
+ * rows read, and the activity they are attached to. A row is marked when it never fires, when its
+ * value is not a number, and when its activity's boundaries add up to more than 100 %
+ * (`E-PROB-ERROR-SUMA`, same tolerance as the engine).
+ */
+export function ListaErrores({
+  ids,
+  rotulo,
+  resuelto,
+  seleccion,
+  onSeleccionar,
+  ir,
+}: PropsListaPaso & { ir: ProcessIR | null }): React.JSX.Element | null {
+  const S = useStrings();
+  const probabilidad = (id: string): unknown => leer(resuelto, ['elements', id, 'errorProbability']);
+  const anfitrion = (id: string): string | undefined => ir?.nodes[id]?.attachedTo;
+  const suma = (host: string | undefined): number =>
+    Object.entries(ir?.nodes ?? {})
+      .filter(([, nodo]) => nodo.type === 'errorBoundary' && nodo.attachedTo === host)
+      .reduce((acc, [id]) => {
+        const p = probabilidad(id);
+        return acc + (typeof p === 'number' ? p : 0);
+      }, 0);
+  return (
+    <ListaElementos
+      titulo={S.escenario.listaErrores}
+      ids={ids}
+      rotulo={rotulo}
+      resumen={(id) => {
+        const p = probabilidad(id);
+        const host = anfitrion(id);
+        const valor =
+          p === undefined ? S.escenario.sinProbabilidadError : typeof p === 'number' ? `${formatDisplay(p * 100)} %` : S.escenario.sinResumen;
+        return host === undefined ? valor : S.escenario.errorEn(valor, rotulo(host).principal);
+      }}
+      falta={(id) => typeof probabilidad(id) !== 'number' || suma(anfitrion(id)) > 1 + 1e-9}
+      seleccion={seleccion}
+      onSeleccionar={onSeleccionar}
+    />
+  );
 }
 
 export function PasoRutas({ ctx, ir, seleccion, onSeleccionar, avanzado = false }: PropsPasoRutas): React.JSX.Element {
