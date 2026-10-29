@@ -2219,7 +2219,7 @@ export const en = {
   },
   /** #704: the band over the beta build on Pages (`AvisoBeta.tsx`). */
   canal: {
-    betaTexto: 'Beta: the preview built from the latest code on main. Projects here are kept apart from the stable app.',
+    betaTexto: 'Beta: what comes after version 1.0, starting with the organization repository, built from the latest code on main. Projects here are kept apart from the stable app.',
     irEstable: 'Open the stable app',
     cerrar: 'Close the beta notice',
   },
