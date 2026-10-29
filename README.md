@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://alambritodito.github.io/lila-modeler/app/"><img src="https://img.shields.io/badge/Try_it-web_app-6f42c1" alt="Try it"></a>
-  <a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16"><img src="https://img.shields.io/badge/Download-Beta_16_(macOS_%C2%B7_Windows_untested)-0969da" alt="Download Beta 16 (macOS; Windows untested)"></a>
+  <a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-rc.1"><img src="https://img.shields.io/badge/Download-1.0.0--rc.1_(macOS_%C2%B7_Windows_untested)-0969da" alt="Download 1.0.0-rc.1 (macOS; Windows untested)"></a>
   <a href="docs/"><img src="https://img.shields.io/badge/Docs-docs%2F-6e7781" alt="Docs"></a>
   <a href="docs/COMING-FROM-BIZAGI.md"><img src="https://img.shields.io/badge/Coming_from-Bizagi_Modeler-bf8700" alt="Coming from Bizagi"></a>
   <a href="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml"><img src="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -73,18 +73,18 @@ Sharing means passing around a portable `.lila` file, not simultaneous editing �
 account, backend or real-time sync. Use **File ▸ Save** (web, tooltip: Save project) or **Save
 as…** (desktop) to get a `.lila`, send it however you'd send any file, and your colleague opens it
 with **File ▸ Open** (tooltip: Open project) in the web app, **File ▸ Open project…** in the desktop app, or by
-double-clicking it in Finder (see the beta guide: the open-file route was verified for Beta 1; a physical Finder double-click was not). Found a reproducible
+double-clicking it in Finder (see the macOS guide: the open-file route was verified with `open -a`; a physical Finder double-click was not). Found a reproducible
 problem along the way?
 [Open an issue](https://github.com/AlambritoDito/lila-modeler/issues/new/choose) — the bug template
 asks for a minimal `.bpmn` file or scenario that shows it.
 
-### Desktop beta
+### Desktop app
 
-Every beta is a GitHub prerelease. [Beta 16](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-beta.16)
-(not `/releases/latest` — GitHub excludes prereleases from that link) attaches two installers and a
+The current release is [1.0.0-rc.1](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-rc.1), a GitHub prerelease
+(not `/releases/latest` — GitHub excludes prereleases from that link). It attaches two installers and a
 `SHA256SUMS` file to check them. Where each platform stands:
 
-- **macOS (Apple Silicon)** — `Lila-Modeler-1.0.0-beta.16-mac-arm64.dmg`. The platform the project is
+- **macOS (Apple Silicon)** — `Lila-Modeler-1.0.0-rc.1-mac-arm64.dmg`. The platform the project is
   developed and tested on. The app is ad-hoc sealed but **not notarized**, so the first launch is
   blocked: after the first blocked attempt (double-clicking the app), go to **System Settings ▸
   Privacy & Security** and click **Open Anyway** next to the message naming the app, then confirm
@@ -99,7 +99,7 @@ Every beta is a GitHub prerelease. [Beta 16](https://github.com/AlambritoDito/li
   installer, no administrator rights, no SmartScreen warning. It has not been tested on a real
   Windows machine yet: [`docs/WINDOWS-PWA-TESTER-GUIDE.md`](docs/WINDOWS-PWA-TESTER-GUIDE.md) walks a
   non-developer through it and ends with a report template.
-- **Windows installer (x64, secondary)** — `Lila-Modeler-1.0.0-beta.16-win-x64.exe`, the NSIS installer built by CI. It is
+- **Windows installer (x64, secondary)** — `Lila-Modeler-1.0.0-rc.1-win-x64.exe`, the NSIS installer built by CI. It is
   **not signed** and **has not been tested on a real Windows machine yet**: nobody has run it on a
   clean install, so expect rough edges. Windows SmartScreen will show “Windows protected your PC”;
   **More info ▸ Run anyway** lets you continue. SignPath Foundation declined to sign the installer
@@ -111,8 +111,16 @@ Every beta is a GitHub prerelease. [Beta 16](https://github.com/AlambritoDito/li
   Chrome and Edge it can be installed as an app (see Windows above, the same works on macOS and
   Linux); in other browsers Open uses the file picker and Save downloads the `.lila`.
 
-The desktop app registers itself as the editor for `.bpmn` and `.lila` files and, since beta.10,
+The desktop app registers itself as the editor for `.bpmn` and `.lila` files and
 tells you when a newer version is out (it does not update itself).
+
+### For RC testers
+
+1.0.0-rc.1 is the release candidate for 1.0.0: it gets only bug fixes until the final release. If
+something breaks or reads wrong, use **Report a problem…** (desktop: **Help ▸ Report a problem…**;
+web: the app menu, or ⌘K / Ctrl+K and type «report»). It opens GitHub's bug form with the version
+and your platform already filled in; nothing is sent until you press **Submit**. Attach the smallest
+`.lila` or `.bpmn` that shows the problem, and say what you expected to happen.
 
 ### CLI
 
@@ -263,7 +271,7 @@ English is the base language; Spanish versions live under `docs/es/`.
 - [`BIZAGI_PARITY.md`](docs/BIZAGI_PARITY.md) — reference behaviour checklist and documented
   differences.
 - [`COMING-FROM-BIZAGI.md`](docs/COMING-FROM-BIZAGI.md) — screen-by-screen guide for Bizagi users.
-- [`BETA-MAC-GUIDE.md`](docs/BETA-MAC-GUIDE.md) — the desktop beta.
+- [`BETA-MAC-GUIDE.md`](docs/BETA-MAC-GUIDE.md) — installing the unsigned desktop app on macOS.
 - [`WINDOWS-PWA-TESTER-GUIDE.md`](docs/WINDOWS-PWA-TESTER-GUIDE.md) — installing the web app on Windows from Chrome or Edge, opening and saving `.lila` files, and reporting what happens.
 - [`WINDOWS-TESTER-GUIDE.md`](docs/WINDOWS-TESTER-GUIDE.md) — trying the untested, unsigned Windows installer and reporting what happens.
 - [`EXAMPLES_POLICY.md`](docs/EXAMPLES_POLICY.md), [`ORACLES.md`](docs/ORACLES.md),

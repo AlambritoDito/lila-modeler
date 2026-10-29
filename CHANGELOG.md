@@ -3,6 +3,54 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0-rc.1] - 2026-10-29
+
+Release candidate for 1.0.0. The simulator now runs the BPMN elements that real processes and
+diagrams exported from Bizagi use most and that it used to reject: the loop marker, multi-instance
+tasks, error boundary events, a timer boundary on a sub-process, and message and none throw events.
+Every `.lila` written by a released version keeps opening and running, and the web app on Pages
+has a stable channel that only moves with a Release. From here to 1.0.0 only bug fixes go in;
+report what you find with **Report a problem…**. Signal and escalation events are still not
+simulated (`E-NOSOP`). Results of models that did not use the new elements are unchanged.
+
+### Added
+
+- **Simulation semantics for #639 (#698, #708)**: ADR-033 defines how the new elements simulate.
+  Message start and end events simulate like plain ones, and none and message intermediate throw
+  events are milestones that count the pass and take no time.
+- **Loop marker (#700, #710)**: a task or call activity with a standard loop marker repeats a
+  fixed number of times (`loop.count`) or again with a probability (`loop.probability`), capped by
+  the diagram's `loopMaximum`. Each iteration is its own activity instance with its own sample,
+  resources and cost. A marker with no `loop` runs once and warns (`W-BUCLE-SIN-PARAMETROS`); a
+  loop that can never end is `E-BUCLE-SIN-SALIDA`.
+- **Multi-instance tasks (#701, #712)**: parallel and sequential multi-instance tasks run N
+  instances, N from `loopCardinality` in the BPMN or `instances` (a distribution) in the scenario.
+  Parallel instances compete for resources; sequential ones run one after another; the task
+  completes when all of them do.
+- **Error boundary events and a timer boundary on a sub-process (#702, #711)**: an error boundary
+  on a task or sub-process fires on a share of the host's completions (`errorProbability`), and
+  the token leaves through it. A timer boundary now works on a sub-process too; an interrupting
+  one cancels the work inside.
+- **Editor fields for the new parameters (#703, #714)**: in Simulate, Times offers **Loop** on a
+  task with a loop marker and **Instances** on a multi-instance task; Routes lists the error
+  boundary events of the selected activity with their probability and edits it, and shows when
+  the probabilities of one activity add up to more than 1. The scenario spreadsheet carries
+  `loopCount`, `loopProbability`, `instances` and `errorProbability`.
+- **Stable and beta apps on Pages (#704, #707, #713)**: «Open the stable app» (`app/`) is built
+  from the latest Release; «Beta: what comes next» (`beta/`) is built from `main`. Each keeps its
+  own recovered projects and offline cache. The landing presents the stable app as 1.0.
+
+### Fixed
+
+- **`.lila` files from released versions (#699, #705)**: archives saved before #613 with a
+  loose diagram's model name open and run again. Frozen `.lila` fixtures from beta.29 are checked
+  on every test run, and `docs/PROJECT_FORMAT.md` states the compatibility promise.
+
+### Changed
+
+- The install guides are no longer called "beta": the macOS guide, the Windows guide and the
+  README point at 1.0.0-rc.1, and the README has a short section for RC testers.
+
 ## [1.0.0-beta.29] - 2026-10-21
 
 Lote R: an agent gets from MCP and the CLI what only the app gave before. It can rename and delete
