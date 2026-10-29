@@ -194,6 +194,8 @@ describe('the new fields are offered only where the engine takes them (ADR-033 Â
     expect(fila?.closest('li')?.textContent).toContain(en.escenario.sinProbabilidadError);
     act(() => { fila!.click(); });
     expect(document.getElementById('campo-elements.Err_Work.errorProbability')).not.toBeNull();
+    // The reserved `conditions` is not written here: no field, and no help standing alone.
+    expect(document.body.textContent).not.toContain(en.escenario.ayudas['conditions']);
   });
 });
 

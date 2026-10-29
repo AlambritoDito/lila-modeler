@@ -370,6 +370,9 @@ export function Propiedades({
             ((siDefinido == null || siDefinido.includes(clave)) &&
               leer(ctx.resuelto, [...ruta, clave]) !== undefined),
         )
+        // A reserved `conditions` that is not written draws nothing (`CampoReservado`), so its
+        // help would stand alone: on an error boundary in Routes (#703), say.
+        .filter(([clave]) => !(esCondicionesReservadas([...ruta, clave], ctx) && estadoReservado(ctx, [...ruta, clave]) === 'ausente'))
         .map(([clave, sub]) => (
           // One box per field and its help, so the wide panel (design 2a) can lay them out in a grid.
           <div key={clave} className="propiedad">
