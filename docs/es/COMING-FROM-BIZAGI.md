@@ -124,6 +124,29 @@ La acción de carril es la entrada más rápida: modela los carriles como roles 
 carril sustituye una docena de asignaciones a mano. Para el motor los carriles siguen siendo
 etiquetas; la acción solo escribe por ti la asignación tarea por tarea.
 
+### Bucles, tareas multi-instancia y eventos de error
+
+Estos elementos BPMN se simulan desde la 1.0 ([ADR-033](DECISIONS.md)), y los pasos de Simular
+ofrecen sus campos en el elemento seleccionado, con la misma validación que cualquier otro campo:
+
+| En tu diagrama | Paso de Lila | Campo |
+|---|---|---|
+| Tarea con marcador de bucle estándar | Tiempos, «Bucle»: un número fijo de veces, u otra vez tras cada iteración con una probabilidad (con el tope del `loopMaximum` del diagrama) | `loop.count` o `loop.probability` |
+| Tarea multi-instancia, paralela o secuencial | Tiempos, «Instancias»: un número o una distribución por caso; sin él, el `loopCardinality` del diagrama, o una | `instances` |
+| Evento de error adjunto interruptor en una tarea o un subproceso embebido | Rutas, «Probabilidad de error»: la parte de las finalizaciones de la actividad que salen por él; Rutas lista todos los eventos de error adjuntos del proceso | `errorProbability` |
+| Evento temporizador adjunto a un subproceso embebido | Tiempos: su tiempo de procesamiento es el plazo, desde que un caso entra en el subproceso | `processingTime` |
+| Inicio de mensaje, fin de mensaje, evento intermedio de lanzamiento sin tipo o de mensaje | Llegadas para el inicio de mensaje; un fin de mensaje lleva lo mismo que cualquier fin (su costo fijo), y un evento de lanzamiento no lleva parámetros | — |
+
+Cada iteración de un bucle y cada instancia de una tarea multi-instancia cuenta como una instancia
+en la tabla Process elements. Bizagi Modeler no simula tareas multi-instancia, y ninguno de estos
+elementos se ha comparado con una corrida publicada de Bizagi ([`BIZAGI_PARITY.md`](BIZAGI_PARITY.md)).
+La plantilla de hoja de cálculo también los lleva, en las columnas `loopCount`, `loopProbability`,
+`instances` y `errorProbability` de su hoja Elements ([`SCENARIO_SHEETS.md`](SCENARIO_SHEETS.md)).
+
+Los eventos de señal y de escalado, los eventos de error de inicio, intermedios y de fin, y los
+eventos adjuntos que no son un temporizador ni un error interruptor siguen deteniendo la corrida
+con `E-NOSOP`, y el lienzo los marca mientras modelas.
+
 ### Calendarios
 
 | Bizagi | Lila |

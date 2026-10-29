@@ -830,6 +830,12 @@ export const es: Strings = {
     listaTiempos: 'Tiempos por elemento',
     listaRecursos: 'Recursos por elemento',
     listaLlegadas: 'Llegadas por evento de inicio',
+    /** ADR-033 § 5 (#703): los eventos de error adjuntos, bajo la vista general de Rutas. */
+    listaErrores: 'Eventos de error adjuntos',
+    /** Un evento de error sin `errorProbability` nunca dispara (`W-ERROR-SIN-PROBABILIDAD`). */
+    sinProbabilidadError: 'Sin probabilidad: nunca dispara',
+    /** «25 % · en Enviar»: la fila de un evento de error, con la actividad a la que está adjunto. */
+    errorEn: (valor: string, actividad: string): string => `${valor} · en ${actividad}`,
     resumenLlegada: (cada: string, casos: number | null): string =>
       casos === null ? cada : `${cada} · ${casos} ${casos === 1 ? 'caso' : 'casos'}`,
     irARecursos: 'Ir a Recursos',
@@ -950,9 +956,11 @@ export const es: Strings = {
       points: 'Puntos',
       // ADR-028: conditions en un flujo que sale de un XOR divergente
       flowTaken: 'Flujo ya recorrido',
-      // ADR-033 § 3: el marcador de bucle de una tarea (#703 añade sus controles)
+      // ADR-033: los marcadores de bucle y multi-instancia de una tarea, y el evento de error adjunto
       loop: 'Bucle',
       count: 'Iteraciones',
+      instances: 'Instancias',
+      errorProbability: 'Probabilidad de error',
       // reservados (§ 4)
       priority: 'Prioridad',
       preempt: 'Expulsión',
@@ -983,7 +991,23 @@ export const es: Strings = {
       quantity: 'Unidades del grupo que toma esta tarea.',
       selection: 'and: espera a todos los grupos. or: toma el primero que quede libre.',
       calendar: 'Sin calendario el elemento está disponible 24×7.',
+      loop: 'Cuántas veces se ejecuta la tarea cada vez que llega un caso. Sin él, se ejecuta una vez.',
+      instances: 'Cuántas instancias se ejecutan cada vez que llega un caso, redondeado a un número entero. Sin él, el loopCardinality del diagrama, o una.',
+      'loop.count': 'Un número entero, 1 o más. Declara count o probability, no los dos.',
+      'loop.probability': 'Entre 0 y 1, tras cada iteración. Declara count o probability, no los dos.',
+      errorProbability: 'Entre 0 y 1: la parte de las finalizaciones de la actividad a la que está adjunto que salen por este evento. Los eventos de error de una actividad suman 1 como mucho; sin ella, nunca dispara.',
     } as Record<string, string>,
+
+    /** ADR-033 § 3 (#703): el bucle de una tarea con marcador de bucle (`CampoBucle.tsx`). */
+    bucle: {
+      porConteo: 'Un número fijo de veces',
+      porProbabilidad: 'Otra vez con una probabilidad',
+      conteo: 'Iteraciones',
+      probabilidad: 'Probabilidad de otra iteración',
+      ayudaConteo: 'Un número entero, 1 o más: la tarea se ejecuta esas veces, o hasta el loopMaximum del diagrama si es menor.',
+      ayudaProbabilidad: 'Entre 0 y 1, tras cada iteración: 0,5 ejecuta la tarea dos veces de media. 1 necesita un loopMaximum en el diagrama.',
+      tope: (n: number): string => `El diagrama limita el bucle a ${n} ${n === 1 ? 'iteración' : 'iteraciones'} (loopMaximum).`,
+    },
 
     /** Las 13 distribuciones de BPSim más la constante y la empírica (§ 3). */
     distribuciones: {
@@ -1787,6 +1811,7 @@ export const es: Strings = {
       start: 'El evento de inicio se configura en Llegadas.',
       gateway: 'Sus porcentajes se editan en Rutas.',
       flow: 'Un flujo se edita en Rutas, desde su compuerta.',
+      errorBoundary: 'Un evento de error adjunto se configura en Rutas: cuántas veces su actividad termina en ese error.',
       end: 'Los eventos de fin no tienen parámetros: solo cuentan los casos que terminan.',
       otro: 'Aquí no hay nada que configurar.',
     } as Record<string, string>,
