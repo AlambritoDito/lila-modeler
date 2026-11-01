@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://alambritodito.github.io/lila-modeler/app/"><img src="https://img.shields.io/badge/Try_it-web_app-6f42c1" alt="Try it"></a>
-  <a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-rc.1"><img src="https://img.shields.io/badge/Download-1.0.0--rc.1_(macOS_%C2%B7_Windows_untested)-0969da" alt="Download 1.0.0-rc.1 (macOS; Windows untested)"></a>
+  <a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0"><img src="https://img.shields.io/badge/Download-1.0.0_(macOS_%C2%B7_Windows_untested)-0969da" alt="Download 1.0.0 (macOS; Windows untested)"></a>
   <a href="docs/"><img src="https://img.shields.io/badge/Docs-docs%2F-6e7781" alt="Docs"></a>
   <a href="docs/COMING-FROM-BIZAGI.md"><img src="https://img.shields.io/badge/Coming_from-Bizagi_Modeler-bf8700" alt="Coming from Bizagi"></a>
   <a href="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml"><img src="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -80,11 +80,11 @@ asks for a minimal `.bpmn` file or scenario that shows it.
 
 ### Desktop app
 
-The current release is [1.0.0-rc.1](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-rc.1), a GitHub prerelease
-(not `/releases/latest` — GitHub excludes prereleases from that link). It attaches two installers and a
+The current release is [1.0.0](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0), the first stable
+version (also at <https://github.com/AlambritoDito/lila-modeler/releases/latest>). It attaches two installers and a
 `SHA256SUMS` file to check them. Where each platform stands:
 
-- **macOS (Apple Silicon)** — `Lila-Modeler-1.0.0-rc.1-mac-arm64.dmg`. The platform the project is
+- **macOS (Apple Silicon)** — `Lila-Modeler-1.0.0-mac-arm64.dmg`. The platform the project is
   developed and tested on. The app is ad-hoc sealed but **not notarized**, so the first launch is
   blocked: after the first blocked attempt (double-clicking the app), go to **System Settings ▸
   Privacy & Security** and click **Open Anyway** next to the message naming the app, then confirm
@@ -99,7 +99,7 @@ The current release is [1.0.0-rc.1](https://github.com/AlambritoDito/lila-modele
   installer, no administrator rights, no SmartScreen warning. It has not been tested on a real
   Windows machine yet: [`docs/WINDOWS-PWA-TESTER-GUIDE.md`](docs/WINDOWS-PWA-TESTER-GUIDE.md) walks a
   non-developer through it and ends with a report template.
-- **Windows installer (x64, secondary)** — `Lila-Modeler-1.0.0-rc.1-win-x64.exe`, the NSIS installer built by CI. It is
+- **Windows installer (x64, secondary)** — `Lila-Modeler-1.0.0-win-x64.exe`, the NSIS installer built by CI. It is
   **not signed** and **has not been tested on a real Windows machine yet**: nobody has run it on a
   clean install, so expect rough edges. Windows SmartScreen will show “Windows protected your PC”;
   **More info ▸ Run anyway** lets you continue. SignPath Foundation declined to sign the installer
@@ -114,10 +114,9 @@ The current release is [1.0.0-rc.1](https://github.com/AlambritoDito/lila-modele
 The desktop app registers itself as the editor for `.bpmn` and `.lila` files and
 tells you when a newer version is out (it does not update itself).
 
-### For RC testers
+### Reporting a problem
 
-1.0.0-rc.1 is the release candidate for 1.0.0: it gets only bug fixes until the final release. If
-something breaks or reads wrong, use **Report a problem…** (desktop: **Help ▸ Report a problem…**;
+If something breaks or reads wrong, use **Report a problem…** (desktop: **Help ▸ Report a problem…**;
 web: the app menu, or ⌘K / Ctrl+K and type «report»). It opens GitHub's bug form with the version
 and your platform already filled in; nothing is sent until you press **Submit**. Attach the smallest
 `.lila` or `.bpmn` that shows the problem, and say what you expected to happen.
@@ -125,7 +124,7 @@ and your platform already filled in; nothing is sent until you press **Submit**.
 ### CLI
 
 Requires Node.js **22 or later**. The engine and the CLI are on npm as `@lila-modeler/engine` (under
-the `beta` tag): `npx @lila-modeler/engine@beta validate model.bpmn`. The examples below run from a
+the `latest` tag): `npx @lila-modeler/engine validate model.bpmn`. The examples below run from a
 checkout, which also has the reference benchmark:
 
 ```bash

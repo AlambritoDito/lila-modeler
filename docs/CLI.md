@@ -13,12 +13,12 @@ Every example below runs from the repository root, against the committed
 ## Install
 
 The CLI ships in the engine package, [`@lila-modeler/engine`](https://www.npmjs.com/package/@lila-modeler/engine)
-on npm, under the `beta` tag while the project is pre-1.0. Install it, or run it without installing:
+on npm, under the `latest` tag. Install it, or run it without installing:
 
 ```bash
-npm install -g @lila-modeler/engine@beta      # puts `lila` on your PATH
-npx -p @lila-modeler/engine@beta lila validate model.bpmn
-npx @lila-modeler/engine@beta validate model.bpmn
+npm install -g @lila-modeler/engine      # puts `lila` on your PATH
+npx -p @lila-modeler/engine lila validate model.bpmn
+npx @lila-modeler/engine validate model.bpmn
 ```
 
 The examples below use `npx lila …` from a checkout of the repository, which also has the

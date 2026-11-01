@@ -14,12 +14,12 @@ Cada ejemplo de abajo corre desde la raíz del repositorio, sobre el benchmark
 ## Instalación
 
 La CLI viaja en el paquete del motor, [`@lila-modeler/engine`](https://www.npmjs.com/package/@lila-modeler/engine)
-en npm, con la etiqueta `beta` mientras el proyecto es pre-1.0. Instálalo, o córrelo sin instalar:
+en npm, con la etiqueta `latest`. Instálalo, o córrelo sin instalar:
 
 ```bash
-npm install -g @lila-modeler/engine@beta      # pone `lila` en tu PATH
-npx -p @lila-modeler/engine@beta lila validate model.bpmn
-npx @lila-modeler/engine@beta validate model.bpmn
+npm install -g @lila-modeler/engine      # pone `lila` en tu PATH
+npx -p @lila-modeler/engine lila validate model.bpmn
+npx @lila-modeler/engine validate model.bpmn
 ```
 
 Los ejemplos de abajo usan `npx lila …` desde un clon del repositorio, que además trae el benchmark

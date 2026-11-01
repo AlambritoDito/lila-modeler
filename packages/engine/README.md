@@ -12,10 +12,10 @@ repository owner's first publication (#48).
 ## CLI
 
 ```bash
-npx @lila-modeler/engine@beta validate model.bpmn
-npx @lila-modeler/engine@beta run model.bpmn scenario.json --seed 42 --replications 3 --json result.json
-npx @lila-modeler/engine@beta compare model.bpmn a.json b.json --seed 42 --replications 3
-npx @lila-modeler/engine@beta --version
+npx @lila-modeler/engine validate model.bpmn
+npx @lila-modeler/engine run model.bpmn scenario.json --seed 42 --replications 3 --json result.json
+npx @lila-modeler/engine compare model.bpmn a.json b.json --seed 42 --replications 3
+npx @lila-modeler/engine --version
 ```
 
 English is the default. Use `--lang es` or `LILA_LANG=es` for Spanish diagnostics. Diagnostic
