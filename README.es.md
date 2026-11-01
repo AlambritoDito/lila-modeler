@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://alambritodito.github.io/lila-modeler/app/"><img src="https://img.shields.io/badge/Pru%C3%A9bala-app_web-6f42c1" alt="Pruébala"></a>
-  <a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-rc.1"><img src="https://img.shields.io/badge/Descargar-1.0.0--rc.1_(macOS_%C2%B7_Windows_sin_probar)-0969da" alt="Descargar 1.0.0-rc.1 (macOS; Windows sin probar)"></a>
+  <a href="https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0"><img src="https://img.shields.io/badge/Descargar-1.0.0_(macOS_%C2%B7_Windows_sin_probar)-0969da" alt="Descargar 1.0.0 (macOS; Windows sin probar)"></a>
   <a href="docs/"><img src="https://img.shields.io/badge/Docs-docs%2F-6e7781" alt="Docs"></a>
   <a href="docs/es/COMING-FROM-BIZAGI.md"><img src="https://img.shields.io/badge/Vienes_de-Bizagi_Modeler-bf8700" alt="Vienes de Bizagi"></a>
   <a href="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml"><img src="https://github.com/AlambritoDito/lila-modeler/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -82,11 +82,11 @@ escritorio, o con doble clic en el Finder (ver la guía de macOS: la ruta open-f
 
 ### App de escritorio
 
-La versión actual es la [1.0.0-rc.1](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0-rc.1), un prerelease de GitHub
-(no `/releases/latest`: GitHub excluye los prereleases de ese enlace). Adjunta dos instaladores y un
+La versión actual es la [1.0.0](https://github.com/AlambritoDito/lila-modeler/releases/tag/v1.0.0), la primera versión
+estable (también en <https://github.com/AlambritoDito/lila-modeler/releases/latest>). Adjunta dos instaladores y un
 archivo `SHA256SUMS` para verificarlos. Cómo está cada plataforma:
 
-- **macOS (Apple Silicon)** — `Lila-Modeler-1.0.0-rc.1-mac-arm64.dmg`. La plataforma en la que se
+- **macOS (Apple Silicon)** — `Lila-Modeler-1.0.0-mac-arm64.dmg`. La plataforma en la que se
   desarrolla y se prueba el proyecto. La app lleva un sello ad hoc pero **no está notarizada**, así
   que el primer arranque se bloquea: tras el primer intento bloqueado (doble clic en la app), ve a
   **Ajustes del Sistema ▸ Privacidad y seguridad** y pulsa **Abrir de todos modos** junto al mensaje
@@ -103,7 +103,7 @@ archivo `SHA256SUMS` para verificarlos. Cómo está cada plataforma:
   SmartScreen. Todavía no se ha probado en una máquina Windows real:
   [`docs/es/GUIA-PROBADOR-WINDOWS-PWA.md`](docs/es/GUIA-PROBADOR-WINDOWS-PWA.md) guía paso a paso a
   quien no es desarrollador y termina con una plantilla de reporte.
-- **Instalador de Windows (x64, secundario)** — `Lila-Modeler-1.0.0-rc.1-win-x64.exe`, el instalador NSIS construido por CI.
+- **Instalador de Windows (x64, secundario)** — `Lila-Modeler-1.0.0-win-x64.exe`, el instalador NSIS construido por CI.
   **No está firmado** y **todavía no se ha probado en una máquina Windows real**: nadie lo ha
   ejecutado en una instalación limpia, así que espera asperezas. SmartScreen de Windows mostrará
   «Windows protegió su PC»; **Más información ▸ Ejecutar de todas formas** permite continuar.
@@ -120,9 +120,8 @@ archivo `SHA256SUMS` para verificarlos. Cómo está cada plataforma:
 La app de escritorio se registra como editor de archivos `.bpmn` y `.lila` y te
 avisa cuando hay una versión nueva (no se actualiza sola).
 
-### Para quienes prueban el RC
+### Informar de un problema
 
-La 1.0.0-rc.1 es la candidata a la 1.0.0: hasta la versión final solo recibe arreglos de errores.
 Si algo falla o se lee mal, usa **Informar de un problema…** (escritorio: **Ayuda ▸ Informar de un
 problema…**; web: el menú de la app, o ⌘K / Ctrl+K y escribe «informar»). Abre el formulario de bug
 de GitHub con la versión y tu plataforma ya rellenadas; no se envía nada hasta que pulses
@@ -132,7 +131,7 @@ pasara.
 ### CLI
 
 Requiere Node.js **22 o superior**. El motor y la CLI están en npm como `@lila-modeler/engine` (con
-la etiqueta `beta`): `npx @lila-modeler/engine@beta validate model.bpmn`. Los ejemplos de abajo
+la etiqueta `latest`): `npx @lila-modeler/engine validate model.bpmn`. Los ejemplos de abajo
 corren desde un clon, que además trae el benchmark de referencia:
 
 ```bash

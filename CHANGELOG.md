@@ -3,6 +3,17 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.0] - 2026-11-01
+
+The first stable version. It is 1.0.0-rc.1 with only the version changed: no bug was reported
+against the release candidate. The GitHub Release is no longer a prerelease, `@lila-modeler/engine`
+and `@lila-modeler/mcp` go to the npm `latest` tag, and «Open the stable app» on Pages serves 1.0.0.
+
+### Changed
+
+- The README and the install guides point at 1.0.0 and the `latest` Release; the «For RC testers»
+  sections become «Reporting a problem», and the CLI docs drop the `@beta` tag.
+
 ## [1.0.0-rc.1] - 2026-10-29
 
 Release candidate for 1.0.0. The simulator now runs the BPMN elements that real processes and
