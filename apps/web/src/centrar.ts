@@ -33,3 +33,33 @@ function caja(elemento: Elemento): Caja {
   const x = Math.min(...xs); const y = Math.min(...ys);
   return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
 }
+
+/** Screen pixels kept clear on each side of the diagram by `ajustar` (#717). */
+export interface Margen { arriba: number; derecha: number; abajo: number; izquierda: number }
+
+/** The canvas call `ajustar` needs: diagram-js's `viewbox()` also reports the diagram and the view. */
+export interface CanvasAjustable {
+  viewbox(): Caja & { inner: Caja; outer: { width: number; height: number } };
+  viewbox(caja: Caja): void;
+}
+
+/**
+ * Fits the whole diagram inside the view minus `margen`, centred across and at the top of the
+ * free area (#717). diagram-js's `zoom('fit-viewport')` pins the diagram to the top-left corner
+ * with no margin, under the canvas's floating top row, which then hid the start event. Top, not
+ * middle, so a wide diagram stays clear of the minimap in the bottom-left corner, as it was.
+ * An empty diagram or a view with no room left is left as it is.
+ */
+export function ajustar(canvas: CanvasAjustable, margen: Margen): void {
+  const { inner, outer } = canvas.viewbox();
+  const ancho = outer.width - margen.izquierda - margen.derecha;
+  const alto = outer.height - margen.arriba - margen.abajo;
+  if (!(inner.width > 0 && inner.height > 0 && ancho > 0 && alto > 0)) return;
+  const escala = Math.min(1, ancho / inner.width, alto / inner.height);
+  canvas.viewbox({
+    x: inner.x + inner.width / 2 - (margen.izquierda + ancho / 2) / escala,
+    y: inner.y - margen.arriba / escala,
+    width: outer.width / escala,
+    height: outer.height / escala,
+  });
+}
