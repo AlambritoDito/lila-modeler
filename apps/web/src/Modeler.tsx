@@ -65,7 +65,7 @@ import { moduloLote, type LilaLote } from './lote';
 import { moduloCarriles, type LilaCarriles } from './carriles';
 import { moduloControlesCarriles } from './controlesCarriles';
 import { moduloAncho, type LilaAncho } from './ancho';
-import { centrar, type CanvasCentrable } from './centrar';
+import { ajustar, centrar, type CanvasAjustable, type CanvasCentrable, type Margen } from './centrar';
 import { idDeSeleccion } from './ids';
 import { svgDelLienzo, type LienzoExportable } from './exportarDiagrama';
 
@@ -360,6 +360,20 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
     /** Un contenedor sin tamaño (pestaña en segundo plano) hace que el viewbox sea NaN. */
     const conTamano = (): boolean => container.clientWidth > 0 && container.clientHeight > 0;
 
+    /**
+     * The fit's margins (#717): the floating row of the canvas's top edge (`.lienzo-arriba`:
+     * validation chips, «Validate paths», the align group) is measured, since it wraps on a narrow
+     * canvas; while it is empty (Results, or Model before the mode switch of an open) its usual
+     * height, 14 px of offset and one 30 px control, is kept clear anyway.
+     */
+    const margenAjuste = (): Margen => {
+      const tope = container.getBoundingClientRect().top;
+      const fila = container.closest('.zona-modelo')?.querySelector('.lienzo-arriba');
+      const bordes = [...(fila?.children ?? [])].map((hijo) => hijo.getBoundingClientRect().bottom - tope);
+      return { arriba: Math.max(44, ...bordes) + 12, derecha: 16, abajo: 16, izquierda: 16 };
+    };
+    const ajustarLienzo = (canvas: Canvas): void => { ajustar(canvas as unknown as CanvasAjustable, margenAjuste()); };
+
     /** Avisos del último import: se conservan entre repintados de la barra de estado. */
     let avisos = 0;
 
@@ -486,10 +500,10 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
       candidato.get<{ fire(evento: string, datos: object): unknown }>('eventBus')
         .fire('selection.changed', { oldSelection: [], newSelection: [] });
       const canvas = candidato.get<Canvas>('canvas');
-      // `fit-viewport` divide por el ancho del contenedor: con la pestaña en segundo plano
+      // El ajuste divide por el ancho del contenedor: con la pestaña en segundo plano
       // eso es 0 y bpmn-js muere con «SVGMatrix: The provided float value is non-finite».
       // Sin ajustar, el diagrama queda al 100 % y el botón «ajustar» sigue estando ahí.
-      if (conTamano()) canvas.zoom('fit-viewport');
+      if (conTamano()) ajustarLienzo(canvas);
       canvas.focus();
       publicar(null);
       return true;
@@ -527,7 +541,7 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
       zoom: (factor) => {
         if (activo === null || !conTamano()) return;
         const canvas = activo.get<Canvas>('canvas');
-        if (factor === 'ajustar') canvas.zoom('fit-viewport');
+        if (factor === 'ajustar') ajustarLienzo(canvas);
         else canvas.zoom(Math.min(4, Math.max(0.2, canvas.zoom() * factor)));
       },
       get servicios(): Servicios {
