@@ -148,6 +148,7 @@ describe('overlayModel (LILA-064)', () => {
 interface Etiqueta {
   id: string;
   type: string;
+  html: HTMLElement;
 }
 
 interface Falso {
@@ -166,7 +167,7 @@ type Render = (evt: { type: string }, ctx: { element: { id: string } }) => unkno
 
 /** `idsEnLienzo`: los ids que el `elementRegistry` conoce, o sea los del `.bpmn` importado. */
 function modeladorFalso(idsEnLienzo: readonly string[]): Falso {
-  const elementos = new Map(idsEnLienzo.map((id) => [id, { id }]));
+  const elementos = new Map(idsEnLienzo.map((id) => [id, { id, width: 100 }]));
   const marcadores = new Map<string, Set<string>>();
   const repintados: string[] = [];
   let etiquetas: Etiqueta[] = [];
@@ -201,7 +202,7 @@ function modeladorFalso(idsEnLienzo: readonly string[]): Falso {
       update: (_tipo: string, elemento: { id: string }) => repintados.push(elemento.id),
     },
     overlays: {
-      add: (id: string, type: string) => etiquetas.push({ id, type }),
+      add: (id: string, type: string, opciones: { html: HTMLElement }) => etiquetas.push({ html: opciones.html, id, type }),
       remove: (filtro: { type: string }) => {
         etiquetas = etiquetas.filter((e) => e.type !== filtro.type);
       },
@@ -435,5 +436,49 @@ describe('applyOverlay / clearOverlay sobre el lienzo (LILA-064)', () => {
     // Sin corrida (escenario recién cambiado, o modelo recién abierto) el overlay se va igual.
     sincronizarOverlay(falso.modeler, null, true);
     expect(falso.etiquetas).toEqual([]);
+  });
+});
+
+describe('badges that stay within their own task (#718)', () => {
+  // diagram-js hangs the badge off the bottom right corner of the task, growing to the right: one
+  // wider than its task ran into the badge of the next task of the row.
+  it('the heat map stacks the bottleneck mark over the wait and caps both badges at the task width', () => {
+    const falso = modeladorFalso(['Task_Cuello', 'Task_Tibia']);
+    const filas = [
+      { espera: 600, id: 'Task_Cuello', proceso: 300, utilizacion: 0.97 },
+    ];
+    const corrida = corridaDe(filas);
+    (corrida.result.elements as Record<string, unknown>).Task_Tibia = { processing: { mean: 300 }, resourceWait: { mean: 60 } };
+    applyOverlay(falso.modeler, { ...corrida, calor: { tareas: ['Task_Cuello', 'Task_Tibia'] } });
+
+    const [tibia, cuello] = [
+      falso.etiquetas.find((e) => e.id === 'Task_Tibia')?.html,
+      falso.etiquetas.find((e) => e.id === 'Task_Cuello')?.html,
+    ];
+    expect(falso.etiquetas).toHaveLength(2);
+    expect(tibia?.style.maxWidth).toBe('100px');
+    expect(cuello?.style.maxWidth).toBe('100px');
+    // The mark is a block of its own (a line above), the wait is the text after it: side by side
+    // they were ~160 px, more than the 150 px from one default task to the next.
+    const marca = cuello?.firstElementChild;
+    expect(marca?.tagName).toBe('DIV');
+    expect(marca?.className).toBe('lila-cuello');
+    expect(marca?.textContent).toBe('CUELLO');
+    expect(cuello?.lastChild?.textContent).toBe('Espera 10 min');
+    // Whatever an ellipsis may cut is whole in the tooltip.
+    expect(cuello?.title).toContain('97');
+    expect(tibia?.textContent).toBe('Espera 1 min');
+    expect(tibia?.title).not.toBe('');
+  });
+
+  it('outside the heat map the label is capped too, and an element without a width is left alone', () => {
+    const falso = modeladorFalso(['Task_Preparar']);
+    applyOverlay(falso.modeler, corridaDe([RANKING[0]!]));
+    expect(falso.etiquetas[0]?.html.style.maxWidth).toBe('100px');
+
+    const sinAncho = modeladorFalso(['Task_Preparar']);
+    delete (sinAncho.modeler.get('elementRegistry') as { get(id: string): { width?: number } }).get('Task_Preparar').width;
+    applyOverlay(sinAncho.modeler, corridaDe([RANKING[0]!]));
+    expect(sinAncho.etiquetas[0]?.html.style.maxWidth).toBe('');
   });
 });

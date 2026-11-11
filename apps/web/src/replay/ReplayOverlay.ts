@@ -166,6 +166,12 @@ function escribir(div: HTMLElement, state: ElementState): void {
   if (div.dataset.running !== String(state.running)) div.dataset.running = String(state.running);
   const titulo = S.animacion.contadorTitulo(state.started, state.completed, state.queue, state.running);
   if (div.title !== titulo) div.title = titulo;
+  // #718: a `0/0` says nothing and, with every element carrying one, the Results map opened with
+  // its flow labels and gateway names covered. The label stays in the DOM (the `data-` contract
+  // above) and comes back on the frame its first token arrives.
+  // ponytail: a counter that does show is not moved off a diagram label; a collision pass if that bites.
+  const vacio = state.started === 0 && state.completed === 0;
+  if (div.hidden !== vacio) div.hidden = vacio;
 }
 
 /**

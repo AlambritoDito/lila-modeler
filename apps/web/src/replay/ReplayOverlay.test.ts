@@ -112,3 +112,30 @@ it('moves a dot along the waypoints of the flow and clears everything afterwards
   expect(falso.capa.querySelector('circle')).toBe(null);
   expect(falso.capaVisible).toBe(false);
 });
+
+it('draws no counter for an element nothing has reached yet, and shows it when the first token arrives (#718)', () => {
+  const falso = modeladorFalso(['Task_A', 'Gateway_B']);
+  const pintura = (started: number, completed: number) => ({
+    elementIds: ['Task_A', 'Gateway_B'],
+    originalIds: {},
+    state: estado({
+      Gateway_B: { completed, queue: 0, running: 0, started },
+      Task_A: { completed: 3, queue: 0, running: 0, started: 3 },
+    }),
+  });
+  sincronizarReplay(falso.modeler, pintura(0, 0));
+  const [tarea, compuerta] = falso.etiquetas.map((e) => e.html);
+  expect(tarea?.hidden).toBe(false);
+  // Hidden, not removed: `tools/e2e-replay.mjs` reads every counter back from its `data-` attributes.
+  expect(compuerta?.hidden).toBe(true);
+  expect(compuerta?.dataset).toMatchObject({ completed: '0', started: '0' });
+  expect(compuerta?.title).not.toBe('');
+
+  sincronizarReplay(falso.modeler, pintura(1, 0));
+  expect(compuerta?.hidden).toBe(false);
+  expect(compuerta?.textContent).toBe('1/0');
+
+  // Reset takes the replay back to zero: the counter leaves again.
+  sincronizarReplay(falso.modeler, pintura(0, 0));
+  expect(compuerta?.hidden).toBe(true);
+});
