@@ -182,6 +182,8 @@ export const es: Strings = {
 
     /** Chips de validación sobre el lienzo y contadores de la barra de estado. */
     irAlPrimerProblema: 'Ir al primer elemento con problemas',
+    /** #722: una entrada de la lista de validación que lleva a su elemento. */
+    irAlProblema: 'Ir al elemento en el diagrama',
     errores: (n: number): string => `${n} ${n === 1 ? 'error' : 'errores'}`,
     avisos: (n: number): string => `${n} ${n === 1 ? 'aviso' : 'avisos'}`,
 
@@ -418,6 +420,7 @@ export const es: Strings = {
     sinCoincidencias: (filtro: string): string => `Ninguna figura coincide con «${filtro}».`,
     requiereActividad: (figura: string): string => `${figura}: selecciona una tarea o un subproceso para adjuntarlo`,
     requiereContenedor: (figura: string): string => `${figura}: añade antes un pool`,
+    poolSoloEnPrincipal: (figura: string): string => `${figura}: los pools van en el diagrama principal, no dentro de un subproceso`,
     eligePool: 'Haz clic en el pool o carril donde añadir el carril. Esc cancela.',
     comandos: {
       titulo: 'Paleta de comandos',

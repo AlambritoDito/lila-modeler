@@ -17,6 +17,7 @@ import { basename, dirname, resolve } from 'node:path';
 
 import {
   AnnotationContentLossError,
+  describeContentLoss,
   REF_KINDS,
   annotatableElements,
   annotateElement,
@@ -111,7 +112,7 @@ export async function readElements(
   try {
     return { elements: await annotatableElements(xml), annotations: await readAnnotations(xml) };
   } catch (error) {
-    if (error instanceof AnnotationContentLossError) throw new Error(agentToolMessages(locale).contentLoss(error.detail));
+    if (error instanceof AnnotationContentLossError) throw new Error(agentToolMessages(locale).contentLoss(describeContentLoss(error.issues, messages(locale).cli)));
     throw error;
   }
 }
@@ -294,7 +295,7 @@ export async function annotateLilaElement(request: AnnotateRequest): Promise<Ann
       next = await annotateElement(next, holder, { documentation: request.documentation });
     }
   } catch (error) {
-    if (error instanceof AnnotationContentLossError) throw new Error(T.contentLoss(error.detail));
+    if (error instanceof AnnotationContentLossError) throw new Error(T.contentLoss(describeContentLoss(error.issues, messages(locale).cli)));
     throw error;
   }
   const after = view(await readAnnotations(next));

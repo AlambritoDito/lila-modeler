@@ -365,7 +365,9 @@ export class LilaCarriles {
    */
   elegirPool(alTerminar: () => void): boolean {
     this.cancelar();
-    const pools = this.elementRegistry.filter((el) => esPool(el) && el.labelTarget === undefined);
+    // Only the pools of the open plane (#721): inside a collapsed sub-process there is none.
+    const raiz = this.canvas.getRootElement();
+    const pools = this.elementRegistry.filter((el) => esPool(el) && el.labelTarget === undefined && el.parent === raiz);
     if (pools.length === 0) return false;
     if (pools.length === 1) {
       this.directEditing.activate(this.modeling.addLane(pools[0]!, 'bottom'));

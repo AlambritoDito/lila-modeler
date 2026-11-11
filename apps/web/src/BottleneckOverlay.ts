@@ -229,25 +229,51 @@ function inyectarEstilos(): void {
   color: var(--fg-onAccent);
   font-weight: 700;
   letter-spacing: 0.06em;
-  margin-right: 4px;
-  padding: 0 3px;
+  margin: -1px -4px 1px;
+  overflow: hidden;
+  padding: 0 4px;
+  text-overflow: ellipsis;
 }
 .lila-bottleneck-label {
   background: var(--bg-elevated);
   border: 1px solid var(--border-strong);
+  box-sizing: border-box;
   color: var(--fg-primary);
   font: 11px var(--font-ui, system-ui);
+  overflow: hidden;
   padding: 1px 4px;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }`;
   document.head.appendChild(style);
 }
 
-function etiquetaHtml(entry: { etiqueta: string; titulo: string }, cuello = false): HTMLElement {
+/**
+ * Where the badge hangs: under its own task, left edges aligned (diagram-js reads `bottom: -4` as
+ * «top of the overlay 4 px below the element» and `left: 0` as its left edge). It used to hang
+ * off the bottom RIGHT corner and grow to the right, which put it on the badge of the next task
+ * of the row, then — once narrowed — on the next shape, its name or its replay counter (#718).
+ * Under the task and never wider than it (`ancho`), the badge stays in the task's own column.
+ * Left rather than right aligned because that is the anchor diagram-js gives for free (an overlay
+ * is placed by its top left corner; right-aligning needs its width, or a wrapper).
+ * What can still sit there is what belongs to the task itself — a boundary event on its bottom
+ * edge, a flow leaving downwards — which is less, and closer to the task it describes.
+ * ponytail: no collision pass, nothing is measured; one if the space under a task gets crowded.
+ */
+const POSICION = { bottom: -4, left: 0 } as const;
+
+/**
+ * `ancho` is the width of the element the badge belongs to: the badge is never wider (a text that
+ * does not fit ends in an ellipsis, the mark on its own too, and is whole in `title`). The
+ * BOTTLENECK mark takes its own line above the wait instead of sitting beside it: side by side
+ * they were ~160 px against a 100 px task.
+ */
+function etiquetaHtml(entry: { etiqueta: string; titulo: string }, ancho: number | undefined, cuello = false): HTMLElement {
   const div = document.createElement('div');
   div.className = 'lila-bottleneck-label';
+  if (ancho !== undefined && ancho > 0) div.style.maxWidth = `${ancho}px`;
   if (cuello) {
-    const marca = document.createElement('span');
+    const marca = document.createElement('div');
     marca.className = 'lila-cuello';
     marca.textContent = strings().c5.mapa.cuello;
     div.append(marca);
@@ -255,7 +281,8 @@ function etiquetaHtml(entry: { etiqueta: string; titulo: string }, cuello = fals
   div.append(entry.etiqueta);
   // La etiqueta es un `div` de `overlays`, no un `<text>` del SVG: el equivalente a `<title>`
   // aquí es el atributo `title`, que da el texto sin recortar al pasar el ratón (#226).
-  div.title = entry.titulo;
+  // The mark can be cut on a narrow task: the tooltip says it too.
+  div.title = cuello ? `${strings().c5.mapa.cuello} · ${entry.titulo}` : entry.titulo;
   return div;
 }
 
@@ -352,6 +379,7 @@ export function applyOverlay(modeler: Modeler, corrida: Corrida): void {
   const canvas = modeler.get<Canvas>('canvas');
   const overlays = modeler.get<Overlays>('overlays');
   const presentes: string[] = [];
+  const anchoDe = (id: string): number | undefined => (elementRegistry.get(id) as { width?: number } | undefined)?.width;
   const calor = corrida.calor === undefined ? {} : modeloCalor(corrida.result, corrida.scenario, corrida.calor.tareas);
 
   // The heat map first: the ranking's cut below paints over its own tasks (same level rule).
@@ -361,7 +389,7 @@ export function applyOverlay(modeler: Modeler, corrida: Corrida): void {
     if (id === null) continue;
     presentes.push(id);
     estado.niveles.set(id, entry.nivel);
-    overlays.add(id, OVERLAY_CALOR, { html: etiquetaHtml(entry), position: { bottom: -4, right: -4 } });
+    overlays.add(id, OVERLAY_CALOR, { html: etiquetaHtml(entry, anchoDe(id)), position: POSICION });
   }
 
   for (const [idResultado, entry] of Object.entries(modelo)) {
@@ -377,7 +405,7 @@ export function applyOverlay(modeler: Modeler, corrida: Corrida): void {
     }
     // With the heat map the badge says what the map says (the wait) plus the engine's verdict.
     const badge = corrida.calor === undefined ? entry : { etiqueta: calor[idResultado]?.etiqueta ?? entry.etiqueta, titulo: entry.titulo };
-    overlays.add(id, OVERLAY_TYPE, { html: etiquetaHtml(badge, corrida.calor !== undefined), position: { bottom: -4, right: -4 } });
+    overlays.add(id, OVERLAY_TYPE, { html: etiquetaHtml(badge, anchoDe(id), corrida.calor !== undefined), position: POSICION });
   }
 
   redibujar(modeler, presentes);

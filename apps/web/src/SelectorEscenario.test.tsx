@@ -33,7 +33,7 @@ function Arnes(extra: Extra & { cambios?: [string, Record<string, unknown>][] })
       escenarios={escenarios}
       activo={activo}
       corridas={[{ scenarioName: 'as-is.scenario.json' } as StoredRun]}
-      validacion={{ errores: 0, avisos: 0, primero: null }}
+      validacion={{ errores: 0, avisos: 0, primerError: null, primerAviso: null }}
       ir={null}
       onElegir={setActivo}
       onDuplicar={() => {
@@ -83,11 +83,14 @@ it('lists the scenarios with BASE, «Simulated» / «Not simulated» and the par
 
 it('the chips count errors and warnings and jump to the first problem; none without problems', () => {
   const onProblema = vi.fn();
-  montar({ validacion: { errores: 2, avisos: 1, primero: 'Task_1' }, onProblema });
+  // QA of #722: each chip goes to the first problem of its own kind, whichever comes first.
+  montar({ validacion: { errores: 2, avisos: 1, primerError: 'Task_2', primerAviso: 'Task_1' }, onProblema });
   const chips = [...caja.querySelectorAll<HTMLButtonElement>('.c5-chips .chip')];
   expect(chips.map((c) => c.textContent)).toEqual([S.app.errores(2), S.app.avisos(1)]);
   act(() => chips[0]!.click());
-  expect(onProblema).toHaveBeenCalledWith('Task_1');
+  expect(onProblema).toHaveBeenLastCalledWith('Task_2');
+  act(() => chips[1]!.click());
+  expect(onProblema).toHaveBeenLastCalledWith('Task_1');
   act(() => raiz!.unmount()); caja.remove();
   montar();
   expect(caja.querySelector('.c5-chips')).toBeNull();

@@ -37,7 +37,7 @@
  *    guardan en segundos (R1, R2), y `run.start` se compone de una fecha y un desfase (R8).
  *    El JSON crudo sigue estando, plegado al final: es la vista avanzada, no la principal.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 import type { ProcessIR } from '@lila-modeler/engine';
@@ -739,6 +739,16 @@ export function ScenarioPanel({
     if (destino !== null) setPaso(destino);
     onSeleccionar(elementoDeProblema(problema.ruta, ir));
   }
+  /**
+   * A list entry (QA of #722): a problem about an element of the diagram is a button that goes to
+   * it, like the chips do — with several unreachable elements the list is how the second one is
+   * found. One without an element to select (the process, `extends`, a shape the simulator does not
+   * know) stays plain text.
+   */
+  function entradaProblema(problema: Problema, texto: ReactNode): ReactNode {
+    if (elementoDeProblema(problema.ruta, ir) === null) return texto;
+    return <button type="button" className="problema-ir" title={S.app.irAlProblema} onClick={() => irAProblema(problema)}>{problema.mensaje}</button>;
+  }
   function pasoDeProblemaPanel(ruta: string): PasoId | null {
     for (const p of PASO_IDS) if (porPaso.porPaso[p].some((x) => x.ruta === ruta)) return p;
     return null;
@@ -1168,7 +1178,7 @@ export function ScenarioPanel({
             <ul>
               {porPaso.sinPaso.map((problema, i) => (
                 <li key={`${problema.ruta}-${i}`}>
-                  <span>{problema.mensaje}</span>
+                  {entradaProblema(problema, <span>{problema.mensaje}</span>)}
                 </li>
               ))}
             </ul>
@@ -1183,7 +1193,7 @@ export function ScenarioPanel({
             <ul className="ids">
               {problemas.map((problema, i) => (
                 <li key={i} className={problema.severidad === 'error' ? 'error' : 'aviso'}>
-                  {problema.mensaje}
+                  {entradaProblema(problema, problema.mensaje)}
                 </li>
               ))}
             </ul>

@@ -132,6 +132,9 @@ it.each([
   ['E-X', 'elements.T.p', 'is outside [0, 1] (elements.T.p).', 'E-X: is outside [0, 1] (elements.T.p).'],
   ['E-X', 'Task_1', 'Task_10: something else.', 'E-X: Task_1: Task_10: something else.'],
   ['E-X', 'Task_1', 'the flow leaves Task_10 (elements.Task_10).', 'E-X: Task_1: the flow leaves Task_10 (elements.Task_10).'],
+  // #722: a structural error names its node; the id in parentheses is the id already said.
+  ['E-X', 'Task_1', 'Review (Task_1): is not reachable.', 'E-X: Review (Task_1): is not reachable.'],
+  ['E-X', 'Task_1', 'Review (Task_10): is not reachable.', 'E-X: Task_1: Review (Task_10): is not reachable.'],
 ])('sinRepetir(%s, %s) does not confuse an id with a longer one (#519)', (code, where, message, expected) => {
   expect(sinRepetir(code, where, message)).toBe(expected);
 });

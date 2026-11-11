@@ -261,7 +261,7 @@ export class Diagram {
       if (edge === undefined || plane === undefined) continue;
       const ends = new Set([flow['sourceRef']?.id, flow['targetRef']?.id]);
       const fresh = this.nodeShapes(plane)
-        .filter((di) => this.moved.has(di['bpmnElement'].id) && !ends.has(di['bpmnElement'].id))
+        .filter((di) => this.moved.has(di['bpmnElement']?.id) && !ends.has(di['bpmnElement']?.id))
         .map((di) => di['bounds'] as Box);
       if (crosses((edge['waypoint'] ?? []) as Point[], fresh)) this.routeFlow(flow);
     }
@@ -325,7 +325,7 @@ export class Diagram {
           di['label']['bounds'].y += by;
           di['label']['bounds'].x += bx;
         }
-        if (bx !== 0 || by !== 0) this.moved.add(di['bpmnElement'].id);
+        if (bx !== 0 || by !== 0) this.moved.add(di['bpmnElement']?.id);
       } else if (di.$type === 'bpmndi:BPMNEdge') {
         const points = (di['waypoint'] ?? []) as Point[];
         if (dy !== 0 && points.every((p) => p.y >= below)) for (const p of points) p.y += dy;
@@ -398,7 +398,7 @@ export class Diagram {
         if (host === undefined ? moves(b) : moves(host)) {
           b.x += dx;
           if (di['label']?.['bounds'] !== undefined) di['label']['bounds'].x += dx;
-          this.moved.add(di['bpmnElement'].id);
+          this.moved.add(di['bpmnElement']?.id);
           went.add(di['bpmnElement']);
         } else if (inBand(b) && this.isContainer(di) && right(b) > fromX) b.width += dx;
       } else if (di.$type === 'bpmndi:BPMNEdge') {
@@ -465,7 +465,7 @@ export class Diagram {
         if (grow.has(di['bpmnElement'])) b.height += dy;
         else if (moving.has(di)) {
           b.y += dy;
-          this.moved.add(di['bpmnElement'].id);
+          this.moved.add(di['bpmnElement']?.id);
           if (di['label']?.['bounds'] !== undefined) di['label']['bounds'].y += dy;
         } else if (this.isContainer(di) && bottom(b) > fromY) b.height += dy;
       } else if (di.$type === 'bpmndi:BPMNEdge') {

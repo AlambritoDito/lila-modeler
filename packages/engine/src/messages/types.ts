@@ -26,11 +26,12 @@ export interface OuterCodeMessages {
   'W-XOR-DEFAULT-ROTO': (id: string, notice: string) => string;
   'W-MSGFLOW': (processId: string, count: number) => string;
   'W-COND': (flowId: string) => string;
-  'E-GATEWAY-SIN-ARISTAS/sin-entradas': (id: string) => string;
-  'E-GATEWAY-SIN-ARISTAS/sin-salidas': (id: string) => string;
-  'E-SIN-START': (processId: string) => string;
-  'E-SIN-END': (processId: string) => string;
-  'E-INALCANZABLE': (id: string) => string;
+  /** #722: `node` is the node's label, «Name (id)» or the bare id (`nodeLabel`), here and in `E-INALCANZABLE`. */
+  'E-GATEWAY-SIN-ARISTAS/sin-entradas': (node: string) => string;
+  'E-GATEWAY-SIN-ARISTAS/sin-salidas': (node: string) => string;
+  'E-SIN-START': (process: string) => string;
+  'E-SIN-END': (process: string) => string;
+  'E-INALCANZABLE': (node: string) => string;
 
   /* --- scenario.ts (lint) ------------------------------------------- */
   'E-RESERVADO': (path: string) => string;
@@ -458,6 +459,16 @@ export interface CliMessages {
   editInvalid: (detail: string) => string;
   editBpmnInvalid: (detail: string) => string;
   editContentLoss: (detail: string) => string;
+  /* --- content a writer cannot carry to its output (#724); `line` is 1-based ---- */
+  lossDuplicateId: (id: string, tag: string, line: number) => string;
+  lossIllegalId: (id: string, tag: string, line: number) => string;
+  lossStrayText: (text: string, line: number) => string;
+  lossMisplaced: (tag: string, line: number, anchor: string) => string;
+  lossMixedContent: (tag: string, parent: string, line: number) => string;
+  lossTwinAttribute: (attributes: string, tag: string, line: number) => string;
+  lossPrefixedAttribute: (attribute: string, element: string) => string;
+  lossDanglingRef: (property: string, ref: string, element: string) => string;
+  lossOther: (detail: string) => string;
   editUnknownId: (id: string) => string;
   editNotAStep: (id: string, type: string) => string;
   editOtherProcess: (id: string, process: string) => string;

@@ -194,7 +194,12 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
 - **R-NOSOP-5 — Errores estructurales (mismo tratamiento, otros códigos):** flujo colgante
   (`E-FLUJO-COLGANTE`), id duplicado (`E-ID-DUPLICADO`), gateway sin salidas o sin entradas
   (`E-GATEWAY-SIN-ARISTAS`), nodo inalcanzable desde algún `start` (`E-INALCANZABLE`), proceso sin
-  `start` (`E-SIN-START`), proceso sin `end` ni `terminate` (`E-SIN-END`). *(prueba: LILA-021)*
+  `start` (`E-SIN-START`), proceso sin `end` ni `terminate` (`E-SIN-END`). El texto de
+  `E-GATEWAY-SIN-ARISTAS` y de `E-INALCANZABLE` nombra el nodo como `Nombre (id)`, o con el id solo
+  cuando no tiene nombre, y `E-SIN-START`/`E-SIN-END` nombran igual el proceso; el campo `id` es
+  siempre el id BPMN. El editor lista estos errores
+  mientras se edita, con la misma validación que usa la corrida (#722).
+  *(prueba: LILA-021, #722)*
 - **R-NOSOP-6 — Lo que el lector XML descarta también es error.** `bpmn-moddle` no lanza cuando
   no puede leer una parte del archivo: la reporta como *warning* de `fromXML` y sigue. `parseBpmn`
   conserva esos avisos tal cual en `ir.source.warnings` (texto de moddle en una línea, más el id

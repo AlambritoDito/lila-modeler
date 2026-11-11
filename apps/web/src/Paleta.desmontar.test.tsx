@@ -12,6 +12,8 @@ it('leaving Model mode (the palette unmounts) cancels a pending pool pick (QA of
   const servicios = {
     carriles: { cancelar, eligiendo: () => true, elegirPool: vi.fn() },
     elementRegistry: { filter: () => [] },
+    // The Pool item asks which plane is open (#721).
+    canvas: { getRootElement: () => ({ type: 'bpmn:Process' }) },
   } as unknown as Servicios;
   const div = document.createElement('div');
   const root = createRoot(div);

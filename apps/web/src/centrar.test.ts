@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { ajustar, centrar } from './centrar';
+import { ajustar, centrar, mostrarPlano } from './centrar';
 
 it('centrar puts the element in the middle of the view at the current zoom (#410, QA of #438)', () => {
   const orden: string[] = [];
@@ -54,4 +54,26 @@ it('ajustar leaves the view alone for an empty diagram or a view with no room (#
     expect(viewbox).toHaveBeenCalledTimes(1);
     expect(viewbox).toHaveBeenLastCalledWith();
   }
+});
+
+it('mostrarPlano switches to the plane that holds the element, and only then (QA of #722)', () => {
+  const proceso = { id: 'Process_1' }; const dentro = { id: 'Sub_1_plane' };
+  let actual: unknown = proceso;
+  const canvas = {
+    findRoot: (el: { id: string }) => (el.id === 'Task_Dentro' ? dentro : el.id === 'Task_Fuera' ? proceso : undefined),
+    getRootElement: () => actual,
+    setRootElement: vi.fn((raiz: unknown) => { actual = raiz; }),
+  };
+  // Already on screen: nothing to do.
+  expect(mostrarPlano(canvas as never, { id: 'Task_Fuera' })).toBe(false);
+  expect(canvas.setRootElement).not.toHaveBeenCalled();
+  // Inside a collapsed sub-process: drill in.
+  expect(mostrarPlano(canvas as never, { id: 'Task_Dentro' })).toBe(true);
+  expect(canvas.setRootElement).toHaveBeenLastCalledWith(dentro);
+  // And back out, for an element of the process while the view is inside the sub-process.
+  expect(mostrarPlano(canvas as never, { id: 'Task_Fuera' })).toBe(true);
+  expect(canvas.setRootElement).toHaveBeenLastCalledWith(proceso);
+  // An element the canvas cannot place changes nothing.
+  expect(mostrarPlano(canvas as never, { id: 'Ghost' })).toBe(false);
+  expect(canvas.setRootElement).toHaveBeenCalledTimes(2);
 });

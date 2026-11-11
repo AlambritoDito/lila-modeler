@@ -55,8 +55,12 @@ export interface Validacion {
   marcadores: ReadonlyMap<string, MarcadorValidacion>;
   errores: number;
   avisos: number;
-  /** Primer id con problema, al que lleva el clic en un chip. `null` si no hay ninguno. */
+  /** Primer id con problema, de cualquier severidad. `null` si no hay ninguno. */
   primero: string | null;
+  /** The first id with an error, where the «n errors» chip goes; `null` when no error has a shape. */
+  primerError: string | null;
+  /** The first id with a warning, where the «n warnings» chip goes. */
+  primerAviso: string | null;
 }
 
 /** Problemas que no cuelgan de ninguna figura y solo suman en los chips. */
@@ -79,6 +83,8 @@ export function problemasPorElemento(
   let errores = sinElemento.errores ?? 0;
   let avisos = sinElemento.avisos ?? 0;
   let primero: string | null = null;
+  let primerError: string | null = null;
+  let primerAviso: string | null = null;
 
   for (const problema of problemas) {
     const nivel: NivelValidacion = problema.severidad === 'error' ? 'error' : 'aviso';
@@ -88,6 +94,8 @@ export function problemasPorElemento(
     const id = RUTA_ELEMENTO.exec(problema.ruta)?.[1];
     if (id === undefined) continue;
     primero ??= id;
+    if (nivel === 'error') primerError ??= id;
+    else primerAviso ??= id;
     const previo = marcadores.get(id);
     if (previo === undefined) {
       marcadores.set(id, { mensajes: [problema.mensaje], nivel });
@@ -97,7 +105,7 @@ export function problemasPorElemento(
     }
   }
 
-  return { avisos, errores, marcadores, primero };
+  return { avisos, errores, marcadores, primero, primerAviso, primerError };
 }
 
 /**

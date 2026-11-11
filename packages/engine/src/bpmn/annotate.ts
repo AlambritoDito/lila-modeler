@@ -11,6 +11,7 @@
 import { BpmnModdle, type Moddle, type ModdleElement } from 'bpmn-moddle';
 import lila from './lila.moddle.json' with { type: 'json' };
 import type { AttributeDefinition, AttributeValue } from './attributes.js';
+import { readLossless } from './preserve.js';
 
 /** Una responsabilidad RACI: `lila:responsibility type="R" roleRef="rol-1"`. */
 export interface Responsibility {
@@ -105,39 +106,12 @@ function* walk(el: ModdleElement): Generator<ModdleElement> {
 }
 
 /**
- * bpmn-moddle DESCARTA en silencio lo que no sabe parsear (un elemento con un id duplicado, o
- * contenido no reconocido dentro de una extensión ajena) y lo reporta solo como `warning`. Si
- * reserializáramos ese árbol, el archivo del usuario perdería contenido sin que nadie se entere,
- * que es justo lo que ADR-021 prohíbe. Así que se convierte en error.
- *
- * ponytail: se aborta en vez de conservar el fragmento intacto. Techo: hay archivos reales de
- * Bizagi (`bizagi-miwg-B.2.0`) que hoy no se pueden anotar. Camino de mejora, cuando haga falta:
- * parchear el XML por rangos de texto en vez de reserializar el documento entero.
+ * The file has content that would be lost by writing it back (#724, see `preserve.ts`): what
+ * bpmn-moddle drops on reading and `readLossless` cannot carry either. Its own class, so a caller
+ * that speaks another language (the MCP server, #99) can say so in its own words with
+ * `describeContentLoss(issues, …)`.
  */
-function assertNoContentLoss(warnings: readonly unknown[]): void {
-  if (warnings.length === 0) return;
-  // bpmn-moddle's warnings are plain `{ message, element, … }` objects, not `Error`s (#633: they
-  // used to print as "[object Object]").
-  const detail = warnings
-    .map((w) => {
-      const message: unknown = w instanceof Error ? w.message : (w as { message?: unknown } | null)?.message;
-      return typeof message === 'string' ? message : String(w);
-    })
-    .join('; ');
-  throw new AnnotationContentLossError(detail);
-}
-
-/**
- * The file has content bpmn-moddle cannot write back (see `assertNoContentLoss`). Its own class, so
- * a caller that speaks another language (the MCP server, #99) can say so in its own words; `detail`
- * is bpmn-moddle's text.
- */
-export class AnnotationContentLossError extends Error {
-  constructor(readonly detail: string) {
-    super(`el archivo tiene contenido que bpmn-moddle no sabe reescribir y se perdería al guardarlo: ${detail}`);
-    this.name = 'AnnotationContentLossError';
-  }
-}
+export { ContentLossError as AnnotationContentLossError, describeContentLoss, type ContentLossIssue } from './preserve.js';
 
 /** An element `annotateElement` can reach: its BPMN `$type` and its `name` (`''` when it has none). */
 export interface AnnotatableElement {
@@ -153,9 +127,7 @@ export interface AnnotatableElement {
  * Throws `AnnotationContentLossError` where `annotateElement` would.
  */
 export async function annotatableElements(xml: string): Promise<Record<string, AnnotatableElement>> {
-  const moddle = BpmnModdle({ lila });
-  const { rootElement: definitions, warnings } = await moddle.fromXML(xml);
-  assertNoContentLoss(warnings);
+  const { root: definitions } = await readLossless(xml);
   const result: Record<string, AnnotatableElement> = Object.create(null) as Record<string, AnnotatableElement>;
   for (const el of walk(definitions)) {
     if (Object.hasOwn(result, el.id)) continue;
@@ -212,9 +184,7 @@ function readOne(el: ModdleElement): Annotations {
  * algo que contar: un elemento sin documentación ni `lila:` no entra en el resultado.
  */
 export async function readAnnotations(xml: string): Promise<Record<string, Annotations>> {
-  const moddle = BpmnModdle({ lila });
-  const { rootElement: definitions, warnings } = await moddle.fromXML(xml);
-  assertNoContentLoss(warnings);
+  const { root: definitions } = await readLossless(xml);
 
   const result: Record<string, Annotations> = {};
   for (const el of walk(definitions)) {
@@ -250,7 +220,8 @@ export async function readTextNotes(xml: string): Promise<Record<string, string[
 }
 
 /**
- * Escribe las anotaciones del elemento `id` y devuelve el XML resultante.
+ * Escribe las anotaciones del elemento `id` y devuelve el XML resultante. What bpmn-moddle cannot
+ * interpret is carried to the output (#724, `preserve.ts`); `AnnotationContentLossError` otherwise.
  *
  * Cada clave presente en `annotations` REEMPLAZA lo que hubiera de ese tipo; una clave ausente
  * deja intacto lo que ya estaba. Los elementos de extensión ajenos (`bizagi:`, `bpsim:`, …) se
@@ -267,9 +238,8 @@ export async function annotateElement(
   id: string,
   annotations: Annotations,
 ): Promise<string> {
-  const moddle = BpmnModdle({ lila });
-  const { rootElement: definitions, warnings } = await moddle.fromXML(xml);
-  assertNoContentLoss(warnings);
+  const read = await readLossless(xml);
+  const { moddle, root: definitions } = read;
 
   let target: ModdleElement | undefined;
   for (const el of walk(definitions)) {
@@ -326,13 +296,16 @@ export async function annotateElement(
       added.push(moddle.create(VALUE_TYPE, { ...attribute }));
     }
 
-    target.extensionElements = moddle.create('bpmn:ExtensionElements', {
-      values: [...kept, ...added],
-    });
+    // One that holds elements set aside (#724) stays the object it is: they go back into it.
+    if (target.extensionElements !== undefined && read.holds(target.extensionElements)) target.extensionElements.values = [...kept, ...added];
+    else {
+      target.extensionElements = moddle.create('bpmn:ExtensionElements', {
+        values: [...kept, ...added],
+      });
+    }
   }
 
-  const { xml: out } = await moddle.toXML(definitions, { format: true });
-  return out;
+  return read.write();
 }
 
 /** A `lila:attributeValue` and the id of the element that holds it. */
@@ -341,12 +314,12 @@ export interface HeldAttributeValue extends AttributeValue {
 }
 
 /** Keeps the `extensionElements` values `keep` picks; one left empty by this goes away. */
-function keepExtensions(el: ModdleElement, keep: (value: ModdleElement) => boolean): void {
+function keepExtensions(el: ModdleElement, keep: (value: ModdleElement) => boolean, holds: (element: ModdleElement) => boolean): void {
   const values = el.extensionElements?.values;
   if (values === undefined) return;
   const kept = values.filter(keep);
   if (kept.length === values.length) return;
-  if (kept.length === 0) delete el.extensionElements;
+  if (kept.length === 0 && !holds(el.extensionElements!)) delete el.extensionElements;
   else el.extensionElements!.values = kept;
 }
 
@@ -364,22 +337,20 @@ export async function writeAttributeDefinitions(
   definitions: readonly AttributeDefinition[],
   dropValue: (value: HeldAttributeValue) => boolean = () => false,
 ): Promise<string> {
-  const moddle = BpmnModdle({ lila });
-  const { rootElement: root, warnings } = await moddle.fromXML(xml);
-  assertNoContentLoss(warnings);
+  const read = await readLossless(xml);
+  const { moddle, root } = read;
   const roots = (root.rootElements ?? []).filter((el) => el.$type === 'bpmn:Collaboration' || el.$type === 'bpmn:Process');
   const host = roots.find((el) => el.$type === 'bpmn:Collaboration') ?? roots[0];
   if (host === undefined) throw new Error('the file has no bpmn:process to hold the attribute definitions.');
   for (const el of walk(root)) {
     keepExtensions(el, (value) =>
       value.$type !== DEFINITION_TYPE &&
-      (value.$type !== VALUE_TYPE || !dropValue({ elementId: el.id, ref: value.ref ?? '', value: value.value ?? '' })));
+      (value.$type !== VALUE_TYPE || !dropValue({ elementId: el.id, ref: value.ref ?? '', value: value.value ?? '' })), read.holds);
   }
   if (definitions.length > 0) {
     const created = definitions.map((definition) => createDefinition(moddle, definition));
     if (host.extensionElements === undefined) host.extensionElements = moddle.create('bpmn:ExtensionElements', { values: created });
     else host.extensionElements.values = [...(host.extensionElements.values ?? []), ...created];
   }
-  const { xml: out } = await moddle.toXML(root, { format: true });
-  return out;
+  return read.write();
 }

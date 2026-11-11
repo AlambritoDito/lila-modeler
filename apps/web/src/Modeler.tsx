@@ -65,7 +65,7 @@ import { moduloLote, type LilaLote } from './lote';
 import { moduloCarriles, type LilaCarriles } from './carriles';
 import { moduloControlesCarriles } from './controlesCarriles';
 import { moduloAncho, type LilaAncho } from './ancho';
-import { ajustar, centrar, type CanvasAjustable, type CanvasCentrable, type Margen } from './centrar';
+import { ajustar, centrar, mostrarPlano, type CanvasAjustable, type CanvasCentrable, type CanvasConPlanos, type Margen } from './centrar';
 import { idDeSeleccion } from './ids';
 import { svgDelLienzo, type LienzoExportable } from './exportarDiagrama';
 
@@ -643,7 +643,11 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
         if (elemento === undefined) return;
         // Centre first: it may switch to the element's plane (a collapsed sub-process), and the
         // selection belongs on the plane that ends up on screen.
-        if (opciones?.centrar && conTamano()) centrar(activo.get<Canvas>('canvas') as unknown as CanvasCentrable, elemento as Elemento);
+        const canvas = activo.get<Canvas>('canvas');
+        if (opciones?.centrar && conTamano()) centrar(canvas as unknown as CanvasCentrable, elemento as Elemento);
+        // Without centring (a validation chip, a problem of the panel) the plane is switched all the
+        // same, and the element brought into view on the plane it was not being looked at (#722).
+        else if (mostrarPlano(canvas as unknown as CanvasConPlanos, elemento) && conTamano()) canvas.scrollToElement(elemento as never);
         activo.get<Selection>('selection').select(elemento);
       },
       enfocar: () => { activo?.get<Canvas>('canvas').focus(); },

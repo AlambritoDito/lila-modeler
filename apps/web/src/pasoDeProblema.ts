@@ -10,7 +10,7 @@
  * Pure: no React, no DOM. The step of an element field comes from `CAMPOS_DE_PASO`, so a field
  * moved between steps moves its problems with it.
  */
-import type { ProcessIR } from '@lila-modeler/engine';
+import type { IrProblemCode, ProcessIR } from '@lila-modeler/engine';
 
 import type { PasoId } from './ids.js';
 import { CAMPOS_DE_PASO, type ClaseElemento } from './scenarioFields.js';
@@ -77,6 +77,22 @@ function pasoDeClase(clase: ClaseElemento | null): PasoId | null {
 }
 
 /**
+ * The codes of the engine's model validation (`IrProblemCode`). They are fixed in the diagram, not
+ * in a step of the panel, whatever element their path names (#722).
+ */
+const CODIGOS_DEL_MODELO: ReadonlySet<string> = new Set<IrProblemCode>([
+  'E-NOSOP',
+  'E-PARSE-INCOMPLETO',
+  'E-FLUJO-COLGANTE',
+  'E-ID-DUPLICADO',
+  'E-REF-INEXISTENTE',
+  'E-GATEWAY-SIN-ARISTAS',
+  'E-INALCANZABLE',
+  'E-SIN-START',
+  'E-SIN-END',
+]);
+
+/**
  * The step where the problem at `ruta` is fixed, or `null` when no step owns it (`extends`,
  * `model`, an unknown element): those go to the list at the foot of the panel.
  *
@@ -86,6 +102,7 @@ function pasoDeClase(clase: ClaseElemento | null): PasoId | null {
  */
 export function pasoDeProblema(ruta: string, ir: ProcessIR | null, codigo?: string): PasoId | null {
   if (codigo === 'E-PROB-ERROR-SUMA') return 'routes';
+  if (codigo !== undefined && CODIGOS_DEL_MODELO.has(codigo)) return null;
   const raiz = /^[^.[]+/.exec(ruta)?.[0] ?? '';
   if (raiz === 'run') return 'run';
   if (raiz === 'calendars') return 'calendars';

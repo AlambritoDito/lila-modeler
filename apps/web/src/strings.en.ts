@@ -201,6 +201,8 @@ export const en = {
 
     /** Validation chips over the canvas and counters of the status bar. */
     irAlPrimerProblema: 'Go to the first element with problems',
+    /** #722: a validation-list entry that goes to its element. */
+    irAlProblema: 'Go to the element in the diagram',
     errores: (n: number): string => `${n} ${n === 1 ? 'error' : 'errors'}`,
     avisos: (n: number): string => `${n} ${n === 1 ? 'warning' : 'warnings'}`,
 
@@ -441,6 +443,8 @@ export const en = {
     /** Title of a boundary event or a lane while nothing fitting is selected (#456). */
     requiereActividad: (figura: string): string => `${figura}: select a task or a sub-process to attach it to`,
     requiereContenedor: (figura: string): string => `${figura}: add a pool first`,
+    /** Title of the pool inside a collapsed sub-process (#721): a sub-process holds no pools. */
+    poolSoloEnPrincipal: (figura: string): string => `${figura}: pools belong to the main diagram, not inside a sub-process`,
     /** The lane tool waiting for a click on a pool (#580); Escape cancels. */
     eligePool: 'Click the pool or lane to add the lane to. Esc cancels.',
     /** The ⌘K command palette (`PaletaComandos.tsx`, #410); its actions reuse the bar's labels. */

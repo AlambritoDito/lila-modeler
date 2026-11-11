@@ -196,7 +196,11 @@ failure. The text follows Bizagi's style ("not supported by the simulator").
   (`E-FLUJO-COLGANTE`), a duplicate id (`E-ID-DUPLICADO`), a gateway with no outgoing or no
   incoming flows (`E-GATEWAY-SIN-ARISTAS`), a node unreachable from any `start`
   (`E-INALCANZABLE`), a process with no `start` (`E-SIN-START`), a process with neither `end` nor
-  `terminate` (`E-SIN-END`). *(test: LILA-021)*
+  `terminate` (`E-SIN-END`). The text of `E-GATEWAY-SIN-ARISTAS` and `E-INALCANZABLE` names the
+  node as `Name (id)`, or by the bare id when it has no name, and `E-SIN-START`/`E-SIN-END` name
+  the process the same way; the `id` field is always the BPMN id.
+  The editor lists these errors while editing, from the same validation the run uses (#722).
+  *(test: LILA-021, #722)*
 - **R-NOSOP-6 — What the XML reader discards is also an error.** `bpmn-moddle` does not throw when
   it cannot read part of the file: it reports it as a `fromXML` *warning* and moves on. `parseBpmn`
   keeps those warnings as-is in `ir.source.warnings` (moddle's text on a single line, plus the

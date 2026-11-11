@@ -2984,6 +2984,26 @@ button.gcal-uso-fila:hover {
 .chips-validacion .punto { width: 7px; height: 7px; background: var(--diagram-marker-warning); }
 .chips-validacion .chip.error .punto { background: var(--diagram-marker-error); }
 
+/* A validation-list entry that goes to its element (QA of #722): a real button that reads as the
+   text it replaces; the underline on hover and the focus ring say it can be followed. */
+.problema-ir {
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+}
+.problema-ir:hover { text-decoration: underline; }
+
+/* bpmn-js draws the sub-process breadcrumb at top 20px / left 20px of the canvas, exactly under
+   the floating row `.lienzo-arriba` (top 14px, controls up to 30px tall, z-index 1), so the chips
+   covered the crumbs and took their clicks (QA of #722). The breadcrumb goes below that row:
+   14 + 30 = 44px is the row's bottom edge, plus the row's own 8px gap. `Modeler.tsx` already keeps
+   those 44px clear when it fits the diagram (`margenAjuste`). */
+.lienzo .bjs-breadcrumbs { top: 52px; }
+
 /* The BASE badge: «Scenario ▾» and the panel header. */
 .insignia-base {
   flex: none;
