@@ -149,6 +149,7 @@ interface Etiqueta {
   id: string;
   type: string;
   html: HTMLElement;
+  position: Readonly<Record<string, number>>;
 }
 
 interface Falso {
@@ -202,7 +203,8 @@ function modeladorFalso(idsEnLienzo: readonly string[]): Falso {
       update: (_tipo: string, elemento: { id: string }) => repintados.push(elemento.id),
     },
     overlays: {
-      add: (id: string, type: string, opciones: { html: HTMLElement }) => etiquetas.push({ html: opciones.html, id, type }),
+      add: (id: string, type: string, opciones: { html: HTMLElement; position: Readonly<Record<string, number>> }) =>
+        etiquetas.push({ html: opciones.html, id, position: opciones.position, type }),
       remove: (filtro: { type: string }) => {
         etiquetas = etiquetas.filter((e) => e.type !== filtro.type);
       },
@@ -456,6 +458,9 @@ describe('badges that stay within their own task (#718)', () => {
       falso.etiquetas.find((e) => e.id === 'Task_Cuello')?.html,
     ];
     expect(falso.etiquetas).toHaveLength(2);
+    // Under its own task, left edges aligned: both kinds of badge, so they line up and neither
+    // reaches the next shape of the row (it used to hang off the bottom right corner).
+    expect(falso.etiquetas.map((e) => e.position)).toEqual([{ bottom: -4, left: 0 }, { bottom: -4, left: 0 }]);
     expect(tibia?.style.maxWidth).toBe('100px');
     expect(cuello?.style.maxWidth).toBe('100px');
     // The mark is a block of its own (a line above), the wait is the text after it: side by side
@@ -465,8 +470,13 @@ describe('badges that stay within their own task (#718)', () => {
     expect(marca?.className).toBe('lila-cuello');
     expect(marca?.textContent).toBe('CUELLO');
     expect(cuello?.lastChild?.textContent).toBe('Espera 10 min');
-    // Whatever an ellipsis may cut is whole in the tooltip.
+    // Whatever an ellipsis may cut is whole in the tooltip, the mark included (in the locale).
     expect(cuello?.title).toContain('97');
+    expect(cuello?.title.startsWith('CUELLO · ')).toBe(true);
+    expect(tibia?.title).not.toContain('CUELLO');
+    // The mark is a block inside the badge: it needs an ellipsis of its own on a narrow task.
+    const css = document.getElementById('lila-bottleneck-overlay-styles')?.textContent ?? '';
+    expect(css).toMatch(/\.lila-cuello \{[^}]*overflow: hidden;[^}]*text-overflow: ellipsis;/);
     expect(tibia?.textContent).toBe('Espera 1 min');
     expect(tibia?.title).not.toBe('');
   });
@@ -475,6 +485,8 @@ describe('badges that stay within their own task (#718)', () => {
     const falso = modeladorFalso(['Task_Preparar']);
     applyOverlay(falso.modeler, corridaDe([RANKING[0]!]));
     expect(falso.etiquetas[0]?.html.style.maxWidth).toBe('100px');
+    expect(falso.etiquetas[0]?.position).toEqual({ bottom: -4, left: 0 });
+    expect(falso.etiquetas[0]?.html.title).not.toContain('CUELLO');
 
     const sinAncho = modeladorFalso(['Task_Preparar']);
     delete (sinAncho.modeler.get('elementRegistry') as { get(id: string): { width?: number } }).get('Task_Preparar').width;
