@@ -115,7 +115,7 @@ processes/<slug>/runs/<id>.result.json
   del lienzo— y una actividad de llamada sigue siendo una tarea con su propio tiempo; hacer doble
   clic en una abre el proceso cuyo id de proceso BPMN es su `calledElement`.
 - **En el `.lila`**, lo que quede fuera de las carpetas `processes/<slug>/` listadas se avisa y se
-  descarta, igual que un archivo suelto en un archivo versión 1; un proceso listado sin su
+  conserva, igual que un archivo suelto en un archivo versión 1; un proceso listado sin su
   `model.bpmn` es fatal (`LILA-NO-MODEL`).
 
 ## Versiones
@@ -145,10 +145,10 @@ Desde la 1.0.0, Lila promete:
   un lector para cada una de las anteriores: un archivo viejo se migra en memoria al abrirlo y no se
   escribe nada hasta que guardas. También añade a los fixtures congelados un archivo escrito por la
   última versión publicada antes del cambio.
-- **Las entradas desconocidas se conservarán.** El ADR-032 (§ 1.4 del [contrato del
-  repositorio](REPOSITORY_CONTRACT.md)) sustituye la regla que las descarta, pero el lector que las
-  conserva todavía no se ha publicado. Hasta entonces, las versiones 1 y 2 avisan de las entradas
-  desconocidas y las descartan al guardar ([abajo](#qué-se-tolera-y-qué-no)).
+- **Las entradas desconocidas se conservan.** Desde la 1.0.1 (#725, § 1.4 del [contrato del
+  repositorio](REPOSITORY_CONTRACT.md)) las versiones 1 y 2 avisan de las entradas que no pueden
+  usar y las vuelven a escribir sin cambios ([abajo](#qué-se-tolera-y-qué-no)). Hasta la 1.0.0 se
+  avisaba de ellas y se descartaban al guardar.
 - **Una forma que un escritor publicado dejó mal se repara al leer**, no se rechaza. Por ahora hay
   una:
 
@@ -166,7 +166,7 @@ model.bpmn». El lector ahora lo repara:
 - Nada más cambia, revisiones incluidas, así que las corridas guardadas siguen vigentes. El
   siguiente guardado escribe los nombres reparados.
 - Un escenario que nombra cualquier otro archivo se deja como está. También uno que nombra una
-  entrada que el `.lila` sí contiene: esa entrada está fuera de la disposición y se descarta.
+  entrada que el `.lila` sí contiene: esa entrada está fuera de la disposición y se conserva tal cual.
   «Ejecutar» sigue rechazando un modelo de verdad distinto, ahora y después de guardar.
 
 Lo hace el lector de `.lila` del motor, así que el navegador, la app de escritorio, la CLI y el
@@ -180,17 +180,23 @@ Abrir es tolerante donde el formato es flexible y estricto donde no lo es:
   tiene que ser un objeto JSON.
 - Un escenario ilegible o una corrida inválida se **excluyen y se explican** en los `problems` del
   proyecto; nunca abortan la apertura. Perder una corrida rota no debería costarte el proyecto.
+  Su entrada se **conserva byte a byte** en el `.lila` (#725), así que guardar nunca borra lo que
+  todavía puedes arreglar a mano, ni deja apuntando a la nada a los escenarios que heredan de él.
 - Que falte `lila-project.json` o `model.bpmn` es **fatal**: no hay proyecto.
 - Las entradas con segmentos `..`, rutas absolutas, letras de unidad o barras invertidas se
   **rechazan sin más**: un zip que trae una no es un proyecto al que le falta un archivo.
 
-**Lo que no está en la disposición de arriba se avisa y se descarta.** Un `notes.md` o una carpeta
-`attachments/` dentro de un `.lila` aparecen en `problems` al abrirlo y no se vuelven a escribir al
-guardar. Conservarlos obligaría a llevar bytes opacos a través de `structuredClone` (la frontera IPC
-del escritorio) y de `JSON.stringify` (la copia en `localStorage` del navegador), y ninguno de los
-dos respeta un `Uint8Array` con honestidad. En la forma de **carpeta** esos archivos simplemente se
-dejan en paz, porque el escritor solo toca los archivos que son suyos; así que hoy el sitio para
-notas y adjuntos es la carpeta, no el archivo.
+**Lo que no está en la disposición de arriba se avisa y se conserva** (#725). Un `notes.md` o una
+carpeta `attachments/` dentro de un `.lila` aparecen en `problems` («not understood by this
+version; kept as is») al abrirlo, y cada guardado —la app de escritorio, la CLI, el servidor MCP,
+el navegador— los vuelve a escribir byte a byte. Los bytes viajan junto al documento, nunca dentro:
+ni `structuredClone` (la frontera IPC del escritorio) ni `JSON.stringify` (la copia en
+`localStorage` del navegador) respetan un `Uint8Array` con honestidad. Por eso, al recargar el
+navegador, que restaura el proyecto desde esa copia, se olvidan, y un guardado posterior escribe el
+archivo sin ellos: vuelve a abrir el archivo en vez de guardar la sesión restaurada. La basura del sistema operativo (`__MACOSX/`, `.DS_Store`, `Thumbs.db`) y los restos
+de los propios escritores (`*.tmp-*`, `*.prev-*`, `*.lock`) se descartan sin aviso. En la forma de
+**carpeta** los archivos ajenos simplemente se dejan en paz, porque el escritor solo toca los
+archivos que son suyos.
 
 ## Tipo MIME y extensión
 

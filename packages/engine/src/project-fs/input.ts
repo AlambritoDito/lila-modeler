@@ -333,7 +333,7 @@ export async function writeLilaProject(
  * The scenario's revision goes up by one, so the app sees the runs of the old version as stale.
  * Every other process, scenario and run is carried through unchanged; the archive is re-encoded
  * canonically (`encodeLila`), so an archive the app or the engine wrote keeps every other entry
- * byte for byte. Entries outside the project layout are dropped, as in any save of a `.lila`.
+ * byte for byte. Entries it could not read are kept as they are, as in any save of a `.lila` (#725).
  * Returns the project as written.
  */
 export async function writeLilaScenario(

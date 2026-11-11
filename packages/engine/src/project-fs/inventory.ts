@@ -15,7 +15,7 @@ import { parseBpmn, type AttributeDefinition } from '../bpmn/index.js';
 import { comparablePath, validatedModelOf } from '../cli-shared.js';
 import { messages, type Locale } from '../messages/index.js';
 import { isCurrentRun, type StoredRun } from '../project/index.js';
-import type { ScenarioDocument } from '../project/index.js';
+import type { ProjectProblem, ScenarioDocument } from '../project/index.js';
 import { checkScenario, type LilaTarget } from './agent-tools.js';
 import { attributeDefinitionsOf } from './attributes.js';
 import { findLilaScenario, lilaScenarioPath, lilaScenarioReader, openLilaProcess, openLilaProject, type LilaProcess } from './input.js';
@@ -69,6 +69,11 @@ export interface LilaProjectInventory {
   /** The layout on disk: 2 for a repository (`processes/<slug>/`), 1 otherwise. */
   readonly formatVersion: 1 | 2;
   readonly processes: readonly LilaProcessSummary[];
+  /**
+   * The entries the reader could not use (#725): a scenario or run that is not readable, or an
+   * entry outside the layout. None of them is in `processes`, and every write keeps them as they are.
+   */
+  readonly problems: readonly ProjectProblem[];
 }
 
 function runSummary(lila: LilaProcess, run: StoredRun): LilaRunSummary {
@@ -118,7 +123,13 @@ export async function lilaProjectInventory(target: Omit<LilaTarget, 'process'>):
       attributes: await attributeDefinitionsOf(process.model.xml),
     });
   }
-  return { file: project.file, name: project.document.name, formatVersion: project.formatVersion, processes };
+  return {
+    file: project.file,
+    name: project.document.name,
+    formatVersion: project.formatVersion,
+    processes,
+    problems: project.document.problems ?? [],
+  };
 }
 
 export interface LilaScenarioView {

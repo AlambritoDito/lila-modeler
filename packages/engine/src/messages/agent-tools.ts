@@ -119,6 +119,8 @@ export interface AgentToolMessages {
   projectShowRevision: (revision: number) => string;
   projectShowExtends: (parent: string) => string;
   projectShowRun: (replications: number, start: string | null, current: boolean) => string;
+  /** Heading of the entries the project could not use (#725): kept as is, never written over. */
+  projectShowProblems: (count: number) => string;
   scenarioShowHeader: (entry: string, slug: string, revision: number, resolved: boolean) => string;
   scenarioShowNotes: (count: number) => string;
   scenarioShowRunnable: (runnable: boolean) => string;
@@ -289,6 +291,8 @@ const en: AgentToolMessages = {
   projectShowExtends: (parent) => `extends ${parent}`,
   projectShowRun: (replications, start, current) =>
     `${replications} ${replications === 1 ? 'replication' : 'replications'}${start === null ? '' : `, start ${start}`}, ${current ? 'current' : 'stale'}`,
+  projectShowProblems: (count) =>
+    `${count} ${count === 1 ? 'entry' : 'entries'} not loaded; every write keeps ${count === 1 ? 'it' : 'them'} as ${count === 1 ? 'it is' : 'they are'}:`,
   scenarioShowHeader: (entry, slug, revision, resolved) =>
     `Scenario ${entry} of process ${slug}, revision ${revision}${resolved ? ', resolved' : ', as stored'}:`,
   scenarioShowNotes: (count) => `${count} ${count === 1 ? 'note' : 'notes'} from the validator:`,
@@ -452,6 +456,8 @@ const es: AgentToolMessages = {
   projectShowExtends: (parent) => `hereda de ${parent}`,
   projectShowRun: (replications, start, current) =>
     `${replications} ${replications === 1 ? 'réplica' : 'réplicas'}${start === null ? '' : `, inicio ${start}`}, ${current ? 'vigente' : 'obsoleta'}`,
+  projectShowProblems: (count) =>
+    `${count} ${count === 1 ? 'entrada no se cargó' : 'entradas no se cargaron'}; cada escritura ${count === 1 ? 'la conserva tal cual' : 'las conserva tal cual'}:`,
   scenarioShowHeader: (entry, slug, revision, resolved) =>
     `Escenario ${entry} del proceso ${slug}, revisión ${revision}${resolved ? ', resuelto' : ', como está guardado'}:`,
   scenarioShowNotes: (count) => `${count} ${count === 1 ? 'nota' : 'notas'} del validador:`,

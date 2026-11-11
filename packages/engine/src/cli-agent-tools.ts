@@ -573,6 +573,10 @@ function printInventory(inventory: LilaProjectInventory, locale: Locale): void {
     console.log(T.projectShowAttributes(process.attributes === null ? null : process.attributes.length));
     printDefinitions(process.attributes ?? [], '    ', locale);
   }
+  if (inventory.problems.length > 0) {
+    console.log(T.projectShowProblems(inventory.problems.length));
+    for (const problem of inventory.problems) console.log(`  ${problem.file}: ${problem.message}`);
+  }
 }
 
 /** `lila project create` (#635): `create_project`, by the same engine function. `--force` is its `overwrite`. */

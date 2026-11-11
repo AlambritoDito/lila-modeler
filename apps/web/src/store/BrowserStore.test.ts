@@ -12,7 +12,7 @@
  * full quota leaves the store working in memory.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { decodeLila, encodeLila } from '@lila-modeler/engine/project';
+import { decodeLila, decodeLilaArchive, encodeLila } from '@lila-modeler/engine/project';
 import { es } from '../strings.es';
 import { getPreferencia, setLocale } from '../i18n';
 import { BrowserStore } from './BrowserStore';
@@ -251,6 +251,23 @@ describe('BrowserStore', () => {
       elegirArchivo(new File([encodeLila(DOC)], 'Pedido.lila'));
 
       await expect(promesa).resolves.toEqual(DOC);
+    });
+
+    it('saving an opened .lila keeps the entries it could not use, byte for byte (#725)', async () => {
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+      const kept = { 'notes.md': '# Notes\n', 'base.scenario.json': '{ "version": 1, ' };
+      const entries = Object.fromEntries(Object.entries(kept).map(([name, text]) => [name, new TextEncoder().encode(text)]));
+      const store = new BrowserStore();
+      const promesa = store.openProject();
+      elegirArchivo(new File([encodeLila(DOC, { entries, objects: {}, slugs: [] })], 'Pedido.lila'));
+      const { problems, ...opened } = (await promesa) as ProjectDocument;
+      expect(problems?.map((p) => p.file).sort()).toEqual(['base.scenario.json', 'notes.md']);
+
+      await store.saveProject(opened);
+
+      const blob = (URL.createObjectURL as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as Blob;
+      const { preserved } = decodeLilaArchive(new Uint8Array(await blob.arrayBuffer()));
+      expect(Object.fromEntries(Object.entries(preserved.entries).map(([name, bytes]) => [name, new TextDecoder().decode(bytes)]))).toEqual(kept);
     });
 
     it('un .lila ilegible se reporta en el idioma de la UI, no en el del motor', async () => {

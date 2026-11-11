@@ -112,7 +112,7 @@ processes/<slug>/runs/<id>.result.json
   the canvas — and a call activity is still a task with a time of its own; double-clicking one opens
   the process whose BPMN process id is its `calledElement`.
 - **In the `.lila`**, anything outside the listed `processes/<slug>/` folders is reported and
-  dropped, exactly like a stray file in a version 1 archive; a listed process without its
+  kept, exactly like a stray file in a version 1 archive; a listed process without its
   `model.bpmn` is fatal (`LILA-NO-MODEL`).
 
 ## Versioning
@@ -140,10 +140,10 @@ From 1.0.0 on, Lila promises:
   reader for every older one: an old file is migrated in memory when it opens, and nothing is
   written until you save. It also adds an archive written by the last release before the change to
   the frozen fixtures.
-- **Unknown entries will be kept.** ADR-032 (§ 1.4 of [the repository
-  contract](REPOSITORY_CONTRACT.md)) replaces the rule that drops them, but the reader that keeps
-  them has not shipped yet. Until it does, versions 1 and 2 report unknown entries and drop them on
-  save ([below](#what-is-tolerated-and-what-is-not)).
+- **Unknown entries are kept.** Since 1.0.1 (#725, § 1.4 of [the repository
+  contract](REPOSITORY_CONTRACT.md)) versions 1 and 2 report the entries they cannot use and write
+  them back unchanged ([below](#what-is-tolerated-and-what-is-not)). Up to 1.0.0 they were
+  reported and dropped on save.
 - **A shape a released writer got wrong is repaired on read**, not refused. There is one so far:
 
 **The loose-diagram project (#613, #699).** Up to 1.0.0-beta.23, «Save As» of a loose diagram
@@ -158,7 +158,7 @@ scenario points at ventas.bpmn, but the active model is model.bpmn». The reader
 - Nothing else changes, revisions included, so stored runs stay current. The next save writes the
   repaired names.
 - A scenario that names any other file is left as it is. So is one that names an entry the archive
-  does hold: that entry is outside the layout and is dropped. «Run» still refuses a genuinely
+  does hold: that entry is outside the layout and is kept as is. «Run» still refuses a genuinely
   different model, now and after a save.
 
 The engine's `.lila` reader does this, so the browser, the desktop app, the CLI and the MCP server
@@ -172,17 +172,23 @@ Opening is tolerant where the format is loose and strict where it is not:
   editing one. It only has to be a JSON object.
 - An unreadable scenario or an invalid run is **excluded and explained** in the project's
   `problems`; it never aborts the opening. Losing a broken run should not cost you the project.
+  Its entry is **kept byte for byte** in the `.lila` (#725), so a save never deletes what you may
+  still fix by hand, nor leaves the scenarios that extend it pointing at nothing.
 - A missing `lila-project.json` or a missing `model.bpmn` is **fatal**: there is no project.
 - Entries with `..` segments, absolute paths, drive letters or backslashes are **refused
   outright** — a zip that carries one is not a project that lost a file.
 
-**Anything not in the layout above is reported and dropped.** A `notes.md` or an `attachments/`
-folder inside a `.lila` shows up in `problems` when you open it and is not written back when you
-save. Preserving it would mean carrying opaque bytes through `structuredClone` (the desktop IPC
-boundary) and `JSON.stringify` (the browser's `localStorage` mirror), neither of which survives a
-`Uint8Array` honestly. In the **folder** form those files are simply left alone, because the
-writer only touches the files it owns — so the place to keep notes and attachments today is the
-folder, not the archive.
+**Anything not in the layout above is reported and kept** (#725). A `notes.md` or an
+`attachments/` folder inside a `.lila` shows up in `problems` («not understood by this version;
+kept as is») when you open it, and every save — the desktop app, the CLI, the MCP server, the
+browser — writes it back byte for byte. The bytes travel beside the document, never inside it:
+neither `structuredClone` (the desktop IPC boundary) nor `JSON.stringify` (the browser's
+`localStorage` mirror) carries a `Uint8Array` honestly. So a browser reload, which restores the
+project from that mirror, forgets them, and a save after it writes the file without them: reopen
+the file instead of saving the restored session. Operating-system litter
+(`__MACOSX/`, `.DS_Store`, `Thumbs.db`) and the writers' own leftovers (`*.tmp-*`, `*.prev-*`,
+`*.lock`) are dropped without a report. In the **folder** form foreign files are simply left
+alone, because the writer only touches the files it owns.
 
 ## MIME type and extension
 
