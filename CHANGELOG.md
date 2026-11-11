@@ -3,6 +3,43 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.2] - 2026-11-11
+
+A patch for 1.0.1 with fixes only, from the review of 1.0.0 as a Bizagi alternative: agents can
+work on imported Bizagi and BPMN MIWG models, structural errors show while you edit, and two
+problems of the editor and the Results map are fixed. Results of models that ran on 1.0.1 are
+unchanged, and 1.0.1 opens every file 1.0.2 writes.
+
+### Fixed
+
+- **Agents can annotate and edit imported models (#724)**: `lila process annotate`, `lila process
+  edit` and the MCP tools `annotate_element` and `edit_process` refused any BPMN that bpmn-moddle
+  read with a warning ("content that cannot be written back"): 3 of the 7 Bizagi exports and 7 of
+  the 22 BPMN MIWG reference files. They now write unresolved references back as written, and set
+  aside the elements bpmn-moddle rejects and the vendor extension content of such files, returning
+  them verbatim to the same parent. What cannot be proven to return to its place (text mixed with
+  a kept element, an unknown attribute with a BPMN prefix, a parent the change rebuilds, a repeated
+  or illegal id) is refused by name, with the construct, its line and the repair, in English and
+  Spanish. Ids used inside kept content are reserved. Files 1.0.1 already accepted produce
+  byte-identical output.
+- **Structural errors show while editing, named by element (#722)**: `E-INALCANZABLE`,
+  `E-GATEWAY-SIN-ARISTAS`, `E-SIN-START`, `E-SIN-END` and the other errors of the model were only
+  reported on Run. The editor now lists them as you draw (status bar, canvas markers, problems
+  list), with the same result Run gives; next to an unsupported element they are warnings in
+  Model and errors in Simulate. The text names the element as `Name (id)`, also in the CLI and the
+  MCP server; `code` and `id` are unchanged. The error chip goes to the first error and the warning
+  chip to the first warning, both switch to the diagram that holds the element, entries of the
+  problems list are buttons, and the breadcrumb of a sub-process is no longer under the chips. An
+  empty new diagram shows no error.
+- **Palette clicks inside a collapsed sub-process (#721)**: a click (not a drag) created the
+  figure on the main diagram and jumped there when a pool or lane lay under the view. The figure
+  now goes to the open sub-process. Lane and Pool are disabled inside a sub-process; a Pool click
+  there used to leave a broken participant in the file.
+- **Results map overlays (#718)**: counters at `0/0` are hidden until the first token arrives, the
+  bottleneck mark sits on its own line above the wait, and the badge hangs under its own task and
+  is never wider than it, so neighbouring badges, counters and labels no longer cover each other.
+  A badge can still cover a boundary event or a flow directly under its own task.
+
 ## [1.0.1] - 2026-11-11
 
 A patch for 1.0.0 with fixes only. It closes two ways a `.lila` could lose content without saying
