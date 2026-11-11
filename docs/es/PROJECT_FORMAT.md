@@ -182,6 +182,9 @@ Abrir es tolerante donde el formato es flexible y estricto donde no lo es:
   proyecto; nunca abortan la apertura. Perder una corrida rota no debería costarte el proyecto.
   Su entrada se **conserva byte a byte** en el `.lila` (#725), así que guardar nunca borra lo que
   todavía puedes arreglar a mano, ni deja apuntando a la nada a los escenarios que heredan de él.
+  Se mueve con su proceso cuando el proyecto pasa a ser un repositorio o vuelve a tener un solo
+  proceso. Borrar el proceso que la contiene se rechaza hasta que la arregles o la quites a mano, y
+  también cualquier guardado que la pondría donde el proyecto ya escribe una entrada.
 - Que falte `lila-project.json` o `model.bpmn` es **fatal**: no hay proyecto.
 - Las entradas con segmentos `..`, rutas absolutas, letras de unidad o barras invertidas se
   **rechazan sin más**: un zip que trae una no es un proyecto al que le falta un archivo.

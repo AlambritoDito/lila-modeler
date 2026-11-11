@@ -72,6 +72,8 @@ export interface AgentToolMessages {
   manageEmptyName: () => string;
   manageSingleProcess: (file: string) => string;
   manageLastProcess: (slug: string, file: string) => string;
+  /** `delete_process` of a process holding entries the file could not read (#725). */
+  manageProcessHoldsUnreadable: (slug: string, entries: string) => string;
   manageProcessCalled: (slug: string, callers: string) => string;
   manageOneProcessLeft: (name: string, slug: string) => string;
   manageLastScenario: (entry: string, slug: string) => string;
@@ -219,6 +221,8 @@ const en: AgentToolMessages = {
   manageSingleProcess: (file) =>
     `${file} has a single process, and a project with one process is saved under the project's name; a process is renamed only in a project with two or more. Nothing was written.`,
   manageLastProcess: (slug, file) => `${slug} is the only process of ${file}, and a project keeps at least one. Nothing was written.`,
+  manageProcessHoldsUnreadable: (slug, entries) =>
+    `${slug} holds entries that could not be read and are kept as they are (${entries}); deleting the process would lose them. Fix or remove them by hand first. Nothing was written.`,
   manageProcessCalled: (slug, callers) =>
     `process ${slug} is the target of call activities in other processes: ${callers}. Point them at another process first. Nothing was written.`,
   manageOneProcessLeft: (name, slug) =>
@@ -384,6 +388,8 @@ const es: AgentToolMessages = {
   manageSingleProcess: (file) =>
     `${file} tiene un solo proceso, y un proyecto con un proceso se guarda con el nombre del proyecto; un proceso solo se renombra en un proyecto con dos o más. No se escribió nada.`,
   manageLastProcess: (slug, file) => `${slug} es el único proceso de ${file}, y un proyecto conserva al menos uno. No se escribió nada.`,
+  manageProcessHoldsUnreadable: (slug, entries) =>
+    `${slug} tiene entradas que no se pudieron leer y se conservan tal cual (${entries}); borrar el proceso las perdería. Arréglalas o quítalas a mano antes. No se escribió nada.`,
   manageProcessCalled: (slug, callers) =>
     `el proceso ${slug} es el destino de actividades de llamada de otros procesos: ${callers}. Apúntalas a otro proceso antes. No se escribió nada.`,
   manageOneProcessLeft: (name, slug) =>

@@ -173,7 +173,10 @@ Opening is tolerant where the format is loose and strict where it is not:
 - An unreadable scenario or an invalid run is **excluded and explained** in the project's
   `problems`; it never aborts the opening. Losing a broken run should not cost you the project.
   Its entry is **kept byte for byte** in the `.lila` (#725), so a save never deletes what you may
-  still fix by hand, nor leaves the scenarios that extend it pointing at nothing.
+  still fix by hand, nor leaves the scenarios that extend it pointing at nothing. It moves with its
+  process when the project becomes a repository or goes back to one process. Deleting the process
+  that holds it is refused until you fix or remove it by hand, and so is any save that would put it
+  where the project already writes an entry.
 - A missing `lila-project.json` or a missing `model.bpmn` is **fatal**: there is no project.
 - Entries with `..` segments, absolute paths, drive letters or backslashes are **refused
   outright** — a zip that carries one is not a project that lost a file.

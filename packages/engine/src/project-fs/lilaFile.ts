@@ -55,7 +55,8 @@ const CODES: Record<ProjectErrorCode, { readonly code: string; readonly message:
 function asProjectIOError(error: unknown): never {
   if (error instanceof ProjectFormatError) {
     const { code, message } = CODES[error.code];
-    throw new ProjectIOError(code, message);
+    // An entry-path refusal names the entry and the reason (#725): the fixed text alone would not.
+    throw new ProjectIOError(code, error.code === 'LILA-ENTRY-PATH' ? `${message} ${error.message}` : message);
   }
   throw error;
 }

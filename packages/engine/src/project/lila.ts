@@ -123,6 +123,12 @@ export interface LilaPreserved {
    * `processes/<slug>/` of a listed slug that is no longer a process left with that process.
    */
   readonly slugs: readonly string[];
+  /**
+   * The model id of each process the manifest listed, by slug (version 2 only): how a save that
+   * folds the repository back to one process tells which process stayed when the document no
+   * longer names its slug (#725).
+   */
+  readonly models?: Readonly<Record<string, string>>;
 }
 
 /** Operating-system litter and the writers' own leftovers: dropped without a report (RM-01 § 1.4). */
@@ -145,11 +151,16 @@ interface Extras {
   readonly entries: Record<string, Uint8Array>;
   /** Slugs listed by the manifest (none in version 1). */
   readonly slugs: readonly string[];
+  /** Model id of each listed process, by slug (version 2 only). */
+  readonly models?: Readonly<Record<string, string>>;
 }
 
-function newExtras(slugs: readonly string[]): Extras {
+function newExtras(manifests: readonly ProcessManifest[] = []): Extras {
   // Without a prototype: an entry may be called `__proto__` or `constructor`, and is kept like any other.
-  return { problems: [], entries: Object.create(null) as Record<string, Uint8Array>, slugs };
+  const entries = Object.create(null) as Record<string, Uint8Array>;
+  const slugs = manifests.map((m) => m.slug);
+  if (manifests.length === 0) return { problems: [], entries, slugs };
+  return { problems: [], entries, slugs, models: Object.fromEntries(manifests.map((m) => [m.slug, m.model.id])) };
 }
 
 /**
@@ -189,7 +200,7 @@ function keepUnreadable(name: string, raw: Uint8Array, error: unknown, extras: E
 }
 
 function preservedOf(extras: Extras): LilaPreserved {
-  return { entries: extras.entries, objects: {}, slugs: extras.slugs };
+  return { entries: extras.entries, objects: {}, slugs: extras.slugs, ...(extras.models === undefined ? {} : { models: extras.models }) };
 }
 
 /** `true` for a flat `<name>.scenario.json` at the root of the archive. */
@@ -241,9 +252,7 @@ function json(value: unknown): Uint8Array {
  * `lilaEntryNames` reports.
  *
  * `preserved` is what `decodeLilaArchive` returned for the archive this document came from (or
- * `null`): its entries are written back as they were read, except those the document now writes
- * itself (a scenario fixed since) and those of a process deleted since (in a version 2 archive; a
- * version 1 archive keeps them, as the folder keeps an old `processes/` folder).
+ * `null`): its entries are written back as `placeKept` places them, never dropped.
  */
 export function encodeLila(document: ProjectDocument, preserved: LilaPreserved | null = null): Uint8Array<ArrayBuffer> {
   const valid = readProjectDocument(document);
@@ -285,35 +294,118 @@ export function encodeLila(document: ProjectDocument, preserved: LilaPreserved |
   }
 
   if (preserved !== null) {
-    const gone = new Set(version === 1 ? [] : preserved.slugs.filter((slug) => !slugs.includes(slug)));
-    // A kept entry of an orphaned folder (a `processes/<slug>/` the manifest did not list) whose
-    // slug is now a process: one that looks like the layout would be read back as that process's
-    // model, scenario or run. Refused instead of merged; any other kept entry just stays there.
-    for (const name of Object.keys(preserved.entries)) {
-      const orphan = name.startsWith(`${PROCESSES_DIR}/`) ? name.slice(PROCESSES_DIR.length + 1).split('/')[0] ?? '' : '';
-      const rest = name.slice(PROCESSES_DIR.length + 2 + orphan.length);
-      if (orphan === '' || preserved.slugs.includes(orphan) || !slugs.includes(orphan)) continue;
-      if (rest === MODEL_FILE || isScenarioEntry(rest) || isRunEntry(rest)) {
-        throw new ProjectFormatError(
-          'LILA-ENTRY-PATH',
-          `the folder "${PROCESSES_DIR}/${orphan}/" already holds files of a process that is not listed (${JSON.stringify(name)}); choose another slug.`,
-        );
-      }
+    const written = (name: string): boolean => Object.hasOwn(files, name);
+    for (const [name, bytes] of placeKept(preserved, version, slugs, survivorOf(valid, preserved), written)) {
+      // Attachments are stored, not compressed (RM-01 § 1.5): they usually are already.
+      put(name, bytes, name.startsWith('attachments/') ? 0 : 6);
     }
-    const names = Object.keys(preserved.entries)
-      .filter((name) => !Object.hasOwn(files, name))
-      .filter((name) => ![...gone].some((slug) => name.startsWith(`${PROCESSES_DIR}/${slug}/`)))
-      .sort((a, b) => {
-        const aa = a.startsWith('attachments/') ? 0 : 1;
-        const bb = b.startsWith('attachments/') ? 0 : 1;
-        return aa !== bb ? aa - bb : a < b ? -1 : a > b ? 1 : 0;
-      });
-    // Attachments are stored, not compressed (RM-01 § 1.5): they usually are already.
-    for (const name of names) put(name, preserved.entries[name] as Uint8Array, name.startsWith('attachments/') ? 0 : 6);
   }
   // `zipSync` allocates a plain `ArrayBuffer`; the cast only narrows `ArrayBufferLike`, which the
   // DOM's `BlobPart` refuses because a `SharedArrayBuffer` would also satisfy it.
   return zipSync(files) as Uint8Array<ArrayBuffer>;
+}
+
+/** The process folder and the layout name of `name` (`processes/<slug>/<rest>`, `<slug>` in `slugs`), when `<rest>` is a scenario or run. */
+function processEntry(name: string, slugs: readonly string[]): { readonly slug: string; readonly rest: string } | null {
+  const slug = slugs.find((s) => name.startsWith(`${PROCESSES_DIR}/${s}/`));
+  if (slug === undefined) return null;
+  const rest = name.slice(PROCESSES_DIR.length + slug.length + 2);
+  return isScenarioEntry(rest) || isRunEntry(rest) ? { slug, rest } : null;
+}
+
+/**
+ * The slug, in `preserved`, of the one process a version 1 `document` holds: the slug it still
+ * names (`document.process`, as a one-process repository is read), else the only listed process
+ * whose model has the same id. `undefined` when neither tells.
+ */
+function survivorOf(document: ProjectDocument, preserved: LilaPreserved): string | undefined {
+  if (document.process !== undefined) return document.process.slug;
+  const same = Object.entries(preserved.models ?? {}).filter(([, id]) => id === document.model.id);
+  return same.length === 1 ? same[0]![0] : undefined;
+}
+
+/**
+ * Where each kept entry goes in the archive `encodeLila` writes, in canonical order (attachments
+ * first, then by name). Nothing is dropped:
+ *
+ * - An unreadable scenario or run belongs to its process and moves with it when the layout folds or
+ *   unfolds (#725): from the root of a version 1 archive to `processes/<slug>/` of the first process
+ *   when the project becomes a repository, and from `processes/<survivor>/` to the root when a
+ *   repository goes back to one process (`survivor`, `survivorOf`; when it cannot be told, nothing
+ *   moves). One whose process was deleted is refused, never dropped (see below).
+ * - Any other entry stays where it is, and one the document now writes itself (a scenario fixed
+ *   since) gives way to it.
+ *
+ * Refused, with the entry named, instead of losing or misreading anything: an unreadable entry of a
+ * deleted process, a moved entry that would land on one the project writes or keeps, and an orphaned scenario, run or model under a folder
+ * that is a process again, which would be read back as that process's own.
+ */
+function placeKept(
+  preserved: LilaPreserved,
+  version: 1 | 2,
+  slugs: readonly string[],
+  survivor: string | undefined,
+  written: (name: string) => boolean,
+): [string, Uint8Array][] {
+  const fromRepository = preserved.slugs.length > 0;
+  const placed = new Map<string, string>();
+  for (const name of Object.keys(preserved.entries)) {
+    let target = name;
+    let owned = false;
+    if (!fromRepository && (isScenarioEntry(name) || isRunEntry(name))) {
+      // The version 1 process is the first one of the document.
+      if (version === 2) target = `${PROCESSES_DIR}/${slugs[0]}/${name}`;
+      owned = true;
+    } else if (fromRepository) {
+      const entry = processEntry(name, preserved.slugs);
+      if (entry !== null && version === 2 && slugs.includes(entry.slug)) owned = true;
+      if (entry !== null && version === 1 && entry.slug === survivor) {
+        target = entry.rest;
+        owned = true;
+      }
+      // Its process was deleted: a slug never changes, so it is gone, not renamed. Refused rather
+      // than dropped, or left behind where a later process could take its folder.
+      const deleted = version === 2 ? entry !== null && !slugs.includes(entry.slug) : entry !== null && survivor !== undefined && entry.slug !== survivor;
+      if (deleted && entry !== null) {
+        throw new ProjectFormatError(
+          'LILA-ENTRY-PATH',
+          `the process "${entry.slug}" is no longer in the project, but it holds ${JSON.stringify(name)}, kept as is because it could not be read; deleting the process would lose it. Fix or remove that entry by hand first.`,
+        );
+      }
+    }
+    const moved = target !== name;
+    const other = placed.get(target);
+    if ((moved && written(target)) || other !== undefined) {
+      throw new ProjectFormatError(
+        'LILA-ENTRY-PATH',
+        `the entry ${JSON.stringify(moved ? name : other)}, kept as is because it could not be read, moves with its process to ${JSON.stringify(target)}, which the project already holds; fix or remove one of them by hand.`,
+      );
+    }
+    if (!owned) {
+      // Not this process's own: in a version 2 archive, one under a listed process's folder that
+      // looks like the layout would be read back as that process's model, scenario or run.
+      const slash = target.startsWith(`${PROCESSES_DIR}/`) ? target.indexOf('/', PROCESSES_DIR.length + 1) : -1;
+      const folder = slash > 0 ? target.slice(PROCESSES_DIR.length + 1, slash) : '';
+      const rest = target.slice(slash + 1);
+      const layout = rest === MODEL_FILE || isScenarioEntry(rest) || isRunEntry(rest);
+      if ((version === 2 && slugs.includes(folder) && layout) || written(target)) {
+        throw new ProjectFormatError(
+          'LILA-ENTRY-PATH',
+          `${JSON.stringify(target)} is kept as is from a process that is no longer listed, and the project now writes a process there that would read it as its own. Choose another slug, or remove the entry by hand.`,
+        );
+      }
+    }
+    // The document writes this entry itself now: a scenario of this process fixed since.
+    if (written(target)) continue;
+    placed.set(target, name);
+  }
+  return [...placed]
+    .sort(([a], [b]) => {
+      const aa = a.startsWith('attachments/') ? 0 : 1;
+      const bb = b.startsWith('attachments/') ? 0 : 1;
+      return aa !== bb ? aa - bb : a < b ? -1 : a > b ? 1 : 0;
+    })
+    .map(([target, name]) => [target, preserved.entries[name] as Uint8Array]);
 }
 
 /** Entry names of a `.lila`, in the order the archive stores them. */
@@ -439,7 +531,7 @@ export function decodeLilaArchive(bytes: Uint8Array): DecodedLila {
     throw new ProjectFormatError('LILA-NO-MODEL', `the archive has no "${MODEL_FILE}".`);
   }
 
-  const extras = newExtras([]);
+  const extras = newExtras();
   const problems = extras.problems;
   const manifest = readManifest(manifestRaw, problems);
   if (manifest === null) {
@@ -527,7 +619,8 @@ export function readLilaPreserved(bytes: Uint8Array): { readonly id: string; rea
     );
   }
   const repository = parsed.version === 2;
-  const slugs = repository ? readRepositoryManifest(parsed).map((m) => m.slug) : [];
+  const manifests = repository ? readRepositoryManifest(parsed) : [];
+  const slugs = manifests.map((m) => m.slug);
   /** What `name` is in the layout: the part after its process folder, or `null` outside the layout. */
   const inLayout = (name: string): string | null => {
     if (!repository) return name;
@@ -536,7 +629,7 @@ export function readLilaPreserved(bytes: Uint8Array): { readonly id: string; rea
   };
   const skipped = (name: string): boolean => name === MANIFEST_FILE || name.endsWith('/') || inLayout(name) === MODEL_FILE;
   const others = unzipOnly((name) => !skipped(name));
-  const extras = newExtras(slugs);
+  const extras = newExtras(manifests);
   for (const name of Object.keys(others).sort()) {
     const raw = others[name] as Uint8Array;
     const rest = inLayout(name);
@@ -605,7 +698,7 @@ export function readRepositoryManifest(parsed: Record<string, unknown>): Process
  */
 function decodeRepository(parsed: Record<string, unknown>, entries: Record<string, Uint8Array>): DecodedLila {
   const manifests = readRepositoryManifest(parsed);
-  const extras = newExtras(manifests.map((m) => m.slug));
+  const extras = newExtras(manifests);
   const problems = extras.problems;
   const byPrefix = new Map(manifests.map((m) => [`${PROCESSES_DIR}/${m.slug}/`, {
     manifest: m,

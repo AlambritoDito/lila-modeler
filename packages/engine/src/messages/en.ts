@@ -848,5 +848,7 @@ export const en: Catalog = {
       'the patch changes nothing, so nothing was written: the scenario keeps its revision and its runs stay current.',
     patchSameTarget: (target) =>
       `${target} already holds this scenario, so nothing was written: it keeps its revision and its runs stay current.`,
+    patchTargetUnreadable: (target) =>
+      `${target} is an entry of the file that could not be read (see the project's problems); it is kept as is, so saveTo will not replace it. Choose another name, or fix or remove the entry by hand.`,
   },
 };

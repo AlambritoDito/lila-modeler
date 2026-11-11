@@ -128,3 +128,67 @@ describe('a .lila with entries the reader could not use (#725)', () => {
     expect(document.problems?.map((p) => p.file)).toEqual(['as-is.scenario.json']);
   });
 });
+
+describe('kept entries follow their process when the layout folds or unfolds (#725, QA)', () => {
+  const outline = join(repo, 'examples/outline/credit-application.json');
+  const names = (): string[] => Object.keys(entriesOf(file)).sort();
+
+  test('v1 → v2 → v1 → v2: the unreadable scenario moves with pedido, and a second process can be added again', async () => {
+    writeFileSync(file, damaged({}));
+    expect(await main(['process', 'create', '--outline', outline, '-p', file, '--process', 'otro'])).toBe(0);
+    expect(entriesOf(file)['processes/pedido/as-is.scenario.json']).toBe(BROKEN);
+    expect(names()).not.toContain('as-is.scenario.json');
+
+    expect(await main(['process', 'delete', file, 'otro'])).toBe(0);
+    expect(entriesOf(file)['as-is.scenario.json']).toBe(BROKEN);
+    expect(names().some((name) => name.startsWith('processes/'))).toBe(false);
+
+    expect(await main(['process', 'create', '--outline', outline, '-p', file, '--process', 'nuevo'])).toBe(0);
+    expect(entriesOf(file)['processes/pedido/as-is.scenario.json']).toBe(BROKEN);
+    // The extender and its base are side by side again.
+    expect(names()).toContain('processes/pedido/to-be-3-cajeros.scenario.json');
+  });
+
+  test('deleting the process that holds an unreadable scenario is refused, naming it; nothing is written', async () => {
+    writeFileSync(file, damaged({}));
+    expect(await main(['process', 'create', '--outline', outline, '-p', file, '--process', 'otro'])).toBe(0);
+    const before = readFileSync(file);
+    expect(await main(['process', 'delete', file, 'pedido'])).not.toBe(0);
+    expect(out.join('\n')).toContain('processes/pedido/as-is.scenario.json');
+    expect(readFileSync(file).equals(before)).toBe(true);
+  });
+
+  test('the codec refuses to drop an unreadable entry of a deleted process, and tells the survivor by its model id', async () => {
+    writeFileSync(file, damaged({}));
+    expect(await main(['process', 'create', '--outline', outline, '-p', file, '--process', 'otro'])).toBe(0);
+    const { document, preserved } = decodeLilaArchive(readFileSync(file));
+    const [pedido, otro] = [document, document.processes![0]!];
+    // Down to `otro`, written as version 1 without its slug: pedido's entry has no process left.
+    const onlyOtro = { ...document, model: otro.model, scenarios: otro.scenarios, scenarioRevisions: otro.scenarioRevisions, runs: otro.runs };
+    const { process: _p, processes: _ps, problems: _pr, ...plain } = onlyOtro;
+    expect(() => encodeLila(plain, preserved)).toThrow(/process "pedido" is no longer in the project.*processes\/pedido\/as-is\.scenario\.json/);
+    // Down to `pedido`, without its slug either: found by its model id, its entry goes to the root.
+    const { process: _q, processes: _qs, problems: _qr, ...onlyPedido } = pedido;
+    expect(Buffer.from(unzipSync(encodeLila(onlyPedido, preserved))['as-is.scenario.json']!).toString('utf8')).toBe(BROKEN);
+  });
+
+  test('an orphaned layout entry under a folder that is a process again is refused with its path, not a bare code', async () => {
+    const entries = unzipSync(new Uint8Array(readFileSync(exampleLila)));
+    entries['processes/otro/as-is.scenario.json'] = strToU8(BROKEN);
+    writeFileSync(file, zipSync(entries));
+    expect(await main(['process', 'create', '--outline', outline, '-p', file, '--process', 'otro'])).not.toBe(0);
+    expect(out.join('\n')).toMatch(/processes\/otro\/as-is\.scenario\.json.*no longer listed/);
+  });
+
+  test('scenario patch --save-to onto an unreadable scenario is refused; the entry stays as it was', async () => {
+    const entries = unzipSync(new Uint8Array(readFileSync(exampleLila)));
+    entries['to-be-3-cajeros.scenario.json'] = strToU8(BROKEN);
+    writeFileSync(file, zipSync(entries));
+    const patch = join(scratch, 'patch.json');
+    writeFileSync(patch, JSON.stringify([{ op: 'add', path: '/description', value: 'x' }]));
+    const before = readFileSync(file);
+    expect(await main(['scenario', 'patch', file, 'as-is', '--patch', patch, '--save-to', 'to-be-3-cajeros'])).not.toBe(0);
+    expect(out.join('\n')).toContain('could not be read');
+    expect(readFileSync(file).equals(before)).toBe(true);
+  });
+});

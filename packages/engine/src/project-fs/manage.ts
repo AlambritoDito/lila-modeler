@@ -213,9 +213,17 @@ export async function deleteLilaProcess(request: DeleteLilaProcessRequest): Prom
     .filter((p) => p.slug !== deleted.slug)
     .flatMap((p) => callersOf(p.model.xml, ids).map((caller) => `${p.slug}/${caller}`));
   if (callers.length > 0) throw new Error(T.manageProcessCalled(deleted.slug, callers.join(', ')));
+  // #725: the scenarios and runs it could not read are kept as they are; deleting would lose them.
+  const prefix = `processes/${deleted.slug}/`;
+  const unreadable = (input.document.problems ?? [])
+    .map((p) => p.file)
+    .filter((file) => file.startsWith(prefix) && /^(?:[^/]+\.scenario\.json|runs\/[^/]+\.result\.json)$/.test(file.slice(prefix.length)));
+  if (unreadable.length > 0) throw new Error(T.manageProcessHoldsUnreadable(deleted.slug, unreadable.join(', ')));
   const rest = all.filter((p) => p.slug !== deleted.slug);
   const next = withProcesses(input.document, rest);
-  if (!dryRun) await writeLilaProject(input, next, locale);
+  // Written with the survivor's slug (`repository`; the bytes are the same version 1 archive), so
+  // the entries it kept as is move to the root with it (#725, `encodeLila`).
+  if (!dryRun) await writeLilaProject(input, withProcesses(input.document, rest, { repository: true }), locale);
   // Down to one process the project is version 1, whose process is named after the project.
   const slugs = processesOf(next).map((p) => p.slug);
   const removedScenarios = Object.keys(deleted.scenarios).sort();
