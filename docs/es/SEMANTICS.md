@@ -979,11 +979,19 @@ nada, como en un evento de lanzamiento (R-THR-2); `W-ELEMENTO-SIN-PARAMETROS` no
     también puede pasar a cada uno de sus eventos adjuntos;
   - una salida es un end, un terminate, un nodo sin flujo saliente y cualquier nodo dentro de un
     subproceso embebido que tenga un evento adjunto propio o en uno que lo contenga;
-  - un nodo es alcanzable desde un start que genera llegadas (R-ARR-1); un join paralelo, solo
-    cuando cada una de sus entradas es alcanzable.
-  Si un nodo alcanzable no tiene camino hasta una salida, un caso que llega ahí nunca puede
-  terminar y la corrida no se detendría nunca: es error `E-CICLO-SIN-SALIDA`. El mensaje nombra
-  el primer nodo de ese tipo que está en un ciclo y, si lo hay, el gateway cuyas salidas tienen
+  - un nodo es alcanzable desde un start que genera llegadas (R-ARR-1). Un gateway paralelo o
+    inclusivo convergente con dos o más flujos entrantes espera tokens concretos del mismo caso
+    (todas las entradas, R-AND-2; las ramas que activó su fork emparejado, R-OR-5), así que solo
+    se atraviesa cuando cada entrada recibe uno con certeza: cuando, para algún start, todas sus
+    entradas se alcanzan incondicionalmente, es decir, por flujos y bifurcaciones paralelas,
+    nunca saliendo de un gateway exclusivo, inclusivo o de eventos divergente, nunca por un
+    evento adjunto y nunca saliendo de un nodo que un evento adjunto interruptor (propio o de un
+    subproceso que lo contenga) puede desviar. Si no, el alcance se detiene en ese join.
+  Si un nodo alcanzable no tiene camino hasta una salida y está en un ciclo que un token puede
+  recorrer (uno que nunca espera en un join que no se atraviesa), un caso que llega ahí da
+  vueltas para siempre y la corrida no se detendría nunca: es error `E-CICLO-SIN-SALIDA`. Un caso
+  que solo puede acabar esperando en un join no se informa: el heap se vacía igual. El mensaje
+  nombra el primer nodo de ese tipo y, si lo hay, el gateway cuyas salidas tienen
   probabilidad 0, cada uno por su nombre con el id (el id solo si no tiene nombre); el lint cita
   `elements.<gatewayId>`, o `run.duration` si no hay gateway. Un proceso con un terminate y
   alguna bifurcación (un gateway paralelo o inclusivo con dos o más salidas, o un evento adjunto
@@ -992,11 +1000,12 @@ nada, como en un evento de lanzamiento (R-THR-2); `W-ELEMENTO-SIN-PARAMETROS` no
   No es una garantía general de que la corrida termine. Solo lee probabilidades exactamente 0;
   un caso que nunca termina por cualquier otra razón (un temporizador o evento que nunca dispara,
   un join que espera para siempre, un bucle cuya salida depende de datos o de `conditions` que
-  nunca se cumplen) no se detecta y se comporta como en la 1.0.0. En el otro sentido, el alcance
-  no mira qué ramas pueden correr juntas: un ciclo detrás de un join paralelo cuyas entradas
-  vienen de ramas exclusivas del mismo caso se informa aunque ningún caso pueda entrar, lo que ya
-  significa que el join bloquea todos los casos (`W-JOIN-BLOQUEADO`). Los ciclos de tiempo cero
-  en corridas con `run.duration` siguen siendo de R-TOK-7. *(prueba: #727)*
+  nunca se cumplen) no se detecta y se comporta como en la 1.0.0. Tampoco un ciclo al que solo se
+  llega por un gateway paralelo o inclusivo convergente que no se atraviesa: por ejemplo, una
+  bifurcación paralela en la que una rama pasa por una elección exclusiva antes del join, seguida
+  de un ciclo cuyas salidas tienen probabilidad 0. Esa corrida también se comporta como en la
+  1.0.0. Los ciclos de tiempo cero en corridas con `run.duration` siguen siendo de R-TOK-7.
+  *(prueba: #727)*
 
 ---
 

@@ -86,7 +86,40 @@ describe('flagged before the first event', () => {
   });
 });
 
+/** Two parallel branches into a join, then the #727 loop. `head` decides what feeds the branches. */
+const joinModel = (head: string): string => `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="urn:lila:test:727"><bpmn:process id="P">
+${head}
+<bpmn:task id="A"/><bpmn:task id="B"/><bpmn:sequenceFlow id="a2" sourceRef="A" targetRef="Join"/><bpmn:sequenceFlow id="b2" sourceRef="B" targetRef="Join"/>
+<bpmn:parallelGateway id="Join"/><bpmn:sequenceFlow id="j" sourceRef="Join" targetRef="Work"/>
+<bpmn:task id="Work" name="Review"/><bpmn:sequenceFlow id="f1" sourceRef="Work" targetRef="Gateway"/>
+<bpmn:exclusiveGateway id="Gateway" name="Approved?"/><bpmn:sequenceFlow id="Repeat" sourceRef="Gateway" targetRef="Work"/>
+<bpmn:sequenceFlow id="Exit" sourceRef="Gateway" targetRef="End"/><bpmn:endEvent id="End"/></bpmn:process></bpmn:definitions>`;
+
+test('a parallel split whose branches meet at a join before the loop is still flagged', async () => {
+  const xml = joinModel(`<bpmn:startEvent id="Start"/><bpmn:sequenceFlow id="f0" sourceRef="Start" targetRef="Fork"/><bpmn:parallelGateway id="Fork"/>
+<bpmn:sequenceFlow id="a" sourceRef="Fork" targetRef="A"/><bpmn:sequenceFlow id="b" sourceRef="Fork" targetRef="B"/>`);
+  const { ir } = await parseBpmn(xml);
+  expect(() => simulate(ir, loop(5, 1, 0))).toThrow(ENDLESS);
+});
+
 describe('not flagged: every case can still end', () => {
+  test('join_after_xor: the join waits for a branch the case never takes, so the heap empties', async () => {
+    const { xml, scenario } = fixture('join_after_xor');
+    const { ir } = await parseBpmn(xml);
+    expect(await lint(xml, scenario)).toEqual([]);
+    expect(simulate(ir, scenario).process).toMatchObject({ started: 5, completed: 0, inFlight: 5 });
+  });
+
+  test('two starts feeding one join: each case brings one token, so the join never fires', async () => {
+    const xml = joinModel(`<bpmn:startEvent id="Start"/><bpmn:sequenceFlow id="f0" sourceRef="Start" targetRef="A"/>
+<bpmn:startEvent id="Other"/><bpmn:sequenceFlow id="f9" sourceRef="Other" targetRef="B"/>`);
+    const { ir } = await parseBpmn(xml);
+    const scenario = loop(5, 1, 0);
+    scenario.elements!.Other = { triggerCount: 5, interTriggerTimer: constant(1) };
+    expect(findEndlessCycle(ir, scenario)).toBeUndefined();
+    expect(simulate(ir, scenario).process).toMatchObject({ started: 10, completed: 0, inFlight: 10 });
+  });
+
   test('exit probability 0.001 runs to completion', async () => {
     const { ir } = await parseBpmn(LOOP);
     expect(findEndlessCycle(ir, loop(20, 0.999, 0.001))).toBeUndefined();

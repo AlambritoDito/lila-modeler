@@ -161,54 +161,88 @@ export function findEndlessCycle(ir: ProcessIR, scenario: EndlessCheckScenario):
   }
   if (canEnd.size === ids.length) return undefined;
 
-  // Nodes a case can reach from a start that generates arrivals (R-ARR-1), breadth-first. A
-  // parallel join is entered only once every one of its incoming flows can carry a token.
-  const reached = new Set<string>();
-  const order: string[] = [];
-  const arrivedFrom = new Map<string, Set<string>>();
-  const visit: string[] = [];
-  for (const id of ids) {
-    const node = nodes[id]!;
+  // Starts that generate arrivals (R-ARR-1).
+  const starts = ids.filter((id) => {
     const element = elements[id];
-    if (node.type !== 'start') continue;
-    if (element?.triggerCount === undefined && element?.interTriggerTimer === undefined) continue;
-    reached.add(id);
-    visit.push(id);
+    return nodes[id]!.type === 'start' && (element?.triggerCount !== undefined || element?.interTriggerTimer !== undefined);
+  });
+  const sourcesOf = (node: Node): Set<string> =>
+    new Set(node.incoming.map((flowId) => ir.flows[flowId]?.from).filter((from): from is string => from !== undefined));
+  // A converging parallel or inclusive gateway waits for specific tokens of the same case: every
+  // input (R-AND-2), or every branch its matching fork activated (R-OR-5). It is passable only
+  // when every one of its inputs is certain to carry a token of the same case. That holds for
+  // nodes a start reaches unconditionally: along flows, through parallel splits, never out of a
+  // diverging exclusive, inclusive or event-based gateway, never along a boundary event and never
+  // out of a node an interrupting boundary event (of its own or of an enclosing sub-process) can
+  // divert. A join is reached unconditionally when all its inputs are.
+  const isJoin = (node: Node): boolean => (node.type === 'and' || node.type === 'or') && node.incoming.length >= 2;
+  const divertible = (id: string): boolean => {
+    const node = nodes[id]!;
+    if (cancellable(node)) return true;
+    return (boundaries.get(id) ?? []).some((boundaryId) => nodes[boundaryId]!.interrupting !== false);
+  };
+  /** Whether a token at this node certainly leaves along every one of its outgoing flows. */
+  const propagates = (id: string): boolean => {
+    const node = nodes[id]!;
+    if ((node.type === 'xor' || node.type === 'or' || node.type === 'eventGateway') && node.outgoing.length >= 2) return false;
+    return !divertible(id);
+  };
+  const passable = new Set<string>();
+  for (const start of starts) {
+    const certain = new Set<string>([start]);
+    const queue = [start];
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      if (!propagates(id)) continue;
+      for (const flowId of nodes[id]!.outgoing) {
+        const to = ir.flows[flowId]?.to;
+        if (to === undefined || nodes[to] === undefined || certain.has(to)) continue;
+        const target = nodes[to]!;
+        if (isJoin(target) && [...sourcesOf(target)].some((from) => !certain.has(from) || !propagates(from))) continue;
+        certain.add(to);
+        queue.push(to);
+      }
+    }
+    for (const id of certain) if (isJoin(nodes[id]!)) passable.add(id);
   }
+
+  // Nodes a case can reach from those starts, breadth-first, stopping at a join that is not
+  // passable: a case may wait there forever, so what lies behind it may never run.
+  const reached = new Set<string>(starts);
+  const order: string[] = [];
+  const visit: string[] = [...starts];
   while (visit.length > 0) {
     const id = visit.shift()!;
     order.push(id);
     for (const to of graph.get(id)!) {
       if (reached.has(to)) continue;
-      const target = nodes[to]!;
-      if (target.type === 'and' && target.incoming.length >= 2) {
-        const sources = arrivedFrom.get(to) ?? new Set<string>();
-        sources.add(id);
-        arrivedFrom.set(to, sources);
-        if (sources.size < new Set(target.incoming.map((flowId) => ir.flows[flowId]?.from)).size) continue;
-      }
+      if (isJoin(nodes[to]!) && !passable.has(to)) continue;
       reached.add(to);
       visit.push(to);
     }
   }
 
-  const trapped = order.filter((id) => !canEnd.has(id));
-  if (trapped.length === 0) return undefined;
-  // Every path from a trapped node goes on forever in a finite graph, so it ends up in a cycle:
-  // name the first node of one, rather than a start or a task on the way to it.
+  // A case trapped there either waits forever at a join (and the heap still empties) or cycles
+  // forever. Only the second never stops the run: report the first reached node that cannot
+  // reach a way out and lies on a cycle a token can actually go round, which never waits at a
+  // join that is not passable.
+  const moves = (id: string): string[] =>
+    graph.get(id)!.filter((to) => !isJoin(nodes[to]!) || passable.has(to));
   const onCycle = (id: string): boolean => {
     const seen = new Set<string>();
-    const stack = [...graph.get(id)!];
+    const stack = [...moves(id)];
     while (stack.length > 0) {
       const next = stack.pop()!;
       if (next === id) return true;
       if (seen.has(next)) continue;
       seen.add(next);
-      stack.push(...graph.get(next)!);
+      stack.push(...moves(next));
     }
     return false;
   };
-  const entryId = trapped.find(onCycle) ?? trapped[0]!;
+  const trapped = order.filter((id) => !canEnd.has(id));
+  const entryId = trapped.find(onCycle);
+  if (entryId === undefined) return undefined;
   const zeroExit = (id: string): boolean =>
     (removed.get(id) ?? []).some((flowId) => canEnd.has(ir.flows[flowId]!.to));
   const gatewayId = trapped.find(zeroExit) ?? trapped.find((id) => removed.has(id));
