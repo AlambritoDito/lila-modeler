@@ -273,6 +273,15 @@ export function hayPool(servicios: Servicios): boolean {
 }
 
 /**
+ * Whether the open plane is the inside of a collapsed sub-process (#721). A pool has no place
+ * there —pools hang from the collaboration of the main diagram—, so its item is disabled.
+ */
+export function enSubproceso(servicios: Servicios): boolean {
+  const tipo = (servicios.canvas.getRootElement() as Elemento | undefined)?.type;
+  return tipo !== undefined && tipo !== 'bpmn:Process' && tipo !== 'bpmn:Collaboration';
+}
+
+/**
  * Whether an element is drawn on the open plane (#721). The registry holds every plane of the
  * diagram: the root one and one per collapsed sub-process, all in the same coordinate system. A
  * shape of a plane that is not showing must not be picked as the parent of a new figure, however
@@ -301,7 +310,7 @@ interface Caja extends Punto { width: number; height: number }
  * modelo de pools la raíz es una `bpmn:Collaboration`, que no tiene `flowElements`: colgarle una
  * tarea revienta el updater a mitad del comando y deja el modelo a medias.
  */
-function sitio(servicios: Servicios, forma: unknown, centro: Punto): { target: unknown; punto: Punto } {
+function sitio(servicios: Servicios, forma: unknown, centro: Punto): { target: unknown; punto: Punto } | null {
   const permite = (target: unknown, punto: Punto): boolean =>
     servicios.rules.allowed('shape.create', { shape: forma, target, position: punto }) === true;
   const visible = enPlanoAbierto(servicios);
@@ -327,7 +336,10 @@ function sitio(servicios: Servicios, forma: unknown, centro: Punto): { target: u
     const punto = centroDe(cajas[i]!);
     if (permite(cajas[i], punto)) return { target: cajas[i], punto };
   }
-  return { target: raiz, punto: centro };
+  // Nothing on the open plane takes the figure (a pool inside a sub-process, #721). Handing the
+  // root over anyway is what the header warns about: the updater throws halfway and leaves a
+  // shape with no semantic parent behind.
+  return null;
 }
 
 /**
@@ -350,7 +362,9 @@ export function insertar(servicios: Servicios, figura: Figura, seleccion: string
   }
   const vista = servicios.canvas.viewbox();
   const forma = nueva(servicios, figura);
-  const { target, punto } = sitio(servicios, forma, centroDe({ ...vista }));
+  const lugar = sitio(servicios, forma, centroDe({ ...vista }));
+  if (lugar === null) return;
+  const { target, punto } = lugar;
   const creada = servicios.modeling.createShape(forma, punto, target);
   // La tercera rama de `sitio()` deja la figura en el centro de un contenedor que puede estar
   // fuera de la pantalla; sin esto el usuario pulsa, no ve nada aparecer y escribe el nombre a
@@ -428,6 +442,8 @@ export function Paleta({ servicios, compacta, onCompacta, id, seleccion = null }
               const falta = figura.requiere !== undefined && (servicios === null ||
                 (anfitrion(servicios, figura, seleccion) === null && (figura.requiere === 'actividad' || !hayPool(servicios))));
               const esCarril = figura.tipo === 'bpmn:Lane';
+              // A pool belongs to the main diagram: inside a collapsed sub-process it is off (#721).
+              const sinSitio = figura.tipo === 'bpmn:Participant' && servicios !== null && enSubproceso(servicios);
               // A lane is only added by `modeling.addLane`: dragging it has no drop target.
               const arrastrable = figura.tipo !== 'bpmn:Lane';
               return (
@@ -437,10 +453,10 @@ export function Paleta({ servicios, compacta, onCompacta, id, seleccion = null }
                   className="figura"
                   // `draggable` + `dragstart` es la misma vía que usa la paleta de bpmn-js:
                   // `create.start` acepta el evento nativo y `dragging` toma el punto de ahí.
-                  draggable={arrastrable}
-                  title={!falta ? figura.nombre
+                  draggable={arrastrable && !sinSitio}
+                  title={sinSitio ? S.paleta.poolSoloEnPrincipal(figura.nombre) : !falta ? figura.nombre
                     : figura.requiere === 'actividad' ? S.paleta.requiereActividad(figura.nombre) : S.paleta.requiereContenedor(figura.nombre)}
-                  disabled={servicios === null || falta}
+                  disabled={servicios === null || falta || sinSitio}
                   {...(esCarril ? { 'aria-pressed': eligiendo } : {})}
                   onDragStart={(e) => { if (arrastrable) servicios?.create.start(e.nativeEvent, nueva(servicios, figura)); }}
                   onClick={() => {

@@ -441,6 +441,8 @@ export const en = {
     /** Title of a boundary event or a lane while nothing fitting is selected (#456). */
     requiereActividad: (figura: string): string => `${figura}: select a task or a sub-process to attach it to`,
     requiereContenedor: (figura: string): string => `${figura}: add a pool first`,
+    /** Title of the pool inside a collapsed sub-process (#721): a sub-process holds no pools. */
+    poolSoloEnPrincipal: (figura: string): string => `${figura}: pools belong to the main diagram, not inside a sub-process`,
     /** The lane tool waiting for a click on a pool (#580); Escape cancels. */
     eligePool: 'Click the pool or lane to add the lane to. Esc cancels.',
     /** The ⌘K command palette (`PaletaComandos.tsx`, #410); its actions reuse the bar's labels. */

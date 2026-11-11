@@ -418,6 +418,7 @@ export const es: Strings = {
     sinCoincidencias: (filtro: string): string => `Ninguna figura coincide con «${filtro}».`,
     requiereActividad: (figura: string): string => `${figura}: selecciona una tarea o un subproceso para adjuntarlo`,
     requiereContenedor: (figura: string): string => `${figura}: añade antes un pool`,
+    poolSoloEnPrincipal: (figura: string): string => `${figura}: los pools van en el diagrama principal, no dentro de un subproceso`,
     eligePool: 'Haz clic en el pool o carril donde añadir el carril. Esc cancela.',
     comandos: {
       titulo: 'Paleta de comandos',

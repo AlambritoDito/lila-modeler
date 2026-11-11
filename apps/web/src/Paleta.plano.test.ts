@@ -9,10 +9,13 @@
  * `scrollToElement` switching root are the whole point, and a fake would test none of them.
  */
 import Modeler from 'bpmn-js/lib/Modeler';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { act, createElement } from 'react';
+import { createRoot } from 'react-dom/client';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { setLocale } from './i18n';
 import { moduloLote } from './lote';
 import { moduloCarriles, type LilaCarriles } from './carriles';
-import { gruposDeFiguras, hayPool, insertar, type Figura } from './Paleta';
+import { enSubproceso, gruposDeFiguras, hayPool, insertar, Paleta, type Figura } from './Paleta';
 import type { Servicios } from './Modeler';
 
 /** The few SVG APIs diagram-js calls while drawing, which jsdom does not implement. */
@@ -82,11 +85,11 @@ interface Lienzo {
 const figura = (tipo: string): Figura => gruposDeFiguras().flatMap((g) => g.figuras).find((f) => f.tipo === tipo)!;
 
 /** The diagram, drilled into `Sub` or not, with the view centred on (400, 200): inside the pool. */
-async function montar(dentro: boolean) {
+async function montar(dentro: boolean, xml = SUBPROCESO_PLEGADO) {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const modeler = new Modeler({ container, additionalModules: [moduloLote, moduloCarriles] });
-  const { warnings } = await modeler.importXML(SUBPROCESO_PLEGADO);
+  const { warnings } = await modeler.importXML(xml);
   expect(warnings).toEqual([]);
   const g = <T,>(n: string) => modeler.get<T>(n);
   const canvas = g<Lienzo>('canvas');
@@ -97,6 +100,8 @@ async function montar(dentro: boolean) {
   const registry = g<{ get(id: string): Forma; filter(f: (e: Forma) => boolean): Forma[] }>('elementRegistry');
   return {
     canvas, registry, activate,
+    xml: async () => (await modeler.saveXML({ format: false })).xml!,
+    commandStack: g<{ canUndo(): boolean }>('commandStack'),
     servicios: {
       modeling: g('modeling'), elementRegistry: registry, rules: g('rules'), canvas: lienzo,
       directEditing: { activate }, elementFactory: g('elementFactory'), carriles: g<LilaCarriles>('lilaCarriles'),
@@ -146,5 +151,79 @@ describe('a palette click inside a collapsed sub-process (#721)', () => {
 
     const fuera = await montar(false);
     expect(hayPool(fuera.servicios)).toBe(true);
+  });
+});
+
+/** The same sub-process in a plain process: no collaboration, no pool yet. */
+const SIN_POOL = SUBPROCESO_PLEGADO
+  .replace('<bpmn:collaboration id="C"><bpmn:participant id="Pool" processRef="P" /></bpmn:collaboration>', '')
+  .replace('bpmnElement="C"', 'bpmnElement="P"')
+  .replace(/<bpmndi:BPMNShape id="Pool_di".*<\/bpmndi:BPMNShape>\n/, '');
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+describe('the Pool item inside a collapsed sub-process (#721)', () => {
+  afterEach(() => setLocale('auto'));
+  const pool = () => figura('bpmn:Participant');
+  const pools = (m: Awaited<ReturnType<typeof montar>>) => m.registry.filter((el) => el.type === 'bpmn:Participant').map((el) => el.parent?.id);
+
+  /** The palette's Pool button, painted over the real services. */
+  function boton(servicios: Servicios): { disabled: boolean; title: string } {
+    const div = document.createElement('div');
+    const root = createRoot(div);
+    act(() => root.render(createElement(Paleta, { servicios, compacta: false, onCompacta: () => {} })));
+    const { disabled, title } = [...div.querySelectorAll<HTMLButtonElement>('button.figura')].find((b) => b.querySelector('.bpmn-icon-participant') !== null)!;
+    act(() => root.unmount());
+    return { disabled, title };
+  }
+
+  it('is disabled there, and says why in both languages; on the main diagram it is on', async () => {
+    const m = await montar(true);
+    expect(enSubproceso(m.servicios)).toBe(true);
+    setLocale('en');
+    const dentro = boton(m.servicios);
+    expect(dentro.disabled).toBe(true);
+    expect(dentro.title).toBe('Pool: pools belong to the main diagram, not inside a sub-process');
+    setLocale('es');
+    expect(boton(m.servicios).title).toBe('Pool: los pools van en el diagrama principal, no dentro de un subproceso');
+
+    setLocale('en');
+    for (const xml of [SUBPROCESO_PLEGADO, SIN_POOL]) {
+      const fuera = await montar(false, xml);
+      expect(enSubproceso(fuera.servicios)).toBe(false);
+      expect(boton(fuera.servicios).disabled).toBe(false);
+      expect(boton(fuera.servicios).title).toBe('Pool');
+    }
+  });
+
+  it('forcing the insert anyway creates nothing and throws nothing: no ghost shape, same XML, nothing to undo', async () => {
+    const m = await montar(true);
+    const antes = await m.xml();
+
+    expect(() => insertar(m.servicios, pool())).not.toThrow();
+
+    expect(pools(m)).toEqual(['C']);
+    expect(m.activate).not.toHaveBeenCalled();
+    expect(m.commandStack.canUndo()).toBe(false);
+    expect(await m.xml()).toBe(antes);
+    expect(m.canvas.getRootElement().id).toBe('Sub_plane');
+  });
+
+  it('on the main diagram a second pool still goes to the collaboration', async () => {
+    const m = await montar(false);
+    insertar(m.servicios, pool());
+    expect(pools(m)).toEqual(['C', 'C']);
+    expect((m.activate.mock.calls[0]![0] as Forma).type).toBe('bpmn:Participant');
+    expect((await m.xml()).match(/<bpmn:participant /g)).toHaveLength(2);
+  });
+
+  it('on a main diagram without pools the first pool still wraps the process', async () => {
+    const m = await montar(false, SIN_POOL);
+    expect(m.canvas.getRootElement().type).toBe('bpmn:Process');
+    insertar(m.servicios, pool());
+    expect(m.canvas.getRootElement().type).toBe('bpmn:Collaboration');
+    expect(pools(m)).toHaveLength(1);
+    expect(m.registry.get('Sub').parent?.type).toBe('bpmn:Participant');
+    expect((await m.xml()).match(/<bpmn:participant /g)).toHaveLength(1);
   });
 });
