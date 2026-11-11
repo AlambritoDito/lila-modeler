@@ -26,11 +26,12 @@ export interface OuterCodeMessages {
   'W-XOR-DEFAULT-ROTO': (id: string, notice: string) => string;
   'W-MSGFLOW': (processId: string, count: number) => string;
   'W-COND': (flowId: string) => string;
-  'E-GATEWAY-SIN-ARISTAS/sin-entradas': (id: string) => string;
-  'E-GATEWAY-SIN-ARISTAS/sin-salidas': (id: string) => string;
+  /** #722: `node` is the node's label, «Name (id)» or the bare id (`nodeLabel`), here and in `E-INALCANZABLE`. */
+  'E-GATEWAY-SIN-ARISTAS/sin-entradas': (node: string) => string;
+  'E-GATEWAY-SIN-ARISTAS/sin-salidas': (node: string) => string;
   'E-SIN-START': (processId: string) => string;
   'E-SIN-END': (processId: string) => string;
-  'E-INALCANZABLE': (id: string) => string;
+  'E-INALCANZABLE': (node: string) => string;
 
   /* --- scenario.ts (lint) ------------------------------------------- */
   'E-RESERVADO': (path: string) => string;

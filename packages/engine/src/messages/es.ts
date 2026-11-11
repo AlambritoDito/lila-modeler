@@ -243,12 +243,12 @@ export const es: Catalog = {
     'W-MSGFLOW': (processId, count) =>
       `${processId}: ${count === 1 ? 'se ignoró' : 'se ignoraron'} ${n(count, 'flujo', 'flujos')} de mensaje (bpmn:messageFlow).`,
     'W-COND': (flowId) => `${flowId}: la condición del flujo (\`conditionExpression\`) se ignora; el ramaje es probabilístico.`,
-    'E-GATEWAY-SIN-ARISTAS/sin-entradas': (id) => `${id}: la compuerta no tiene entradas.`,
-    'E-GATEWAY-SIN-ARISTAS/sin-salidas': (id) => `${id}: la compuerta no tiene salidas.`,
+    'E-GATEWAY-SIN-ARISTAS/sin-entradas': (node) => `${node}: la compuerta no tiene entradas.`,
+    'E-GATEWAY-SIN-ARISTAS/sin-salidas': (node) => `${node}: la compuerta no tiene salidas.`,
     'E-SIN-START': (processId) => `${processId}: el proceso no tiene ningún evento de inicio.`,
     'E-SIN-END': (processId) =>
       `${processId}: el proceso no tiene ningún evento de fin, ni normal ni terminal.`,
-    'E-INALCANZABLE': (id) => `${id}: el nodo no es alcanzable desde ningún evento de inicio.`,
+    'E-INALCANZABLE': (node) => `${node}: el nodo no es alcanzable desde ningún evento de inicio.`,
 
     'E-RESERVADO': (path) => `campo reservado, no soportado por el simulador en v1 (${path}).`,
     'E-REF-DESCONOCIDA': (path, calendar) =>

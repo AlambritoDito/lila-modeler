@@ -17,7 +17,9 @@ export interface PrepareSimulationOptions {
  * already carry the id or path they are about, at the start or (since #519) at the end; prefixing it again printed it twice.
  */
 export function sinRepetir(code: string, where: string, message: string): string {
-  return message.startsWith(`${where}: `) || message.endsWith(` (${where}).`) ? `${code}: ${message}` : `${code}: ${where}: ${message}`;
+  // #722: a structural error names its node, `Name (id): …`; the id is still in there.
+  const yaLoDice = message.startsWith(`${where}: `) || message.endsWith(` (${where}).`) || message.includes(` (${where}): `);
+  return yaLoDice ? `${code}: ${message}` : `${code}: ${where}: ${message}`;
 }
 
 /**

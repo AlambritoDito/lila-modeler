@@ -129,6 +129,33 @@ test('un nodo desconectado de todo start es E-INALCANZABLE', () => {
   ]);
 });
 
+test('#722: the text names the node, the id stays in the field (both locales)', () => {
+  const model = ir({
+    nodes: {
+      Start_1: { type: 'start', name: '', incoming: [], outgoing: ['Flow_1'] },
+      End_1: { type: 'end', name: '', incoming: ['Flow_1'], outgoing: [] },
+      Activity_14428r5: { type: 'task', name: 'Review order', incoming: [], outgoing: [] },
+      Gateway_0x: { type: 'xor', name: 'Approved?', incoming: [], outgoing: [] },
+      Task_SameAsId: { type: 'task', name: 'Task_SameAsId', incoming: [], outgoing: [] },
+    },
+    flows: { Flow_1: { from: 'Start_1', to: 'End_1', name: '', isDefault: false } },
+  });
+
+  expect(validate(model, { locale: 'en' }).errors).toEqual([
+    { code: 'E-GATEWAY-SIN-ARISTAS', id: 'Gateway_0x', message: 'Approved? (Gateway_0x): the gateway has no incoming flows.' },
+    { code: 'E-INALCANZABLE', id: 'Activity_14428r5', message: 'Review order (Activity_14428r5): the node is not reachable from any start event.' },
+    { code: 'E-INALCANZABLE', id: 'Gateway_0x', message: 'Approved? (Gateway_0x): the node is not reachable from any start event.' },
+    // Without a name of its own the id is the fallback, exactly as before.
+    { code: 'E-INALCANZABLE', id: 'Task_SameAsId', message: 'Task_SameAsId: the node is not reachable from any start event.' },
+  ]);
+  expect(validate(model, ES).errors.map((p) => [p.id, p.message])).toEqual([
+    ['Gateway_0x', 'Approved? (Gateway_0x): la compuerta no tiene entradas.'],
+    ['Activity_14428r5', 'Review order (Activity_14428r5): el nodo no es alcanzable desde ningún evento de inicio.'],
+    ['Gateway_0x', 'Approved? (Gateway_0x): el nodo no es alcanzable desde ningún evento de inicio.'],
+    ['Task_SameAsId', 'Task_SameAsId: el nodo no es alcanzable desde ningún evento de inicio.'],
+  ]);
+});
+
 test('los elementos que el perfil sí admite pero no son nodos no producen error', () => {
   const { errors } = validate(ir(), {
     ...ES,

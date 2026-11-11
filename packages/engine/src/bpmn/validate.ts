@@ -9,6 +9,7 @@
  * El texto de los errores `E-NOSOP` es normativo y sale literal de `docs/SEMANTICS.md` § 3
  * (R-NOSOP-1 y R-NOSOP-2); los códigos, de la § 17.
  */
+import { nodeLabel } from '../core/endless.js';
 import { validateIr, type IrProblem, type ProcessIR, type SourceWarning } from '../core/ir.js';
 import { CONSTRUCTION_BY_QNAME, FALLBACK_CONSTRUCTION } from '../messages/constructions.js';
 import { messages, type Catalog, type Locale } from '../messages/index.js';
@@ -314,13 +315,14 @@ export function validate(ir: ProcessIR, opts: ValidateOptions = {}): ValidationR
       // Un gateway con una entrada y una salida es pass-through legítimo (R-AND-6, R-PERF-2):
       // solo se exige que tenga al menos una de cada.
       if (node.incoming.length === 0 || node.outgoing.length === 0) {
+        // #722: the text names the node («Name (id)», the bare id without a name); `id` stays the key.
         errors.push({
           code: 'E-GATEWAY-SIN-ARISTAS',
           id,
           message:
             node.incoming.length === 0
-              ? M['E-GATEWAY-SIN-ARISTAS/sin-entradas'](id)
-              : M['E-GATEWAY-SIN-ARISTAS/sin-salidas'](id),
+              ? M['E-GATEWAY-SIN-ARISTAS/sin-entradas'](nodeLabel(ir, id))
+              : M['E-GATEWAY-SIN-ARISTAS/sin-salidas'](nodeLabel(ir, id)),
         });
       }
     }
@@ -350,7 +352,7 @@ export function validate(ir: ProcessIR, opts: ValidateOptions = {}): ValidationR
         errors.push({
           code: 'E-INALCANZABLE',
           id,
-          message: M['E-INALCANZABLE'](id),
+          message: M['E-INALCANZABLE'](nodeLabel(ir, id)),
         });
       }
     }

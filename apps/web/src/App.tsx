@@ -32,6 +32,7 @@ import { MenuComparar, VistaComparar, type OpcionComparar } from './VistaCompara
 import { ResultsView } from './ResultsView';
 import { graficasDelDocumento, type LogDeCorrida } from './GraficasResultados';
 import { TokenSim } from './TokenSim';
+import { erroresDeModeloEnVivo, problemasDeModelo, type ErrorDeModelo } from './modeloEnVivo';
 import { prepareSimulation, sinHuerfanas } from './simulationGate';
 import type { ProjectDocument, StoredRun } from './store/ProjectStore';
 import type { SaveOutcome, Ajustes, MenuAction, OpenPathRequest } from '../../desktop/src/bridge.js';
@@ -773,11 +774,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   // y no solo con el esquema. `null` mientras no se haya podido parsear.
   const [ir, setIr] = useState<ProcessIR | null>(null);
   /**
-   * #455: the `E-NOSOP` of the canvas model (constructs the simulator does not run), from the same
-   * deferred reparse that sets `ir`. Only those: `E-SIN-START`/`E-SIN-END` and the rest of the full
-   * `validate()` stay a Run-time matter (#409, an empty «New» is not an error yet).
+   * The errors of the canvas model, from the same deferred reparse that sets `ir`: the constructs
+   * the simulator does not run (`E-NOSOP`, #455) and, since #722, the structural ones Run raises
+   * (`E-INALCANZABLE`, `E-GATEWAY-SIN-ARISTAS`, `E-SIN-START`…). An empty «New» has none (#409):
+   * see `erroresDeModeloEnVivo`. `name` is read from the canvas for what the IR does not hold.
    */
-  const [noSoportados, setNoSoportados] = useState<readonly { id: string; message: string; name?: string }[]>([]);
+  const [erroresModelo, setErroresModelo] = useState<readonly (ErrorDeModelo & { name?: string })[]>([]);
   const [seleccion, setSeleccion] = useState<string | null>(null);
   // La última corrida y el interruptor son todo el estado del overlay (LILA-064). Poner
   // `corrida` a `null` es lo que "apaga" el overlay al cambiar de escenario o de modelo: no hay
@@ -1551,16 +1553,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * #455: a construct outside the simulated subset is a correct BPMN diagram while modelling, so
    * in Model it is a warning; in every other mode it is the error Run is going to raise. Run itself
    * is untouched: `simulationGate.ts` still fails with the engine's `E-NOSOP`.
+   * #722: the structural errors of the same validation are listed too (`problemasDeModelo`).
    */
   /** Names of the unsupported elements, for the panel's headings (seams QA of #476). */
   const nombresModelo = useMemo(
-    () => Object.fromEntries(noSoportados.flatMap((p) => (p.name?.trim() ? [[p.id, p.name] as const] : []))),
-    [noSoportados],
+    () => Object.fromEntries(erroresModelo.flatMap((p) => (p.name?.trim() ? [[p.id, p.name] as const] : []))),
+    [erroresModelo],
   );
-  const problemasModelo = useMemo<Problema[]>(
-    () => noSoportados.map((p) => ({ ruta: `elements.${p.id}`, mensaje: p.message, severidad: modo === 'modelar' ? 'warning' : 'error' })),
-    [noSoportados, modo],
-  );
+  const problemasModelo = useMemo<Problema[]>(() => problemasDeModelo(erroresModelo, modo === 'modelar'), [erroresModelo, modo]);
 
   const validacion = useMemo(
     () => {
@@ -1571,9 +1571,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       // are shown verbatim; since #280 the engine is asked for them in the active locale.
       // A copy: the model's problems (#455) are appended to it, not to the lint's own list.
       const problemas = [...problemasEscenario(resuelto, ir, locale, otrosProcesos), ...problemasModelo];
-      // ponytail (#409): an empty process («New») is not an error yet. `E-SIN-START`/`E-SIN-END`
-      // come from the engine's full `validate()`: the live reparse runs it since #455 but keeps only
-      // `E-NOSOP` (`noSoportados`), and the rest stays at Run time (`simulationGate.ts`).
+      // ponytail (#409): an empty process («New») is not an error yet; the live reparse leaves its
+      // `E-SIN-START`/`E-SIN-END` out (`erroresDeModeloEnVivo`) and Run says them.
       if (error !== null) problemas.unshift({ ruta: 'extends', mensaje: error, severidad: 'error' });
       // Sin figura: archivos ilegibles del proyecto, el diagrama que no abrió y los avisos de importar.
       // The list itself also goes to the Simulate dock's Warnings tab (#394).
@@ -1625,14 +1624,15 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         setIr(informe.ir); setOtrosProcesos(informe.elsewhere);
         // Unsupported elements never enter the IR, so the panel cannot read their name from it:
         // it comes from the canvas (seams QA of #476, E2 × E5).
-        const nosop = informe.errors.filter((p) => p.code === 'E-NOSOP');
-        const ids = new Set(nosop.map((p) => p.id));
+        // #722: every error Run would raise for this model, not only `E-NOSOP`.
+        const errores = erroresDeModeloEnVivo(informe);
+        const ids = new Set(errores.filter((p) => p.code === 'E-NOSOP').map((p) => p.id));
         const nombres = new Map(modelador.servicios.elementRegistry.filter((el) => el.id !== undefined && ids.has(el.id)).map((el) => [el.id, el.businessObject?.name]));
-        setNoSoportados(nosop.map((p) => { const name = nombres.get(p.id); return name === undefined ? { id: p.id, message: p.message } : { id: p.id, message: p.message, name }; }));
-      }).catch(() => { if (vivo) { setIr(null); setNoSoportados([]); setReparseando(false); } });
+        setErroresModelo(errores.map((p) => { const name = nombres.get(p.id); return name === undefined ? p : { ...p, name }; }));
+      }).catch(() => { if (vivo) { setIr(null); setErroresModelo([]); setReparseando(false); } });
     }, 150);
     return () => { vivo = false; clearTimeout(timer); };
-    // The locale reparses because the `E-NOSOP` messages are the engine's, in the active language.
+    // The locale reparses because the model's messages are the engine's, in the active language.
   }, [modelador, procesoId, revision, locale]);
 
   /**
@@ -2544,7 +2544,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const panelMontado = ventanaEscenario !== null || modo === 'simular' || (modo !== 'resultados' && pestana === 'simulacion');
   const conteoProblemas = panelMontado
     ? conteoPanel
-    : validacion.problemas.filter((p) => p.severidad === 'error').length + (modo === 'modelar' ? problemasModelo.length : 0);
+    : validacion.problemas.filter((p) => p.severidad === 'error').length + problemasModelo.filter((p) => p.severidad === 'warning').length;
   function simularDesdeBarra(): void {
     if (conteoProblemas > 0) {
       elegirModo('simular');

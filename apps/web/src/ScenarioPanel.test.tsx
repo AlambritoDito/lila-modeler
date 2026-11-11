@@ -1341,6 +1341,34 @@ describe('model problems (#455)', () => {
     expect(document.querySelector('.escenario-cabecera')!.textContent).toContain(es.escenario.conteo(errores, propios.length - errores + 1));
     expect([...document.querySelectorAll('.escenario ul.ids li.aviso')].map((li) => li.textContent)).toContain(nosop.mensaje);
   });
+
+  it('#722: a structural error of the model is listed apart from the steps, even on a task, and holds the run back', () => {
+    const escenario = asIsCorto();
+    const tarea = Object.entries(ir.nodes).find(([, nodo]) => nodo.type === 'task')![0];
+    const inalcanzable = { ruta: `elements.${tarea}`, mensaje: `Review order (${tarea}): the node is not reachable from any start event.`, severidad: 'error' as const, codigo: 'E-INALCANZABLE' };
+    const conteos: number[] = [];
+    const panel = (extra: readonly (typeof inalcanzable)[]) => (
+      <ScenarioPanel
+        archivo="as-is.scenario.json"
+        escenarios={{ 'as-is.scenario.json': escenario }}
+        onCambio={() => {}}
+        onGuardar={() => {}}
+        onDuplicar={() => {}}
+        ir={ir}
+        problemasExtra={extra}
+        seleccion={null}
+        onSeleccionar={() => {}}
+        onConteoProblemas={(n) => conteos.push(n)}
+      />
+    );
+    montar(panel([]));
+    const antes = conteos.at(-1)!;
+    expect([...document.querySelectorAll('.sim-sinpaso li')].map((li) => li.textContent)).not.toContain(inalcanzable.mensaje);
+    act(() => raiz!.render(panel([inalcanzable])));
+    expect([...document.querySelectorAll('.sim-sinpaso li')].map((li) => li.textContent)).toContain(inalcanzable.mensaje);
+    expect([...document.querySelectorAll('.escenario ul.ids li.error')].map((li) => li.textContent)).toContain(inalcanzable.mensaje);
+    expect(conteos.at(-1)).toBe(antes + 1);
+  });
 });
 
 /* ------------------------------------------------------------------ *

@@ -4066,15 +4066,16 @@ const chipsDelLienzo = () => [...container.querySelectorAll('.zona-modelo .chips
 it('an unsupported construct is a warning in Model, an error in Simulate, and only Run fails (#455)', async () => {
   await click(T.app.modos.modelar);
   await reparsear(CON_MENSAJE);
-  // One warning and no error while modelling; the other engine errors (E-INALCANZABLE of the end
-  // behind it) stay a Run-time matter.
-  expect(chipsDelLienzo()).toEqual([T.app.avisos(1)]);
+  // No error while modelling: the unsupported construct is a warning, and so is what follows from
+  // it (#722: the end behind it is E-INALCANZABLE because the parser left Msg_1 out of the graph).
+  expect(chipsDelLienzo()).toEqual([T.app.avisos(2)]);
   const marcadores = (mocks.validacion.mock.calls.at(-1)![0] as { marcadores: Map<string, { nivel: string; mensajes: string[] }> }).marcadores;
-  expect([...marcadores.keys()]).toEqual(['Msg_1']);
+  expect([...marcadores.keys()]).toEqual(['Msg_1', 'End_A']);
   expect(marcadores.get('Msg_1')).toEqual({ nivel: 'aviso', mensajes: [expect.stringContaining('not supported by the simulator')] });
+  expect(marcadores.get('End_A')).toEqual({ nivel: 'aviso', mensajes: ['End_A: the node is not reachable from any start event.'] });
 
   await click(T.app.modos.simular);
-  expect(chipsDelLienzo()).toEqual([T.app.errores(1)]);
+  expect(chipsDelLienzo()).toEqual([T.app.errores(2)]);
 
   // Run goes through the gate with this model, and the gate's E-NOSOP (pinned for real in
   // `simulationGate.test.ts`) stops it before the Worker.
@@ -4083,6 +4084,72 @@ it('an unsupported construct is a warning in Model, an error in Simulate, and on
   expect(mocks.gate.mock.calls.at(-1)![0]).toContain('Msg_1');
   expect(mocks.worker).not.toHaveBeenCalled();
   expect(container.textContent).toContain('E-NOSOP: Msg_1');
+});
+
+// ---------- Structural errors while editing (#722) ----------
+
+/** A valid start → task → end, plus `extra` inside the process. */
+const conExtra = (extra: string): string => `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="x"><bpmn:process id="Process_722" isExecutable="false">
+<bpmn:startEvent id="Start_A"><bpmn:outgoing>F1</bpmn:outgoing></bpmn:startEvent>
+<bpmn:task id="Task_A" name="Prepare"><bpmn:incoming>F1</bpmn:incoming><bpmn:outgoing>F2</bpmn:outgoing></bpmn:task>
+<bpmn:endEvent id="End_A"><bpmn:incoming>F2</bpmn:incoming></bpmn:endEvent>
+<bpmn:sequenceFlow id="F1" sourceRef="Start_A" targetRef="Task_A"/><bpmn:sequenceFlow id="F2" sourceRef="Task_A" targetRef="End_A"/>
+${extra}</bpmn:process></bpmn:definitions>`;
+const ultimaValidacion = () => mocks.validacion.mock.calls.at(-1)![0] as { errores: number; avisos: number; marcadores: Map<string, { nivel: string; mensajes: string[] }> };
+
+it('a task no flow reaches is an error while editing, named by its name, without running (#722)', async () => {
+  await click(T.app.modos.modelar);
+  await reparsear(conExtra(''));
+  expect(ultimaValidacion().errores).toBe(0);
+  expect(container.querySelector('.chip.error')).toBeNull();
+
+  await reparsear(conExtra('<bpmn:task id="Activity_14428r5" name="Review order"/>'));
+  // The canvas chip, the status bar's count and the marker on the task: all before any Run.
+  expect(chipsDelLienzo()).toContain(T.app.errores(1));
+  expect(container.querySelector('.estado')?.textContent ?? container.textContent).toContain(T.app.errores(1));
+  expect([...ultimaValidacion().marcadores]).toEqual([
+    ['Activity_14428r5', { nivel: 'error', mensajes: ['Review order (Activity_14428r5): the node is not reachable from any start event.'] }],
+  ]);
+  expect(mocks.gate).not.toHaveBeenCalled();
+  expect(mocks.worker).not.toHaveBeenCalled();
+
+  // In Simulate it is the same error (the panel's own list is pinned in `ScenarioPanel.test.tsx`
+  // and `modeloEnVivo.test.ts`: this suite mocks the panel).
+  await click(T.app.modos.simular);
+  expect(chipsDelLienzo()).toEqual([T.app.errores(1)]);
+
+  // Connecting it clears the error with the next reparse.
+  await reparsear(conExtra(''));
+  expect(ultimaValidacion().errores).toBe(0);
+});
+
+it('what flow never reaches by design is not flagged: boundary timer, annotation, data object (#722)', async () => {
+  await click(T.app.modos.modelar);
+  await reparsear(conExtra(`<bpmn:boundaryEvent id="Limit" attachedToRef="Task_A"><bpmn:outgoing>F3</bpmn:outgoing><bpmn:timerEventDefinition id="TD"/></bpmn:boundaryEvent>
+<bpmn:endEvent id="End_Late"><bpmn:incoming>F3</bpmn:incoming></bpmn:endEvent><bpmn:sequenceFlow id="F3" sourceRef="Limit" targetRef="End_Late"/>
+<bpmn:textAnnotation id="Note"><bpmn:text>note</bpmn:text></bpmn:textAnnotation><bpmn:association id="Assoc" sourceRef="Task_A" targetRef="Note"/>
+<bpmn:dataObjectReference id="Data" dataObjectRef="DO"/><bpmn:dataObject id="DO"/>`));
+  expect(ultimaValidacion().errores).toBe(0);
+  expect([...ultimaValidacion().marcadores.keys()]).not.toEqual(expect.arrayContaining(['Limit', 'End_Late', 'Note', 'Data']));
+});
+
+it('the Bizagi sample A.3.0 shows its unreachable tasks on import, by name (#722)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const a30 = readFileSync('examples/bizagi-exports/bizagi-miwg-A.3.0-roundtrip.bpmn', 'utf8');
+  await click(T.app.modos.modelar);
+  await reparsear(a30);
+  const mensajes = [...ultimaValidacion().marcadores.values()].flatMap((m) => m.mensajes);
+  const inalcanzables = mensajes.filter((m) => m.endsWith('the node is not reachable from any start event.'));
+  expect(inalcanzables).toHaveLength(5);
+  // Named, with the id behind: none is the bare `_<uuid>: …` Run used to print.
+  for (const m of inalcanzables) expect(m).toMatch(/^.+ \(_[0-9a-f-]{36}\): the node/);
+  // In Model they follow the two unsupported boundary events that cause them (warnings, #455)…
+  expect(chipsDelLienzo()).toEqual([T.app.avisos(ultimaValidacion().avisos)]);
+  expect(ultimaValidacion().avisos).toBeGreaterThanOrEqual(7);
+  // …and in Simulate they are the errors Run raises.
+  await click(T.app.modos.simular);
+  expect(ultimaValidacion().errores).toBe(7);
 });
 
 it('boundary events and the lane wait for a fitting selection, and say which (#456)', async () => {
