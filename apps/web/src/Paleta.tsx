@@ -12,7 +12,7 @@
  * Los iconos son las clases `bpmn-icon-*` de `bpmn-font`, que la app ya carga en `App.tsx`.
  */
 import { useEffect, useState } from 'react';
-import type { Servicios } from './Modeler';
+import type { Elemento, Servicios } from './Modeler';
 import { strings, useStrings } from './i18n';
 
 /** Una figura de la paleta: lo que hace falta para pintarla y para crearla. */
@@ -268,7 +268,22 @@ export function anfitrion(servicios: Servicios, figura: Figura, seleccion: strin
 
 /** Whether the diagram has a pool the lane tool could pick (#580). */
 export function hayPool(servicios: Servicios): boolean {
-  return servicios.elementRegistry.filter((el) => el.type === 'bpmn:Participant' && el.labelTarget === undefined).length > 0;
+  const visible = enPlanoAbierto(servicios);
+  return servicios.elementRegistry.filter((el) => el.type === 'bpmn:Participant' && el.labelTarget === undefined && visible(el)).length > 0;
+}
+
+/**
+ * Whether an element is drawn on the open plane (#721). The registry holds every plane of the
+ * diagram: the root one and one per collapsed sub-process, all in the same coordinate system. A
+ * shape of a plane that is not showing must not be picked as the parent of a new figure, however
+ * well it sits under the centre of the view.
+ */
+function enPlanoAbierto(servicios: Servicios): (el: Elemento) => boolean {
+  return (el) => {
+    let cima: Elemento = el;
+    while (cima.parent !== undefined && cima.parent !== null) cima = cima.parent as Elemento;
+    return cima === servicios.canvas.getRootElement();
+  };
 }
 
 interface Punto { x: number; y: number }
@@ -289,8 +304,11 @@ interface Caja extends Punto { width: number; height: number }
 function sitio(servicios: Servicios, forma: unknown, centro: Punto): { target: unknown; punto: Punto } {
   const permite = (target: unknown, punto: Punto): boolean =>
     servicios.rules.allowed('shape.create', { shape: forma, target, position: punto }) === true;
+  const visible = enPlanoAbierto(servicios);
   const cajas = servicios.elementRegistry
-    .filter((el) => el.labelTarget === undefined && el.width !== undefined && el.height !== undefined)
+    // Only what the open plane shows (#721): inside a collapsed sub-process, the pool of the root
+    // diagram is still in the registry, right under the same point.
+    .filter((el) => el.labelTarget === undefined && el.width !== undefined && el.height !== undefined && visible(el))
     // Del más pequeño al más grande: un carril gana al pool que lo contiene.
     .sort((a, b) => a.width! * a.height! - b.width! * b.height!) as Caja[];
 

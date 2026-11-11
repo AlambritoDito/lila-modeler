@@ -13,7 +13,7 @@ import type { Servicios } from './Modeler';
 import { setLocale } from './i18n';
 
 const RAIZ = { id: 'Collaboration_1' };
-const POOL = { id: 'Pool_1', x: 0, y: 0, width: 600, height: 300 };
+const POOL = { id: 'Pool_1', x: 0, y: 0, width: 600, height: 300, parent: RAIZ };
 const TAREA: Figura = { tipo: 'bpmn:UserTask', nombre: 'Tarea de usuario', icono: 'user-task' };
 
 /** `admite` decide, como las reglas de bpmn-js, quién puede contener a la figura. */
