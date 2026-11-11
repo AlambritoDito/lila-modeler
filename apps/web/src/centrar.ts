@@ -63,3 +63,23 @@ export function ajustar(canvas: CanvasAjustable, margen: Margen): void {
     height: outer.height / escala,
   });
 }
+
+/** The canvas calls `mostrarPlano` needs (diagram-js's `Canvas`). */
+export interface CanvasConPlanos {
+  findRoot(elemento: unknown): unknown;
+  getRootElement(): unknown;
+  setRootElement(raiz: unknown): unknown;
+}
+
+/**
+ * Puts on screen the plane that holds `elemento` (the inside of a collapsed sub-process, or the
+ * process when the view is inside one) and says whether it had to switch. diagram-js's `select`
+ * silently leaves out what is not on the plane on screen, so going to a problem on another plane
+ * selected nothing (QA of #722).
+ */
+export function mostrarPlano(canvas: CanvasConPlanos, elemento: unknown): boolean {
+  const raiz = canvas.findRoot(elemento);
+  if (raiz === undefined || raiz === null || raiz === canvas.getRootElement()) return false;
+  canvas.setRootElement(raiz);
+  return true;
+}

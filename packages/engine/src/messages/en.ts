@@ -241,8 +241,8 @@ export const en: Catalog = {
     'W-COND': (flowId) => `${flowId}: the flow's condition (\`conditionExpression\`) is ignored; branching is probabilistic.`,
     'E-GATEWAY-SIN-ARISTAS/sin-entradas': (node) => `${node}: the gateway has no incoming flows.`,
     'E-GATEWAY-SIN-ARISTAS/sin-salidas': (node) => `${node}: the gateway has no outgoing flows.`,
-    'E-SIN-START': (processId) => `${processId}: the process has no start event.`,
-    'E-SIN-END': (processId) => `${processId}: the process has no end event and no terminate.`,
+    'E-SIN-START': (process) => `${process}: the process has no start event.`,
+    'E-SIN-END': (process) => `${process}: the process has no end event and no terminate.`,
     'E-INALCANZABLE': (node) => `${node}: the node is not reachable from any start event.`,
 
     'E-RESERVADO': (path) => `reserved field, not supported by the simulator in v1 (${path}).`,

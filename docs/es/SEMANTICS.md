@@ -196,7 +196,8 @@ fallo silencioso. El texto sigue el estilo de Bizagi (“no soportado por el sim
   (`E-GATEWAY-SIN-ARISTAS`), nodo inalcanzable desde algún `start` (`E-INALCANZABLE`), proceso sin
   `start` (`E-SIN-START`), proceso sin `end` ni `terminate` (`E-SIN-END`). El texto de
   `E-GATEWAY-SIN-ARISTAS` y de `E-INALCANZABLE` nombra el nodo como `Nombre (id)`, o con el id solo
-  cuando no tiene nombre; el campo `id` es siempre el id BPMN. El editor lista estos errores
+  cuando no tiene nombre, y `E-SIN-START`/`E-SIN-END` nombran igual el proceso; el campo `id` es
+  siempre el id BPMN. El editor lista estos errores
   mientras se edita, con la misma validación que usa la corrida (#722).
   *(prueba: LILA-021, #722)*
 - **R-NOSOP-6 — Lo que el lector XML descarta también es error.** `bpmn-moddle` no lanza cuando

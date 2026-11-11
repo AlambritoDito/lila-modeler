@@ -29,8 +29,8 @@ export interface OuterCodeMessages {
   /** #722: `node` is the node's label, «Name (id)» or the bare id (`nodeLabel`), here and in `E-INALCANZABLE`. */
   'E-GATEWAY-SIN-ARISTAS/sin-entradas': (node: string) => string;
   'E-GATEWAY-SIN-ARISTAS/sin-salidas': (node: string) => string;
-  'E-SIN-START': (processId: string) => string;
-  'E-SIN-END': (processId: string) => string;
+  'E-SIN-START': (process: string) => string;
+  'E-SIN-END': (process: string) => string;
   'E-INALCANZABLE': (node: string) => string;
 
   /* --- scenario.ts (lint) ------------------------------------------- */

@@ -26,7 +26,7 @@ export interface SelectorEscenarioProps {
   activo: string;
   /** Latest current run of each scenario (App's `latest`): «Simulated» or «Not simulated». */
   corridas: readonly StoredRun[];
-  validacion: { readonly errores: number; readonly avisos: number; readonly primero: string | null };
+  validacion: { readonly errores: number; readonly avisos: number; readonly primerError: string | null; readonly primerAviso: string | null };
   ir: ProcessIR | null;
   onElegir: (id: string) => void;
   /** Duplicates the active scenario and makes the copy active; returns the copy's file and name. */
@@ -137,7 +137,8 @@ export function SelectorEscenario(props: SelectorEscenarioProps): React.JSX.Elem
     return { resuelto, padre };
   }, [escenarios, activo, delta, padreId]);
 
-  const ir = (): void => { if (validacion.primero !== null) props.onProblema(validacion.primero); };
+  /** Each chip goes to the first problem of its own kind (QA of #722). */
+  const ir = (id: string | null): void => { if (id !== null) props.onProblema(id); };
 
   return (
     <div className="c5-escenario" ref={raiz} onKeyDown={(e) => {
@@ -165,12 +166,12 @@ export function SelectorEscenario(props: SelectorEscenarioProps): React.JSX.Elem
       {(validacion.errores > 0 || validacion.avisos > 0) && (
         <span className="chips-validacion c5-chips" role="group" aria-label={S.c5.escenario.problemas}>
           {validacion.errores > 0 && (
-            <button type="button" className="chip error" data-n={validacion.errores} title={S.app.irAlPrimerProblema} disabled={validacion.primero === null} onClick={ir}>
+            <button type="button" className="chip error" data-n={validacion.errores} title={S.app.irAlPrimerProblema} disabled={validacion.primerError === null} onClick={() => ir(validacion.primerError)}>
               <span className="punto" /><span className="c6-chip-largo">{S.app.errores(validacion.errores)}</span>
             </button>
           )}
           {validacion.avisos > 0 && (
-            <button type="button" className="chip" data-n={validacion.avisos} title={S.app.irAlPrimerProblema} disabled={validacion.primero === null} onClick={ir}>
+            <button type="button" className="chip" data-n={validacion.avisos} title={S.app.irAlPrimerProblema} disabled={validacion.primerAviso === null} onClick={() => ir(validacion.primerAviso)}>
               <span className="punto" /><span className="c6-chip-largo">{S.app.avisos(validacion.avisos)}</span>
             </button>
           )}

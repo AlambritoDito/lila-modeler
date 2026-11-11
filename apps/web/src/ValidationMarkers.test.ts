@@ -110,6 +110,20 @@ describe('problemasPorElemento · agrupación y totales', () => {
     expect(validacion.primero).toBe('Task_1');
   });
 
+  it('QA of #722: the first error and the first warning are told apart, whichever comes first', () => {
+    const validacion = problemasPorElemento([
+      problema('elements.Task_Empacar', 'warning'),
+      problema('run.duration', 'error'),
+      problema('elements.Activity_1', 'error'),
+      problema('elements.Task_Empacar.processingTime', 'error'),
+    ]);
+    expect(validacion.primero).toBe('Task_Empacar');
+    expect(validacion.primerAviso).toBe('Task_Empacar');
+    expect(validacion.primerError).toBe('Activity_1');
+    // Only errors without a shape: the error chip has nowhere to go.
+    expect(problemasPorElemento([problema('elements.Task_1', 'warning'), problema('run.duration', 'error')]).primerError).toBeNull();
+  });
+
   it('los problemas sin figura solo cuentan en los chips', () => {
     const validacion = problemasPorElemento(
       [problema('run.duration', 'error'), problema('resources.cajero.calendar', 'error'), problema('extends', 'error')],
@@ -124,7 +138,7 @@ describe('problemasPorElemento · agrupación y totales', () => {
   });
 
   it('sin problemas los chips quedan a cero', () => {
-    expect(problemasPorElemento([])).toEqual({ avisos: 0, errores: 0, marcadores: new Map(), primero: null });
+    expect(problemasPorElemento([])).toEqual({ avisos: 0, errores: 0, marcadores: new Map(), primero: null, primerAviso: null, primerError: null });
   });
 });
 
@@ -178,6 +192,8 @@ function validacionDe(entradas: readonly [string, 'error' | 'aviso'][]): Validac
     errores: entradas.filter(([, n]) => n === 'error').length,
     marcadores: new Map(entradas.map(([id, nivel]) => [id, { mensajes: [`${id}: algo`], nivel }])),
     primero: entradas[0]?.[0] ?? null,
+    primerAviso: entradas.find(([, n]) => n === 'aviso')?.[0] ?? null,
+    primerError: entradas.find(([, n]) => n === 'error')?.[0] ?? null,
   };
 }
 

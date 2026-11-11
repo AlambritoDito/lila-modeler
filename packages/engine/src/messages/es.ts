@@ -245,9 +245,9 @@ export const es: Catalog = {
     'W-COND': (flowId) => `${flowId}: la condición del flujo (\`conditionExpression\`) se ignora; el ramaje es probabilístico.`,
     'E-GATEWAY-SIN-ARISTAS/sin-entradas': (node) => `${node}: la compuerta no tiene entradas.`,
     'E-GATEWAY-SIN-ARISTAS/sin-salidas': (node) => `${node}: la compuerta no tiene salidas.`,
-    'E-SIN-START': (processId) => `${processId}: el proceso no tiene ningún evento de inicio.`,
-    'E-SIN-END': (processId) =>
-      `${processId}: el proceso no tiene ningún evento de fin, ni normal ni terminal.`,
+    'E-SIN-START': (process) => `${process}: el proceso no tiene ningún evento de inicio.`,
+    'E-SIN-END': (process) =>
+      `${process}: el proceso no tiene ningún evento de fin, ni normal ni terminal.`,
     'E-INALCANZABLE': (node) => `${node}: el nodo no es alcanzable desde ningún evento de inicio.`,
 
     'E-RESERVADO': (path) => `campo reservado, no soportado por el simulador en v1 (${path}).`,

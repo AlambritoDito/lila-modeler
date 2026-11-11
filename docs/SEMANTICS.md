@@ -197,7 +197,8 @@ failure. The text follows Bizagi's style ("not supported by the simulator").
   incoming flows (`E-GATEWAY-SIN-ARISTAS`), a node unreachable from any `start`
   (`E-INALCANZABLE`), a process with no `start` (`E-SIN-START`), a process with neither `end` nor
   `terminate` (`E-SIN-END`). The text of `E-GATEWAY-SIN-ARISTAS` and `E-INALCANZABLE` names the
-  node as `Name (id)`, or by the bare id when it has no name; the `id` field is always the BPMN id.
+  node as `Name (id)`, or by the bare id when it has no name, and `E-SIN-START`/`E-SIN-END` name
+  the process the same way; the `id` field is always the BPMN id.
   The editor lists these errors while editing, from the same validation the run uses (#722).
   *(test: LILA-021, #722)*
 - **R-NOSOP-6 — What the XML reader discards is also an error.** `bpmn-moddle` does not throw when

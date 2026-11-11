@@ -201,6 +201,8 @@ export const en = {
 
     /** Validation chips over the canvas and counters of the status bar. */
     irAlPrimerProblema: 'Go to the first element with problems',
+    /** #722: a validation-list entry that goes to its element. */
+    irAlProblema: 'Go to the element in the diagram',
     errores: (n: number): string => `${n} ${n === 1 ? 'error' : 'errors'}`,
     avisos: (n: number): string => `${n} ${n === 1 ? 'warning' : 'warnings'}`,
 

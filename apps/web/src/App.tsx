@@ -3322,14 +3322,14 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         {modo === 'modelar' && (validacion.errores > 0 || validacion.avisos > 0) && (
           <div className="chips-validacion">
             {validacion.errores > 0 && (
-              <button type="button" className="chip error" title={S.app.irAlPrimerProblema} disabled={validacion.primero === null}
-                onClick={() => { if (validacion.primero !== null) modelador?.seleccionar?.(validacion.primero); }}>
+              <button type="button" className="chip error" title={S.app.irAlPrimerProblema} disabled={validacion.primerError === null}
+                onClick={() => { if (validacion.primerError !== null) modelador?.seleccionar?.(validacion.primerError); }}>
                 <span className="punto" />{S.app.errores(validacion.errores)}
               </button>
             )}
             {validacion.avisos > 0 && (
-              <button type="button" className="chip" title={S.app.irAlPrimerProblema} disabled={validacion.primero === null}
-                onClick={() => { if (validacion.primero !== null) modelador?.seleccionar?.(validacion.primero); }}>
+              <button type="button" className="chip" title={S.app.irAlPrimerProblema} disabled={validacion.primerAviso === null}
+                onClick={() => { if (validacion.primerAviso !== null) modelador?.seleccionar?.(validacion.primerAviso); }}>
                 <span className="punto" />{S.app.avisos(validacion.avisos)}
               </button>
             )}

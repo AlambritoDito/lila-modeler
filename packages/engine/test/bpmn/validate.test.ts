@@ -156,6 +156,19 @@ test('#722: the text names the node, the id stays in the field (both locales)', 
   ]);
 });
 
+test('#722: a named process is named in E-SIN-START / E-SIN-END; the id stays in the field', () => {
+  const task = { Task_1: { type: 'task' as const, name: '', incoming: [], outgoing: [] } };
+  const named = validate(ir({ id: 'P_NoStart', name: 'No start', nodes: task }), { locale: 'en' }).errors;
+  expect(named).toEqual([
+    { code: 'E-SIN-START', id: 'P_NoStart', message: 'No start (P_NoStart): the process has no start event.' },
+    { code: 'E-SIN-END', id: 'P_NoStart', message: 'No start (P_NoStart): the process has no end event and no terminate.' },
+  ]);
+  expect(validate(ir({ nodes: task }), ES).errors.map((p) => p.message)).toEqual([
+    'Process_1: el proceso no tiene ningún evento de inicio.',
+    'Process_1: el proceso no tiene ningún evento de fin, ni normal ni terminal.',
+  ]);
+});
+
 test('los elementos que el perfil sí admite pero no son nodos no producen error', () => {
   const { errors } = validate(ir(), {
     ...ES,

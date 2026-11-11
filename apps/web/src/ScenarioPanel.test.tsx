@@ -1347,6 +1347,7 @@ describe('model problems (#455)', () => {
     const tarea = Object.entries(ir.nodes).find(([, nodo]) => nodo.type === 'task')![0];
     const inalcanzable = { ruta: `elements.${tarea}`, mensaje: `Review order (${tarea}): the node is not reachable from any start event.`, severidad: 'error' as const, codigo: 'E-INALCANZABLE' };
     const conteos: number[] = [];
+    const elegidos: (string | null)[] = [];
     const panel = (extra: readonly (typeof inalcanzable)[]) => (
       <ScenarioPanel
         archivo="as-is.scenario.json"
@@ -1357,7 +1358,7 @@ describe('model problems (#455)', () => {
         ir={ir}
         problemasExtra={extra}
         seleccion={null}
-        onSeleccionar={() => {}}
+        onSeleccionar={(id) => elegidos.push(id)}
         onConteoProblemas={(n) => conteos.push(n)}
       />
     );
@@ -1368,6 +1369,19 @@ describe('model problems (#455)', () => {
     expect([...document.querySelectorAll('.sim-sinpaso li')].map((li) => li.textContent)).toContain(inalcanzable.mensaje);
     expect([...document.querySelectorAll('.escenario ul.ids li.error')].map((li) => li.textContent)).toContain(inalcanzable.mensaje);
     expect(conteos.at(-1)).toBe(antes + 1);
+
+    // QA of #722: both entries are buttons that go to the element; one without an element is text.
+    for (const lista of ['.sim-sinpaso li', '.escenario ul.ids li.error']) {
+      const boton = [...document.querySelectorAll(lista)].find((li) => li.textContent === inalcanzable.mensaje)!.querySelector('button')!;
+      expect(boton.type).toBe('button');
+      act(() => boton.click());
+      expect(elegidos.at(-1)).toBe(tarea);
+      elegidos.length = 0;
+    }
+    const sinFin = { ruta: 'model', mensaje: 'Process_1: the process has no end event and no terminate.', severidad: 'error' as const, codigo: 'E-SIN-END' };
+    act(() => raiz!.render(panel([sinFin as never])));
+    const plano = [...document.querySelectorAll('.sim-sinpaso li')].find((li) => li.textContent === sinFin.mensaje)!;
+    expect(plano.querySelector('button')).toBeNull();
   });
 });
 

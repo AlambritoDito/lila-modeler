@@ -328,18 +328,20 @@ export function validate(ir: ProcessIR, opts: ValidateOptions = {}): ValidationR
     }
   }
 
+  // #722: like a node, the process is named in the text, `Name (id)`; `id` stays the process id.
+  const processLabel = !ir.name || ir.name === ir.id ? ir.id : `${ir.name} (${ir.id})`;
   if (starts.length === 0) {
     errors.push({
       code: 'E-SIN-START',
       id: ir.id,
-      message: M['E-SIN-START'](ir.id),
+      message: M['E-SIN-START'](processLabel),
     });
   }
   if (!hasEnd) {
     errors.push({
       code: 'E-SIN-END',
       id: ir.id,
-      message: M['E-SIN-END'](ir.id),
+      message: M['E-SIN-END'](processLabel),
     });
   }
 

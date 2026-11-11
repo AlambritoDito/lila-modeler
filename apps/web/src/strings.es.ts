@@ -182,6 +182,8 @@ export const es: Strings = {
 
     /** Chips de validación sobre el lienzo y contadores de la barra de estado. */
     irAlPrimerProblema: 'Ir al primer elemento con problemas',
+    /** #722: una entrada de la lista de validación que lleva a su elemento. */
+    irAlProblema: 'Ir al elemento en el diagrama',
     errores: (n: number): string => `${n} ${n === 1 ? 'error' : 'errores'}`,
     avisos: (n: number): string => `${n} ${n === 1 ? 'aviso' : 'avisos'}`,
 

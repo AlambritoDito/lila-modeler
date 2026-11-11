@@ -4114,6 +4114,16 @@ it('a task no flow reaches is an error while editing, named by its name, without
   expect(mocks.gate).not.toHaveBeenCalled();
   expect(mocks.worker).not.toHaveBeenCalled();
 
+  // QA of #722: with a warning listed first, «1 error» still goes to the unreachable task and
+  // «1 warning» to the task with the warning.
+  await act(async () => { mocks.problemas = [{ ruta: 'elements.Task_A', mensaje: 'no parameters', severidad: 'warning' }]; mocks.scenarioChange(); });
+  expect(chipsDelLienzo()).toEqual([T.app.errores(1), T.app.avisos(1)]);
+  await click(T.app.errores(1));
+  expect(mocks.seleccionar).toHaveBeenLastCalledWith('Activity_14428r5');
+  await click(T.app.avisos(1));
+  expect(mocks.seleccionar).toHaveBeenLastCalledWith('Task_A');
+  await act(async () => { mocks.problemas = []; mocks.scenarioChange(); });
+
   // In Simulate it is the same error (the panel's own list is pinned in `ScenarioPanel.test.tsx`
   // and `modeloEnVivo.test.ts`: this suite mocks the panel).
   await click(T.app.modos.simular);
