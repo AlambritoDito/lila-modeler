@@ -102,8 +102,10 @@ describe('lilaProjectInventory', () => {
     const file = await repository();
     await defineLilaAttribute({ file, process: 'copia', name: 'Risk', type: 'list', appliesTo: 'task', options: ['Low', 'High'] });
     const document = decodeLila(readFileSync(file));
+    // A repeated id: bpmn-moddle drops the second element, and nothing can carry it (#724).
     const b20 = readFileSync(new URL('../../../../examples/bizagi-exports/bizagi-miwg-B.2.0-roundtrip.bpmn', import.meta.url), 'utf8');
-    writeFileSync(file, encodeLila({ ...document, model: { ...document.model, xml: b20 } }));
+    const repeated = b20.replace('</process>', '<task id="Task_twice" /><task id="Task_twice" /></process>');
+    writeFileSync(file, encodeLila({ ...document, model: { ...document.model, xml: repeated } }));
     const bytes = readFileSync(file);
     const inventory = await lilaProjectInventory({ file });
     expect(inventory.processes.map((p) => [p.slug, p.attributes])).toEqual([

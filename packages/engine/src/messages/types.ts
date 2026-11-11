@@ -459,6 +459,16 @@ export interface CliMessages {
   editInvalid: (detail: string) => string;
   editBpmnInvalid: (detail: string) => string;
   editContentLoss: (detail: string) => string;
+  /* --- content a writer cannot carry to its output (#724); `line` is 1-based ---- */
+  lossDuplicateId: (id: string, tag: string, line: number) => string;
+  lossIllegalId: (id: string, tag: string, line: number) => string;
+  lossStrayText: (text: string, line: number) => string;
+  lossMisplaced: (tag: string, line: number, anchor: string) => string;
+  lossMixedContent: (tag: string, parent: string, line: number) => string;
+  lossTwinAttribute: (attributes: string, tag: string, line: number) => string;
+  lossPrefixedAttribute: (attribute: string, element: string) => string;
+  lossDanglingRef: (property: string, ref: string, element: string) => string;
+  lossOther: (detail: string) => string;
   editUnknownId: (id: string) => string;
   editNotAStep: (id: string, type: string) => string;
   editOtherProcess: (id: string, process: string) => string;

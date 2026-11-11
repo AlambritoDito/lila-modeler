@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vitest';
-import { annotateElement, readAnnotations, writeAttributeDefinitions } from '../../src/bpmn/annotate.js';
+import { AnnotationContentLossError, annotateElement, readAnnotations, writeAttributeDefinitions } from '../../src/bpmn/annotate.js';
 
 const pedido = readFileSync(
   fileURLToPath(new URL('../../../../examples/pedido/model.bpmn', import.meta.url)),
@@ -122,7 +122,7 @@ test('un elemento sin anotaciones no aparece en readAnnotations', async () => {
 
 // Fallos encontrados por el QA adversarial del PR 158.
 
-test('un archivo cuyo contenido bpmn-moddle no sabe reescribir falla en vez de perderlo', async () => {
+test('a file with content bpmn-moddle cannot interpret is read and written whole (#724)', async () => {
   const b20 = readFileSync(
     fileURLToPath(
       new URL(
@@ -132,18 +132,22 @@ test('un archivo cuyo contenido bpmn-moddle no sabe reescribir falla en vez de p
     ),
     'utf8',
   );
-  await expect(readAnnotations(b20)).rejects.toThrow(/se perdería al guardarlo/);
-  // bpmn-moddle's warnings are plain objects: their message, never "[object Object]" (#633).
-  const error = await readAnnotations(b20).catch((e: unknown) => e as Error);
-  expect(error.message).not.toContain('[object Object]');
-  expect(error.message).toMatch(/unparsable content|unresolved reference/);
+  // It used to be refused (PR 158's QA): bpmn-moddle drops its four <LoopCounter> and seven
+  // references to ids no element has. Now they are carried; `test/agent-writeback.test.ts` has the rest.
+  await expect(readAnnotations(b20)).resolves.toEqual({});
+  const written = await annotateElement(b20, '_c9870992-6643-4094-acfd-d76e5e37941b', { documentation: 'x' });
+  expect(written.match(/<LoopCounter>0<\/LoopCounter>/g)).toHaveLength(4);
 });
 
-test('un id duplicado falla en vez de borrar el elemento repetido', async () => {
+test('a repeated id is refused instead of deleting the second element', async () => {
   const dup = pedido.replace('id="Task_Empacar"', 'id="Task_Revisar"');
-  await expect(annotateElement(dup, 'Task_Revisar', { documentation: 'x' })).rejects.toThrow(
-    /se perdería al guardarlo/,
-  );
+  const error = await annotateElement(dup, 'Task_Revisar', { documentation: 'x' }).catch((e: unknown) => e as AnnotationContentLossError);
+  expect(error).toBeInstanceOf(AnnotationContentLossError);
+  // Its issues name the construct (#724); never "[object Object]" (#633).
+  expect(error.issues).toEqual([{ kind: 'duplicateId', id: 'Task_Revisar', tag: 'bpmn:task', line: expect.any(Number) as number }]);
+  expect(error.detail).toMatch(/^line \d+: <bpmn:task> repeats the id "Task_Revisar" of an earlier element/);
+  expect(error.message).not.toContain('[object Object]');
+  await expect(readAnnotations(dup)).rejects.toBeInstanceOf(AnnotationContentLossError);
 });
 
 test('anota y lee un bpmn:lane, que no cuelga de flowElements', async () => {

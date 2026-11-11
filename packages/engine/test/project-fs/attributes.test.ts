@@ -192,13 +192,26 @@ describe('defineLilaAttribute', () => {
   });
 
   test('a model bpmn-moddle cannot write back whole is refused with its reason, not "[object Object]"', async () => {
+    // A repeated id: bpmn-moddle drops the second element, and nothing can carry it (#724).
     const b20 = readFileSync(join(repo, 'examples/bizagi-exports/bizagi-miwg-B.2.0-roundtrip.bpmn'), 'utf8');
-    await withModel(() => b20);
+    await withModel(() => b20.replace('</process>', '<task id="Task_twice" /><task id="Task_twice" /></process>'));
     const bytes = readFileSync(file);
     const error = await defineLilaAttribute({ file, name: 'SLA', type: 'number', appliesTo: 'task' }).catch((e: unknown) => e as Error);
-    expect(error.message).toMatch(/^the model has content that cannot be written back without losing it/);
+    expect(error.message).toMatch(
+      /^the model has content that cannot be written back without losing it, so it cannot be annotated: line \d+: <task> repeats the id "Task_twice" of an earlier element, .*give one of the two an id of its own/,
+    );
     expect(error.message).not.toContain('[object Object]');
     expect(readFileSync(file).equals(bytes)).toBe(true);
+  });
+
+  test('a Bizagi export with content bpmn-moddle cannot interpret takes attributes, and keeps that content (#724)', async () => {
+    const b20 = readFileSync(join(repo, 'examples/bizagi-exports/bizagi-miwg-B.2.0-roundtrip.bpmn'), 'utf8');
+    await withModel(() => b20);
+    const result = await defineLilaAttribute({ file, name: 'SLA', type: 'number', appliesTo: 'task' });
+    expect(result.after?.id).toBe('Attr_sla');
+    const written = decodeLila(readFileSync(file)).model.xml;
+    expect(written.match(/<LoopCounter>0<\/LoopCounter>/g)).toHaveLength(4);
+    expect(written).toContain('lila:attributeDefinition');
   });
 });
 

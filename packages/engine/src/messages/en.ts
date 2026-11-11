@@ -684,6 +684,23 @@ export const en: Catalog = {
     editInvalid: (detail) => `the edit was refused; nothing was changed:\n${detail}`,
     editBpmnInvalid: (detail) => `the edited process would not validate; nothing was changed:\n${detail}`,
     editContentLoss: (detail) => `the model has content the BPMN reader cannot write back, so editing it would lose it: ${detail}`,
+    lossDuplicateId: (id, tag, line) =>
+      `line ${line}: <${tag}> repeats the id "${id}" of an earlier element, and the id is the only key of an element; give one of the two an id of its own (and point at it the references meant for it)`,
+    lossIllegalId: (id, tag, line) =>
+      `line ${line}: the id "${id}" of <${tag}> is not an XML name; rename it, and the references to it, to start with a letter or "_" and use only letters, digits, "_", "-" and "."`,
+    lossStrayText: (text, line) =>
+      `line ${line}: the text "${text}" stands where BPMN has no text; remove it, or move it into a <documentation> element`,
+    lossMisplaced: (tag, line, anchor) =>
+      `<${tag}> (line ${line}) is not BPMN and was kept as it is inside ${anchor === '' ? 'the document' : `"${anchor}"`}, which this change rebuilds; leave ${anchor === '' ? 'it' : `"${anchor}"`} out of the change, or remove <${tag}> from the model first`,
+    lossMixedContent: (tag, parent, line) =>
+      `line ${line}: <${tag}> stands in the middle of the text of <${parent}>, where BPMN has text only, and its place in that text cannot be kept; write it as text (&lt;${tag}&gt;…) or put the text in a CDATA section`,
+    lossTwinAttribute: (attributes, tag, line) =>
+      `line ${line}: <${tag}> has two attributes that differ only in their prefix (${attributes}), and the BPMN reader keeps one of them; rename or remove one`,
+    lossPrefixedAttribute: (attribute, element) =>
+      `the attribute ${attribute} of "${element}" is not BPMN and would be written without its prefix; remove it, write it without the prefix, or give it a namespace of its own`,
+    lossDanglingRef: (property, ref, element) =>
+      `"${element}" refers to "${ref}" (${property}), an id no element has, and what this change makes of "${element}" has no place for that reference; remove the reference from the model first, or leave "${element}" out of the change`,
+    lossOther: (detail) => `${detail} (the BPMN reader would drop this content; remove or correct it in the file)`,
     editUnknownId: (id) => `"${id}" is not the id of an element of the model.`,
     editNotAStep: (id, type) => `"${id}" is a ${type}, not a step (task, gateway, event or sub-process).`,
     editOtherProcess: (id, process) => `"${id}" is not in the process being edited (${process}).`,

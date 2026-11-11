@@ -745,8 +745,18 @@ terminal.
   also flags an XOR whose branch probabilities no longer add up to 1, naming the flows to patch.
 - **What is not touched stays**: documentation, `lila:` annotations (RACI, references, extended
   attributes), other vendors' extensions, the text annotations, data objects and groups no
-  operation names, other pools and message flows. A model the BPMN reader cannot read completely is refused rather than written back with
-  something missing.
+  operation names, other pools and message flows. So does what the BPMN reader cannot interpret in
+  an imported model: a reference to an id no element has (`messageRef="Message_1"` of a Bizagi
+  export, `triso:unspecified`) is written back as it was, and an element that is not BPMN where it
+  stands (Bizagi's `<LoopCounter>`, a vendor element outside `extensionElements`) goes back,
+  verbatim, into the same parent; in such a model the content of other vendors' extensions is kept
+  verbatim too, after the `lila:` elements of the same `extensionElements`; the output is always
+  UTF-8, whatever encoding the file declared.
+  `annotate_element` and `define_attribute` keep the same. What cannot be kept is refused before
+  anything is written, and the refusal names it with its line and its repair: an id used twice, an
+  id that is not an XML name, text where BPMN has none, an unknown element in the middle of text,
+  or an element that was kept inside a parent the change makes anew. The ids inside kept elements,
+  and those references name without an element having them, count as taken for new elements.
 - **Layout.** By default (`layout: true`) the edited process is laid out again with the same
   layouter and lane fix as `create_process`: positions set by hand in that process are lost; text
   annotations and data objects follow their element, and those with no shape yet (a model that

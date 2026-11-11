@@ -81,6 +81,13 @@ declare module 'bpmn-moddle' {
     $attrs?: Record<string, unknown>;
     /** A property by qualified name, known (`bioc:fill`, `color:border-color`) or not. */
     get?(name: string): unknown;
+    set?(name: string, value: unknown): void;
+    /** The type's descriptor: its properties by qualified name (`bpmn:messageRef`). */
+    $descriptor?: {
+      /** A generic element: content of a namespace bpmn-moddle has no descriptor for. */
+      isGeneric?: boolean;
+      propertiesByName: Record<string, { name: string; isMany?: boolean; isReference?: boolean } | undefined>;
+    };
     /** `bpmn:Definitions` → `bpmndi:BPMNDiagram` → `bpmndi:BPMNPlane` (DI, read by `render-svg.ts`). */
     diagrams?: ModdleElement[];
     plane?: ModdleElement;
@@ -108,15 +115,31 @@ declare module 'bpmn-moddle' {
     error?: { message: string };
     element?: ModdleElement;
     property?: string;
+    /** The id an unresolved reference names. */
+    value?: unknown;
+  }
+
+  /** A reference as read: `property` (qualified) of `element` names the element with the id `id`. */
+  export interface ModdleReference {
+    element: ModdleElement;
+    property: string;
+    id: string;
   }
 
   export interface Moddle {
     fromXML(
       xml: string,
       typeName?: string,
-    ): Promise<{ rootElement: ModdleElement; warnings: ModdleWarning[] }>;
+    ): Promise<{
+      rootElement: ModdleElement;
+      warnings: ModdleWarning[];
+      references: ModdleReference[];
+      elementsById: Record<string, ModdleElement>;
+    }>;
     toXML(element: ModdleElement, options?: unknown): Promise<{ xml: string }>;
     create(type: string, attrs?: Record<string, unknown>): ModdleElement;
+    /** The packages (namespaces) this moddle has a descriptor for. */
+    getPackages(): { uri: string; prefix: string }[];
   }
 
   export function BpmnModdle(packages?: Record<string, unknown>, options?: unknown): Moddle;

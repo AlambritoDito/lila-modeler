@@ -12,6 +12,7 @@
  */
 import {
   AnnotationContentLossError,
+  describeContentLoss,
   ATTRIBUTE_TYPES,
   ELEMENT_CATEGORIES,
   annotatableElements,
@@ -27,7 +28,7 @@ import {
   type Annotations,
   type AttributeDefinition,
 } from '../bpmn/index.js';
-import { agentToolMessages, type Locale } from '../messages/index.js';
+import { agentToolMessages, messages, type Locale } from '../messages/index.js';
 import { definitionList, readElements, withModelXml, type LilaTarget } from './agent-tools.js';
 import { lilaWritten, openLilaProcess, writeLilaProject } from './input.js';
 
@@ -206,7 +207,7 @@ export async function defineLilaAttribute(request: DefineAttributeRequest): Prom
     try {
       next = await writeAttributeDefinitions(xml, definitions, (value) => drops(value.elementId, value.ref, value.value));
     } catch (error) {
-      if (error instanceof AnnotationContentLossError) throw new Error(T.contentLoss(error.detail));
+      if (error instanceof AnnotationContentLossError) throw new Error(T.contentLoss(describeContentLoss(error.issues, messages(locale).cli)));
       throw error;
     }
     if (!dryRun) written = lilaWritten(lila, await writeLilaProject(lila, withModelXml(lila.document, lila.process.slug, next), locale));

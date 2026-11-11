@@ -779,8 +779,20 @@ mismo desde una terminal.
   no suman 1, con los flujos a corregir.
 - **Lo que no se toca se queda**: documentación, anotaciones `lila:` (RACI, referencias, atributos
   extendidos), extensiones de otros fabricantes, las anotaciones de texto, objetos de datos y grupos
-  que ninguna operación nombra, otros pools y flujos de mensaje. Un modelo que el lector BPMN no puede leer completo se rechaza en vez de
-  reescribirse con algo de menos.
+  que ninguna operación nombra, otros pools y flujos de mensaje. También lo que el lector BPMN no
+  sabe interpretar de un modelo importado: una referencia a un id que ningún elemento tiene
+  (`messageRef="Message_1"` de un export de Bizagi, `triso:unspecified`) se escribe tal como
+  estaba, y un elemento que no es BPMN donde está (el `<LoopCounter>` de Bizagi, un elemento de
+  otro fabricante fuera de `extensionElements`) vuelve, literal, al mismo padre; en un modelo así
+  el contenido de las extensiones de otros fabricantes también se conserva literal, después de los
+  elementos `lila:` del mismo `extensionElements`; la salida es siempre UTF-8, declare lo que
+  declare el archivo. `annotate_element` y `define_attribute`
+  conservan lo mismo. Lo que no se puede conservar se rechaza antes de escribir nada, y el rechazo
+  lo nombra con su línea y su arreglo: un id usado dos veces, un id que no es un nombre XML, texto
+  donde BPMN no lo admite, un elemento desconocido en medio de un texto, o un elemento que se
+  conservaba dentro de un padre que el cambio hace de nuevo. Los ids que hay dentro de lo
+  conservado, y los que las referencias nombran sin que ningún elemento los tenga, cuentan como
+  ocupados para los elementos nuevos.
 - **Maquetado.** Por defecto (`layout: true`) el proceso editado se maqueta de nuevo con el mismo
   maquetador y el mismo arreglo de carriles que `create_process`: se pierden las posiciones puestas a
   mano en ese proceso; las anotaciones de texto y los objetos de datos siguen a su elemento, y los

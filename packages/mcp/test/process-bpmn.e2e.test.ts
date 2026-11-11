@@ -133,3 +133,38 @@ test('#632: A.3.0 is refused as it is, and kept for documentation with allowUnsi
   expect(blank.isError).toBe(true);
   expect(blank.text).toMatch(/^put_process_bpmn: `bpmn` is empty/);
 }, 120_000);
+
+test('#724: annotate_element and edit_process write the Bizagi exports that bpmn-moddle reads with warnings', async () => {
+  // A.4.0 and B.1.0 name messages and data stores the export left out; B.2.0 has <LoopCounter>, which is not BPMN.
+  for (const name of ['A.4.0', 'B.1.0', 'B.2.0']) {
+    const project = `writeback-${name}.lila`;
+    await answer('create_project', { path: project, name: `MIWG ${name}`, bpmn: bizagi(name), allowUnsimulatable: true });
+    const source = readFileSync(bizagi(name), 'utf8');
+    const kept = source.match(/(?:messageRef|dataStoreRef)="[^"]+"|<LoopCounter>0<\/LoopCounter>/g) ?? [];
+    expect(kept.length).toBeGreaterThan(0);
+    const before = await answer<{ xml: string; processId: string }>('get_process_bpmn', { project });
+    const task = /<(?:task|userTask|serviceTask)\b[^>]*\bid="([^"]+)"/.exec(before.xml.slice(before.xml.indexOf(`<process id="${before.processId}"`)))![1]!;
+
+    await answer('annotate_element', { project, elementId: task, documentation: 'Checked by an agent.' });
+    const edited = await answer<{ dryRun: boolean }>('edit_process', { project, operations: [{ op: 'rename', id: task, name: 'Renamed by an agent' }], layout: false });
+    expect(edited.dryRun).toBe(false);
+
+    const after = (await answer<{ xml: string }>('get_process_bpmn', { project })).xml;
+    expect(after).toContain('Checked by an agent.');
+    expect(after).toContain('name="Renamed by an agent"');
+    const count = (text: string, piece: string): number => text.split(piece).length - 1;
+    for (const piece of new Set(kept)) expect(count(after, piece), piece).toBe(count(source, piece));
+  }
+
+  // What cannot be carried is refused by name, in the caller's language, and nothing is written.
+  const twice = readFileSync(bizagi('A.1.0'), 'utf8').replace('</process>', '<task id="Task_twice" /><task id="Task_twice" /></process>');
+  await answer('create_project', { path: 'twice.lila', name: 'Twice', bpmn: twice, allowUnsimulatable: true });
+  const bytes = readFileSync(join(cwd, 'twice.lila'));
+  const refused = await call('edit_process', { project: 'twice.lila', operations: [{ op: 'rename', id: 'Task_twice', name: 'x' }] });
+  expect(refused.isError).toBe(true);
+  expect(refused.text).toMatch(/line \d+: <task> repeats the id "Task_twice" of an earlier element, .*give one of the two an id of its own/);
+  const rechazado = await call('annotate_element', { project: 'twice.lila', elementId: 'Task_twice', documentation: 'x', locale: 'es' });
+  expect(rechazado.isError).toBe(true);
+  expect(rechazado.text).toMatch(/línea \d+: <task> repite el id "Task_twice" de un elemento anterior/);
+  expect(readFileSync(join(cwd, 'twice.lila')).equals(bytes)).toBe(true);
+}, 120_000);

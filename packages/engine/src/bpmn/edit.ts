@@ -7,8 +7,9 @@
  * loaded), so everything they do not touch is written back as it was read: documentation, `lila:`
  * extension elements (RACI, references, extended attributes), other vendors' extensions, text
  * annotations, data objects, other pools and message flows. Any model can be edited, not only one
- * `create_process` made: one drawn in the app or imported from Bizagi too. A document `bpmn-moddle`
- * could not read completely (it would drop content when writing) is refused.
+ * `create_process` made: one drawn in the app or imported from Bizagi too. What `bpmn-moddle`
+ * cannot interpret is carried to the output (#724, `preserve.ts`); a document with content that
+ * cannot be carried is refused, naming it.
  *
  * All or none: every operation is checked and applied in order on the tree in memory; then the
  * result is validated with `validateBpmnXml`. Any problem (a bad operation, or a validation error
@@ -28,6 +29,7 @@ import { z } from 'zod';
 
 import lila from './lila.moddle.json' with { type: 'json' };
 import { isNCName, marcarExportador } from './ids.js';
+import { ContentLossError, describeContentLoss, readLossless } from './preserve.js';
 import {
   associationsOf,
   attachData,
@@ -1864,17 +1866,20 @@ export async function editBpmn(xml: string, operations: unknown, options: EditBp
   const ops = readOperations(operations, C, shapeIssues);
   if (ops.length === 0) fail(C, shapeIssues);
 
-  const moddle = BpmnModdle({ lila });
-  const { rootElement, warnings } = await moddle.fromXML(xml);
-  if (warnings.length > 0) {
-    const detail = warnings.map((w) => w.message).join('; ');
-    fail(C, [{ op: null, path: 'bpmn', message: C.editContentLoss(detail) }]);
-  }
+  // What bpmn-moddle cannot interpret is carried to the output (#724); what cannot be is named.
+  const contentLoss = (error: unknown): never => {
+    if (!(error instanceof ContentLossError)) throw error;
+    return fail(C, [{ op: null, path: 'bpmn', message: C.editContentLoss(describeContentLoss(error.issues, C)) }]);
+  };
+  const read = await readLossless(xml).catch(contentLoss);
+  const { moddle, root: rootElement } = read;
   const definitions = rootElement as unknown as El;
   const process = mainProcess(definitions, options.processId);
   if (process === undefined) fail(C, [{ op: null, path: 'bpmn', message: C.outlineNoProcess() }]);
 
   const editor = new Editor(moddle, definitions, process, C, options.scenario, options.scenarioName ?? 'as-is.scenario.json');
+  // Ids the file has where the tree does not show them (#724): no new element may take one.
+  for (const id of read.reserved) editor.used.add(id);
   editor.incremental = options.layout === false;
   editor.callTargets = options.callTargets;
   editor.noteSeated();
@@ -1916,8 +1921,7 @@ export async function editBpmn(xml: string, operations: unknown, options: EditBp
     }
     if (links.some((link) => link.$type === 'bpmn:MessageFlow' && touched(link))) editor.diagram.routeMessages(definitions);
   }
-  const { xml: raw } = await moddle.toXML(rootElement, { format: true });
-  const out = marcarExportador(raw);
+  const out = marcarExportador(await read.write({ removed: editor.removed }).catch(contentLoss));
 
   // Only errors the edit brought in count: a model may already carry some (it is still editable).
   const scenarios = options.scenarios === undefined ? undefined : [...options.scenarios];
