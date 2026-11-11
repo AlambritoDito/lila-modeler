@@ -962,6 +962,44 @@ nothing, as on a throw event (R-THR-2); `W-ELEMENTO-SIN-PARAMETROS` does not app
   replications and is omitted if fewer than two are available. Every DES event closes
   atomically: a signal raised from `onEvent` takes effect before the next event, not between
   completing a task and walking its instantaneous outgoing flows. *(test: LILA-029)*
+- **R-ARR-11 — A part of the process a case can never leave (#727).** Only when the scenario
+  has no `run.duration` (with it, R-ARR-3 stops the run anyway and a stuck case is in flight at
+  the cut). Before the first event, the lint and `core/` (`packages/engine/src/core/endless.ts`)
+  look at the flattened graph, every embedded sub-process included:
+  - a token can move along every sequence flow except one leaving an exclusive gateway whose
+    weight under R-XOR-1…5 is exactly 0 (an explicit `probability: 0`, or the remainder of 0
+    left to an undeclared flow), and one leaving an inclusive gateway whose `probability` is 0
+    and which is not its R-OR-3 fallback. A gateway with `conditions` on any outgoing flow, or
+    whose weights add up to 0 (`E-XOR-SUMA-CERO`), keeps all of its flows. A task or sub-process
+    can also move to each of its boundary events;
+  - a way out is an end, a terminate, a node with no outgoing flow, and any node inside an
+    embedded sub-process that has a boundary event of its own or on an enclosing one;
+  - a node is reachable from a start that generates arrivals (R-ARR-1). A converging parallel
+    or inclusive gateway with two or more incoming flows waits for specific tokens of the same
+    case (every input, R-AND-2; the branches its matching fork activated, R-OR-5), so it is
+    passed only when every input is certain to carry one: when, for some start, all its inputs
+    are reached unconditionally, that is along flows and parallel splits, never out of a
+    diverging exclusive, inclusive or event-based gateway, never along a boundary event and
+    never out of a node an interrupting boundary event (its own or an enclosing sub-process's)
+    can divert. Otherwise the reachability stops at that join.
+  If a reachable node has no path to a way out and lies on a cycle a token can go round (one
+  that never waits at a join that is not passed), a case that gets there cycles forever and the
+  run would never stop, so it is error `E-CICLO-SIN-SALIDA`. A case that can only end up waiting
+  at a join is not reported: the heap still empties. The message names the first such node and,
+  when there is one, the gateway whose ways out have probability 0, each by name
+  with its id (the bare id without a name); the lint cites `elements.<gatewayId>`, or
+  `run.duration` without a gateway. A process with a terminate and any fork (a parallel or
+  inclusive gateway with two or more outgoing flows, or a non-interrupting boundary event) is
+  never flagged, because a terminate on another branch can end the case.
+
+  This is not a general guarantee that a run ends. It only reads probabilities of exactly 0; a
+  case that never ends for any other reason (a timer or event that never fires, a join that
+  waits forever, a loop whose exit depends on data or on `conditions` that are never met) is
+  not caught and behaves as in 1.0.0. Nor is a cycle reached only through a converging parallel
+  or inclusive gateway that is not passed: for example, a parallel split where one branch goes
+  through an exclusive choice into the join, followed by a cycle whose exits have probability 0.
+  Such a run behaves as in 1.0.0 too. Zero-time cycles in runs with `run.duration` are still
+  R-TOK-7's. *(test: #727)*
 
 ---
 
@@ -1390,6 +1428,7 @@ Errors (they abort; validation errors are returned in `errors[]`, runtime errors
 | `E-CAMPO-NO-APLICA` | field declared on an element that does not admit it (R4, R5, R14; `errorProbability` off an error boundary, §9.3; `instances` off a multi-instance task, R-MI-1) |
 | `E-CAL-VACIO` | calendar with no intervals, a calendar whose every opening falls on one of its own holidays (R-CAL-14, cites `calendars.<name>`), or empty intersection of calendars (cites the task) |
 | `E-SIN-PARADA` | neither `run.duration` nor any `triggerCount` |
+| `E-CICLO-SIN-SALIDA` | without `run.duration`, a node a case can reach but never leave, because every way out has probability 0 (R-ARR-11); the lint cites `elements.<gatewayId>` (or `run.duration`) and `core/` repeats the check before the first event |
 | `E-BUCLE-SIN-SALIDA` | `loop.probability: 1` on a task whose loop marker has no `loopMaximum`: the loop never ends (R-LOOP-2); the lint cites `elements.<id>.loop.probability` and `core/` repeats the check before the first event |
 | `E-RESERVADO` | reserved field (§15, exact text in R-RES-2) |
 
@@ -1692,6 +1731,7 @@ lint or the `core/` guard catches it (unifying them requires touching `core/`; s
 | R-ARR-7 | warm-up | LILA-027 |
 | R-ARR-8 | replications and 95% CI; `n` and conditional KPIs | LILA-027, #356 |
 | R-ARR-9, R-ARR-10 | public aggregate and cancellation | LILA-029, #356 |
+| R-ARR-11 | a part of the process a case can never leave, without `run.duration` | #727 |
 | R-REC-1 … R-REC-3 | pools, defaults and FIFO `(enabled, seq)` | LILA-033 (defaults: LILA-013) |
 | R-REC-4, R-REC-5 | atomic AND with no partial holding; no deadlock | LILA-034 |
 | R-REC-6 | OR selection | LILA-035 |

@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { checkDistribution } from './core/distributions.js';
 import { poolCapacityBound } from './core/sim.js';
 import { neverOpens } from './core/calendar.js';
+import { endlessCycleMessage, findEndlessCycle } from './core/endless.js';
 import type { ProcessIR } from './core/ir.js';
 import { coded, messages, type Catalog, type Locale, type ZodMessages } from './messages/index.js';
 
@@ -540,6 +541,7 @@ export type ScenarioProblemCode =
   | 'E-SUBPROC-PARAMETRO'
   | 'E-TIMER-RECURSO'
   | 'E-SIN-PARADA'
+  | 'E-CICLO-SIN-SALIDA'
   | 'E-XOR-SUMA-CERO'
   | 'E-BUCLE-SIN-SALIDA'
   | 'W-SIN-SEED'
@@ -1149,6 +1151,19 @@ export function validateScenario(
       severity: 'error',
       message: M['E-SIN-PARADA']('run.duration'),
     });
+  } else {
+    // R-ARR-11 (#727): without `run.duration`, a region a case can enter and never leave (every
+    // way out has probability 0) would never let the run stop. The path is the gateway to fix
+    // when there is one; otherwise the stop that is missing.
+    const cycle = findEndlessCycle(ir, scenario);
+    if (cycle !== undefined) {
+      problems.push({
+        code: 'E-CICLO-SIN-SALIDA',
+        path: cycle.gatewayId === undefined ? 'run.duration' : `elements.${cycle.gatewayId}`,
+        severity: 'error',
+        message: endlessCycleMessage(ir, cycle, locale),
+      });
+    }
   }
 
   // R-DEG-4 — sin `seed` la corrida usa 1: sigue siendo determinista, pero el escenario no dice

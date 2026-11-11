@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="UTF-8"?><bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="urn:qa727"><bpmn:process id="P"><bpmn:startEvent id="Start"/><bpmn:sequenceFlow id="f0" sourceRef="Start" targetRef="MI"/>
+<bpmn:task id="MI" name="Batch item"><bpmn:multiInstanceLoopCharacteristics isSequential="true"><bpmn:loopCardinality>1000</bpmn:loopCardinality></bpmn:multiInstanceLoopCharacteristics></bpmn:task>
+<bpmn:sequenceFlow id="f1" sourceRef="MI" targetRef="End"/><bpmn:endEvent id="End"/></bpmn:process></bpmn:definitions>

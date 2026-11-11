@@ -298,7 +298,9 @@ export function registerAgentTools(
         '`current`: false when the model or the scenario it ran changed after the run; a change in ' +
         'only an `extends` parent does not count) and its extended ' +
         '`attributes` (the definitions `annotate_element` can fill in, with `appliesTo` and ' +
-        '`options`; null when the model cannot be read back whole). Call it first on an existing ' +
+        '`options`; null when the model cannot be read back whole), plus `problems`: the entries ' +
+        'it could not use (an unreadable scenario or run, a file outside the layout), each ' +
+        '`{ file, message }`, which every write keeps as they are. Call it first on an existing ' +
         'file. Like `lila project show --json`.',
       inputSchema: z.object({ project: projectSchema, locale: localeSchema }),
       annotations: { readOnlyHint: true },

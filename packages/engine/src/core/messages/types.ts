@@ -58,6 +58,11 @@ export interface CoreCodeMessages {
   /** R-LOOP-2: `probability: 1` on a task whose loop marker has no `loopMaximum`. */
   'E-BUCLE-SIN-SALIDA/elemento': (nodeId: string) => string;
 
+  /* --- core/endless.ts (R-ARR-11, #727) ------------------------------ */
+  /** Subjects are the node's name with its id in parentheses, or the bare id. */
+  'E-CICLO-SIN-SALIDA/gateway': (entry: string, gateway: string) => string;
+  'E-CICLO-SIN-SALIDA/elemento': (entry: string) => string;
+
   /* --- core/resources.ts (internal guards) -------------------------- */
   'E-REC-LIBERACION': (requestId: string) => string;
   'E-REC-SOLICITUD-DUPLICADA': (requestId: string) => string;

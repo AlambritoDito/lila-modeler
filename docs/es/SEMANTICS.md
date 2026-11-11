@@ -966,6 +966,46 @@ nada, como en un evento de lanzamiento (R-THR-2); `W-ELEMENTO-SIN-PARAMETROS` no
   y se omite si hay menos de dos. Cada evento DES se cierra atómicamente: una señal activada desde
   `onEvent` surte efecto antes del siguiente evento, no entre completar una tarea y recorrer sus
   flujos salientes instantáneos. *(prueba: LILA-029)*
+- **R-ARR-11 — Una parte del proceso de la que un caso nunca puede salir (#727).** Solo cuando
+  el escenario no tiene `run.duration` (con ella, R-ARR-3 detiene la corrida de todos modos y un
+  caso atascado queda en curso al corte). Antes del primer evento, el lint y `core/`
+  (`packages/engine/src/core/endless.ts`) miran el grafo aplanado, con todos los subprocesos
+  embebidos:
+  - un token puede avanzar por todo sequence flow salvo uno que sale de un gateway exclusivo
+    cuyo peso según R-XOR-1…5 es exactamente 0 (una `probability: 0` explícita, o el residuo 0
+    que recibe un flujo sin declarar), y uno que sale de un gateway inclusivo con `probability`
+    0 que no es su respaldo de R-OR-3. Un gateway con `conditions` en alguna salida, o cuyos
+    pesos suman 0 (`E-XOR-SUMA-CERO`), conserva todas sus salidas. Una tarea o un subproceso
+    también puede pasar a cada uno de sus eventos adjuntos;
+  - una salida es un end, un terminate, un nodo sin flujo saliente y cualquier nodo dentro de un
+    subproceso embebido que tenga un evento adjunto propio o en uno que lo contenga;
+  - un nodo es alcanzable desde un start que genera llegadas (R-ARR-1). Un gateway paralelo o
+    inclusivo convergente con dos o más flujos entrantes espera tokens concretos del mismo caso
+    (todas las entradas, R-AND-2; las ramas que activó su fork emparejado, R-OR-5), así que solo
+    se atraviesa cuando cada entrada recibe uno con certeza: cuando, para algún start, todas sus
+    entradas se alcanzan incondicionalmente, es decir, por flujos y bifurcaciones paralelas,
+    nunca saliendo de un gateway exclusivo, inclusivo o de eventos divergente, nunca por un
+    evento adjunto y nunca saliendo de un nodo que un evento adjunto interruptor (propio o de un
+    subproceso que lo contenga) puede desviar. Si no, el alcance se detiene en ese join.
+  Si un nodo alcanzable no tiene camino hasta una salida y está en un ciclo que un token puede
+  recorrer (uno que nunca espera en un join que no se atraviesa), un caso que llega ahí da
+  vueltas para siempre y la corrida no se detendría nunca: es error `E-CICLO-SIN-SALIDA`. Un caso
+  que solo puede acabar esperando en un join no se informa: el heap se vacía igual. El mensaje
+  nombra el primer nodo de ese tipo y, si lo hay, el gateway cuyas salidas tienen
+  probabilidad 0, cada uno por su nombre con el id (el id solo si no tiene nombre); el lint cita
+  `elements.<gatewayId>`, o `run.duration` si no hay gateway. Un proceso con un terminate y
+  alguna bifurcación (un gateway paralelo o inclusivo con dos o más salidas, o un evento adjunto
+  no interruptor) nunca se marca, porque un terminate en otra rama puede terminar el caso.
+
+  No es una garantía general de que la corrida termine. Solo lee probabilidades exactamente 0;
+  un caso que nunca termina por cualquier otra razón (un temporizador o evento que nunca dispara,
+  un join que espera para siempre, un bucle cuya salida depende de datos o de `conditions` que
+  nunca se cumplen) no se detecta y se comporta como en la 1.0.0. Tampoco un ciclo al que solo se
+  llega por un gateway paralelo o inclusivo convergente que no se atraviesa: por ejemplo, una
+  bifurcación paralela en la que una rama pasa por una elección exclusiva antes del join, seguida
+  de un ciclo cuyas salidas tienen probabilidad 0. Esa corrida también se comporta como en la
+  1.0.0. Los ciclos de tiempo cero en corridas con `run.duration` siguen siendo de R-TOK-7.
+  *(prueba: #727)*
 
 ---
 
@@ -1390,6 +1430,7 @@ Errores (abortan; los de validación se devuelven en `errors[]`, los de ejecuci�
 | `E-CAMPO-NO-APLICA` | campo declarado en un elemento que no lo admite (R4, R5, R14; `errorProbability` fuera de un borde de error, §9.3; `instances` fuera de una tarea multi-instancia, R-MI-1) |
 | `E-CAL-VACIO` | calendario sin intervalos, calendario cuyas aperturas caen todas en sus propios festivos (R-CAL-14, cita `calendars.<nombre>`), o intersección de calendarios vacía (cita la tarea) |
 | `E-SIN-PARADA` | ni `run.duration` ni ningún `triggerCount` |
+| `E-CICLO-SIN-SALIDA` | sin `run.duration`, un nodo al que un caso puede llegar pero del que nunca puede salir, porque todas las salidas tienen probabilidad 0 (R-ARR-11); el lint cita `elements.<gatewayId>` (o `run.duration`) y `core/` repite la comprobación antes del primer evento |
 | `E-BUCLE-SIN-SALIDA` | `loop.probability: 1` en una tarea cuyo marcador de bucle no tiene `loopMaximum`: el bucle nunca termina (R-LOOP-2); el lint cita `elements.<id>.loop.probability` y `core/` repite la comprobación antes del primer evento |
 | `E-RESERVADO` | campo reservado (§15, texto exacto en R-RES-2) |
 
@@ -1690,6 +1731,7 @@ guardia de `core/` (unificarlos toca `core/`; ver R-CAL-10).
 | R-ARR-7 | warmup | LILA-027 |
 | R-ARR-8 | replicaciones e IC 95 %; `n` y KPI condicionales | LILA-027, #356 |
 | R-ARR-9, R-ARR-10 | agregado público y cancelación | LILA-029, #356 |
+| R-ARR-11 | una parte del proceso de la que un caso nunca puede salir, sin `run.duration` | #727 |
 | R-REC-1 … R-REC-3 | pools, defaults y FIFO `(enabled, seq)` | LILA-033 (defaults: LILA-013) |
 | R-REC-4, R-REC-5 | AND atómico sin retención parcial; sin deadlock | LILA-034 |
 | R-REC-6 | selección OR | LILA-035 |

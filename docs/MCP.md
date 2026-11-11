@@ -98,7 +98,7 @@ JSON Schema as resources, and the guide's flow as the prompt `interview-to-proce
 - **`get_project({ project, locale? })`** lists what a `.lila` holds, writing nothing: its
   processes, their scenarios and their saved runs, current or stale. `project` must be a `.lila`
   file, as in `patch_scenario`. Returns
-  `{ file, name, formatVersion, processes }`.
+  `{ file, name, formatVersion, processes, problems }`.
 - **`get_scenario({ project, process?, scenario, resolved?, locale? })`** reads one scenario as
   stored, or resolved through `extends`, with the validator's notes, writing nothing. Returns
   `{ file, process, entry, revision, resolved, scenario, runnable, notes }`.
@@ -192,7 +192,9 @@ A `.lila` (`docs/PROJECT_FORMAT.md`) is accepted wherever a tool takes a model (
 byte as it was. Call `get_project` first on a file that already exists, instead of finding its
 processes, scenarios and runs through the errors of other tools.
 
-- **`get_project`** returns `{ file, name, formatVersion, processes }`. `formatVersion` is 2 for a
+- **`get_project`** returns `{ file, name, formatVersion, processes, problems }`. `problems` lists
+  the entries the file holds but could not use (`{ file, message }`: an unreadable scenario or run,
+  a file outside the layout); every write keeps them byte for byte (#725). `formatVersion` is 2 for a
   repository of several processes and 1 otherwise. Each process has `slug` (what `process` takes),
   `name`, `processId` (its `bpmn:process`), `modelRevision`, `elements` (flow nodes: tasks, events,
   gateways; `null` when the model cannot be read), `scenarios` (`entry`, `name`, `revision`,

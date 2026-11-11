@@ -144,7 +144,7 @@ mismo pipeline (`loadResolvedScenario`, `validateScenario`, `writeJsonAtomic`).
 - **`get_project({ project, locale? })`** (#628) — lista lo que tiene un `.lila` sin escribir nada:
   sus procesos, sus escenarios y sus corridas guardadas, vigentes u obsoletas. `project` tiene que
   ser un archivo `.lila`, como en `patch_scenario`. Devuelve
-  `{ file, name, formatVersion, processes }`.
+  `{ file, name, formatVersion, processes, problems }`.
 - **`get_scenario({ project, process?, scenario, resolved?, locale? })`** (#628) — lee un escenario
   como está guardado, o resuelto por `extends`, con las notas del validador, sin escribir nada.
   Devuelve `{ file, process, entry, revision, resolved, scenario, runnable, notes }`.
@@ -223,7 +223,10 @@ de `patch_scenario`. Las reglas son las de la CLI (`docs/CLI.md`, «Un `.lila` c
 a byte como estaba. Llama primero a `get_project` sobre un archivo que ya existe, en vez de
 descubrir sus procesos, escenarios y corridas por los errores de otras tools.
 
-- **`get_project`** devuelve `{ file, name, formatVersion, processes }`. `formatVersion` es 2 para
+- **`get_project`** devuelve `{ file, name, formatVersion, processes, problems }`. `problems` lista
+  las entradas que el archivo tiene pero no pudo usar (`{ file, message }`: un escenario o una
+  corrida ilegible, un archivo fuera de la estructura); toda escritura las conserva byte a byte
+  (#725). `formatVersion` es 2 para
   un repositorio de varios procesos y 1 si no. Cada proceso trae `slug` (lo que recibe `process`),
   `name`, `processId` (su `bpmn:process`), `modelRevision`, `elements` (nodos de flujo: tareas,
   eventos, compuertas; `null` si el modelo no se puede leer), `scenarios` (`entry`, `name`,

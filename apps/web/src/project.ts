@@ -1,8 +1,8 @@
 import { resolveScenarioPath } from '@lila-modeler/engine/schema';
 import { marcarExportador } from '@lila-modeler/engine/bpmn';
 import type { ProcessIR } from '@lila-modeler/engine';
-import { decodeLila, processesOf, ProjectFormatError, readProjectDocument } from '@lila-modeler/engine/project';
-import type { ProcessDocument } from '@lila-modeler/engine/project';
+import { decodeLilaArchive, encodeLila, processesOf, ProjectFormatError, readProjectDocument } from '@lila-modeler/engine/project';
+import type { LilaPreserved, ProcessDocument } from '@lila-modeler/engine/project';
 import type { ProjectErrorCode } from '@lila-modeler/engine/project';
 import type { ProjectDocument, ProjectSessionStore, ProjectStore, ScenarioDocument } from './store/ProjectStore';
 import { strings } from './i18n';
@@ -49,16 +49,38 @@ export function readProject(value: unknown): ProjectDocument {
 }
 
 /**
+ * What the last `.lila` read of each project kept beside its document (RM-01 § 1.4, #725): the
+ * entries it could not use (an unreadable scenario or run, a file outside the layout), by project
+ * id. In memory only — the document is what reaches `localStorage`, and bytes cannot go there — so
+ * `encodeProject` writes them back on every save to a file, and a reload loses them.
+ */
+const conservadas = new Map<string, LilaPreserved>();
+
+/**
  * `decodeLila` with the same localized wording as `readProject` — the only way this app should
  * open a `.lila`. Calling `decodeLila` straight from a store bypasses the catalog and shows the
- * engine's English text.
+ * engine's English text. It also keeps what the archive held beside the document, for
+ * `encodeProject`.
  */
 export function readLila(bytes: Uint8Array): ProjectDocument {
+  let leido: ReturnType<typeof decodeLilaArchive>;
   try {
-    return decodeLila(bytes);
+    leido = decodeLilaArchive(bytes);
   } catch (error) {
     localizado(error);
   }
+  const { document, preserved } = leido;
+  if (Object.keys(preserved.entries).length > 0) conservadas.set(document.id, preserved);
+  else conservadas.delete(document.id);
+  return document;
+}
+
+/**
+ * `encodeLila` with what the last `readLila` of the same project kept beside it: what every save
+ * to a file writes, so an entry this version could not use survives it byte for byte (#725).
+ */
+export function encodeProject(doc: ProjectDocument): Uint8Array<ArrayBuffer> {
+  return encodeLila(doc, conservadas.get(doc.id) ?? null);
 }
 
 /**

@@ -223,6 +223,9 @@ export async function patchLilaScenario(request: PatchLilaScenarioRequest): Prom
 
   if (!isPlainObject(patchedRaw)) throw new Error(M.patchNotAnObject());
   const target = lilaScenarioEntryName(saveTo, locale);
+  // #725: an entry the reader could not use is kept byte for byte, never written over by a new scenario.
+  const archiveName = `${lila.root.slice(lila.file.length + 1)}${target}`;
+  if ((lila.document.problems ?? []).some((p) => p.file === archiveName)) throw new Error(M.patchTargetUnreadable(target));
   const parent = extendsFrom === undefined ? entry : findLilaScenario(lila, extendsFrom, locale);
   const delta = buildPatchDelta(patch, patchedRaw, locale);
   // Both entries live in the same folder of the archive, so `extends` is the parent's entry name.

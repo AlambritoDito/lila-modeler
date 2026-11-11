@@ -36,6 +36,7 @@ import {
   type CapacitySchedule,
 } from './calendar.js';
 import { sample, type Distribution } from './distributions.js';
+import { assertNoEndlessCycle } from './endless.js';
 import { Heap } from './heap.js';
 import type { ProcessIR, Node } from './ir.js';
 import { coded, coreMessages, type CoreCodeMessages, type Locale } from './messages/index.js';
@@ -701,6 +702,9 @@ export function runReplication(
   const calendars = assertSupportedCalendarScenario(scenario, locale);
   // ADR-033 R-LOOP-2: a loop that can never end is rejected before the first event.
   assertSupportedLoopScenario(ir, scenario, locale);
+  // R-ARR-11 (#727): without `run.duration`, a region a case can never leave would never let the
+  // run stop.
+  assertNoEndlessCycle(ir, scenario, locale);
 
   // Cache por `(nodeId, pools)`: una tarea AND con los mismos dos pools intersecta una vez, no
   // una vez por instancia. Con el mapa vacío ni siquiera se construye la clave.

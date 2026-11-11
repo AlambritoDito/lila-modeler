@@ -1,0 +1,28 @@
+{
+ "elements": {
+  "Start": {
+   "triggerCount": 300
+  },
+  "Work": {
+   "processingTime": {
+    "type": "constant",
+    "value": 60
+   }
+  },
+  "Repeat": {
+   "probability": 0.999
+  },
+  "Exit": {
+   "probability": 0.001
+  }
+ },
+ "version": 1,
+ "model": "crowd_p0.001.bpmn",
+ "name": "crowd_p0.001",
+ "run": {
+  "start": "2026-09-07T00:00:00+00:00",
+  "seed": 7,
+  "replications": 1,
+  "baseTimeUnit": "s"
+ }
+}

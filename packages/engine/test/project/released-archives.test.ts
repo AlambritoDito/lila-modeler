@@ -179,10 +179,10 @@ describe('the legacy loose-diagram archive (#613, #699)', () => {
       entries[LEGACY_MODEL] = entries['model.bpmn'] as Uint8Array;
     });
     const opened = decodeLila(bytes);
-    // The model read is still the archive's `model.bpmn`; the extra entry is dropped.
+    // The model read is still the archive's `model.bpmn`; the extra entry is reported and kept beside it.
     expect(opened.model.name).toBe('model.bpmn');
     expect(opened.scenarios['as-is.scenario.json']?.['model']).toBe(LEGACY_MODEL);
-    expect(opened.problems).toEqual([{ file: LEGACY_MODEL, message: expect.stringContaining('not part of the Lila project layout') }]);
+    expect(opened.problems).toEqual([{ file: LEGACY_MODEL, message: 'not understood by this version; kept as is.' }]);
     await expect(runScenario(opened as unknown as ProcessDocument, 'as-is.scenario.json')).rejects.toThrow(
       `the scenario points at ${LEGACY_MODEL}, but the active model is model.bpmn.`,
     );

@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="UTF-8"?><bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="urn:qa727"><bpmn:process id="P" isExecutable="true"><bpmn:startEvent id="Start"/><bpmn:sequenceFlow id="f0" sourceRef="Start" targetRef="Work"/><bpmn:task id="Work" name="Rework"/>
+<bpmn:sequenceFlow id="f1" sourceRef="Work" targetRef="G"/><bpmn:exclusiveGateway id="G" name="Ok?"/>
+<bpmn:sequenceFlow id="Repeat" sourceRef="G" targetRef="Work"/><bpmn:sequenceFlow id="Exit" sourceRef="G" targetRef="End"/><bpmn:endEvent id="End"/></bpmn:process></bpmn:definitions>

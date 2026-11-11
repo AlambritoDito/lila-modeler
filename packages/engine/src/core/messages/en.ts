@@ -44,6 +44,10 @@ export const coreEn: CoreCatalog = {
 
     'E-BUCLE-SIN-SALIDA/elemento': (nodeId) =>
       `${nodeId}: a loop with probability 1 and no loopMaximum never ends.`,
+    'E-CICLO-SIN-SALIDA/gateway': (entry, gateway) =>
+      `${entry}: a case that gets here can never end, because every way out of ${gateway} has probability 0, and without \`run.duration\` the run would never stop. Give a way out a probability above 0, or set \`run.duration\`.`,
+    'E-CICLO-SIN-SALIDA/elemento': (entry) =>
+      `${entry}: a case that gets here can never end, because every way out has probability 0, and without \`run.duration\` the run would never stop. Give a way out a probability above 0, or set \`run.duration\`.`,
 
     'E-REC-LIBERACION': (requestId) => `${requestId} has no active allocation.`,
     'E-REC-SOLICITUD-DUPLICADA': (requestId) => `the request ${requestId} already exists.`,

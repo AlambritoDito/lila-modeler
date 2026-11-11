@@ -856,5 +856,7 @@ export const es: Catalog = {
       'el patch no cambia nada, así que no se escribió nada: el escenario conserva su revisión y sus corridas siguen vigentes.',
     patchSameTarget: (target) =>
       `${target} ya tiene este escenario, así que no se escribió nada: conserva su revisión y sus corridas siguen vigentes.`,
+    patchTargetUnreadable: (target) =>
+      `${target} es una entrada del archivo que no se pudo leer (mira los problemas del proyecto); se conserva tal cual, así que saveTo no la reemplaza. Elige otro nombre, o arregla o quita la entrada a mano.`,
   },
 };

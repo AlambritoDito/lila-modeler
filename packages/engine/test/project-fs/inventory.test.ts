@@ -93,6 +93,7 @@ describe('lilaProjectInventory', () => {
           attributes: [],
         },
       ],
+      problems: [],
     });
     expect(readFileSync(file).equals(bytes)).toBe(true);
   });

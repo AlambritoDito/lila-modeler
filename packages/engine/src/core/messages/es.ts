@@ -53,6 +53,10 @@ export const coreEs: CoreCatalog = {
 
     'E-BUCLE-SIN-SALIDA/elemento': (nodeId) =>
       `${nodeId}: un bucle con probabilidad 1 y sin loopMaximum nunca termina.`,
+    'E-CICLO-SIN-SALIDA/gateway': (entry, gateway) =>
+      `${entry}: un caso que llega aquí nunca puede terminar, porque todas las salidas de ${gateway} tienen probabilidad 0, y sin \`run.duration\` la corrida no se detendría nunca. Da a una salida una probabilidad mayor que 0, o define \`run.duration\`.`,
+    'E-CICLO-SIN-SALIDA/elemento': (entry) =>
+      `${entry}: un caso que llega aquí nunca puede terminar, porque todas sus salidas tienen probabilidad 0, y sin \`run.duration\` la corrida no se detendría nunca. Da a una salida una probabilidad mayor que 0, o define \`run.duration\`.`,
 
     'E-REC-LIBERACION': (requestId) => `${requestId} no tiene una asignación activa.`,
     'E-REC-SOLICITUD-DUPLICADA': (requestId) => `ya existe la solicitud ${requestId}.`,

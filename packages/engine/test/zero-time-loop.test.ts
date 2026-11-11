@@ -10,7 +10,7 @@ function run(mode: string, locale = 'en') {
   }));
 }
 
-test.each(['xor', 'xor-no-duration', 'missing', 'missing-no-duration', 'event-timer', 'event-message', 'boundary', 'disabled', 'warmup', 'replications'])(
+test.each(['xor', 'missing', 'event-timer', 'event-message', 'boundary', 'disabled', 'warmup', 'replications'])(
   '#368: %s aborts with a diagnostic, never timeout or OOM', (mode) => {
     const result = run(mode);
     expect(result.error).toMatch(/^E-LIMITE-SIN-AVANCE: .*case 1, replication 0, time 0 s:.*100000/);
@@ -19,6 +19,14 @@ test.each(['xor', 'xor-no-duration', 'missing', 'missing-no-duration', 'event-ti
     if (mode === 'replications') expect(result.emitted).toBeGreaterThan(0);
   },
 );
+
+// #727 (R-ARR-11): without `run.duration` the exit of probability 0 is caught before the first event.
+test.each(['xor-no-duration', 'missing-no-duration'])('%s is rejected statically, before any event', (mode) => {
+  const result = run(mode);
+  expect(result.error).toMatch(/^E-CICLO-SIN-SALIDA: Gateway: .*every way out of Gateway has probability 0/);
+  expect(result.process).toBeUndefined();
+  expect(result.maxReplication).toBe(0);
+});
 
 test('the diagnostic is deterministic and localized', () => {
   expect(run('xor').error).toBe(run('xor').error);

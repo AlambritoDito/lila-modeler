@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="UTF-8"?><bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="urn:qa727"><bpmn:process id="P"><bpmn:startEvent id="Start"/><bpmn:sequenceFlow id="f0" sourceRef="Start" targetRef="SP"/>
+<bpmn:subProcess id="SP" name="Sub"><bpmn:startEvent id="SS"/><bpmn:sequenceFlow id="s0" sourceRef="SS" targetRef="W"/><bpmn:task id="W" name="Inner"/><bpmn:sequenceFlow id="s1" sourceRef="W" targetRef="SE"/><bpmn:endEvent id="SE"/></bpmn:subProcess>
+<bpmn:sequenceFlow id="f1" sourceRef="SP" targetRef="G"/><bpmn:exclusiveGateway id="G"/><bpmn:sequenceFlow id="Repeat" sourceRef="G" targetRef="SP"/><bpmn:sequenceFlow id="Exit" sourceRef="G" targetRef="End"/><bpmn:endEvent id="End"/></bpmn:process></bpmn:definitions>

@@ -614,6 +614,8 @@ export interface McpMessages {
   patchNoChange: () => string;
   /** `patch_scenario` with `saveTo` whose target already holds the candidate (#627). */
   patchSameTarget: (target: string) => string;
+  /** `patch_scenario` with `saveTo` naming an entry the file holds but could not read (#725). */
+  patchTargetUnreadable: (target: string) => string;
 }
 
 export interface Catalog {

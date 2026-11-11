@@ -8,7 +8,7 @@ import { beforeAll, describe, expect, test } from 'vitest';
 import { parseBpmn } from '../../src/bpmn/index.js';
 import { simulate } from '../../src/index.js';
 import { ScenarioSchema } from '../../src/scenario.js';
-import { decodeLila, encodeLila, lilaEntryNames } from '../../src/project/index.js';
+import { decodeLila, decodeLilaArchive, encodeLila, lilaEntryNames } from '../../src/project/index.js';
 import type { ProjectDocument, StoredRun } from '../../src/project/index.js';
 
 /**
@@ -102,13 +102,17 @@ describe('the .lila container', () => {
     expect(Object.keys(opened.scenarios)).toEqual([AS_IS, TO_BE]);
   });
 
-  test('a file that is not part of the layout is reported and dropped', () => {
-    const opened = decodeLila(rebuilt((entries) => { entries['notes.md'] = strToU8('# notes'); }));
+  test('a file that is not part of the layout is reported and kept beside the document (#725)', () => {
+    const bytes = rebuilt((entries) => { entries['notes.md'] = strToU8('# notes'); });
+    const opened = decodeLila(bytes);
     expect(opened.problems).toEqual([
-      { file: 'notes.md', message: expect.stringContaining('not part of the Lila project layout') },
+      { file: 'notes.md', message: 'not understood by this version; kept as is.' },
     ]);
-    // Dropped, not carried: saving again writes the five entries of the layout and nothing else.
+    // Not inside the document: encoding the document alone writes the layout and nothing else…
     expect([...lilaEntryNames(encodeLila(opened))]).not.toContain('notes.md');
+    // …and with what the archive kept beside it, the note goes back, byte for byte.
+    const { document, preserved } = decodeLilaArchive(bytes);
+    expect(strFromU8(unzipSync(encodeLila(document, preserved))['notes.md']!)).toBe('# notes');
   });
 
   test('an archive without a manifest is not a project', () => {

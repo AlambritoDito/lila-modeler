@@ -1,0 +1,32 @@
+{
+ "elements": {
+  "Start": {
+   "triggerCount": 50,
+   "interTriggerTimer": {
+    "type": "constant",
+    "value": 1
+   }
+  },
+  "W": {
+   "processingTime": {
+    "type": "constant",
+    "value": 30
+   }
+  },
+  "Repeat": {
+   "probability": 1
+  },
+  "Exit": {
+   "probability": 0
+  }
+ },
+ "version": 1,
+ "model": "tp_subproc.bpmn",
+ "name": "tp_subproc",
+ "run": {
+  "start": "2026-09-07T00:00:00+00:00",
+  "seed": 7,
+  "replications": 1,
+  "baseTimeUnit": "s"
+ }
+}

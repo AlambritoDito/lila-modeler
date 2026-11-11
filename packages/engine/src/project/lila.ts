@@ -10,11 +10,14 @@
  *   <name>.scenario.json       the raw ScenarioDocument, one per scenario, `extends` untouched
  *   runs/<id>.result.json      the full StoredRun
  *
- * Anything else in the archive (`notes.md`, `attachments/…`) is REPORTED and DROPPED: it lands in
- * `document.problems` when opening and is not written back. Keeping it would mean carrying opaque
- * bytes inside `ProjectDocument`, which travels through `structuredClone` over IPC and through
- * `JSON.stringify` into the browser's `localStorage` mirror — neither survives a `Uint8Array`
- * honestly. Saying so out loud beats pretending the round-trip is lossless. See
+ * Anything else in the archive (`notes.md`, `attachments/…`), and a scenario or run that could not
+ * be read, is KEPT, byte for byte, and written back by the next save (RM-01 § 1.4, § 2.4, #725) —
+ * but beside the document, never inside it: `decodeLilaArchive` returns those entries as
+ * `LilaPreserved`, and `encodeLila` takes them back. `ProjectDocument` travels through
+ * `structuredClone` over IPC and through `JSON.stringify` into the browser's `localStorage` mirror,
+ * and neither carries a `Uint8Array` honestly. Each kept entry is reported in `problems` ("… kept as
+ * is"); operating-system litter (`__MACOSX/`, `.DS_Store`, `Thumbs.db`) and the writers' own
+ * leftovers (`*.tmp-*`, `*.prev-*`, `*.lock`) are dropped without a word. See
  * `docs/PROJECT_FORMAT.md`.
  *
  * Output is deterministic — fixed mtime, canonical entry order — so two saves of the same
@@ -102,6 +105,104 @@ function assertSafeEntryName(name: string): void {
   }
 }
 
+/**
+ * The bytes a `.lila` held that are not part of the document (RM-01 § 1.4, § 5.3), kept beside it
+ * so the next `encodeLila` writes them back. Never put inside `ProjectDocument`: it would have to
+ * cross IPC and the browser's `localStorage`, which cannot carry bytes.
+ */
+export interface LilaPreserved {
+  /**
+   * Entries kept as read and written back unchanged, by entry name: entries this build does not
+   * understand, and scenarios and runs that could not be read (#725).
+   */
+  readonly entries: Readonly<Record<string, Uint8Array>>;
+  /** The bytes each catalog object was read from, by entry name. Always empty in format versions 1 and 2. */
+  readonly objects: Readonly<Record<string, Uint8Array>>;
+  /**
+   * The slugs the manifest listed when the entries were read. A kept entry under
+   * `processes/<slug>/` of a listed slug that is no longer a process left with that process.
+   */
+  readonly slugs: readonly string[];
+  /**
+   * The model id of each process the manifest listed, by slug (version 2 only): how a save that
+   * folds the repository back to one process tells which process stayed when the document no
+   * longer names its slug (#725).
+   */
+  readonly models?: Readonly<Record<string, string>>;
+}
+
+/** Operating-system litter and the writers' own leftovers: dropped without a report (RM-01 § 1.4). */
+function isLitter(name: string): boolean {
+  const segments = name.split('/');
+  const base = segments[segments.length - 1] ?? '';
+  return (
+    segments[0] === '__MACOSX' ||
+    segments.includes('.DS_Store') ||
+    base === 'Thumbs.db' ||
+    base.includes('.tmp-') ||
+    base.includes('.prev-') ||
+    base.endsWith('.lock')
+  );
+}
+
+/** What the readers of every version collect besides the processes. */
+interface Extras {
+  readonly problems: ProjectProblem[];
+  readonly entries: Record<string, Uint8Array>;
+  /** Slugs listed by the manifest (none in version 1). */
+  readonly slugs: readonly string[];
+  /** Model id of each listed process, by slug (version 2 only). */
+  readonly models?: Readonly<Record<string, string>>;
+}
+
+function newExtras(manifests: readonly ProcessManifest[] = []): Extras {
+  // Without a prototype: an entry may be called `__proto__` or `constructor`, and is kept like any other.
+  const entries = Object.create(null) as Record<string, Uint8Array>;
+  const slugs = manifests.map((m) => m.slug);
+  if (manifests.length === 0) return { problems: [], entries, slugs };
+  return { problems: [], entries, slugs, models: Object.fromEntries(manifests.map((m) => [m.slug, m.model.id])) };
+}
+
+/**
+ * An entry that is not part of a process: litter, or an entry this build does not understand
+ * (RM-01 § 1.4). Everything but litter is kept.
+ */
+function readOtherEntry(name: string, raw: Uint8Array, extras: Extras): void {
+  if (isLitter(name)) return;
+  extras.entries[name] = raw;
+  extras.problems.push({ file: name, message: 'not understood by this version; kept as is.' });
+}
+
+/** A scenario entry's content, or an error saying why it cannot be one. A draft only has to be a JSON object. */
+function readScenarioEntry(raw: Uint8Array): ScenarioDocument {
+  const parsed: unknown = JSON.parse(strFromU8(raw));
+  if (!isPlainObject(parsed)) throw new Error('the content is not a JSON object.');
+  return parsed;
+}
+
+/** A run entry's content, or an error saying why it cannot be one. */
+function readRunEntry(raw: Uint8Array): StoredRun {
+  const parsed: unknown = JSON.parse(strFromU8(raw));
+  const problem = runProblem(parsed);
+  if (problem !== null) throw problem;
+  return parsed as unknown as StoredRun;
+}
+
+/**
+ * A scenario or run of the layout that could not be read (#725): excluded from the document and
+ * explained, as before, and also kept byte for byte, so a save never deletes what a person may
+ * still fix by hand — nor leaves the scenarios that extend it dangling.
+ */
+function keepUnreadable(name: string, raw: Uint8Array, error: unknown, extras: Extras): void {
+  extras.entries[name] = raw;
+  const why = (error as Error).message;
+  extras.problems.push({ file: name, message: `${why}${why.endsWith('.') ? '' : '.'} Not loaded; kept as is.` });
+}
+
+function preservedOf(extras: Extras): LilaPreserved {
+  return { entries: extras.entries, objects: {}, slugs: extras.slugs, ...(extras.models === undefined ? {} : { models: extras.models }) };
+}
+
 /** `true` for a flat `<name>.scenario.json` at the root of the archive. */
 function isScenarioEntry(name: string): boolean {
   return !name.includes('/') && name.endsWith(SCENARIO_SUFFIX) && name.length > SCENARIO_SUFFIX.length;
@@ -145,16 +246,20 @@ function json(value: unknown): Uint8Array {
 }
 
 /**
- * The canonical entry order: manifest, model, scenarios sorted by name, runs sorted by id. It is
- * what makes two encodings of the same document byte-identical, and it is the order
+ * The canonical entry order: manifest, model, scenarios sorted by name, runs sorted by id, and
+ * last the entries `preserved` keeps, attachments first and then the rest, each sorted by name. It
+ * is what makes two encodings of the same document byte-identical, and it is the order
  * `lilaEntryNames` reports.
+ *
+ * `preserved` is what `decodeLilaArchive` returned for the archive this document came from (or
+ * `null`): its entries are written back as `placeKept` places them, never dropped.
  */
-export function encodeLila(document: ProjectDocument): Uint8Array<ArrayBuffer> {
+export function encodeLila(document: ProjectDocument, preserved: LilaPreserved | null = null): Uint8Array<ArrayBuffer> {
   const valid = readProjectDocument(document);
-  const files: Record<string, [Uint8Array, { mtime: Date; level: 6 }]> = {};
-  const put = (name: string, bytes: Uint8Array): void => {
+  const files: Record<string, [Uint8Array, { mtime: Date; level: 0 | 6 }]> = {};
+  const put = (name: string, bytes: Uint8Array, level: 0 | 6 = 6): void => {
     assertSafeEntryName(name);
-    files[name] = [bytes, { mtime: FIXED_MTIME, level: 6 }];
+    files[name] = [bytes, { mtime: FIXED_MTIME, level }];
   };
   /** One process's version 1 layout under `prefix` (`''` for a version 1 archive). */
   const putProcess = (prefix: string, process: Pick<ProcessDocument, 'model' | 'scenarios' | 'runs'>): void => {
@@ -177,16 +282,130 @@ export function encodeLila(document: ProjectDocument): Uint8Array<ArrayBuffer> {
     }
   };
 
-  if (valid.processes === undefined || valid.processes.length === 0) {
+  const version = valid.processes === undefined || valid.processes.length === 0 ? 1 : 2;
+  let slugs: string[] = [];
+  if (version === 1) {
     put(MANIFEST_FILE, json(manifestOf(valid)));
     putProcess('', valid);
   } else {
     put(MANIFEST_FILE, json({ ...repositoryManifestOf(valid), engine: engineVersion }));
+    slugs = processesOf(valid).map((p) => p.slug);
     for (const process of processesOf(valid)) putProcess(`${PROCESSES_DIR}/${process.slug}/`, process);
+  }
+
+  if (preserved !== null) {
+    const written = (name: string): boolean => Object.hasOwn(files, name);
+    for (const [name, bytes] of placeKept(preserved, version, slugs, survivorOf(valid, preserved), written)) {
+      // Attachments are stored, not compressed (RM-01 § 1.5): they usually are already.
+      put(name, bytes, name.startsWith('attachments/') ? 0 : 6);
+    }
   }
   // `zipSync` allocates a plain `ArrayBuffer`; the cast only narrows `ArrayBufferLike`, which the
   // DOM's `BlobPart` refuses because a `SharedArrayBuffer` would also satisfy it.
   return zipSync(files) as Uint8Array<ArrayBuffer>;
+}
+
+/** The process folder and the layout name of `name` (`processes/<slug>/<rest>`, `<slug>` in `slugs`), when `<rest>` is a scenario or run. */
+function processEntry(name: string, slugs: readonly string[]): { readonly slug: string; readonly rest: string } | null {
+  const slug = slugs.find((s) => name.startsWith(`${PROCESSES_DIR}/${s}/`));
+  if (slug === undefined) return null;
+  const rest = name.slice(PROCESSES_DIR.length + slug.length + 2);
+  return isScenarioEntry(rest) || isRunEntry(rest) ? { slug, rest } : null;
+}
+
+/**
+ * The slug, in `preserved`, of the one process a version 1 `document` holds: the slug it still
+ * names (`document.process`, as a one-process repository is read), else the only listed process
+ * whose model has the same id. `undefined` when neither tells.
+ */
+function survivorOf(document: ProjectDocument, preserved: LilaPreserved): string | undefined {
+  if (document.process !== undefined) return document.process.slug;
+  const same = Object.entries(preserved.models ?? {}).filter(([, id]) => id === document.model.id);
+  return same.length === 1 ? same[0]![0] : undefined;
+}
+
+/**
+ * Where each kept entry goes in the archive `encodeLila` writes, in canonical order (attachments
+ * first, then by name). Nothing is dropped:
+ *
+ * - An unreadable scenario or run belongs to its process and moves with it when the layout folds or
+ *   unfolds (#725): from the root of a version 1 archive to `processes/<slug>/` of the first process
+ *   when the project becomes a repository, and from `processes/<survivor>/` to the root when a
+ *   repository goes back to one process (`survivor`, `survivorOf`; when it cannot be told, nothing
+ *   moves). One whose process was deleted is refused, never dropped (see below).
+ * - Any other entry stays where it is, and one the document now writes itself (a scenario fixed
+ *   since) gives way to it.
+ *
+ * Refused, with the entry named, instead of losing or misreading anything: an unreadable entry of a
+ * deleted process, a moved entry that would land on one the project writes or keeps, and an orphaned scenario, run or model under a folder
+ * that is a process again, which would be read back as that process's own.
+ */
+function placeKept(
+  preserved: LilaPreserved,
+  version: 1 | 2,
+  slugs: readonly string[],
+  survivor: string | undefined,
+  written: (name: string) => boolean,
+): [string, Uint8Array][] {
+  const fromRepository = preserved.slugs.length > 0;
+  const placed = new Map<string, string>();
+  for (const name of Object.keys(preserved.entries)) {
+    let target = name;
+    let owned = false;
+    if (!fromRepository && (isScenarioEntry(name) || isRunEntry(name))) {
+      // The version 1 process is the first one of the document.
+      if (version === 2) target = `${PROCESSES_DIR}/${slugs[0]}/${name}`;
+      owned = true;
+    } else if (fromRepository) {
+      const entry = processEntry(name, preserved.slugs);
+      if (entry !== null && version === 2 && slugs.includes(entry.slug)) owned = true;
+      if (entry !== null && version === 1 && entry.slug === survivor) {
+        target = entry.rest;
+        owned = true;
+      }
+      // Its process was deleted: a slug never changes, so it is gone, not renamed. Refused rather
+      // than dropped, or left behind where a later process could take its folder.
+      const deleted = version === 2 ? entry !== null && !slugs.includes(entry.slug) : entry !== null && survivor !== undefined && entry.slug !== survivor;
+      if (deleted && entry !== null) {
+        throw new ProjectFormatError(
+          'LILA-ENTRY-PATH',
+          `the process "${entry.slug}" is no longer in the project, but it holds ${JSON.stringify(name)}, kept as is because it could not be read; deleting the process would lose it. Fix or remove that entry by hand first.`,
+        );
+      }
+    }
+    const moved = target !== name;
+    const other = placed.get(target);
+    if ((moved && written(target)) || other !== undefined) {
+      throw new ProjectFormatError(
+        'LILA-ENTRY-PATH',
+        `the entry ${JSON.stringify(moved ? name : other)}, kept as is because it could not be read, moves with its process to ${JSON.stringify(target)}, which the project already holds; fix or remove one of them by hand.`,
+      );
+    }
+    if (!owned) {
+      // Not this process's own: in a version 2 archive, one under a listed process's folder that
+      // looks like the layout would be read back as that process's model, scenario or run.
+      const slash = target.startsWith(`${PROCESSES_DIR}/`) ? target.indexOf('/', PROCESSES_DIR.length + 1) : -1;
+      const folder = slash > 0 ? target.slice(PROCESSES_DIR.length + 1, slash) : '';
+      const rest = target.slice(slash + 1);
+      const layout = rest === MODEL_FILE || isScenarioEntry(rest) || isRunEntry(rest);
+      if ((version === 2 && slugs.includes(folder) && layout) || written(target)) {
+        throw new ProjectFormatError(
+          'LILA-ENTRY-PATH',
+          `${JSON.stringify(target)} is kept as is from a process that is no longer listed, and the project now writes a process there that would read it as its own. Choose another slug, or remove the entry by hand.`,
+        );
+      }
+    }
+    // The document writes this entry itself now: a scenario of this process fixed since.
+    if (written(target)) continue;
+    placed.set(target, name);
+  }
+  return [...placed]
+    .sort(([a], [b]) => {
+      const aa = a.startsWith('attachments/') ? 0 : 1;
+      const bb = b.startsWith('attachments/') ? 0 : 1;
+      return aa !== bb ? aa - bb : a < b ? -1 : a > b ? 1 : 0;
+    })
+    .map(([target, name]) => [target, preserved.entries[name] as Uint8Array]);
 }
 
 /** Entry names of a `.lila`, in the order the archive stores them. */
@@ -247,7 +466,7 @@ function readManifest(raw: Uint8Array, problems: ProjectProblem[]): Manifest | n
  * archive does not hold, that name can only mean the `model.bpmn` beside it, so the scenarios whose
  * `model` is exactly that name are retargeted too, as `procesoDelProyecto` does on «Save As» in the
  * web app. A scenario naming anything else, or naming an entry the archive does hold (which is
- * dropped as outside the layout), is left alone, so a genuinely different model is still refused
+ * outside the layout, and kept as is), is left alone, so a genuinely different model is still refused
  * when it runs, on this open and every later one. Revisions are not bumped: the scenarios describe
  * the same model as before.
  */
@@ -265,12 +484,28 @@ function projectModelOf<T extends { readonly model: { readonly name: string }; r
   return { ...process, model: { ...process.model, name: MODEL_FILE }, scenarios };
 }
 
+/** What `decodeLilaArchive` returns: the document, and the entries kept beside it. */
+export interface DecodedLila {
+  readonly document: ProjectDocument;
+  readonly preserved: LilaPreserved;
+}
+
 /**
  * Reads a `.lila`. Tolerant in exactly the same places as the folder reader: a broken scenario or
  * run is excluded and explained in `problems`, while a missing manifest or a missing `model.bpmn`
- * is fatal — without them there is no project and nothing to model.
+ * is fatal — without them there is no project and nothing to model. The document only: use
+ * `decodeLilaArchive` to keep the entries it could not use.
  */
 export function decodeLila(bytes: Uint8Array): ProjectDocument {
+  return decodeLilaArchive(bytes).document;
+}
+
+/**
+ * `decodeLila`, plus what the archive held besides the document (`LilaPreserved`): the entries
+ * outside the layout and the scenarios and runs that could not be read, for the next `encodeLila`
+ * to write back (#725).
+ */
+export function decodeLilaArchive(bytes: Uint8Array): DecodedLila {
   const entries = unzip(bytes);
   for (const name of Object.keys(entries)) assertSafeEntryName(name);
 
@@ -296,7 +531,8 @@ export function decodeLila(bytes: Uint8Array): ProjectDocument {
     throw new ProjectFormatError('LILA-NO-MODEL', `the archive has no "${MODEL_FILE}".`);
   }
 
-  const problems: ProjectProblem[] = [];
+  const extras = newExtras();
+  const problems = extras.problems;
   const manifest = readManifest(manifestRaw, problems);
   if (manifest === null) {
     throw new ProjectFormatError('LILA-MANIFEST', `"${MANIFEST_FILE}" could not be parsed.`);
@@ -311,26 +547,21 @@ export function decodeLila(bytes: Uint8Array): ProjectDocument {
     const raw = entries[name] as Uint8Array;
     if (isScenarioEntry(name)) {
       try {
-        const parsed: unknown = JSON.parse(strFromU8(raw));
-        if (!isPlainObject(parsed)) throw new Error('the content is not a JSON object.');
-        scenarios[name] = parsed;
+        scenarios[name] = readScenarioEntry(raw);
       } catch (error) {
-        problems.push({ file: name, message: (error as Error).message });
+        keepUnreadable(name, raw, error, extras);
       }
       continue;
     }
     if (isRunEntry(name)) {
       try {
-        const parsed: unknown = JSON.parse(strFromU8(raw));
-        const problem = runProblem(parsed);
-        if (problem !== null) throw problem;
-        runs.push(parsed as unknown as StoredRun);
+        runs.push(readRunEntry(raw));
       } catch (error) {
-        problems.push({ file: name, message: (error as Error).message });
+        keepUnreadable(name, raw, error, extras);
       }
       continue;
     }
-    problems.push({ file: name, message: 'not part of the Lila project layout; ignored and not written back.' });
+    readOtherEntry(name, raw, extras);
   }
 
   const process = projectModelOf(
@@ -349,7 +580,71 @@ export function decodeLila(bytes: Uint8Array): ProjectDocument {
     // encode/decode round-trip stop being an identity.
     ...(problems.length > 0 ? { problems } : {}),
   };
-  return readProjectDocument(document);
+  return { document: readProjectDocument(document), preserved: preservedOf(extras) };
+}
+
+/**
+ * The project id of a `.lila` and the entries it keeps beside its document (`LilaPreserved`), without
+ * decoding the document: only the manifest, the scenarios, the runs and the entries outside the
+ * layout are inflated, and the scenarios and runs only to tell the unreadable ones (#725), so a
+ * writer can carry them through (`writeLilaFile`) without building the document again. Throws a
+ * `ProjectFormatError` where `decodeLilaArchive` would on the container and the manifest.
+ */
+export function readLilaPreserved(bytes: Uint8Array): { readonly id: string; readonly preserved: LilaPreserved } {
+  const unzipOnly = (keep: (name: string) => boolean): Record<string, Uint8Array> => {
+    try {
+      return unzipSync(bytes, {
+        filter: (file) => {
+          assertSafeEntryName(file.name);
+          return keep(file.name);
+        },
+      });
+    } catch (error) {
+      if (error instanceof ProjectFormatError) throw error;
+      throw new ProjectFormatError('LILA-ZIP', `the file is not a readable .lila archive: ${(error as Error).message}`);
+    }
+  };
+  const manifestRaw = unzipOnly((name) => name === MANIFEST_FILE)[MANIFEST_FILE];
+  if (manifestRaw === undefined) {
+    throw new ProjectFormatError('LILA-NO-MANIFEST', `the archive has no "${MANIFEST_FILE}": it is not a .lila project.`);
+  }
+  const parsed = peekManifest(manifestRaw);
+  if (!isPlainObject(parsed) || typeof parsed.id !== 'string') {
+    throw new ProjectFormatError('LILA-MANIFEST', `"${MANIFEST_FILE}" does not describe a Lila project.`);
+  }
+  if (typeof parsed.version === 'number' && parsed.version > 2) {
+    throw new ProjectFormatError(
+      'LILA-MANIFEST',
+      `"${MANIFEST_FILE}" declares version ${parsed.version}; this reader understands versions 1 and 2.`,
+    );
+  }
+  const repository = parsed.version === 2;
+  const manifests = repository ? readRepositoryManifest(parsed) : [];
+  const slugs = manifests.map((m) => m.slug);
+  /** What `name` is in the layout: the part after its process folder, or `null` outside the layout. */
+  const inLayout = (name: string): string | null => {
+    if (!repository) return name;
+    const slug = slugs.find((s) => name.startsWith(`${PROCESSES_DIR}/${s}/`));
+    return slug === undefined ? null : name.slice(PROCESSES_DIR.length + slug.length + 2);
+  };
+  const skipped = (name: string): boolean => name === MANIFEST_FILE || name.endsWith('/') || inLayout(name) === MODEL_FILE;
+  const others = unzipOnly((name) => !skipped(name));
+  const extras = newExtras(manifests);
+  for (const name of Object.keys(others).sort()) {
+    const raw = others[name] as Uint8Array;
+    const rest = inLayout(name);
+    if (rest !== null && (isScenarioEntry(rest) || isRunEntry(rest))) {
+      try {
+        if (isScenarioEntry(rest)) readScenarioEntry(raw);
+        else readRunEntry(raw);
+      } catch (error) {
+        keepUnreadable(name, raw, error, extras);
+      }
+      continue;
+    }
+    readOtherEntry(name, raw, extras);
+  }
+  return { id: parsed.id, preserved: preservedOf(extras) };
 }
 
 function peekManifest(raw: Uint8Array): unknown {
@@ -398,12 +693,13 @@ export function readRepositoryManifest(parsed: Record<string, unknown>): Process
 /**
  * Reads a version 2 archive (ADR-029): each listed process from its `processes/<slug>/` folder,
  * with exactly the tolerance of the version 1 reader — a missing `model.bpmn` is fatal, a broken
- * scenario or run is excluded and explained, and anything outside the listed folders is reported
- * and dropped.
+ * scenario or run is excluded, explained and kept, and anything outside the listed folders is
+ * reported and kept (`readOtherEntry`).
  */
-function decodeRepository(parsed: Record<string, unknown>, entries: Record<string, Uint8Array>): ProjectDocument {
+function decodeRepository(parsed: Record<string, unknown>, entries: Record<string, Uint8Array>): DecodedLila {
   const manifests = readRepositoryManifest(parsed);
-  const problems: ProjectProblem[] = [];
+  const extras = newExtras(manifests);
+  const problems = extras.problems;
   const byPrefix = new Map(manifests.map((m) => [`${PROCESSES_DIR}/${m.slug}/`, {
     manifest: m,
     scenarios: {} as Record<string, ScenarioDocument>,
@@ -424,26 +720,21 @@ function decodeRepository(parsed: Record<string, unknown>, entries: Record<strin
     if (target !== undefined && rest === MODEL_FILE) continue;
     if (target !== undefined && isScenarioEntry(rest)) {
       try {
-        const scenario: unknown = JSON.parse(strFromU8(raw));
-        if (!isPlainObject(scenario)) throw new Error('the content is not a JSON object.');
-        target.scenarios[rest] = scenario;
+        target.scenarios[rest] = readScenarioEntry(raw);
       } catch (error) {
-        problems.push({ file: name, message: (error as Error).message });
+        keepUnreadable(name, raw, error, extras);
       }
       continue;
     }
     if (target !== undefined && isRunEntry(rest)) {
       try {
-        const run: unknown = JSON.parse(strFromU8(raw));
-        const problem = runProblem(run);
-        if (problem !== null) throw problem;
-        target.runs.push(run as unknown as StoredRun);
+        target.runs.push(readRunEntry(raw));
       } catch (error) {
-        problems.push({ file: name, message: (error as Error).message });
+        keepUnreadable(name, raw, error, extras);
       }
       continue;
     }
-    problems.push({ file: name, message: 'not part of the Lila repository layout; ignored and not written back.' });
+    readOtherEntry(name, raw, extras);
   }
 
   const processes: ProcessDocument[] = [...byPrefix].map(([prefix, { manifest, scenarios, runs }]) => projectModelOf({
@@ -465,5 +756,5 @@ function decodeRepository(parsed: Record<string, unknown>, entries: Record<strin
     runs: first.runs,
     ...(problems.length > 0 ? { problems } : {}),
   };
-  return readProjectDocument(withProcesses(base, processes, { repository: true }));
+  return { document: readProjectDocument(withProcesses(base, processes, { repository: true })), preserved: preservedOf(extras) };
 }
