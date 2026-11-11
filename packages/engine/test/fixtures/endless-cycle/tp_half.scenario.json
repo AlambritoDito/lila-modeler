@@ -1,0 +1,38 @@
+{
+ "elements": {
+  "Start": {
+   "triggerCount": 5000,
+   "interTriggerTimer": {
+    "type": "constant",
+    "value": 1
+   }
+  },
+  "Ok": {
+   "probability": 0.5
+  },
+  "Bad": {
+   "probability": 0.5
+  },
+  "W": {
+   "processingTime": {
+    "type": "constant",
+    "value": 30
+   }
+  },
+  "Repeat": {
+   "probability": 1
+  },
+  "Exit": {
+   "probability": 0
+  }
+ },
+ "version": 1,
+ "model": "tp_half.bpmn",
+ "name": "tp_half",
+ "run": {
+  "start": "2026-09-07T00:00:00+00:00",
+  "seed": 7,
+  "replications": 1,
+  "baseTimeUnit": "s"
+ }
+}

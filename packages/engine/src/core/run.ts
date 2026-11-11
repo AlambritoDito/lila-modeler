@@ -5,6 +5,7 @@
  * reloj, disco, red ni estado global. `core/` conserva cero dependencias externas (ADR-009).
  */
 
+import { assertNoEndlessCycle } from './endless.js';
 import type { ProcessIR } from './ir.js';
 import { coded, coreMessages, type Locale } from './messages/index.js';
 import { aggregateReplication, caseCycleTimes, saturationWarning, type PoolLoad } from './metrics.js';
@@ -271,6 +272,8 @@ export function simulate(ir: ProcessIR, scenario: SimScenario, options: Simulate
   assertSupportedErrorScenario(ir, scenario, locale);
   // ADR-033 R-LOOP-2: a loop that can never end.
   assertSupportedLoopScenario(ir, scenario, locale);
+  // R-ARR-11 (#727): without `run.duration`, a region a case can never leave.
+  assertNoEndlessCycle(ir, scenario, locale);
   // Contrato del event log (docs/RESULTS_FORMAT.md § 7): `result.log` solo se materializa cuando
   // nadie más se hizo cargo de las filas. Con `onEvent` el consumidor ya las recibe una a una —la
   // CLI las escribe directas a `log.csv`— y retenerlas otra vez duplicaría hasta 6 M de objetos.

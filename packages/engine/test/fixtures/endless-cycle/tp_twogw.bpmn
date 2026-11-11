@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="UTF-8"?><bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="urn:qa727"><bpmn:process id="P"><bpmn:startEvent id="Start"/><bpmn:sequenceFlow id="f0" sourceRef="Start" targetRef="W"/><bpmn:task id="W" name="Review"/><bpmn:sequenceFlow id="f1" sourceRef="W" targetRef="G1"/>
+<bpmn:exclusiveGateway id="G1" name="First check"/><bpmn:sequenceFlow id="a" sourceRef="G1" targetRef="G2"/><bpmn:sequenceFlow id="Exit1" sourceRef="G1" targetRef="End"/>
+<bpmn:exclusiveGateway id="G2" name="Second check"/><bpmn:sequenceFlow id="Back" sourceRef="G2" targetRef="W"/><bpmn:sequenceFlow id="Exit2" sourceRef="G2" targetRef="End"/><bpmn:endEvent id="End"/></bpmn:process></bpmn:definitions>

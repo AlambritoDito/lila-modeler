@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?><bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D" targetNamespace="urn:qa727"><bpmn:process id="P"><bpmn:startEvent id="Start"/><bpmn:sequenceFlow id="f0" sourceRef="Start" targetRef="Sp"/><bpmn:parallelGateway id="Sp"/>
+<bpmn:sequenceFlow id="a" sourceRef="Sp" targetRef="A"/><bpmn:sequenceFlow id="b" sourceRef="Sp" targetRef="T"/><bpmn:task id="A" name="Rework"/><bpmn:sequenceFlow id="a1" sourceRef="A" targetRef="G"/><bpmn:exclusiveGateway id="G"/><bpmn:sequenceFlow id="Repeat" sourceRef="G" targetRef="A"/><bpmn:sequenceFlow id="Exit" sourceRef="G" targetRef="J"/>
+<bpmn:intermediateCatchEvent id="T" name="Slow wait"><bpmn:timerEventDefinition/></bpmn:intermediateCatchEvent>
+<bpmn:sequenceFlow id="b2" sourceRef="T" targetRef="J"/><bpmn:parallelGateway id="J"/><bpmn:sequenceFlow id="f9" sourceRef="J" targetRef="End"/><bpmn:endEvent id="End"/></bpmn:process></bpmn:definitions>

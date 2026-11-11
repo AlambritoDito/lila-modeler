@@ -1,0 +1,38 @@
+{
+ "elements": {
+  "Start": {
+   "triggerCount": 200,
+   "interTriggerTimer": {
+    "type": "constant",
+    "value": 1
+   }
+  },
+  "A": {
+   "processingTime": {
+    "type": "constant",
+    "value": 5
+   }
+  },
+  "T": {
+   "processingTime": {
+    "type": "constant",
+    "value": 100000000
+   }
+  },
+  "Repeat": {
+   "probability": 0.99
+  },
+  "Exit": {
+   "probability": 0.01
+  }
+ },
+ "version": 1,
+ "model": "join_rework.bpmn",
+ "name": "join_rework",
+ "run": {
+  "start": "2026-09-07T00:00:00+00:00",
+  "seed": 7,
+  "replications": 1,
+  "baseTimeUnit": "s"
+ }
+}
