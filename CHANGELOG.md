@@ -3,6 +3,32 @@
 All notable changes to Lila Modeler are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semantic versioning.
 
+## [1.0.1] - 2026-11-11
+
+A patch for 1.0.0 with fixes only. It closes two ways a `.lila` could lose content without saying
+so, stops a run that could never end before it exhausts memory, and fixes the fit of the diagram
+in the Model tab. Results of models that ran on 1.0.0 are unchanged, and 1.0.0 opens every file
+1.0.1 writes.
+
+### Fixed
+
+- **A `.lila` keeps what it could not read (#725, #690)**: a scenario or run that fails to parse,
+  and any file the format does not know (a loose `notes.md`, an attachment), used to disappear on
+  the next write by the CLI, the MCP server, the desktop app («Save» and «Save as») or the web app.
+  They are now kept byte for byte, and they move with their process when a project goes from one
+  process to several or back. `lila project show` and the MCP `get_project` tool list them under
+  `problems`. A write that would have to overwrite or orphan a kept entry is refused and says
+  which entry and why; `scenario patch --save-to` no longer replaces an unreadable scenario.
+  In the browser, kept entries live in memory: after a page reload the restored session no longer
+  has them, so save before reloading (see `docs/PROJECT_FORMAT.md`).
+- **A cycle no case can leave is rejected before the run (#727)**: with no `run.duration`, a loop
+  whose every way out has probability 0 used to run until Node or the browser ran out of memory.
+  The scenario lint and the run now stop with `E-CICLO-SIN-SALIDA`, naming the element and the
+  gateway (R-ARR-11). Endless runs caused by something other than a probability of exactly 0
+  (conditions, timers or joins that never fire) are not detected and behave as in 1.0.0.
+- **Fit in the Model tab (#717)**: the fit left the start of the process hidden under «Validate
+  paths» and the align toolbar; it now fits the diagram below the canvas's floating top row.
+
 ## [1.0.0] - 2026-11-01
 
 The first stable version. It is 1.0.0-rc.1 with only the version changed: no bug was reported
