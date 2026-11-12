@@ -346,9 +346,8 @@ export async function rewriteCatalogReferences(
   xml: string,
   rewrite: (reference: CatalogReference) => string | null | undefined,
 ): Promise<{ readonly xml: string; readonly changed: number }> {
-  const moddle = BpmnModdle({ lila });
-  const { rootElement: root, warnings } = await moddle.fromXML(xml);
-  assertNoContentLoss(warnings);
+  const read = await readLossless(xml);
+  const { root } = read;
   let changed = 0;
   const seen = new Set<ModdleElement>();
   for (const el of walk(root)) {
@@ -382,11 +381,10 @@ export async function rewriteCatalogReferences(
       if (kept.has(signature(value))) removed.add(value);
       else kept.add(signature(value));
     }
-    if (removed.size > 0) keepExtensions(el, (value) => !removed.has(value));
+    if (removed.size > 0) keepExtensions(el, (value) => !removed.has(value), read.holds);
   }
   if (changed === 0) return { xml, changed };
-  const { xml: out } = await moddle.toXML(root, { format: true });
-  return { xml: out, changed };
+  return { xml: await read.write(), changed };
 }
 
 /** A `lila:attributeValue` and the id of the element that holds it. */

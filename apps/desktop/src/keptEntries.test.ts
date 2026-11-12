@@ -15,7 +15,8 @@ const XML = '<?xml version="1.0"?><bpmn:definitions xmlns:bpmn="http://www.omg.o
 /** The entries a desktop save must carry through untouched: unknown entries and an unreadable scenario (#725). */
 const KEPT: Record<string, string> = {
   'notes.md': '# Notes\n\nKept by every save.\n',
-  'maps/x.json': '{\n  "nodes": []\n}\n',
+  // Not `maps/`: a name RM-01 § 1.1 reserves makes the archive version 3, which moves the process into a folder.
+  'drafts/x.json': '{\n  "nodes": []\n}\n',
   'base.scenario.json': '{ "version": 1, ',
 };
 
