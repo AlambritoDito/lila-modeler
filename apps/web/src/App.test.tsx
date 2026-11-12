@@ -3759,6 +3759,58 @@ it('creating the first object of a version 2 project from the catalog panel asks
   expect(container.textContent).toContain(T.app.sinGuardar);
 });
 
+it('the catalog panel reports its own refusals: a file notice is not its banner, and a picker create leaves that notice alone (QA of #674, M2)', async () => {
+  await abrirDocumento(withCatalog(proyecto('p44', 'Front office') as ProjectDocument, [{ type: 'system', id: 'sys-pms', name: 'PMS', revision: 1 }]));
+  // A notice of the app's own, unrelated to the catalog: a save that failed.
+  vi.mocked(session.saveProject).mockRejectedValueOnce(new Error('E-DISCO-LLENO'));
+  await act(async () => mocks.changed());
+  await click(T.app.guardar);
+  expect(avisos('E-DISCO-LLENO')).toBeGreaterThan(0);
+  const antes = avisos('E-DISCO-LLENO');
+
+  // A picker's create (#93) does not wipe it, as before #674.
+  const creado = await enCatalogo((c) => c.crear('role', 'Receptionist'));
+  expect(await creado.resultado).toMatchObject({ name: 'Receptionist' });
+  expect(avisos('E-DISCO-LLENO')).toBe(antes);
+
+  // Nor is it the panel's «change refused» banner.
+  await act(async () => { botonCatalogo().click(); });
+  const error = () => panelCatalogo()!.querySelector('.catalogo-error');
+  expect(error()).toBeNull();
+  expect(panelCatalogo()!.textContent).not.toContain('E-DISCO-LLENO');
+
+  // A change the engine refuses is: a URL with no host passes the field's own check, not the engine's.
+  await elegirEnCatalogo('PMS');
+  const url = campoCatalogo(T.catalogo.panel.campos.url);
+  teclear(url, 'http://@nowhere');
+  await act(async () => { url.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
+  expect(error()?.getAttribute('role')).toBe('alert');
+  expect(error()!.textContent).toBe(T.catalogo.error('"url" must be an http or https URL.'));
+  expect(mocks.catalogo?.objetos.find((o) => o.id === 'sys-pms')).toEqual({ type: 'system', id: 'sys-pms', name: 'PMS', revision: 1 });
+  // The app's notice is still the app's, outside the panel, and the refusal did not join it.
+  expect(avisos('E-DISCO-LLENO')).toBe(antes);
+  expect(avisos(T.catalogo.error('"url" must be an http or https URL.'))).toBe(1);
+
+  // The next change that goes through clears the banner; reopening starts without one.
+  teclear(url, 'https://example.org/pms');
+  await act(async () => { url.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
+  expect(mocks.catalogo?.objetos.find((o) => o.id === 'sys-pms')).toMatchObject({ url: 'https://example.org/pms', revision: 2 });
+  expect(error()).toBeNull();
+  expect(avisos('E-DISCO-LLENO')).toBe(antes);
+});
+
+it('the catalog panel takes its link colour, focus ring and selection marker from --accent-tertiary, as `.enlace` does (QA of #674, S2)', () => {
+  const css = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), 'app.css'), 'utf8');
+  const reglas = css.split('\n').filter((linea) => linea.startsWith('.catalogo'));
+  expect(reglas.length).toBeGreaterThan(10);
+  expect(reglas.filter((r) => r.includes('--accent-primary'))).toEqual([]);
+  const regla = (selector: string): string => reglas.find((r) => r.startsWith(`${selector} {`) || r.includes(`, ${selector} {`))!;
+  expect(regla('.catalogo-enlace')).toContain('color: var(--accent-tertiary)');
+  expect(regla('.catalogo a:focus-visible')).toContain('outline: 2px solid var(--accent-tertiary)');
+  expect(regla(".catalogo-objeto[aria-current='true']")).toContain('var(--accent-tertiary)');
+  expect(/\n\.enlace \{[^}]*color: var\(--accent-tertiary\)/.test(css)).toBe(true);
+});
+
 it('the desktop autosave carries a rename made in the catalog panel (#674)', async () => {
   const v3 = withCatalog(proyecto('p43', 'Recepción') as ProjectDocument, [RECEPCIONISTA]);
   const puente = puenteRecuperacion(encodeLila(v3));

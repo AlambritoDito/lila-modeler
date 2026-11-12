@@ -65,7 +65,7 @@ interface Montado {
 }
 
 /** Mounts the panel over a catalog kept as `App.tsx` keeps it. `escaneos` is the index's source; `'pending'` before it is read. */
-function montar(inicial: ProjectDocument, escaneos: readonly ProcessScan[] | 'pending' | 'unavailable', preguntar: (q: { appVersion: string }) => Promise<boolean> = nunca): Montado {
+function montar(inicial: ProjectDocument, escaneos: readonly ProcessScan[] | 'pending' | 'unavailable', preguntar: (q: { appVersion: string }) => Promise<boolean> = nunca, espia?: () => void, error?: string): Montado {
   const contenedor = document.createElement('div');
   document.body.append(contenedor);
   const raiz = createRoot(contenedor);
@@ -97,7 +97,8 @@ function montar(inicial: ProjectDocument, escaneos: readonly ProcessScan[] | 'pe
       catalogo={catalogo}
       indice={indice}
       procesos={PROCESOS}
-      actualizar={(objeto, campos) => cambiar((d) => updateCatalogObject(d, { ...campos, id: objeto.id, type: objeto.type, baseRevision: objeto.revision }))}
+      error={error}
+      actualizar={(objeto, campos) => (espia?.(), cambiar((d) => updateCatalogObject(d, { ...campos, id: objeto.id, type: objeto.type, baseRevision: objeto.revision })))}
       puedeDeshacer={entrada !== null}
       onDeshacer={() => { if (entrada !== null) { setDoc(undoCatalogChange(doc, entrada)); setEntrada(null); } }}
       onIr={ir}
@@ -115,7 +116,11 @@ beforeEach(async () => {
   setLocale('en');
   // jsdom implements neither; what the browser does with the open state is all the panel needs here.
   HTMLDialogElement.prototype.showModal = function () { this.open = true; };
-  HTMLDialogElement.prototype.close = function () { this.open = false; };
+  // Closing a dialog takes the focus from whatever held it inside, as the browser does: the field blurs.
+  HTMLDialogElement.prototype.close = function () {
+    this.open = false;
+    if (document.activeElement instanceof HTMLElement && this.contains(document.activeElement)) document.activeElement.blur();
+  };
   ESCANEOS = await scanProcesses(PROCESOS, new Map());
 });
 afterEach(() => { for (const d of desmontar.splice(0)) d(); document.body.replaceChildren(); });
@@ -265,6 +270,119 @@ describe('catalog panel (#674)', () => {
     teclear(nombre, '   ');
     await salir(nombre);
     expect(estado().doc.catalog![0]).toMatchObject({ name: 'Receptionist', revision: 2 });
+  });
+
+  it('an empty name is refused out loud: invalid while typed, then the previous name comes back with the note (QA of #674, S4)', async () => {
+    const { dialogo, estado } = montar(V3, ESCANEOS);
+    await elegir(dialogo(), 'Receptionist');
+    const nombre = campo(detalle(dialogo()), P.nombre);
+    expect(nombre.getAttribute('aria-invalid')).toBeNull();
+    teclear(nombre, '   ');
+    expect(nombre.getAttribute('aria-invalid')).toBe('true');
+    expect(document.getElementById(nombre.getAttribute('aria-describedby')!)!.textContent).toBe(P.nombreVacio);
+    await tecla(nombre, 'Enter');
+    expect(nombre.value).toBe('Receptionist');
+    expect(nombre.getAttribute('aria-invalid')).toBeNull();
+    expect(document.getElementById(nombre.getAttribute('aria-describedby')!)!.textContent).toBe(P.nombreVacio);
+    expect(estado().doc.catalog![0]).toEqual(RECEPTIONIST);
+    // Typing again clears the note.
+    teclear(nombre, 'Receptionist 2');
+    expect(detalle(dialogo()).querySelector('.catalogo-aviso')).toBeNull();
+    // The same on leaving the field, and for an attribute's name.
+    teclear(nombre, '');
+    await salir(nombre);
+    expect(nombre.value).toBe('Receptionist');
+    expect(detalle(dialogo()).querySelector('.catalogo-aviso')!.textContent).toBe(P.nombreVacio);
+    await elegir(dialogo(), 'Welcome manual');
+    const atributo = campo(detalle(dialogo()), P.atributoNombre(1));
+    teclear(atributo, ' ');
+    expect(atributo.getAttribute('aria-invalid')).toBe('true');
+    await salir(atributo);
+    expect(atributo.value).toBe('Retention');
+    expect(estado().doc.catalog).toContainEqual(MANUAL);
+  });
+
+  it('Escape and «Close» discard what was typed and not confirmed: nothing is written, nothing to undo (QA of #674, M1)', async () => {
+    const conUnidad = { ...V3, catalog: [{ ...RECEPTIONIST, unitRef: 'unit-front' }, FRONT, MANUAL, RISK] };
+    const casos: Array<[string, (d: HTMLElement) => HTMLInputElement | HTMLTextAreaElement, string]> = [
+      ['Receptionist', (d) => campo(d, P.nombre), 'Oops'],
+      ['Receptionist', (d) => campo<HTMLTextAreaElement>(d, P.descripcion), 'Half a sentence'],
+      // An emptied picker clears its reference when it is left; not when the panel closes under it.
+      ['Receptionist', (d) => campo(d, P.campos.unitRef), ''],
+      ['Welcome manual', (d) => campo(d, P.campos.url), 'https://example.org/other'],
+      ['Welcome manual', (d) => campo(d, P.atributoNombre(1)), 'Kept for'],
+      ['Welcome manual', (d) => campo(d, P.atributoValor(1)), '9 years'],
+    ];
+    for (const [objeto, elCampo, texto] of casos) {
+      for (const salida of ['Escape', P.cerrar]) {
+        const actualizar = vi.fn();
+        const { dialogo, estado, cerrado } = montar(conUnidad, ESCANEOS, nunca, actualizar);
+        await elegir(dialogo(), objeto);
+        const c = elCampo(detalle(dialogo()));
+        teclear(c, texto);
+        expect(document.activeElement).toBe(c);
+        if (salida === 'Escape') await tecla(c, 'Escape');
+        else await act(async () => { boton(dialogo(), P.cerrar).click(); });
+        // A picker's first Escape closes its list; the second is the panel's.
+        if (cerrado.mock.calls.length === 0) await tecla(c, 'Escape');
+        expect(cerrado, `${objeto} / ${c.getAttribute('aria-label')} / ${salida}`).toHaveBeenCalledOnce();
+        expect(actualizar, `${objeto} / ${c.getAttribute('aria-label')} / ${salida}`).not.toHaveBeenCalled();
+        expect(estado().doc).toBe(conUnidad);
+      }
+    }
+  });
+
+  it('a press on «Close» does not take the focus from the field being typed in (QA of #674, M1)', async () => {
+    const { dialogo } = montar(V3, ESCANEOS);
+    const pulsacion = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    act(() => { boton(dialogo(), P.cerrar).dispatchEvent(pulsacion); });
+    expect(pulsacion.defaultPrevented).toBe(true);
+  });
+
+  it('the focus stays in the panel after «Add attribute», removing one and «Undo last catalog change» (QA of #674, S1)', async () => {
+    const { dialogo, estado } = montar(V3, ESCANEOS);
+    await elegir(dialogo(), 'Welcome manual');
+    teclear(campo(detalle(dialogo()), P.atributoNuevoNombre), 'Language');
+    const anadir = boton(detalle(dialogo()), P.atributoAnadir);
+    await act(async () => { anadir.focus(); anadir.click(); });
+    expect(estado().doc.catalog!.find((o) => o.id === 'doc-manual')!.attributes).toHaveLength(2);
+    expect(boton(detalle(dialogo()), P.atributoAnadir).disabled).toBe(true);
+    expect(document.activeElement).toBe(campo(detalle(dialogo()), P.atributoNuevoNombre));
+
+    const quitar = campo<HTMLButtonElement>(detalle(dialogo()), P.atributoQuitar(2));
+    await act(async () => { quitar.focus(); quitar.click(); });
+    expect(document.activeElement).toBe(campo(detalle(dialogo()), P.atributoNuevoNombre));
+
+    const deshacer = boton(dialogo(), T.catalogo.deshacer);
+    await act(async () => { deshacer.focus(); deshacer.click(); });
+    expect(boton(dialogo(), T.catalogo.deshacer).disabled).toBe(true);
+    expect(document.activeElement).toBe(campo(dialogo(), P.buscar));
+  });
+
+  it('a unit cannot take a unit under it as its parent: no cycles (QA of #674, S3)', async () => {
+    const habitaciones: CatalogObject = { type: 'unit', id: 'unit-rooms', name: 'Rooms', revision: 1, parentRef: 'unit-front' };
+    const piso: CatalogObject = { type: 'unit', id: 'unit-floor', name: 'Floor 2', revision: 1, parentRef: 'unit-rooms' };
+    const anexo: CatalogObject = { type: 'unit', id: 'unit-annex', name: 'Annex', revision: 1 };
+    const { dialogo } = montar({ ...V3, catalog: [FRONT, habitaciones, piso, anexo] }, []);
+    const opcionesDe = async (unidad: string): Promise<string[]> => {
+      await elegir(dialogo(), unidad);
+      const padre = campo(detalle(dialogo()), P.campos.parentRef);
+      await tecla(padre, 'ArrowDown');
+      const filas = [...detalle(dialogo()).querySelectorAll('[role="option"]')].map((o) => o.textContent ?? '');
+      await tecla(padre, 'Escape');
+      return filas;
+    };
+    expect(await opcionesDe('Front office')).toEqual(['Annex']);
+    expect(await opcionesDe('Rooms')).toEqual(['Annex', 'Front office']);
+    expect(await opcionesDe('Floor 2')).toEqual(['Annex', 'Front office', 'Rooms']);
+    expect(await opcionesDe('Annex')).toEqual(['Floor 2', 'Front office', 'Rooms']);
+  });
+
+  it('a refused change is reported in the panel, and only then (QA of #674, M2)', () => {
+    const sin = montar(V3, ESCANEOS);
+    expect(sin.dialogo().querySelector('.catalogo-error')).toBeNull();
+    const con = montar(V3, ESCANEOS, nunca, undefined, 'The catalog was not changed: no.');
+    expect(con.dialogo().querySelector('.catalogo-error[role="alert"]')!.textContent).toBe('The catalog was not changed: no.');
   });
 
   it('warns when a new name repeats one of the same type, and still lets it through', async () => {

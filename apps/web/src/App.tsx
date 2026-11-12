@@ -599,6 +599,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [deshacerCatalogo, setDeshacerCatalogo] = useState<CatalogUndoEntry | null>(null);
   /** #674: the catalog panel, a dialog mounted while open. */
   const [catalogoAbierto, setCatalogoAbierto] = useState(false);
+  /** #674: why the panel's last change was refused. Its own: `ioError` is the app's file notices. */
+  const [errorCatalogo, setErrorCatalogo] = useState<string | null>(null);
   /**
    * #674: the references of every process, read in the background while the panel is open (RM-01
    * § 4); `'pending'` until the first read finishes, so no count shows as zero before. The cache
@@ -984,10 +986,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * object, or `null` when nothing changed. A project opened while the question was up is not
    * touched.
    */
-  async function cambiarCatalogo(operar: (doc: ProjectDocument) => CatalogOperationResult | Promise<CatalogOperationResult>): Promise<CatalogObject | null> {
+  async function cambiarCatalogo(operar: (doc: ProjectDocument) => CatalogOperationResult | Promise<CatalogOperationResult>, enPanel = false): Promise<CatalogObject | null> {
     const leidos = extrasDelRepositorio.current;
     const antes = documentoDelCatalogo(leidos);
-    setIoError(null);
+    // #674: a change from the catalog panel reports its refusal in the panel, behind which the
+    // status bar cannot be seen; the pickers keep reporting through `ioError`, as before.
+    if (enPanel) setErrorCatalogo(null);
     try {
       const operado = await operar(antes);
       // The pickers only offer changes that rewrite no BPMN (an adoptable id); one that would is
@@ -1000,7 +1004,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       setDeshacerCatalogo(recordCatalogChange(antes, resultado));
       return resultado.object;
     } catch (e) {
-      setIoError(S.catalogo.error(e instanceof Error ? e.message : String(e)));
+      (enPanel ? setErrorCatalogo : setIoError)(S.catalogo.error(e instanceof Error ? e.message : String(e)));
       return null;
     }
   }
@@ -1021,6 +1025,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   /** #674: the catalog panel, from the File menu and ⌘K. Not over another modal, nor for a loose diagram (no catalog). */
   function abrirCatalogo(): void {
     if (suelto || ioBusy || karaoke || modelador === null || document.querySelector('dialog[open], .bienvenida') !== null) return;
+    setErrorCatalogo(null);
     setCatalogoAbierto(true);
   }
   /** #674: the slug each process is indexed by; a one-process project has no list, and its slug is the project's. */
@@ -3093,14 +3098,18 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         </div>
       </dialog>}
       {catalogoAbierto && catalogoPanel !== undefined && <CatalogPanel
-        catalogo={catalogoPanel}
+        catalogo={{
+          ...catalogoPanel,
+          crear: (tipo, nombre) => cambiarCatalogo((doc) => createCatalogObject(doc, { type: tipo, name: nombre }), true),
+          adoptar: (tipo, id) => cambiarCatalogo((doc) => adoptReference(doc, { type: tipo, ref: id }), true),
+        }}
         indice={indiceCatalogo}
         procesos={procesosDelCatalogo}
-        actualizar={(objeto, campos) => cambiarCatalogo((doc) => updateCatalogObject(doc, { ...campos, id: objeto.id, type: objeto.type, baseRevision: objeto.revision }))}
+        actualizar={(objeto, campos) => cambiarCatalogo((doc) => updateCatalogObject(doc, { ...campos, id: objeto.id, type: objeto.type, baseRevision: objeto.revision }), true)}
         puedeDeshacer={deshacerCatalogo !== null}
         onDeshacer={deshacerCambioCatalogo}
         onIr={(uso) => void irAUso(uso)}
-        error={ioError}
+        error={errorCatalogo}
         onCerrar={() => setCatalogoAbierto(false)}
       />}
       {bienvenida && <Bienvenida

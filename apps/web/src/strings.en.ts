@@ -2286,6 +2286,7 @@ export const en = {
       elige: 'Select an object to see its details and where it is used.',
       detalle: (nombre: string): string => `Details of ${nombre}`,
       nombre: 'Name',
+      nombreVacio: 'A name cannot be empty: the previous one is kept.',
       id: 'Id',
       tipoCampo: 'Type',
       descripcion: 'Description',

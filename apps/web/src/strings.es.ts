@@ -2221,6 +2221,7 @@ export const es: Strings = {
       elige: 'Elige un objeto para ver su detalle y dónde se usa.',
       detalle: (nombre: string): string => `Detalle de ${nombre}`,
       nombre: 'Nombre',
+      nombreVacio: 'El nombre no puede quedar vacío: se conserva el anterior.',
       id: 'Id',
       tipoCampo: 'Tipo',
       descripcion: 'Descripción',

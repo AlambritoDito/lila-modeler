@@ -13,7 +13,7 @@
  */
 import { CATALOG_TYPES, catalogKey, isKnownCatalogType, type CatalogAttribute, type CatalogFields, type CatalogObject, type CatalogUse, type KnownCatalogType, type ProcessUse } from '@lila-modeler/engine/project';
 import { useEffect, useId, useRef, useState } from 'react';
-import { groupCatalog, isProcessUse, repeatsName, usesOf, type CatalogIndexState } from './catalogo';
+import { groupCatalog, isProcessUse, repeatsName, unitDescendants, usesOf, type CatalogIndexState } from './catalogo';
 import { useStrings } from './i18n';
 import { SelectorCatalogo, type CatalogoPanel } from './SelectorCatalogo';
 
@@ -43,36 +43,47 @@ interface PropsCampo {
   etiqueta: string;
   valor: string;
   multilinea?: boolean;
-  /** Whether the text may be written; one that may not stays in the field, unwritten. */
-  valido?: (texto: string) => boolean;
-  /** A note under the field for the text it holds, or `null`. */
+  /**
+   * Why the text may not be written, or `null`. Such a text is never written: while it is in the
+   * field the field is `aria-invalid`, and leaving it puts back the value it had, with the reason.
+   */
+  invalido?: (texto: string) => string | null;
+  /** A note under the field for the text it holds, or `null`: a warning, the text is still written. */
   aviso?: (texto: string) => string | null;
+  /** `true` once the panel is closing: what was typed and not confirmed is then discarded, not written. */
+  descartar: { readonly current: boolean };
   onConfirmar: (texto: string) => void;
 }
 
 /** A text field that writes when it is left or on Enter (a single line), not while typing. */
-function CampoTexto({ etiqueta, valor, multilinea = false, valido, aviso, onConfirmar }: PropsCampo): React.JSX.Element {
+function CampoTexto({ etiqueta, valor, multilinea = false, invalido, aviso, descartar, onConfirmar }: PropsCampo): React.JSX.Element {
   const [borrador, setBorrador] = useState<string | null>(null);
+  /** Why the last text was not written; shown until the field is typed in again. */
+  const [rechazo, setRechazo] = useState<string | null>(null);
   const avisoId = useId();
   const texto = borrador ?? valor;
-  const nota = aviso?.(texto) ?? null;
+  const error = borrador !== null ? invalido?.(borrador) ?? null : null;
+  const nota = error ?? rechazo ?? aviso?.(texto) ?? null;
   const confirmar = (): void => {
-    if (borrador === null) return;
-    if (valido !== undefined && !valido(borrador)) return;
-    if (borrador !== valor) onConfirmar(borrador);
+    // Esc and «Close» take the focus away too (the dialog closes): that is not a confirmation.
+    if (borrador === null || descartar.current) return;
+    if (error !== null) setRechazo(error);
+    else if (borrador !== valor) onConfirmar(borrador);
     setBorrador(null);
   };
+  const escribir = (valorNuevo: string): void => { setBorrador(valorNuevo); setRechazo(null); };
   const comunes = {
     'aria-label': etiqueta,
     'aria-describedby': nota !== null ? avisoId : undefined,
+    'aria-invalid': error !== null ? true : undefined,
     value: texto,
     onBlur: confirmar,
   };
   return (
     <>
       {multilinea
-        ? <textarea {...comunes} rows={3} onChange={(e) => setBorrador(e.target.value)} />
-        : <input {...comunes} type="text" onChange={(e) => setBorrador(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmar(); } }} />}
+        ? <textarea {...comunes} rows={3} onChange={(e) => escribir(e.target.value)} />
+        : <input {...comunes} type="text" onChange={(e) => escribir(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmar(); } }} />}
       {nota !== null && <small className="catalogo-aviso" id={avisoId} role="status">{nota}</small>}
     </>
   );
@@ -83,6 +94,9 @@ export function CatalogPanel({ catalogo, indice, procesos, actualizar, puedeDesh
   const P = S.catalogo.panel;
   const dialogo = useRef<HTMLDialogElement>(null);
   const buscador = useRef<HTMLInputElement>(null);
+  const atributoNuevo = useRef<HTMLInputElement>(null);
+  /** Set when the panel starts closing: the fields discard their drafts instead of writing them as they lose the focus. */
+  const cerrando = useRef(false);
   // Captured on the first render, before `showModal` moves the focus into the dialog.
   const previo = useRef(document.activeElement as HTMLElement | null);
   const base = useId();
@@ -103,6 +117,7 @@ export function CatalogPanel({ catalogo, indice, procesos, actualizar, puedeDesh
    * menu has hidden by now: the focus goes to the menu's own button instead.
    */
   function cerrar(): void {
+    cerrando.current = true;
     dialogo.current?.close();
     const menu = previo.current?.closest('details:not([open])');
     (menu?.querySelector<HTMLElement>(':scope > summary') ?? previo.current)?.focus?.();
@@ -143,9 +158,15 @@ export function CatalogPanel({ catalogo, indice, procesos, actualizar, puedeDesh
 
   function detalle(objeto: CatalogObject): React.JSX.Element {
     const editable = isKnownCatalogType(objeto.type);
-    const cambiar = (campos: CatalogFields): void => { void actualizar(objeto, campos); };
-    const atributos: readonly CatalogAttribute[] = objeto.attributes ?? [];
+    const cambiar = (campos: CatalogFields): void => { if (!cerrando.current) void actualizar(objeto, campos); };
     const fijarAtributos = (lista: readonly CatalogAttribute[]): void => cambiar({ attributes: lista.length > 0 ? lista : null });
+    const sinNombre = (t: string): string | null => (t.trim() === '' ? P.nombreVacio : null);
+    const urlInvalida = (t: string): string | null => (t.trim() === '' || ES_URL.test(t.trim()) ? null : P.urlInvalida);
+    // A unit is not its own parent, nor the child of a unit under it: no cycles (RM-01 § 2.2).
+    const debajo = objeto.type === 'unit' ? unitDescendants(objetos, objeto.id) : new Set<string>();
+    /** The row that held the focus is gone, or its button disabled: the focus goes to the new-attribute field. */
+    const fijarAtributosYEnfocar = (lista: readonly CatalogAttribute[]): void => { fijarAtributos(lista); atributoNuevo.current?.focus(); };
+    const atributos: readonly CatalogAttribute[] = objeto.attributes ?? [];
     const texto = (campo: string): string | undefined => {
       const valor = objeto[campo];
       return typeof valor === 'string' ? valor : undefined;
@@ -157,8 +178,7 @@ export function CatalogPanel({ catalogo, indice, procesos, actualizar, puedeDesh
           campo={P.campos[campo]}
           tipo={tipo}
           valor={texto(campo)}
-          // A unit is not its own parent.
-          catalogo={{ ...catalogo, objetos: objetos.filter((o) => o !== objeto) }}
+          catalogo={{ ...catalogo, objetos: objetos.filter((o) => o !== objeto && !(campo === 'parentRef' && o.type === 'unit' && debajo.has(o.id))) }}
           onElegir={(id) => cambiar({ [campo]: id === '' ? null : id })}
         />
       </label>
@@ -174,8 +194,9 @@ export function CatalogPanel({ catalogo, indice, procesos, actualizar, puedeDesh
             ? <CampoTexto
               etiqueta={P.nombre}
               valor={objeto.name}
-              valido={(t) => t.trim() !== ''}
+              invalido={sinNombre}
               aviso={(t) => (repeatsName(objetos, objeto.type, t, objeto.id) ? P.nombreRepetido(nombreTipo(objeto.type)) : null)}
+              descartar={cerrando}
               onConfirmar={(t) => cambiar({ name: t })}
             />
             : <output>{objeto.name}</output>}
@@ -185,7 +206,7 @@ export function CatalogPanel({ catalogo, indice, procesos, actualizar, puedeDesh
         <label className="campo">
           <span>{P.descripcion}</span>
           {editable
-            ? <CampoTexto etiqueta={P.descripcion} valor={objeto.description ?? ''} multilinea onConfirmar={(t) => cambiar({ description: t === '' ? null : t })} />
+            ? <CampoTexto etiqueta={P.descripcion} valor={objeto.description ?? ''} multilinea descartar={cerrando} onConfirmar={(t) => cambiar({ description: t === '' ? null : t })} />
             : <output>{objeto.description ?? ''}</output>}
         </label>
         {objeto.type === 'role' && referencia('unitRef', 'unit')}
@@ -197,8 +218,8 @@ export function CatalogPanel({ catalogo, indice, procesos, actualizar, puedeDesh
             <CampoTexto
               etiqueta={P.campos.url}
               valor={url}
-              valido={(t) => t.trim() === '' || ES_URL.test(t.trim())}
-              aviso={(t) => (t.trim() === '' || ES_URL.test(t.trim()) ? null : P.urlInvalida)}
+              invalido={urlInvalida}
+              descartar={cerrando}
               onConfirmar={(t) => cambiar({ url: t.trim() === '' ? null : t.trim() })}
             />
           </label>
@@ -211,22 +232,23 @@ export function CatalogPanel({ catalogo, indice, procesos, actualizar, puedeDesh
           {atributos.map((atributo, i) => (editable
             // Free text pairs, in order (RM-01 § 2.1): the position is the only identity a pair has.
             ? <div className="catalogo-atributo" key={i}>
-              <CampoTexto etiqueta={P.atributoNombre(i + 1)} valor={atributo.name} valido={(t) => t.trim() !== ''} onConfirmar={(t) => fijarAtributos(atributos.map((a, j) => (j === i ? { ...a, name: t.trim() } : a)))} />
-              <CampoTexto etiqueta={P.atributoValor(i + 1)} valor={atributo.value} onConfirmar={(t) => fijarAtributos(atributos.map((a, j) => (j === i ? { ...a, value: t } : a)))} />
-              <button type="button" className="boton" aria-label={P.atributoQuitar(i + 1)} title={P.atributoQuitar(i + 1)} onClick={() => fijarAtributos(atributos.filter((_, j) => j !== i))}>
+              <CampoTexto etiqueta={P.atributoNombre(i + 1)} valor={atributo.name} invalido={sinNombre} descartar={cerrando} onConfirmar={(t) => fijarAtributos(atributos.map((a, j) => (j === i ? { ...a, name: t.trim() } : a)))} />
+              <CampoTexto etiqueta={P.atributoValor(i + 1)} valor={atributo.value} descartar={cerrando} onConfirmar={(t) => fijarAtributos(atributos.map((a, j) => (j === i ? { ...a, value: t } : a)))} />
+              <button type="button" className="boton" aria-label={P.atributoQuitar(i + 1)} title={P.atributoQuitar(i + 1)} onClick={() => fijarAtributosYEnfocar(atributos.filter((_, j) => j !== i))}>
                 <span aria-hidden="true">×</span>
               </button>
             </div>
             : <output className="catalogo-atributo" key={i}><span>{atributo.name}</span><span>{atributo.value}</span></output>))}
           {editable && <div className="catalogo-atributo">
-            <input type="text" aria-label={P.atributoNuevoNombre} placeholder={P.atributoNuevoNombre} value={atributoNombre} onChange={(e) => setAtributoNombre(e.target.value)} />
+            <input ref={atributoNuevo} type="text" aria-label={P.atributoNuevoNombre} placeholder={P.atributoNuevoNombre} value={atributoNombre} onChange={(e) => setAtributoNombre(e.target.value)} />
             <input type="text" aria-label={P.atributoNuevoValor} placeholder={P.atributoNuevoValor} value={atributoValor} onChange={(e) => setAtributoValor(e.target.value)} />
             <button
               type="button"
               className="boton"
               disabled={atributoNombre.trim() === ''}
               onClick={() => {
-                fijarAtributos([...atributos, { name: atributoNombre.trim(), value: atributoValor }]);
+                // The button disables itself with the name emptied: the focus moves on to the next pair.
+                fijarAtributosYEnfocar([...atributos, { name: atributoNombre.trim(), value: atributoValor }]);
                 setAtributoNombre(''); setAtributoValor('');
               }}
             >
@@ -271,8 +293,10 @@ export function CatalogPanel({ catalogo, indice, procesos, actualizar, puedeDesh
           value={consulta}
           onChange={(e) => setConsulta(e.target.value)}
         />
-        <button type="button" className="boton" disabled={!puedeDeshacer} onClick={onDeshacer}>{S.catalogo.deshacer}</button>
-        <button type="button" className="boton" onClick={cerrar}>{P.cerrar}</button>
+        {/* One level: the button disables itself, so the focus goes to the search field instead of nowhere. */}
+        <button type="button" className="boton" disabled={!puedeDeshacer} onClick={() => { onDeshacer(); buscador.current?.focus(); }}>{S.catalogo.deshacer}</button>
+        {/* A press here must not take the focus from a field first: that would write its draft before the panel closes. */}
+        <button type="button" className="boton" onMouseDown={(e) => e.preventDefault()} onClick={cerrar}>{P.cerrar}</button>
       </header>
       {typeof error === 'string' && error !== '' && <p className="catalogo-error" role="alert">{error}</p>}
       <div className="catalogo-cuerpo">

@@ -6,7 +6,7 @@
  */
 import { usageIndex, withCatalog, withProcesses, type CatalogObject, type ProcessDocument, type ProjectDocument } from '@lila-modeler/engine/project';
 import { describe, expect, it } from 'vitest';
-import { buildIndex, groupCatalog, isProcessUse, repeatsName, scanProcesses, usesOf, type ScanCache } from './catalogo';
+import { buildIndex, groupCatalog, isProcessUse, repeatsName, scanProcesses, unitDescendants, usesOf, type ScanCache } from './catalogo';
 
 const RECEPTIONIST: CatalogObject = { type: 'role', id: 'role-rec', name: 'Receptionist', revision: 1, unitRef: 'unit-front' };
 const CASHIER: CatalogObject = { type: 'role', id: 'role-cash', name: 'Cajéro', revision: 1, unitRef: 'unit-gone' };
@@ -70,6 +70,18 @@ describe('repeatsName', () => {
     expect(repeatsName(CATALOG, 'unit', 'Receptionist')).toBe(false);
     expect(repeatsName(CATALOG, 'role', '   ')).toBe(false);
     expect(repeatsName(CATALOG, 'role', 'Night porter')).toBe(false);
+  });
+});
+
+describe('unitDescendants', () => {
+  it('lists every unit under a unit, at any depth, and survives a cycle already in the file', () => {
+    const unit = (id: string, parentRef?: string): CatalogObject => ({ type: 'unit', id, name: id, revision: 1, ...(parentRef !== undefined ? { parentRef } : {}) });
+    const units = [unit('a'), unit('b', 'a'), unit('c', 'b'), unit('d'), unit('e', 'c'), { type: 'role', id: 'r', name: 'r', revision: 1, parentRef: 'a' }];
+    expect([...unitDescendants(units, 'a')].sort()).toEqual(['b', 'c', 'e']);
+    expect([...unitDescendants(units, 'c')]).toEqual(['e']);
+    expect([...unitDescendants(units, 'd')]).toEqual([]);
+    // A cycle written by hand: x ← y ← x. It ends, and never lists the unit itself.
+    expect([...unitDescendants([unit('x', 'y'), unit('y', 'x')], 'x')]).toEqual(['y']);
   });
 });
 

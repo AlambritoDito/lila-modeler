@@ -3188,7 +3188,7 @@ button.gcal-uso-fila:hover {
 .catalogo-encabezado h2 { font-size: 1em; margin: 0 8px 0 0; }
 .catalogo-encabezado input { flex: 1 1 10rem; min-width: 0; }
 .catalogo input, .catalogo textarea { background: var(--bg-base); border: 1px solid var(--border); border-radius: 0; box-sizing: border-box; color: var(--fg-primary); font: inherit; min-width: 0; padding: calc(5px * var(--espacio, 1)) 8px; }
-.catalogo input:focus-visible, .catalogo textarea:focus-visible, .catalogo button:focus-visible, .catalogo a:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
+.catalogo input:focus-visible, .catalogo textarea:focus-visible, .catalogo button:focus-visible, .catalogo a:focus-visible { outline: 2px solid var(--accent-tertiary); outline-offset: -2px; }
 .catalogo-error { border-bottom: 1px solid var(--border); color: var(--status-warning); flex: none; margin: 0; padding: calc(8px * var(--espacio, 1)) 16px; }
 .catalogo-cuerpo { display: flex; flex: 1 1 auto; min-height: 0; }
 .catalogo-lista { border-right: 1px solid var(--border); box-sizing: border-box; flex: none; overflow: auto; padding: calc(12px * var(--espacio, 1)); width: min(22rem, 45%); }
@@ -3199,7 +3199,7 @@ button.gcal-uso-fila:hover {
 .catalogo-objeto, .catalogo-uso { background: none; border: none; border-radius: 0; color: var(--fg-primary); cursor: pointer; font: inherit; padding: calc(5px * var(--espacio, 1)) 8px; text-align: left; width: 100%; }
 .catalogo-objeto { align-items: baseline; display: flex; gap: 8px; justify-content: space-between; }
 .catalogo-objeto:hover, .catalogo-uso:hover { background: var(--bg-hover); }
-.catalogo-objeto[aria-current='true'] { background: var(--bg-hover); box-shadow: inset 2px 0 0 var(--accent-primary); font-weight: 600; }
+.catalogo-objeto[aria-current='true'] { background: var(--bg-hover); box-shadow: inset 2px 0 0 var(--accent-tertiary); font-weight: 600; }
 .catalogo-objeto .nombre { min-width: 0; overflow-wrap: anywhere; }
 .catalogo-objeto .conteo { color: var(--fg-muted); flex: none; font-size: 11px; font-weight: 400; }
 .catalogo-uso { overflow-wrap: anywhere; text-decoration: underline; }
@@ -3209,7 +3209,8 @@ p.catalogo-detalle { padding: calc(20px * var(--espacio, 1)) 24px; }
 .catalogo-aviso { color: var(--status-warning); flex-basis: 100%; }
 .catalogo-atributo { align-items: center; display: flex; gap: 6px; }
 .catalogo-atributo > input, .catalogo-atributo > span { flex: 1 1 0; }
-.catalogo-enlace { color: var(--accent-primary); }
+/* The colour of the app's `.enlace`: `--accent-primary` is a fill, not a text colour, in some themes (QA of #674). */
+.catalogo-enlace { color: var(--accent-tertiary); }
 
 /* ---------- ajustes ---------- */
 

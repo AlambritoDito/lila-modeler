@@ -63,6 +63,22 @@ export function repeatsName(catalog: readonly CatalogObject[], type: string, nam
   return folded !== '' && catalog.some((o) => o.type === type && o.id !== exceptId && fold(o.name) === folded);
 }
 
+/**
+ * The ids of the units under `id`: every unit whose `parentRef` chain reaches it. None of them may
+ * become its parent, or the hierarchy would close into a cycle (RM-01 § 2.2).
+ */
+export function unitDescendants(catalog: readonly CatalogObject[], id: string): Set<string> {
+  const under = new Set<string>();
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const o of catalog) {
+      if (o.type !== 'unit' || o.id === id || under.has(o.id)) continue;
+      if (o.parentRef === id || (typeof o.parentRef === 'string' && under.has(o.parentRef))) { under.add(o.id); grew = true; }
+    }
+  }
+  return under;
+}
+
 /** A process as the index reads it: its slug, its process id when it has one, and its BPMN. */
 export interface ProcessSource {
   readonly slug: string;
