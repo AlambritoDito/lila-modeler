@@ -3177,6 +3177,40 @@ button.gcal-uso-fila:hover {
 .paleta-comandos kbd { border: 1px solid var(--border); color: var(--fg-muted); font-family: var(--font-mono); font-size: 10px; line-height: 1; padding: 1px 4px; }
 .paleta-comandos .vacio { color: var(--fg-muted); margin: 0; padding: calc(12px * var(--espacio, 1)) 12px; }
 
+/* ---------- catalog panel (#674) ---------- */
+
+/* A fixed box in two columns, as Settings: the list of objects by type on the left, the detail of
+   the chosen one on the right, each scrolling on its own. Only theme tokens, so every theme works. */
+.catalogo:not([open]) { display: none; }
+.catalogo { background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 0; box-shadow: 0 6px 20px var(--shadow); color: var(--fg-primary); display: flex; flex-direction: column; height: 76vh; max-height: 86vh; max-width: min(920px, 94vw); min-width: 22rem; overflow: hidden; padding: 0; width: 94vw; }
+.catalogo::backdrop { background: rgb(0 0 0 / 50%); }
+.catalogo-encabezado { align-items: center; border-bottom: 1px solid var(--border); display: flex; flex: none; flex-wrap: wrap; gap: 8px; padding: calc(12px * var(--espacio, 1)) 16px; }
+.catalogo-encabezado h2 { font-size: 1em; margin: 0 8px 0 0; }
+.catalogo-encabezado input { flex: 1 1 10rem; min-width: 0; }
+.catalogo input, .catalogo textarea { background: var(--bg-base); border: 1px solid var(--border); border-radius: 0; box-sizing: border-box; color: var(--fg-primary); font: inherit; min-width: 0; padding: calc(5px * var(--espacio, 1)) 8px; }
+.catalogo input:focus-visible, .catalogo textarea:focus-visible, .catalogo button:focus-visible, .catalogo a:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
+.catalogo-error { border-bottom: 1px solid var(--border); color: var(--status-warning); flex: none; margin: 0; padding: calc(8px * var(--espacio, 1)) 16px; }
+.catalogo-cuerpo { display: flex; flex: 1 1 auto; min-height: 0; }
+.catalogo-lista { border-right: 1px solid var(--border); box-sizing: border-box; flex: none; overflow: auto; padding: calc(12px * var(--espacio, 1)); width: min(22rem, 45%); }
+.catalogo-lista h3 { color: var(--fg-muted); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; margin: calc(14px * var(--espacio, 1)) 0 calc(4px * var(--espacio, 1)); text-transform: uppercase; }
+.catalogo-lista ul, .catalogo-usos { list-style: none; margin: 0; padding: 0; }
+.catalogo-nuevo { display: flex; flex-wrap: wrap; gap: 6px; }
+.catalogo-nuevo input { flex: 1 1 8rem; }
+.catalogo-objeto, .catalogo-uso { background: none; border: none; border-radius: 0; color: var(--fg-primary); cursor: pointer; font: inherit; padding: calc(5px * var(--espacio, 1)) 8px; text-align: left; width: 100%; }
+.catalogo-objeto { align-items: baseline; display: flex; gap: 8px; justify-content: space-between; }
+.catalogo-objeto:hover, .catalogo-uso:hover { background: var(--bg-hover); }
+.catalogo-objeto[aria-current='true'] { background: var(--bg-hover); box-shadow: inset 2px 0 0 var(--accent-primary); font-weight: 600; }
+.catalogo-objeto .nombre { min-width: 0; overflow-wrap: anywhere; }
+.catalogo-objeto .conteo { color: var(--fg-muted); flex: none; font-size: 11px; font-weight: 400; }
+.catalogo-uso { overflow-wrap: anywhere; text-decoration: underline; }
+.catalogo-detalle { box-sizing: border-box; flex: 1 1 auto; min-width: 0; overflow: auto; }
+p.catalogo-detalle { padding: calc(20px * var(--espacio, 1)) 24px; }
+.catalogo-vacio, .catalogo-nota { color: var(--fg-muted); margin: 0; }
+.catalogo-aviso { color: var(--status-warning); flex-basis: 100%; }
+.catalogo-atributo { align-items: center; display: flex; gap: 6px; }
+.catalogo-atributo > input, .catalogo-atributo > span { flex: 1 1 0; }
+.catalogo-enlace { color: var(--accent-primary); }
+
 /* ---------- ajustes ---------- */
 
 /* Two columns behind a `role="tablist"` nav (General / Appearance / Shortcuts), replacing the old

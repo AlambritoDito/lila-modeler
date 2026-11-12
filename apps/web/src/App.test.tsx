@@ -3547,6 +3547,252 @@ it('a project opened while the version 3 question is up cancels it; nothing chan
   expect(mocks.catalogo?.conCatalogo).toBe(false);
 });
 
+// ---------- catalog panel: File menu, ⌘K, where used, rename and undo (#674) ----------
+
+const panelCatalogo = () => container.querySelector<HTMLDialogElement>('dialog.catalogo');
+const botonCatalogo = () => [...container.querySelectorAll<HTMLButtonElement>('.menu-archivo button')].find((b) => b.textContent === T.catalogo.panel.abrir)!;
+const filasCatalogo = () => [...panelCatalogo()!.querySelectorAll<HTMLButtonElement>('.catalogo-objeto')].map((b) => [b.querySelector('.nombre')!.textContent, b.querySelector('.conteo')!.textContent]);
+const usosCatalogo = () => [...panelCatalogo()!.querySelectorAll<HTMLButtonElement>('section.catalogo-detalle .catalogo-uso')];
+const campoCatalogo = (etiqueta: string) => panelCatalogo()!.querySelector<HTMLInputElement>(`[aria-label="${etiqueta}"]`)!;
+/** Opens the panel from the File menu and waits for the usage index, built in the background. */
+async function abrirCatalogo(): Promise<void> {
+  await act(async () => { botonCatalogo().click(); });
+  expect(panelCatalogo()?.open).toBe(true);
+  await vi.waitFor(() => { expect(panelCatalogo()!.textContent).not.toContain(T.catalogo.panel.pendiente); });
+}
+async function elegirEnCatalogo(nombre: string): Promise<void> {
+  await act(async () => { [...panelCatalogo()!.querySelectorAll<HTMLButtonElement>('.catalogo-objeto')].find((b) => b.querySelector('.nombre')!.textContent === nombre)!.click(); });
+}
+async function renombrarEnCatalogo(nombre: string): Promise<void> {
+  const campo = campoCatalogo(T.catalogo.panel.nombre);
+  teclear(campo, nombre);
+  await act(async () => { campo.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
+}
+async function escapeEnCatalogo(): Promise<void> {
+  await act(async () => { panelCatalogo()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); });
+}
+/** A process with one task whose Responsible is `rol` (synthetic, `docs/EXAMPLES_POLICY.md`). */
+const xmlConRol = (proceso: string, tarea: string, rol: string): string => `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:lila="https://lila-modeler.org/schema/bpmn/1" id="Definitions_${proceso}" targetNamespace="https://lila-modeler.org/bpmn">
+<bpmn:process id="${proceso}" isExecutable="false">
+<bpmn:task id="${tarea}" name="${tarea}"><bpmn:extensionElements><lila:responsibility type="R" roleRef="${rol}" /></bpmn:extensionElements></bpmn:task>
+</bpmn:process></bpmn:definitions>`;
+/** A version 3 repository with three processes, one task each, all three with «Receptionist» as Responsible. */
+function tresProcesos(): ProjectDocument {
+  const proceso = (slug: string, name: string, tarea: string) => ({
+    slug, name, model: { id: `Process_${slug}`, name: 'model.bpmn', xml: xmlConRol(`Process_${slug}`, tarea, RECEPCIONISTA.id), revision: 0 },
+    scenarios: { 'as-is.scenario.json': { version: 1, name: 'AS-IS', model: 'model.bpmn' } }, scenarioRevisions: {}, runs: [],
+  });
+  const [uno, dos, tres] = [proceso('check-in', 'Check-in', 'Task_Welcome'), proceso('billing', 'Billing', 'Task_Charge'), proceso('check-out', 'Check-out', 'Task_Farewell')];
+  return withCatalog({ version: 1, id: 'hotel', name: 'Hotel', model: uno!.model, scenarios: uno!.scenarios, scenarioRevisions: {}, runs: [],
+    process: { slug: uno!.slug, name: uno!.name }, processes: [dos!, tres!] }, [RECEPCIONISTA]);
+}
+const xmlDe = (doc: ProjectDocument): string[] => [doc.model.xml, ...(doc.processes ?? []).map((p) => p.model.xml)];
+
+it('the catalog panel opens from the File menu and from ⌘K; Escape closes it and returns the focus (#674)', async () => {
+  await abrirDocumento(withCatalog(proyecto('p40', 'Front office') as ProjectDocument, [RECEPCIONISTA]));
+  expect(panelCatalogo()).toBeNull();
+
+  // From the File menu: the entry is hidden once the menu closes, so the focus returns to the menu button.
+  const menu = container.querySelector<HTMLDetailsElement>('.menu-archivo')!;
+  menu.open = true;
+  botonCatalogo().focus();
+  await act(async () => { botonCatalogo().click(); });
+  expect(panelCatalogo()?.open).toBe(true);
+  expect(menu.open).toBe(false);
+  expect(document.activeElement).toBe(campoCatalogo(T.catalogo.panel.buscar));
+  expect(filasCatalogo().map(([nombre]) => nombre)).toEqual(['Receptionist']);
+  // ⌘K stays out of the way of an open modal.
+  await abrirConTeclado();
+  expect(paleta()).toBeNull();
+  await escapeEnCatalogo();
+  expect(panelCatalogo()).toBeNull();
+  expect(document.activeElement).toBe(menu.querySelector('summary'));
+
+  // From ⌘K: the focus returns to where it was before the palette.
+  const origen = container.querySelector<HTMLButtonElement>('.modo.activo')!;
+  origen.focus();
+  await abrirConTeclado();
+  await escribir(T.catalogo.panel.abrir);
+  expect(opciones()).toEqual([T.catalogo.panel.abrir]);
+  await teclaPaleta('Enter');
+  expect(paleta()).toBeNull();
+  expect(panelCatalogo()?.open).toBe(true);
+  await escapeEnCatalogo();
+  expect(panelCatalogo()).toBeNull();
+  expect(document.activeElement).toBe(origen);
+});
+
+it('«Receptionist» used in three processes shows 3 uses; each use opens its process tab and selects the task (#674)', async () => {
+  const lienzo = lienzoQueRecuerda();
+  const doc = tresProcesos();
+  await abrirRepositorio(doc);
+  await asentarReparse();
+  expect(pestanasProceso().map((b) => b.textContent)).toEqual(['Check-in', 'Billing', 'Check-out']);
+
+  await abrirCatalogo();
+  expect(filasCatalogo()).toEqual([['Receptionist', T.catalogo.panel.usos(3)]]);
+  await elegirEnCatalogo('Receptionist');
+  const R = T.catalogo.panel.relaciones['responsibility:R'];
+  expect(usosCatalogo().map((b) => b.textContent)).toEqual([
+    T.catalogo.panel.usoProceso('Check-in', 'Task_Welcome', R),
+    T.catalogo.panel.usoProceso('Billing', 'Task_Charge', R),
+    T.catalogo.panel.usoProceso('Check-out', 'Task_Farewell', R),
+  ]);
+
+  // The third process: its tab opens, then the task is selected and centred, and the canvas focused.
+  mocks.seleccionar.mockClear(); mocks.enfocar.mockClear();
+  await act(async () => { usosCatalogo()[2]!.click(); });
+  expect(panelCatalogo()).toBeNull();
+  expect(pestanasProceso()[2]!.getAttribute('aria-current')).toBe('true');
+  expect(lienzo.xml()).toBe(doc.processes![1]!.model.xml);
+  expect(mocks.seleccionar).toHaveBeenLastCalledWith('Task_Farewell', { centrar: true });
+  expect(mocks.enfocar).toHaveBeenCalled();
+
+  // The second, from the third.
+  await abrirCatalogo();
+  await elegirEnCatalogo('Receptionist');
+  expect(usosCatalogo()).toHaveLength(3);
+  await act(async () => { usosCatalogo()[1]!.click(); });
+  expect(pestanasProceso()[1]!.getAttribute('aria-current')).toBe('true');
+  expect(lienzo.xml()).toBe(doc.processes![0]!.model.xml);
+  expect(mocks.seleccionar).toHaveBeenLastCalledWith('Task_Charge', { centrar: true });
+
+  // A use in the process already on the canvas selects without loading anything.
+  await abrirCatalogo();
+  await elegirEnCatalogo('Receptionist');
+  const cargas = mocks.abrir.mock.calls.length;
+  await act(async () => { usosCatalogo()[1]!.click(); });
+  expect(mocks.abrir.mock.calls.length).toBe(cargas);
+  expect(mocks.seleccionar).toHaveBeenLastCalledWith('Task_Charge', { centrar: true });
+
+  // And the first, back from the second.
+  await abrirCatalogo();
+  await elegirEnCatalogo('Receptionist');
+  await act(async () => { usosCatalogo()[0]!.click(); });
+  expect(pestanasProceso()[0]!.getAttribute('aria-current')).toBe('true');
+  expect(lienzo.xml()).toBe(doc.model.xml);
+  expect(mocks.seleccionar).toHaveBeenLastCalledWith('Task_Welcome', { centrar: true });
+});
+
+it('a rename in the catalog panel reaches the pickers, leaves the BPMN alone, marks the document unsaved and keeps the id through save and reopen; the undo restores the name (#674)', async () => {
+  lienzoQueRecuerda();
+  const doc = tresProcesos();
+  await abrirRepositorio(doc);
+  await click(T.app.pestanas.documentacion);
+  await asentarReparse();
+  await click(T.app.guardar);
+  expect(container.textContent).toContain(T.app.guardado);
+  const antes = vi.mocked(session.saveProject).mock.calls.at(-1)![0];
+  expect(antes.catalog).toEqual([RECEPCIONISTA]);
+  const cargas = mocks.abrir.mock.calls.length;
+
+  await abrirCatalogo();
+  await elegirEnCatalogo('Receptionist');
+  await renombrarEnCatalogo('Front desk agent');
+  const renombrado = { ...RECEPCIONISTA, name: 'Front desk agent', revision: 2 };
+  // The panel, and the catalog the three pickers read their names from.
+  expect(filasCatalogo()).toEqual([['Front desk agent', T.catalogo.panel.usos(3)]]);
+  expect(mocks.catalogo?.objetos).toEqual([renombrado]);
+  expect(container.textContent).toContain(T.app.sinGuardar);
+  expect(vi.mocked(session.setDirty)).toHaveBeenLastCalledWith(true);
+
+  // «Undo last catalog change», from the panel: the name is back everywhere, and the canvas was never touched.
+  await act(async () => { [...panelCatalogo()!.querySelectorAll('button')].find((b) => b.textContent === T.catalogo.deshacer)!.click(); });
+  expect(filasCatalogo()).toEqual([['Receptionist', T.catalogo.panel.usos(3)]]);
+  expect(campoCatalogo(T.catalogo.panel.nombre).value).toBe('Receptionist');
+  expect(mocks.catalogo?.objetos).toEqual([RECEPCIONISTA]);
+  expect(container.textContent).toContain(T.app.guardado);
+  expect(mocks.abrir.mock.calls.length).toBe(cargas);
+
+  // Renamed again, undone from the File menu this time, then renamed for good.
+  await renombrarEnCatalogo('Front desk agent');
+  await escapeEnCatalogo();
+  expect(botonDeshacerCatalogo().disabled).toBe(false);
+  await act(async () => { botonDeshacerCatalogo().click(); });
+  expect(mocks.catalogo?.objetos).toEqual([RECEPCIONISTA]);
+  await abrirCatalogo();
+  await elegirEnCatalogo('Receptionist');
+  await renombrarEnCatalogo('Front desk agent');
+  await escapeEnCatalogo();
+  expect(mocks.abrir.mock.calls.length).toBe(cargas);
+
+  await click(T.app.guardar);
+  const guardado = vi.mocked(session.saveProject).mock.calls.at(-1)![0];
+  expect(guardado.catalog).toEqual([renombrado]);
+  // Not one byte of BPMN changed, nor a model revision: the names are not in the models.
+  expect(xmlDe(guardado)).toEqual(xmlDe(antes));
+  expect([guardado.model.revision, ...guardado.processes!.map((p) => p.model.revision)]).toEqual([antes.model.revision, ...antes.processes!.map((p) => p.model.revision)]);
+  expect(xmlDe(guardado).every((xml) => xml.includes(`roleRef="${RECEPCIONISTA.id}"`))).toBe(true);
+  expect(container.textContent).toContain(T.app.guardado);
+
+  // Reopened from the `.lila` it encodes to: same id, new name, still three uses.
+  await abrirDocumento(guardado);
+  expect(mocks.catalogo?.objetos).toEqual([renombrado]);
+  await abrirCatalogo();
+  expect(filasCatalogo()).toEqual([['Front desk agent', T.catalogo.panel.usos(3)]]);
+});
+
+it('creating the first object of a version 2 project from the catalog panel asks once (#674)', async () => {
+  await abrirDocumento(proyecto('p41', 'Front office') as ProjectDocument);
+  await nuevoProcesoConNombre('Billing');
+  await asentarReparse();
+  await abrirCatalogo();
+  const crear = async (nombre: string): Promise<void> => {
+    teclear(campoCatalogo(T.catalogo.panel.nuevoNombre), nombre);
+    await act(async () => { [...panelCatalogo()!.querySelectorAll('button')].find((b) => b.textContent === T.catalogo.panel.crear)!.click(); });
+  };
+  await crear('Receptionist');
+  expect(dialogoMejora()?.open).toBe(true);
+  expect(filasCatalogo()).toEqual([]);
+  await responderMejora(T.catalogo.mejoraConfirmar);
+  expect(dialogoMejora()).toBeNull();
+  // Still open, with the new role listed and selected.
+  expect(panelCatalogo()?.open).toBe(true);
+  expect(filasCatalogo().map(([nombre]) => nombre)).toEqual(['Receptionist']);
+  expect(campoCatalogo(T.catalogo.panel.nombre).value).toBe('Receptionist');
+  expect(mocks.catalogo?.conCatalogo).toBe(true);
+
+  await crear('Night porter');
+  expect(dialogoMejora()).toBeNull();
+  expect(filasCatalogo().map(([nombre]) => nombre)).toEqual(['Night porter', 'Receptionist']);
+  expect(container.textContent).toContain(T.app.sinGuardar);
+});
+
+it('the desktop autosave carries a rename made in the catalog panel (#674)', async () => {
+  const v3 = withCatalog(proyecto('p43', 'Recepción') as ProjectDocument, [RECEPCIONISTA]);
+  const puente = puenteRecuperacion(encodeLila(v3));
+  vi.useFakeTimers();
+  try {
+    await montar();
+    // The restored copy opens dirty; let its own copy go out first.
+    await act(async () => { await vi.advanceTimersByTimeAsync(6000); });
+    expect(decodeLila(puente.writeRecovery.mock.calls.at(-1)![0] as Uint8Array).catalog).toEqual([RECEPCIONISTA]);
+    puente.writeRecovery.mockClear();
+
+    await act(async () => { botonCatalogo().click(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+    await elegirEnCatalogo('Receptionist');
+    await renombrarEnCatalogo('Front desk agent');
+    await act(async () => { await vi.advanceTimersByTimeAsync(5200); });
+    expect(puente.writeRecovery).toHaveBeenCalled();
+    const copia = decodeLila(puente.writeRecovery.mock.calls.at(-1)![0] as Uint8Array);
+    expect(copia.catalog).toEqual([{ ...RECEPCIONISTA, name: 'Front desk agent', revision: 2 }]);
+  } finally { vi.useRealTimers(); }
+});
+
+it('the catalog panel shows its counts as pending, not 0, until the models are read (#674)', async () => {
+  await abrirDocumento(withCatalog(proyecto('p42', 'Front office') as ProjectDocument, [RECEPCIONISTA]));
+  const lectura = deferred<string>();
+  const xml = await mocks.exportXml();
+  mocks.exportXml.mockImplementation(() => lectura.promise);
+  await act(async () => { botonCatalogo().click(); });
+  expect(filasCatalogo()).toEqual([['Receptionist', T.catalogo.panel.pendiente]]);
+  expect(panelCatalogo()!.textContent).not.toContain(T.catalogo.panel.usos(0));
+  await act(async () => { lectura.resolve(xml); });
+  await vi.waitFor(() => { expect(filasCatalogo()).toEqual([['Receptionist', T.catalogo.panel.usos(0)]]); });
+});
+
 it('scopes Montana decoration to successfully applied built-in themes', async () => {
   const select = selectTema();
   const choose = async (id: string) => {
