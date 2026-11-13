@@ -17,10 +17,12 @@ import { compare } from '@lila-modeler/engine';
 import { CompareView } from './CompareView';
 import { runMetaFrom } from './compareWarnings';
 import { catalogToken, changeToken, defaultElement, defaultScenarios, documentToken, encodeProject, escenariosDelProyecto, MODELO_PROYECTO, newModelXml, nextScenarioRevisions, procesoDelProyecto, projectStore, proyectoDeSuelto, readLila, readProject, repositoryToken, tokenPart, tomarAvisoRecuperacion } from './project';
-import { adoptReference, createCatalogObject, formatVersionOf, isCurrentRun, newProcessId, processesOf, processIds, processSlug, storedRun, withProcesses, type CatalogObject, type CatalogOperationResult, type ProcessDocument } from '@lila-modeler/engine/project';
+import { adoptReference, createCatalogObject, formatVersionOf, updateCatalogObject, isCurrentRun, newProcessId, processesOf, processIds, processSlug, storedRun, withProcesses, type CatalogObject, type CatalogOperationResult, type ProcessDocument, type ProcessUse } from '@lila-modeler/engine/project';
 import { confirmUpgrade, type UpgradeQuestion } from './catalogUpgrade';
 import { recordCatalogChange, undoCatalogChange, type CatalogUndoEntry } from './catalogUndo';
 import type { CatalogoPanel } from './SelectorCatalogo';
+import { CatalogPanel } from './CatalogPanel';
+import { buildIndex, scanProcesses, type ProcessScan, type ScanCache } from './catalogo';
 import { PestanasProcesos } from './PestanasProcesos';
 import type { ProcessIR, SimulationProgress } from '@lila-modeler/engine';
 import { Lienzo, type Alineacion, type EstadoLienzo, type EventoLienzo, type Modelador, type Servicios } from './Modeler';
@@ -595,6 +597,17 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [catalogoGuardado, setCatalogoGuardado] = useState(() => catalogToken({}));
   /** #93: «Undo last catalog change», one level (`catalogUndo.ts`); `null` when there is nothing to undo. */
   const [deshacerCatalogo, setDeshacerCatalogo] = useState<CatalogUndoEntry | null>(null);
+  /** #674: the catalog panel, a dialog mounted while open. */
+  const [catalogoAbierto, setCatalogoAbierto] = useState(false);
+  /** #674: why the panel's last change was refused. Its own: `ioError` is the app's file notices. */
+  const [errorCatalogo, setErrorCatalogo] = useState<string | null>(null);
+  /**
+   * #674: the references of every process, read in the background while the panel is open (RM-01
+   * § 4); `'pending'` until the first read finishes, so no count shows as zero before. The cache
+   * keeps a process whose BPMN did not change from being read again.
+   */
+  const [escaneos, setEscaneos] = useState<readonly ProcessScan[] | 'pending' | 'unavailable'>('pending');
+  const cacheEscaneos = useRef<ScanCache>(new Map());
   /**
    * #92: the process id of each slug of a version 3 document, for the processes added in this
    * session: chosen once, so two saves (or a save and an autosave) write the same id.
@@ -973,9 +986,12 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * object, or `null` when nothing changed. A project opened while the question was up is not
    * touched.
    */
-  async function cambiarCatalogo(operar: (doc: ProjectDocument) => CatalogOperationResult | Promise<CatalogOperationResult>): Promise<CatalogObject | null> {
+  async function cambiarCatalogo(operar: (doc: ProjectDocument) => CatalogOperationResult | Promise<CatalogOperationResult>, enPanel = false): Promise<CatalogObject | null> {
     const leidos = extrasDelRepositorio.current;
     const antes = documentoDelCatalogo(leidos);
+    // #674: a change from the catalog panel reports its refusal in the panel, behind which the
+    // status bar cannot be seen; the pickers keep reporting through `ioError`, as before.
+    if (enPanel) setErrorCatalogo(null);
     try {
       const operado = await operar(antes);
       // The pickers only offer changes that rewrite no BPMN (an adoptable id); one that would is
@@ -988,7 +1004,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       setDeshacerCatalogo(recordCatalogChange(antes, resultado));
       return resultado.object;
     } catch (e) {
-      setIoError(S.catalogo.error(e instanceof Error ? e.message : String(e)));
+      (enPanel ? setErrorCatalogo : setIoError)(S.catalogo.error(e instanceof Error ? e.message : String(e)));
       return null;
     }
   }
@@ -1005,6 +1021,58 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     crear: (tipo, nombre) => cambiarCatalogo((doc) => createCatalogObject(doc, { type: tipo, name: nombre })),
     adoptar: (tipo, id) => cambiarCatalogo((doc) => adoptReference(doc, { type: tipo, ref: id })),
   };
+
+  /** #674: the catalog panel, from the File menu and ⌘K. Not over another modal, nor for a loose diagram (no catalog). */
+  function abrirCatalogo(): void {
+    if (suelto || ioBusy || karaoke || modelador === null || document.querySelector('dialog[open], .bienvenida') !== null) return;
+    setErrorCatalogo(null);
+    setCatalogoAbierto(true);
+  }
+  /** #674: the slug each process is indexed by; a one-process project has no list, and its slug is the project's. */
+  const procesosDelCatalogo = procesos.length > 0 ? procesos : [{ slug: processSlug(projectName), name: projectName }];
+  const activoDelCatalogo = procesos.length > 0 ? activo : 0;
+  useEffect(() => {
+    if (!catalogoAbierto || modelador === null) return undefined;
+    let vigente = true;
+    void (async () => {
+      try {
+        // The canvas process is read live, as a save reads it; the others as they were left.
+        const xml = await modelador.exportar({ aceptarPerdida: true });
+        const fuentes = procesosDelCatalogo.map((p, i) => ({
+          slug: p.slug,
+          id: 'id' in p ? p.id : undefined,
+          xml: i === activoDelCatalogo || !('model' in p) ? xml : p.model.xml,
+        }));
+        const leidos = await scanProcesses(fuentes, cacheEscaneos.current);
+        if (vigente) setEscaneos(leidos);
+      } catch {
+        if (vigente) setEscaneos('unavailable');
+      }
+    })();
+    // Closed, the next opening counts again: the canvas may have changed in between.
+    return () => { vigente = false; setEscaneos('pending'); };
+    // `revision` is the canvas process's: an edit re-reads that process only (the cache keeps the rest).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalogoAbierto, modelador, procesos, activo, revision, projectName]);
+  const indiceCatalogo = useMemo(
+    () => (typeof escaneos === 'string' ? escaneos : buildIndex(extras.catalog ?? [], escaneos)),
+    [escaneos, extras.catalog],
+  );
+  /**
+   * #674: a use of the «where used» list: opens its process tab and selects the element, centred,
+   * as picking an element in ⌘K does. The panel has closed itself by now.
+   */
+  async function irAUso(uso: ProcessUse): Promise<void> {
+    const indice = procesos.findIndex((p) => p.slug === uso.slug);
+    if (procesos.length > 1 && indice >= 0 && indice !== activo) {
+      await cambiarProceso(indice);
+      // The switch was refused (a loss the user did not accept, another operation in progress).
+      if (procesoEnLienzo.current !== uso.slug) return;
+    }
+    if (comparando) flushSync(() => setComparacion(null));
+    modelador?.seleccionar?.(uso.element, { centrar: true });
+    modelador?.enfocar?.();
+  }
 
   /** The process on the canvas as it is now: the exported XML plus its scenarios and runs. */
   async function procesoActual(): Promise<ProcessDocument> {
@@ -2163,6 +2231,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       accion('nuevo', libre), accion('abrir', libre), accion('guardar', libre), accion('guardarComo', libre),
       // #93: only while there is a catalog change to undo, as the menu entry is enabled.
       deshacerCatalogo !== null && { grupo: 'acciones', nombre: S.catalogo.deshacer, elegir: deshacerCambioCatalogo },
+      // #674: the catalog panel; a loose diagram has no catalog.
+      !suelto && modelador !== null && { grupo: 'acciones', nombre: S.catalogo.panel.abrir, elegir: abrirCatalogo },
       accion('imprimir', modelador !== null),
       accion('ejecutar', libre && !corriendo), accion('cancelar', corriendo),
       accion('zoomMas', conLienzo), accion('zoomMenos', conLienzo), accion('ajustarVista', conLienzo), accion('renombrar', conLienzo),
@@ -3027,6 +3097,21 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
           <button className="boton" type="button" onClick={() => responderMejora(false)}>{S.app.cancelar}</button>
         </div>
       </dialog>}
+      {catalogoAbierto && catalogoPanel !== undefined && <CatalogPanel
+        catalogo={{
+          ...catalogoPanel,
+          crear: (tipo, nombre) => cambiarCatalogo((doc) => createCatalogObject(doc, { type: tipo, name: nombre }), true),
+          adoptar: (tipo, id) => cambiarCatalogo((doc) => adoptReference(doc, { type: tipo, ref: id }), true),
+        }}
+        indice={indiceCatalogo}
+        procesos={procesosDelCatalogo}
+        actualizar={(objeto, campos) => cambiarCatalogo((doc) => updateCatalogObject(doc, { ...campos, id: objeto.id, type: objeto.type, baseRevision: objeto.revision }), true)}
+        puedeDeshacer={deshacerCatalogo !== null}
+        onDeshacer={deshacerCambioCatalogo}
+        onIr={(uso) => void irAUso(uso)}
+        error={errorCatalogo}
+        onCerrar={() => setCatalogoAbierto(false)}
+      />}
       {bienvenida && <Bienvenida
         recientes={recientes}
         temaNombre={tema?.name ?? S.app.temas[temaId as TemaId] ?? temaId}
@@ -3114,6 +3199,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               <button type="button" title={`${S.app.menuEscritorio.guardarComo}${atajo('guardarComo')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar(true)}>{S.app.menuEscritorio.guardarComo}</button>
               <button type="button" disabled={ioBusy || modelador === null} onClick={() => void guardar(true, true)}>{S.app.menuEscritorio.guardarComoCarpeta}</button>
               <hr />
+              <button type="button" disabled={suelto || ioBusy || modelador === null} onClick={abrirCatalogo}>{S.catalogo.panel.abrir}</button>
               <button type="button" disabled={deshacerCatalogo === null} onClick={deshacerCambioCatalogo}>{S.catalogo.deshacer}</button>
               <hr />
               <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarSvg')}>{S.app.menuEscritorio.exportarSvg}</button>
@@ -3130,6 +3216,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               <button type="button" title={`${S.app.tituloAbrir}${atajo('abrir')}`} disabled={ioBusy || modelador === null} onClick={() => void projectAction('open')}>{S.app.abrir}</button>
               <button type="button" title={`${S.app.tituloGuardar}${atajo('guardar')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar()}>{S.app.guardar}</button>
               <button type="button" title={`${S.app.tituloGuardarComo}${atajo('guardarComo')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar(true)}>{S.app.guardarComo}</button>
+              <button type="button" disabled={suelto || ioBusy || modelador === null} onClick={abrirCatalogo}>{S.catalogo.panel.abrir}</button>
               <button type="button" disabled={deshacerCatalogo === null} onClick={deshacerCambioCatalogo}>{S.catalogo.deshacer}</button>
               {bpmnFilesEnabled && <>
                 <button type="button" disabled={ioBusy || modelador === null} onClick={() => void projectAction('bpmn')}>{S.app.importarBpmn}</button>
