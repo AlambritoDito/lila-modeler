@@ -378,6 +378,16 @@ describe('catalog panel (#674)', () => {
     expect(await opcionesDe('Annex')).toEqual(['Floor 2', 'Front office', 'Rooms']);
   });
 
+  it('a cycle already in the file shows each parent by its name, not as a reference to adopt (QA of #674, N1)', async () => {
+    const frente: CatalogObject = { ...FRONT, parentRef: 'unit-floor' };
+    const habitaciones: CatalogObject = { type: 'unit', id: 'unit-rooms', name: 'Rooms', revision: 1, parentRef: FRONT.id };
+    const piso: CatalogObject = { type: 'unit', id: 'unit-floor', name: 'Floor 2', revision: 1, parentRef: 'unit-rooms' };
+    const { dialogo } = montar({ ...V3, catalog: [frente, habitaciones, piso] }, []);
+    await elegir(dialogo(), 'Front office');
+    expect((campo(detalle(dialogo()), P.campos.parentRef) as HTMLInputElement).value).toBe('Floor 2');
+    expect(detalle(dialogo()).textContent).not.toContain('unit-floor');
+  });
+
   it('a refused change is reported in the panel, and only then (QA of #674, M2)', () => {
     const sin = montar(V3, ESCANEOS);
     expect(sin.dialogo().querySelector('.catalogo-error')).toBeNull();

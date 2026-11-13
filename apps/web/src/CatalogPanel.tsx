@@ -178,7 +178,8 @@ export function CatalogPanel({ catalogo, indice, procesos, actualizar, puedeDesh
           campo={P.campos[campo]}
           tipo={tipo}
           valor={texto(campo)}
-          catalogo={{ ...catalogo, objetos: objetos.filter((o) => o !== objeto && !(campo === 'parentRef' && o.type === 'unit' && debajo.has(o.id))) }}
+          catalogo={{ ...catalogo, // The current value stays, so a cycle already in the file shows its parent by name.
+          objetos: objetos.filter((o) => o !== objeto && (o.id === texto(campo) || !(campo === 'parentRef' && o.type === 'unit' && debajo.has(o.id)))) }}
           onElegir={(id) => cambiar({ [campo]: id === '' ? null : id })}
         />
       </label>
