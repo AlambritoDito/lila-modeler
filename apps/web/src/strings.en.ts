@@ -2254,12 +2254,19 @@ export const en = {
     adoptar: 'Adopt',
     adoptarDe: (campo: string, id: string): string => `Adopt ${id} into the catalog (${campo})`,
     noAdoptable: (id: string): string => `${id} cannot be adopted as this field's catalog id: pick or create an object instead`,
+    /** #675: a value that cannot be an id is adopted from the catalog panel, which lists what it rewrites first. */
+    adoptarRevisando: 'Adopt…',
+    adoptarRevisandoDe: (campo: string, id: string): string => `Review and adopt ${id} into the catalog (${campo})`,
+    noAdoptableReescribe: (id: string): string => `${id} cannot be a catalog id: adopting it creates an object with a generated id and rewrites the references that hold it`,
     mejoraTitulo: 'Upgrade this project for the catalog?',
     mejoraTexto: (version: string): string =>
       `Adding an object to the catalog saves this project as a version 3 repository. Lila versions earlier than ${version} cannot open it after that. You are asked only once for this project.`,
     mejoraConfirmar: 'Upgrade and continue',
     deshacer: 'Undo last catalog change',
     error: (detalle: string): string => `The catalog was not changed: ${detalle}`,
+    /** #675: the undo of a change that rewrote processes, one of them edited since and not on the canvas. */
+    deshacerEditado: (procesos: string): string =>
+      `${procesos} was edited after that catalog change. Open it and undo from there, so that edit is kept.`,
     /** The catalog panel (#674): a dialog from the File menu and ⌘K. */
     panel: {
       abrir: 'Catalog…',
@@ -2315,6 +2322,25 @@ export const en = {
       sinResolver: 'Unresolved references',
       sinResolverNinguna: 'None: every reference points at a catalog object.',
       sinResolverFila: (id: string, tipo: string, donde: string): string => `${id} (${tipo}) — ${donde}`,
+      /** #675: safe delete. An object in use is refused with its uses and two ways out; there is no forced delete. */
+      borrar: 'Delete',
+      borrarDe: (nombre: string): string => `Delete ${nombre}`,
+      enUsoGrupo: (nombre: string): string => `${nombre} is in use`,
+      enUso: (nombre: string, n: number): string =>
+        `${nombre} was not deleted: it is in use (${n === 1 ? '1 reference' : `${n} references`}). Replace it with another object, or remove its references.`,
+      enUsoLista: 'References that keep it in use',
+      reemplazarPor: 'Replace with',
+      reemplazarYBorrar: 'Replace and delete',
+      quitarYBorrar: 'Remove references and delete',
+      /** #675: adopting an unresolved value, after listing the references it resolves. */
+      adoptarFila: (id: string, tipo: string): string => `Adopt ${id} (${tipo})…`,
+      adoptarTitulo: (id: string, tipo: string): string => `Adopt «${id}» into the catalog (${tipo})`,
+      adoptarConserva: (id: string): string => `A new object is created with the id ${id}. The references below already hold that id: no process is rewritten.`,
+      adoptarReescribe: (id: string): string =>
+        `«${id}» cannot be a catalog id, so the new object gets a generated id and every reference below is rewritten to it, in every process.`,
+      adoptarLugares: 'References it resolves',
+      adoptarSinLugares: 'No reference holds this value any more.',
+      adoptarConfirmar: 'Adopt',
     },
   },
 } as const;

@@ -2192,12 +2192,17 @@ export const es: Strings = {
     adoptar: 'Adoptar',
     adoptarDe: (campo: string, id: string): string => `Adoptar ${id} en el catálogo (${campo})`,
     noAdoptable: (id: string): string => `${id} no se puede adoptar como id del catálogo para este campo: elige o crea un objeto`,
+    adoptarRevisando: 'Adoptar…',
+    adoptarRevisandoDe: (campo: string, id: string): string => `Revisar y adoptar ${id} en el catálogo (${campo})`,
+    noAdoptableReescribe: (id: string): string => `${id} no puede ser un id del catálogo: al adoptarlo se crea un objeto con un id generado y se reescriben las referencias que lo contienen`,
     mejoraTitulo: '¿Actualizar este proyecto para el catálogo?',
     mejoraTexto: (version: string): string =>
       `Añadir un objeto al catálogo guarda este proyecto como repositorio de versión 3. Las versiones de Lila anteriores a ${version} ya no podrán abrirlo. Solo se pregunta una vez por proyecto.`,
     mejoraConfirmar: 'Actualizar y continuar',
     deshacer: 'Deshacer el último cambio del catálogo',
     error: (detalle: string): string => `El catálogo no cambió: ${detalle}`,
+    deshacerEditado: (procesos: string): string =>
+      `${procesos} se editó después de ese cambio del catálogo. Ábrelo y deshaz desde ahí, para conservar esa edición.`,
     panel: {
       abrir: 'Catálogo…',
       titulo: 'Catálogo',
@@ -2249,6 +2254,23 @@ export const es: Strings = {
       sinResolver: 'Referencias sin resolver',
       sinResolverNinguna: 'Ninguna: todas las referencias apuntan a un objeto del catálogo.',
       sinResolverFila: (id: string, tipo: string, donde: string): string => `${id} (${tipo}) — ${donde}`,
+      borrar: 'Eliminar',
+      borrarDe: (nombre: string): string => `Eliminar ${nombre}`,
+      enUsoGrupo: (nombre: string): string => `${nombre} está en uso`,
+      enUso: (nombre: string, n: number): string =>
+        `${nombre} no se eliminó: está en uso (${n === 1 ? '1 referencia' : `${n} referencias`}). Reemplázalo por otro objeto o quita sus referencias.`,
+      enUsoLista: 'Referencias que lo mantienen en uso',
+      reemplazarPor: 'Reemplazar por',
+      reemplazarYBorrar: 'Reemplazar y eliminar',
+      quitarYBorrar: 'Quitar referencias y eliminar',
+      adoptarFila: (id: string, tipo: string): string => `Adoptar ${id} (${tipo})…`,
+      adoptarTitulo: (id: string, tipo: string): string => `Adoptar «${id}» en el catálogo (${tipo})`,
+      adoptarConserva: (id: string): string => `Se crea un objeto nuevo con el id ${id}. Las referencias de abajo ya tienen ese id: no se reescribe ningún proceso.`,
+      adoptarReescribe: (id: string): string =>
+        `«${id}» no puede ser un id del catálogo, así que el objeto nuevo recibe un id generado y cada referencia de abajo se reescribe con él, en todos los procesos.`,
+      adoptarLugares: 'Referencias que resuelve',
+      adoptarSinLugares: 'Ya ninguna referencia tiene este valor.',
+      adoptarConfirmar: 'Adoptar',
     },
   },
 };

@@ -3211,6 +3211,13 @@ p.catalogo-detalle { padding: calc(20px * var(--espacio, 1)) 24px; }
 .catalogo-atributo > input, .catalogo-atributo > span { flex: 1 1 0; }
 /* The colour of the app's `.enlace`: `--accent-primary` is a fill, not a text colour, in some themes (QA of #674). */
 .catalogo-enlace { color: var(--accent-tertiary); }
+/* #675: the refusal of a delete and the review of an adoption, inside the details column. */
+.catalogo-en-uso { border-top: 1px solid var(--border); padding-top: calc(10px * var(--espacio, 1)); }
+.catalogo-en-uso .catalogo-aviso { margin: 0; }
+.catalogo-detalle .acciones { display: flex; flex-wrap: wrap; gap: 8px; }
+.catalogo-adopcion h3 { font-size: 1em; margin: 0; }
+.catalogo-lista .catalogo-usos li { align-items: baseline; display: flex; gap: 6px; }
+.catalogo-lista .catalogo-usos .adoptar { flex: none; }
 
 /* ---------- ajustes ---------- */
 

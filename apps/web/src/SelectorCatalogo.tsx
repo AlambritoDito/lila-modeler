@@ -10,7 +10,8 @@
  *
  * A value no object has is kept and shown (RM-01 § 3.4): with its id, and in a repository that
  * has a catalog (version 3) as «id — not in catalog»; a version 1 or 2 project shows its typed ids
- * without warnings. «Adopt» makes an object with that id when that rewrites no BPMN.
+ * without warnings. «Adopt» makes an object with that id when that rewrites no BPMN; a value that
+ * cannot be an id is handed to the catalog panel («Adopt…», #675), which rewrites it across processes.
  */
 import type { CatalogObject, KnownCatalogType } from '@lila-modeler/engine/project';
 import { useId, useState } from 'react';
@@ -27,6 +28,12 @@ export interface CatalogoPanel {
   readonly conCatalogo: boolean;
   crear(tipo: KnownCatalogType, nombre: string): Promise<CatalogObject | null>;
   adoptar(tipo: KnownCatalogType, id: string): Promise<CatalogObject | null>;
+  /**
+   * #675: opens the catalog panel on the adoption of a value that cannot be an id: the object gets
+   * a generated id and the references are rewritten across processes, after the panel lists them.
+   * Absent where there is no such panel to open: then such a value only gets its note.
+   */
+  revisarAdopcion?(tipo: KnownCatalogType, id: string): void;
 }
 
 interface Props {
@@ -51,7 +58,9 @@ export function SelectorCatalogo({ campo, tipo, valor, catalogo, onElegir }: Pro
   const [activo, setActivo] = useState(0);
 
   const resolucion = resolveReference(catalogo.objetos, tipo, valor);
-  /** Why a value cannot be adopted, in a repository with a catalog only (RM-01 § 3.4). */
+  /** #675: a value that cannot be an id is adopted through the catalog panel, when there is one to open. */
+  const revisar = resolucion.state === 'unresolved' && !resolucion.adoptable ? catalogo.revisarAdopcion : undefined;
+  /** Why a value cannot be adopted as it is, in a repository with a catalog only (RM-01 § 3.4). */
   const nota = resolucion.state === 'unresolved' && !resolucion.adoptable && catalogo.conCatalogo;
   const notaId = `${base}-nota`;
   const mostrado =
@@ -161,7 +170,18 @@ export function SelectorCatalogo({ campo, tipo, valor, catalogo, onElegir }: Pro
         >
           {S.catalogo.adoptar}
         </button>
-      ) : nota && <small className="selector-catalogo-nota" id={notaId}>{S.catalogo.noAdoptable(resolucion.id)}</small>)}
+      ) : <>
+        {revisar !== undefined && <button
+          type="button"
+          className="boton adoptar"
+          aria-label={S.catalogo.adoptarRevisandoDe(campo, resolucion.id)}
+          title={S.catalogo.adoptarRevisandoDe(campo, resolucion.id)}
+          onClick={() => revisar(tipo, resolucion.id)}
+        >
+          {S.catalogo.adoptarRevisando}
+        </button>}
+        {nota && <small className="selector-catalogo-nota" id={notaId}>{revisar !== undefined ? S.catalogo.noAdoptableReescribe(resolucion.id) : S.catalogo.noAdoptable(resolucion.id)}</small>}
+      </>)}
     </div>
   );
 }

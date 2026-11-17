@@ -67,6 +67,8 @@ import { moduloControlesCarriles } from './controlesCarriles';
 import { moduloAncho, type LilaAncho } from './ancho';
 import { ajustar, centrar, mostrarPlano, type CanvasAjustable, type CanvasCentrable, type CanvasConPlanos, type Margen } from './centrar';
 import { idDeSeleccion } from './ids';
+import type { ReferenceChanges } from './catalogDelete';
+import { applyReferenceChanges, type ModdleNode } from './catalogLive';
 import { svgDelLienzo, type LienzoExportable } from './exportarDiagrama';
 
 /** Lo que el shell pinta en la barra de estado. */
@@ -254,6 +256,13 @@ export interface Modelador {
   seleccionar?(id: string | readonly string[], opciones?: { centrar?: true }): void;
   /** Gives the canvas the keyboard focus, so bpmn-js's own shortcuts work right away (#410). */
   enfocar?(): void;
+  /**
+   * Sets the catalog references of the listed elements (by the id they have in the exported XML)
+   * outside the command stack (#675, `catalogLive.ts`): a catalog delete or adopt that rewrites
+   * references, and its undo, change the diagram without adding to or emptying its ⌘Z history.
+   * Returns how many elements changed; the shell bumps the model revision itself.
+   */
+  referencias?(cambios: ReferenceChanges): number;
   /**
    * Whether `alinear` would move anything in the current selection (#453): bpmn-js's own rules
    * decide, so lanes, annotations, a pool's children and the like count as bpmn-js counts them.
@@ -651,6 +660,26 @@ export function Lienzo({ xmlInicial, onListo, onEstado, onSeleccion }: Props): R
         activo.get<Selection>('selection').select(elemento);
       },
       enfocar: () => { activo?.get<Canvas>('canvas').focus(); },
+      referencias: (cambios) => {
+        if (activo === null) return 0;
+        const moddle = activo.get<{ create(tipo: string, atributos: Record<string, unknown>): ModdleNode }>('moddle');
+        const cambiados = new Set(applyReferenceChanges(
+          activo.getDefinitions() as unknown as ModdleNode,
+          cambios,
+          (tipo, atributos) => moddle.create(tipo, atributos),
+          (elemento) => originalIds.get(elemento.id ?? '') ?? elemento.id ?? '',
+        ));
+        if (cambiados.size > 0) {
+          // As `repintar`: the way to say «these changed» without the command stack. The properties
+          // panel listens to it and reads the element again. Without the root: `update` has no
+          // graphics for it.
+          const registro = activo.get<ElementRegistry>('elementRegistry');
+          activo.get<EventBus>('eventBus').fire('elements.changed', {
+            elements: registro.filter((el) => el.parent != null && cambiados.has(el.businessObject as ModdleNode)),
+          });
+        }
+        return cambiados.size;
+      },
       alineable: () => {
         if (activo === null) return { alinear: false, distribuir: false };
         const reglas = activo.get<Servicios['rules']>('rules');
