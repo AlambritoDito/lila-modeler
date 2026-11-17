@@ -9,10 +9,18 @@
  * through the same units as the pickers (#93): `catalogo.crear` asks the version 3 question once,
  * and create and update register with «Undo last catalog change». A field is written when it is
  * left (or on Enter), never while typing. Objects of a type this build does not know are shown and
- * not edited. There is no delete here (#675) and no attachment (RM-01 § 6).
+ * not edited. There is no attachment (RM-01 § 6).
+ *
+ * Safe delete (#675, RM-01 § 3.4): «Delete» removes an object nothing uses. One in use is refused —
+ * the refusal lists the uses the engine found, each one a way to its task — and offers the two ways
+ * out, *replace with* another object of the type or *remove references and delete*. There is no
+ * forced delete. An unresolved value is adopted after listing the references it resolves; one that
+ * cannot be an id gets a generated id and those references are rewritten in every process. Each of
+ * these is the last catalog change, so «Undo last catalog change» takes it back whole.
  */
 import { CATALOG_TYPES, catalogKey, isKnownCatalogType, type CatalogAttribute, type CatalogFields, type CatalogObject, type CatalogUse, type KnownCatalogType, type ProcessUse } from '@lila-modeler/engine/project';
 import { useEffect, useId, useRef, useState } from 'react';
+import { adoptionPlaces, adoptionRewrites, type DeleteChoice } from './catalogDelete';
 import { groupCatalog, isProcessUse, repeatsName, unitDescendants, usesOf, type CatalogIndexState } from './catalogo';
 import { useStrings } from './i18n';
 import { SelectorCatalogo, type CatalogoPanel } from './SelectorCatalogo';
@@ -26,6 +34,13 @@ interface Props {
   procesos: readonly { readonly slug: string; readonly name: string }[];
   /** Writes `campos` to `objeto`; resolves to the object, or `null` when nothing changed. */
   actualizar: (objeto: CatalogObject, campos: CatalogFields) => Promise<CatalogObject | null>;
+  /**
+   * #675: deletes `objeto`. Without `como` an object in use is refused: resolves to its uses, and
+   * nothing changes. `'deleted'` when it went; `null` when it failed (the reason is `error`).
+   */
+  eliminar: (objeto: CatalogObject, como?: DeleteChoice) => Promise<'deleted' | readonly CatalogUse[] | null>;
+  /** #675: an unresolved value to adopt, asked for by a picker: the panel opens on its review. */
+  adopcion?: { readonly type: KnownCatalogType; readonly id: string } | null | undefined;
   /** «Undo last catalog change» (#93): whether there is one, and the command. */
   puedeDeshacer: boolean;
   onDeshacer: () => void;
@@ -89,7 +104,7 @@ function CampoTexto({ etiqueta, valor, multilinea = false, invalido, aviso, desc
   );
 }
 
-export function CatalogPanel({ catalogo, indice, procesos, actualizar, puedeDeshacer, onDeshacer, onIr, error, onCerrar }: Props): React.JSX.Element {
+export function CatalogPanel({ catalogo, indice, procesos, actualizar, eliminar, adopcion: adopcionPedida, puedeDeshacer, onDeshacer, onIr, error, onCerrar }: Props): React.JSX.Element {
   const S = useStrings();
   const P = S.catalogo.panel;
   const dialogo = useRef<HTMLDialogElement>(null);
@@ -106,10 +121,26 @@ export function CatalogPanel({ catalogo, indice, procesos, actualizar, puedeDesh
   const [nuevoNombre, setNuevoNombre] = useState('');
   const [atributoNombre, setAtributoNombre] = useState('');
   const [atributoValor, setAtributoValor] = useState('');
+  /** #675: the delete that was refused: the object (`<type>/<id>`) and the uses the engine found. */
+  const [enUso, setEnUso] = useState<{ readonly clave: string; readonly usos: readonly CatalogUse[] } | null>(null);
+  /** #675: the id picked in «Replace with». */
+  const [reemplazo, setReemplazo] = useState('');
+  /** #675: the unresolved value under review to be adopted; it takes the place of the details. */
+  const [adopcion, setAdopcion] = useState<{ readonly type: KnownCatalogType; readonly id: string } | null>(adopcionPedida ?? null);
+  const rechazo = useRef<HTMLDivElement>(null);
+  const revision = useRef<HTMLElement>(null);
+  // A refusal or a review that just appeared takes the focus: its first control, or itself.
+  useEffect(() => {
+    if (enUso !== null) (rechazo.current?.querySelector<HTMLElement>('input') ?? rechazo.current)?.focus();
+  }, [enUso?.clave]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (adopcion !== null) revision.current?.querySelector<HTMLElement>('.acciones button:not(:disabled)')?.focus();
+  }, [adopcion?.type, adopcion?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!dialogo.current?.open) dialogo.current?.showModal();
-    buscador.current?.focus();
+    // Opened on an adoption to review (#675), the focus goes to its buttons instead.
+    (revision.current?.querySelector<HTMLElement>('.acciones button:not(:disabled)') ?? buscador.current)?.focus();
   }, []);
 
   /**
@@ -138,7 +169,7 @@ export function CatalogPanel({ catalogo, indice, procesos, actualizar, puedeDesh
     : P.usoObjeto(nombreObjeto(uso.object), campoDe(uso.field)));
   /** A use in a process opens it on the canvas (the panel closes); one in an object shows that object. */
   const irA = (uso: CatalogUse): void => {
-    if (isProcessUse(uso)) { cerrar(); onIr(uso); } else setSeleccion(uso.object);
+    if (isProcessUse(uso)) { cerrar(); onIr(uso); } else elegir(uso.object);
   };
   const conteo = (objeto: CatalogObject): string => {
     const usos = usesOf(indice, objeto);
@@ -152,8 +183,63 @@ export function CatalogPanel({ catalogo, indice, procesos, actualizar, puedeDesh
     void catalogo.crear(nuevoTipo, nombre).then((objeto) => {
       if (objeto === null) return;
       setNuevoNombre('');
-      setSeleccion(catalogKey(objeto));
+      elegir(catalogKey(objeto));
     });
+  }
+
+  /** Shows `clave` in the details, leaving a refusal or an adoption review that was there. */
+  function elegir(clave: string | null): void {
+    setSeleccion(clave);
+    setEnUso(null);
+    setReemplazo('');
+    setAdopcion(null);
+  }
+
+  /** #675: deletes `objeto`; in use and without `como`, shows the refusal instead. */
+  function borrar(objeto: CatalogObject, como?: DeleteChoice): void {
+    const clave = catalogKey(objeto);
+    void eliminar(objeto, como).then((hecho) => {
+      if (hecho === null) return;
+      if (hecho === 'deleted') {
+        elegir(null);
+        buscador.current?.focus();
+      } else {
+        setReemplazo('');
+        setEnUso({ clave, usos: hecho });
+      }
+    });
+  }
+
+  /** #675: the adoption under review: what it will do, the references it resolves, confirm or cancel. */
+  function revisionDeAdopcion(pedida: { readonly type: KnownCatalogType; readonly id: string }): React.JSX.Element {
+    const lugares = adoptionPlaces(indice, pedida.type, pedida.id);
+    const titulo = P.adoptarTitulo(pedida.id, P.tipo[pedida.type]);
+    const confirmar = (): void => {
+      void catalogo.adoptar(pedida.type, pedida.id).then((objeto) => { if (objeto !== null) elegir(catalogKey(objeto)); });
+    };
+    return (
+      <section ref={revision} className="catalogo-detalle campos catalogo-adopcion" aria-label={titulo}>
+        <h3>{titulo}</h3>
+        <p className="catalogo-nota">{adoptionRewrites(objetos, pedida.id) ? P.adoptarReescribe(pedida.id) : P.adoptarConserva(pedida.id)}</p>
+        <div className="campo">
+          <span id={`${base}-lugares`}>{P.adoptarLugares}</span>
+          {lugares === 'pending' && <output role="status">{P.pendiente}</output>}
+          {lugares === 'unavailable' && <output role="status">{P.noDisponibleTexto}</output>}
+          {typeof lugares !== 'string' && (lugares.length === 0
+            ? <output>{P.adoptarSinLugares}</output>
+            : <ul className="catalogo-usos" aria-labelledby={`${base}-lugares`}>
+              {lugares.map((uso, i) => (
+                <li key={i}><button type="button" className="catalogo-uso" title={P.irAUso(textoUso(uso))} onClick={() => irA(uso)}>{textoUso(uso)}</button></li>
+              ))}
+            </ul>)}
+        </div>
+        <div className="acciones">
+          {/* Not before the references are read: what is confirmed is the list above. */}
+          <button type="button" className="boton primario" disabled={typeof lugares === 'string'} onClick={confirmar}>{P.adoptarConfirmar}</button>
+          <button type="button" className="boton" onClick={() => { setAdopcion(null); buscador.current?.focus(); }}>{S.app.cancelar}</button>
+        </div>
+      </section>
+    );
   }
 
   function detalle(objeto: CatalogObject): React.JSX.Element {
@@ -270,6 +356,35 @@ export function CatalogPanel({ catalogo, indice, procesos, actualizar, puedeDesh
             </ul>}
           </>}
         </div>
+        {editable && <div className="acciones">
+          <button type="button" className="boton" aria-label={P.borrarDe(objeto.name)} onClick={() => borrar(objeto)}>{P.borrar}</button>
+        </div>}
+        {editable && isKnownCatalogType(objeto.type) && enUso?.clave === catalogKey(objeto) && (
+          // The refusal (RM-01 § 3.4): why, where it is used, and the two ways out. No forced delete.
+          <div ref={rechazo} className="campo catalogo-en-uso" role="group" aria-label={P.enUsoGrupo(objeto.name)} tabIndex={-1}>
+            <p className="catalogo-aviso" role="alert">{P.enUso(objeto.name, enUso.usos.length)}</p>
+            <ul className="catalogo-usos" aria-label={P.enUsoLista}>
+              {enUso.usos.map((uso, i) => (
+                <li key={i}><button type="button" className="catalogo-uso" title={P.irAUso(textoUso(uso))} onClick={() => irA(uso)}>{textoUso(uso)}</button></li>
+              ))}
+            </ul>
+            <label className="campo">
+              <span>{P.reemplazarPor}</span>
+              <SelectorCatalogo
+                campo={P.reemplazarPor}
+                tipo={objeto.type}
+                valor={reemplazo === '' ? undefined : reemplazo}
+                catalogo={{ ...catalogo, objetos: objetos.filter((o) => o !== objeto) }}
+                onElegir={setReemplazo}
+              />
+            </label>
+            <div className="acciones">
+              <button type="button" className="boton" disabled={reemplazo === ''} onClick={() => borrar(objeto, { replaceWith: reemplazo })}>{P.reemplazarYBorrar}</button>
+              <button type="button" className="boton" onClick={() => borrar(objeto, { removeReferences: true })}>{P.quitarYBorrar}</button>
+              <button type="button" className="boton" onClick={() => { setEnUso(null); setReemplazo(''); }}>{S.app.cancelar}</button>
+            </div>
+          </div>
+        )}
       </section>
     );
   }
@@ -330,7 +445,7 @@ export function CatalogPanel({ catalogo, indice, procesos, actualizar, puedeDesh
                         type="button"
                         className="catalogo-objeto"
                         aria-current={catalogKey(objeto) === seleccion ? 'true' : undefined}
-                        onClick={() => { setSeleccion(catalogKey(objeto)); setAtributoNombre(''); setAtributoValor(''); }}
+                        onClick={() => { elegir(catalogKey(objeto)); setAtributoNombre(''); setAtributoValor(''); }}
                       >
                         <span className="nombre">{objeto.name}</span>
                         <span className="conteo">{conteo(objeto)}</span>
@@ -350,12 +465,26 @@ export function CatalogPanel({ catalogo, indice, procesos, actualizar, puedeDesh
               : <ul className="catalogo-usos">
                 {sinResolver.map((r, i) => {
                   const texto = P.sinResolverFila(r.id, nombreTipo(r.type), textoUso(r));
-                  return <li key={i}><button type="button" className="catalogo-uso" title={P.irAUso(textoUso(r))} onClick={() => irA(r)}>{texto}</button></li>;
+                  const tipo = r.type;
+                  // #675: one «Adopt» per value, on its first reference; the review lists them all.
+                  const primera = sinResolver.findIndex((otra) => otra.type === tipo && otra.id === r.id) === i;
+                  return <li key={i}>
+                    <button type="button" className="catalogo-uso" title={P.irAUso(textoUso(r))} onClick={() => irA(r)}>{texto}</button>
+                    {primera && isKnownCatalogType(tipo) && r.id.trim() !== '' && <button
+                      type="button"
+                      className="boton adoptar"
+                      aria-label={P.adoptarFila(r.id, P.tipo[tipo])}
+                      title={P.adoptarFila(r.id, P.tipo[tipo])}
+                      onClick={() => { elegir(null); setAdopcion({ type: tipo, id: r.id }); }}
+                    >
+                      {S.catalogo.adoptar}
+                    </button>}
+                  </li>;
                 })}
               </ul>)}
           </section>}
         </nav>
-        {elegido !== undefined ? detalle(elegido) : <p className="catalogo-detalle catalogo-vacio">{P.elige}</p>}
+        {adopcion !== null ? revisionDeAdopcion(adopcion) : elegido !== undefined ? detalle(elegido) : <p className="catalogo-detalle catalogo-vacio">{P.elige}</p>}
       </div>
     </dialog>
   );

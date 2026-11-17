@@ -80,6 +80,8 @@ const mocks = vi.hoisted(() => ({ gate: vi.fn(), worker: vi.fn(), exportXml: vi.
   // The live reparse's `validateBpmnModel` calls (the gate is mocked, so they are only App's):
   // what `esperarReparse` waits on instead of guessing how long a real parse takes under CI load.
   reparses: [] as Promise<unknown>[],
+  // #675: the canvas's in-place rewrite of catalog references, outside its ⌘Z history.
+  referencias: vi.fn(),
   // #93: the catalog the shell hands the properties panel, to play the pickers' create, adopt and read.
   catalogo: undefined as import('./SelectorCatalogo').CatalogoPanel | undefined }));
 /**
@@ -153,7 +155,7 @@ vi.mock('./Modeler', () => ({ Lienzo: ({ onListo, onEstado, onSeleccion }: { onL
     exportar: mocks.exportXml, abrir: mocks.abrir, cuellos: mocks.cuellos, ajustar: mocks.ajustar, zoom: mocks.zoom,
     repintar: mocks.repintar, exportarSvg: mocks.exportarSvg,
     validacion: mocks.validacion, seleccionar: mocks.seleccionar, simulacionTokens: mocks.simulacionTokens, enfocar: mocks.enfocar,
-    porcentajes: mocks.porcentajes, etiquetasPaso: mocks.etiquetasPaso,
+    porcentajes: mocks.porcentajes, etiquetasPaso: mocks.etiquetasPaso, referencias: mocks.referencias,
     suscribir: (events: string[], callback: () => void) => {
       // The lane layer of C2 (`carrilClic.ts`) listens to several events at once: not the shell's.
       if (events.length > 1) return () => {};
@@ -3757,6 +3759,276 @@ it('creating the first object of a version 2 project from the catalog panel asks
   expect(dialogoMejora()).toBeNull();
   expect(filasCatalogo().map(([nombre]) => nombre)).toEqual(['Night porter', 'Receptionist']);
   expect(container.textContent).toContain(T.app.sinGuardar);
+});
+
+// ---------- catalog panel: safe delete and adopt with rewrite across processes (#675) ----------
+
+const AGENTE = { type: 'role', id: 'role-3f8h2n6v0bqk', name: 'Front desk agent', revision: 1 };
+type CambiosDeReferencias = ReadonlyMap<string, readonly { relation: string; id: string }[]>;
+/**
+ * A canvas that remembers what was opened and plays `Modelador.referencias` on it: the references
+ * of each listed task are rewritten in the XML it exports, and nothing is loaded again. The real
+ * one, over bpmn-js, is `Modeler.abrir.test.tsx`.
+ */
+function lienzoConReferencias(): { xml: () => string } {
+  const lienzo = lienzoQueRecuerda();
+  let reescrito: string | null = null;
+  const abrir = mocks.abrir.getMockImplementation()!;
+  mocks.abrir.mockImplementation(async (xml: string) => { reescrito = null; return abrir(xml); });
+  const actual = (): string => reescrito ?? lienzo.xml();
+  mocks.exportXml.mockImplementation(async () => actual());
+  mocks.referencias.mockImplementation((cambios: CambiosDeReferencias) => {
+    for (const [elemento, referencias] of cambios) {
+      const cuerpo = referencias.map((r) => (r.relation.startsWith('responsibility:')
+        ? `<lila:responsibility type="${r.relation.slice('responsibility:'.length)}" roleRef="${r.id}" />`
+        : `<lila:${r.relation} ref="${r.id}" />`)).join('');
+      // The task may have no extension elements left (the engine drops them when it removes the last one).
+      const tarea = new RegExp(`<bpmn:task id="${elemento}"([^>]*?)(?:/>|>(?:\\s*<bpmn:extensionElements>.*?</bpmn:extensionElements>)?(.*?)</bpmn:task>)`, 's');
+      reescrito = actual().replace(tarea, (_todo: string, atributos: string, resto = '') =>
+        `<bpmn:task id="${elemento}"${atributos.trimEnd()}>${cuerpo === '' ? '' : `<bpmn:extensionElements>${cuerpo}</bpmn:extensionElements>`}${resto}</bpmn:task>`);
+      if (!reescrito.includes('xmlns:lila=')) reescrito = reescrito.replace('<bpmn:definitions ', '<bpmn:definitions xmlns:lila="https://lila-modeler.org/schema/bpmn/1" ');
+    }
+    return cambios.size;
+  });
+  return { xml: actual };
+}
+const rechazoCatalogo = () => panelCatalogo()!.querySelector<HTMLElement>('.catalogo-en-uso');
+const botonEnCatalogo = (texto: string) => [...panelCatalogo()!.querySelectorAll('button')].find((b) => b.textContent === texto)!;
+/** Presses a button of the panel and lets the operation, which reads every process, land. */
+async function pulsarEnCatalogo(boton: HTMLElement): Promise<void> {
+  await act(async () => { boton.click(); });
+  await act(async () => { await new Promise((listo) => { setTimeout(listo, 20); }); });
+}
+async function borrarEnCatalogo(nombre: string): Promise<void> {
+  await elegirEnCatalogo(nombre);
+  await pulsarEnCatalogo(campoCatalogo(T.catalogo.panel.borrarDe(nombre)));
+}
+const revisionesDe = (doc: ProjectDocument): number[] => [doc.model.revision, ...(doc.processes ?? []).map((p) => p.model.revision)];
+async function guardarYLeer(): Promise<ProjectDocument> {
+  await click(T.app.guardar);
+  expect(container.textContent).toContain(T.app.guardado);
+  return vi.mocked(session.saveProject).mock.calls.at(-1)![0];
+}
+
+it('deleting «Receptionist», used in three processes, is refused with its three uses; «replace with» rewrites them in all three and the undo restores them, without ever reloading the canvas (#675)', async () => {
+  lienzoConReferencias();
+  const doc = tresProcesos();
+  await abrirRepositorio({ ...doc, catalog: [RECEPCIONISTA, AGENTE] });
+  await click(T.app.pestanas.documentacion);
+  await asentarReparse();
+  const antes = await guardarYLeer();
+  const cargas = mocks.abrir.mock.calls.length;
+
+  await abrirCatalogo();
+  await borrarEnCatalogo('Receptionist');
+  // Refused: the object is still there, nothing to undo, the three uses listed.
+  const R = T.catalogo.panel.relaciones['responsibility:R'];
+  expect(rechazoCatalogo()!.querySelector('[role="alert"]')!.textContent).toBe(T.catalogo.panel.enUso('Receptionist', 3));
+  expect([...rechazoCatalogo()!.querySelectorAll('.catalogo-uso')].map((b) => b.textContent)).toEqual([
+    T.catalogo.panel.usoProceso('Check-in', 'Task_Welcome', R), T.catalogo.panel.usoProceso('Billing', 'Task_Charge', R), T.catalogo.panel.usoProceso('Check-out', 'Task_Farewell', R),
+  ]);
+  expect(mocks.catalogo?.objetos).toEqual([RECEPCIONISTA, AGENTE]);
+  expect(container.textContent).toContain(T.app.guardado);
+  expect(mocks.referencias).not.toHaveBeenCalled();
+
+  // «Replace with» Front desk agent.
+  const selector = campoCatalogo(T.catalogo.panel.reemplazarPor);
+  teclear(selector, 'front');
+  await act(async () => { selector.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
+  await pulsarEnCatalogo(botonEnCatalogo(T.catalogo.panel.reemplazarYBorrar));
+  await vi.waitFor(() => { expect(filasCatalogo()).toEqual([['Front desk agent', T.catalogo.panel.usos(3)]]); });
+  expect(mocks.catalogo?.objetos).toEqual([AGENTE]);
+  expect(container.textContent).toContain(T.app.sinGuardar);
+  // The canvas process was rewritten in place — not loaded again, so its ⌘Z history is as it was.
+  expect(mocks.referencias).toHaveBeenCalledExactlyOnceWith(new Map([['Task_Welcome', [{ relation: 'responsibility:R', id: AGENTE.id }]]]));
+  expect(mocks.abrir.mock.calls.length).toBe(cargas);
+
+  const reemplazado = await guardarYLeer();
+  expect(reemplazado.catalog).toEqual([AGENTE]);
+  expect(xmlDe(reemplazado).every((xml) => xml.includes(`roleRef="${AGENTE.id}"`) && !xml.includes(RECEPCIONISTA.id))).toBe(true);
+  // Every rewritten model is one revision up: its runs are stale.
+  expect(revisionesDe(reemplazado)).toEqual(revisionesDe(antes).map((r) => r + 1));
+
+  // «Undo last catalog change»: the object and the three original references, in all three processes.
+  await abrirCatalogo();
+  await pulsarEnCatalogo(botonEnCatalogo(T.catalogo.deshacer));
+  await vi.waitFor(() => { expect(filasCatalogo()).toEqual([['Front desk agent', T.catalogo.panel.usos(0)], ['Receptionist', T.catalogo.panel.usos(3)]]); });
+  expect(mocks.referencias).toHaveBeenLastCalledWith(new Map([['Task_Welcome', [{ relation: 'responsibility:R', id: RECEPCIONISTA.id }]]]));
+  expect(mocks.abrir.mock.calls.length).toBe(cargas);
+  expect(botonEnCatalogo(T.catalogo.deshacer).disabled).toBe(true);
+  await escapeEnCatalogo();
+  const deshecho = await guardarYLeer();
+  expect(deshecho.catalog).toEqual([RECEPCIONISTA, AGENTE]);
+  expect(xmlDe(deshecho)).toEqual(xmlDe(antes));
+  expect(revisionesDe(deshecho)).toEqual(revisionesDe(antes).map((r) => r + 2));
+});
+
+it('«remove references and delete» reaches the processes that are not on the canvas; undone from another tab, that tab\'s canvas gets its references back in place (#675)', async () => {
+  const lienzo = lienzoConReferencias();
+  const doc = tresProcesos();
+  await abrirRepositorio(doc);
+  await click(T.app.pestanas.documentacion);
+  await asentarReparse();
+  const cargas = mocks.abrir.mock.calls.length;
+
+  await abrirCatalogo();
+  await borrarEnCatalogo('Receptionist');
+  await pulsarEnCatalogo(botonEnCatalogo(T.catalogo.panel.quitarYBorrar));
+  await vi.waitFor(() => { expect(filasCatalogo()).toEqual([]); });
+  expect(mocks.referencias).toHaveBeenCalledExactlyOnceWith(new Map([['Task_Welcome', []]]));
+  expect(mocks.abrir.mock.calls.length).toBe(cargas);
+  await escapeEnCatalogo();
+
+  // The second process, which was not on the canvas, opens without its responsibility.
+  await act(async () => pestanasProceso()[1]!.click());
+  expect(lienzo.xml()).toContain('Task_Charge');
+  expect(lienzo.xml()).not.toContain('lila:responsibility');
+  expect(lienzo.xml()).not.toContain(RECEPCIONISTA.id);
+  await asentarReparse();
+
+  // Undone from the File menu with the second process on the canvas: in place there, by snapshot elsewhere.
+  const cargasEnBilling = mocks.abrir.mock.calls.length;
+  await pulsarEnCatalogo(botonDeshacerCatalogo());
+  await vi.waitFor(() => { expect(mocks.catalogo?.objetos).toEqual([RECEPCIONISTA]); });
+  expect(mocks.referencias).toHaveBeenLastCalledWith(new Map([['Task_Charge', [{ relation: 'responsibility:R', id: RECEPCIONISTA.id }]]]));
+  expect(mocks.abrir.mock.calls.length).toBe(cargasEnBilling);
+  expect(botonDeshacerCatalogo().disabled).toBe(true);
+  const deshecho = await guardarYLeer();
+  expect(deshecho.catalog).toEqual([RECEPCIONISTA]);
+  // The two that were not on the canvas at the undo are back byte for byte; the canvas one has its reference again.
+  expect([xmlDe(deshecho)[0], xmlDe(deshecho)[2]]).toEqual([xmlDe(doc)[0], xmlDe(doc)[2]]);
+  expect(xmlDe(deshecho)[1]).toContain(`<lila:responsibility type="R" roleRef="${RECEPCIONISTA.id}" />`);
+});
+
+it('a picker hands a value that cannot be an id to the catalog panel: adopting «POS» asks the version 3 question, rewrites it in every process, and the undo takes it all back (#675)', async () => {
+  lienzoConReferencias();
+  const conPos = (proceso: string, tarea: string): string => xmlConRol(proceso, tarea, 'cajero').replace('<lila:responsibility type="R" roleRef="cajero" />', '<lila:systemRef ref="POS" />');
+  const proceso = (slug: string, name: string, tarea: string) => ({
+    slug, name, model: { id: `Process_${slug}`, name: 'model.bpmn', xml: conPos(`Process_${slug}`, tarea), revision: 0 },
+    scenarios: { 'as-is.scenario.json': { version: 1, name: 'AS-IS', model: 'model.bpmn' } }, scenarioRevisions: {}, runs: [],
+  });
+  const [uno, dos] = [proceso('check-in', 'Check-in', 'Task_Welcome'), proceso('billing', 'Billing', 'Task_Charge')];
+  const v2: ProjectDocument = { version: 1, id: 'hotel', name: 'Hotel', model: uno.model, scenarios: uno.scenarios, scenarioRevisions: {}, runs: [], process: { slug: uno.slug, name: uno.name }, processes: [dos] };
+  await abrirRepositorio(v2);
+  await click(T.app.pestanas.documentacion);
+  await asentarReparse();
+  const cargas = mocks.abrir.mock.calls.length;
+
+  // The picker's «Adopt…» of a value that is not an id: the panel opens on its review.
+  expect(panelCatalogo()).toBeNull();
+  await act(async () => { mocks.catalogo!.revisarAdopcion!('system', 'POS'); });
+  const P = T.catalogo.panel;
+  const revision = () => panelCatalogo()!.querySelector<HTMLElement>('.catalogo-adopcion')!;
+  expect(revision().textContent).toContain(P.adoptarReescribe('POS'));
+  await vi.waitFor(() => { expect(revision().textContent).not.toContain(P.pendiente); });
+  expect([...revision().querySelectorAll('.catalogo-uso')].map((b) => b.textContent)).toEqual([
+    P.usoProceso('Check-in', 'Task_Welcome', P.relaciones.systemRef), P.usoProceso('Billing', 'Task_Charge', P.relaciones.systemRef),
+  ]);
+  expect(mocks.catalogo?.objetos).toEqual([]);
+
+  await pulsarEnCatalogo(botonEnCatalogo(P.adoptarConfirmar));
+  expect(dialogoMejora()?.open).toBe(true);
+  expect(mocks.referencias).not.toHaveBeenCalled();
+  await responderMejora(T.catalogo.mejoraConfirmar);
+  await vi.waitFor(() => { expect(mocks.catalogo?.objetos.map((o) => o.name)).toEqual(['POS']); });
+  const pos = mocks.catalogo!.objetos[0]!;
+  expect(pos.id).not.toBe('POS');
+  expect(mocks.catalogo?.conCatalogo).toBe(true);
+  expect(mocks.referencias).toHaveBeenCalledExactlyOnceWith(new Map([['Task_Welcome', [{ relation: 'systemRef', id: pos.id }]]]));
+  await vi.waitFor(() => { expect(filasCatalogo()).toEqual([['POS', P.usos(2)]]); });
+  await escapeEnCatalogo();
+  const adoptado = await guardarYLeer();
+  expect(adoptado.formatVersion).toBe(3);
+  expect(xmlDe(adoptado).every((xml) => xml.includes(`<lila:systemRef ref="${pos.id}" />`) && !xml.includes('ref="POS"'))).toBe(true);
+
+  await pulsarEnCatalogo(botonDeshacerCatalogo());
+  await vi.waitFor(() => { expect(mocks.catalogo?.objetos).toEqual([]); });
+  const deshecho = await guardarYLeer();
+  expect(xmlDe(deshecho)).toEqual(xmlDe(v2));
+  expect(deshecho.formatVersion).toBe(3); // The upgrade is never undone (RM-01 § 1.3).
+  expect(mocks.abrir.mock.calls.length).toBe(cargas);
+});
+
+it('the undo is refused, naming the process, while one the change rewrote was edited since and is not on the canvas; from that process it goes through (#675)', async () => {
+  lienzoConReferencias();
+  const doc = tresProcesos();
+  await abrirRepositorio({ ...doc, catalog: [RECEPCIONISTA, AGENTE] });
+  await click(T.app.pestanas.documentacion);
+  await asentarReparse();
+  await abrirCatalogo();
+  await borrarEnCatalogo('Receptionist');
+  await pulsarEnCatalogo(botonEnCatalogo(T.catalogo.panel.quitarYBorrar));
+  await vi.waitFor(() => { expect(mocks.catalogo?.objetos).toEqual([AGENTE]); });
+  await escapeEnCatalogo();
+
+  // «Billing» is edited on the canvas, then left for «Check-out».
+  await act(async () => pestanasProceso()[1]!.click());
+  await act(async () => mocks.changed());
+  await asentarReparse();
+  await act(async () => pestanasProceso()[2]!.click());
+  await asentarReparse();
+  mocks.referencias.mockClear();
+
+  await pulsarEnCatalogo(botonDeshacerCatalogo());
+  expect(container.textContent).toContain(T.catalogo.error(T.catalogo.deshacerEditado('Billing')));
+  expect(mocks.catalogo?.objetos).toEqual([AGENTE]);
+  expect(mocks.referencias).not.toHaveBeenCalled();
+  expect(botonDeshacerCatalogo().disabled).toBe(false);
+
+  // From «Billing» itself the undo is done in place there, and by snapshot in the two it did not edit.
+  await act(async () => pestanasProceso()[1]!.click());
+  await asentarReparse();
+  await pulsarEnCatalogo(botonDeshacerCatalogo());
+  await vi.waitFor(() => { expect(mocks.catalogo?.objetos).toEqual([RECEPCIONISTA, AGENTE]); });
+  expect(mocks.referencias).toHaveBeenCalledExactlyOnceWith(new Map([['Task_Charge', [{ relation: 'responsibility:R', id: RECEPCIONISTA.id }]]]));
+  const deshecho = await guardarYLeer();
+  expect(xmlDe(deshecho).every((xml) => xml.includes(`roleRef="${RECEPCIONISTA.id}"`))).toBe(true);
+});
+
+it('in a one-process version 1 project the only process is the canvas one: an adopt that rewrites changes it in place, and so does its undo (#675)', async () => {
+  lienzoConReferencias();
+  const base = proyecto('p50', 'Front desk') as ProjectDocument;
+  const xml = xmlConRol('Process_Solo', 'Task_Welcome', 'cajero').replace('<lila:responsibility type="R" roleRef="cajero" />', '<lila:systemRef ref="POS" />');
+  await abrirDocumento({ ...base, model: { ...base.model, xml } });
+  const cargas = mocks.abrir.mock.calls.length;
+  expect(pestanasProceso()).toHaveLength(0);
+
+  await act(async () => { mocks.catalogo!.revisarAdopcion!('system', 'POS'); });
+  await vi.waitFor(() => { expect(panelCatalogo()!.querySelector('.catalogo-adopcion')!.querySelectorAll('.catalogo-uso')).toHaveLength(1); });
+  await pulsarEnCatalogo(botonEnCatalogo(T.catalogo.panel.adoptarConfirmar));
+  await responderMejora(T.catalogo.mejoraConfirmar);
+  await vi.waitFor(() => { expect(mocks.catalogo?.objetos.map((o) => o.name)).toEqual(['POS']); });
+  const pos = mocks.catalogo!.objetos[0]!;
+  expect(mocks.referencias).toHaveBeenCalledExactlyOnceWith(new Map([['Task_Welcome', [{ relation: 'systemRef', id: pos.id }]]]));
+  await escapeEnCatalogo();
+  expect((await guardarYLeer()).model.xml).toContain(`<lila:systemRef ref="${pos.id}" />`);
+
+  await pulsarEnCatalogo(botonDeshacerCatalogo());
+  await vi.waitFor(() => { expect(mocks.catalogo?.objetos).toEqual([]); });
+  expect(mocks.referencias).toHaveBeenLastCalledWith(new Map([['Task_Welcome', [{ relation: 'systemRef', id: 'POS' }]]]));
+  expect((await guardarYLeer()).model.xml).toContain('<lila:systemRef ref="POS" />');
+  expect(mocks.abrir.mock.calls.length).toBe(cargas);
+});
+
+it('a delete while a save or an export holds the file lock is refused in the panel, and changes nothing (#675)', async () => {
+  lienzoConReferencias();
+  await abrirRepositorio(tresProcesos());
+  await asentarReparse();
+  await abrirCatalogo();
+  await elegirEnCatalogo('Receptionist');
+  // A save that does not finish holds the lock.
+  let terminar!: (doc: ProjectDocument | null) => void;
+  vi.mocked(session.saveProject).mockReturnValueOnce(new Promise((listo) => { terminar = listo; }));
+  await act(async () => { [...container.querySelectorAll('button')].filter((b) => b.textContent === T.app.guardar).at(-1)!.click(); });
+  await pulsarEnCatalogo(campoCatalogo(T.catalogo.panel.borrarDe('Receptionist')));
+  expect(panelCatalogo()!.querySelector('.catalogo-error')!.textContent).toBe(T.catalogo.error(T.app.guardadoOcupado));
+  expect(rechazoCatalogo()).toBeNull();
+  expect(filasCatalogo().map(([nombre]) => nombre)).toEqual(['Receptionist']);
+  await act(async () => { terminar(null); });
+  // Once it is released the delete goes through to the refusal: the object is in use.
+  await pulsarEnCatalogo(campoCatalogo(T.catalogo.panel.borrarDe('Receptionist')));
+  expect(panelCatalogo()!.querySelector('.catalogo-error')).toBeNull();
+  expect(rechazoCatalogo()).not.toBeNull();
 });
 
 it('the catalog panel reports its own refusals: a file notice is not its banner, and a picker create leaves that notice alone (QA of #674, M2)', async () => {

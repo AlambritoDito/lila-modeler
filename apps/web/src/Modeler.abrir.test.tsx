@@ -140,3 +140,60 @@ it('a list selects the ids still in the diagram and on the plane on screen, as o
   expect(ids()).toEqual([]);
   expect(onSeleccion).toHaveBeenLastCalledWith(null);
 });
+
+it('referencias rewrites catalog references in place, outside the ⌘Z history (#675)', async () => {
+  const { modelador } = await montar();
+  const conCatalogo = XML
+    .replace('<bpmn:definitions ', '<bpmn:definitions xmlns:lila="https://lila-modeler.org/schema/bpmn/1" ')
+    .replace('<bpmn:incoming>F1</bpmn:incoming>', '<bpmn:extensionElements><lila:versionTag value="1.0" /><lila:responsibility type="R" roleRef="role-rec" /><lila:systemRef ref="POS" /></bpmn:extensionElements><bpmn:incoming>F1</bpmn:incoming>')
+    .replace('<bpmn:task id="Inner" name="Wrap" />', '<bpmn:task id="Inner" name="Wrap"><bpmn:extensionElements><lila:responsibility type="A" roleRef="role-rec" /></bpmn:extensionElements></bpmn:task>');
+  await act(async () => { expect(await modelador.abrir(conCatalogo)).toBe(true); });
+  const figura = (id: string) => modelador.servicios.elementRegistry.filter((el) => el.id === id)[0]!;
+  const pila = vi.fn();
+  const cambiados = vi.fn();
+  modelador.suscribir(['commandStack.changed'], pila);
+  modelador.suscribir(['elements.changed'], cambiados);
+
+  // One step of history, to see it survive: the task is renamed on the canvas.
+  act(() => { modelador.servicios.modeling.updateProperties(figura('T2') as never, { name: 'Ship' }); });
+  expect(pila).toHaveBeenCalledTimes(1);
+  cambiados.mockClear();
+
+  // «Replace with» on T1, «remove references» on the task of the collapsed sub-process's plane.
+  let cuantos = 0;
+  act(() => {
+    cuantos = modelador.referencias!(new Map([
+      ['T1', [{ relation: 'responsibility:R', id: 'role-agent' }, { relation: 'systemRef', id: 'POS' }]],
+      ['Inner', []],
+      ['Gone', [{ relation: 'input', id: 'doc-1' }]],
+    ]));
+  });
+  expect(cuantos).toBe(2);
+  expect(pila).toHaveBeenCalledTimes(1); // Not a command: nothing was added to the history.
+  expect(cambiados).toHaveBeenCalledTimes(1); // The properties panel reads the elements again.
+  let xml = await modelador.exportar();
+  expect(xml).toContain('roleRef="role-agent"');
+  expect(xml).not.toContain('role-rec');
+  expect(xml).toContain('<lila:versionTag value="1.0" />');
+  expect(xml).toContain('<lila:systemRef ref="POS" />');
+  expect(xml).toMatch(/<bpmn:task id="Inner" name="Wrap" ?\/>/);
+
+  // ⌘Z undoes the rename, the one step there was, and leaves the catalog change alone.
+  act(() => modelador.deshacer?.());
+  xml = await modelador.exportar();
+  expect(xml).toContain('name="Send"');
+  expect(xml).toContain('roleRef="role-agent"');
+  act(() => modelador.deshacer?.());
+  expect(await modelador.exportar()).toBe(xml);
+  // And ⌘⇧Z brings the rename back.
+  act(() => modelador.rehacer?.());
+  expect(await modelador.exportar()).toContain('name="Ship"');
+
+  // The undo of the catalog change puts the references back the same way.
+  act(() => { modelador.referencias!(new Map([['T1', [{ relation: 'responsibility:R', id: 'role-rec' }, { relation: 'systemRef', id: 'POS' }]], ['Inner', [{ relation: 'responsibility:A', id: 'role-rec' }]]])); });
+  xml = await modelador.exportar();
+  expect(xml).toContain('<lila:responsibility type="R" roleRef="role-rec" />');
+  expect(xml).toContain('<lila:responsibility type="A" roleRef="role-rec" />');
+  expect(xml).not.toContain('role-agent');
+  expect(pila).toHaveBeenCalledTimes(3); // The rename, its undo and its redo: never the catalog.
+});

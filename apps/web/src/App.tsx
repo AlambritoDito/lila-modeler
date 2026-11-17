@@ -17,9 +17,10 @@ import { compare } from '@lila-modeler/engine';
 import { CompareView } from './CompareView';
 import { runMetaFrom } from './compareWarnings';
 import { catalogToken, changeToken, defaultElement, defaultScenarios, documentToken, encodeProject, escenariosDelProyecto, MODELO_PROYECTO, newModelXml, nextScenarioRevisions, procesoDelProyecto, projectStore, proyectoDeSuelto, readLila, readProject, repositoryToken, tokenPart, tomarAvisoRecuperacion } from './project';
-import { adoptReference, createCatalogObject, formatVersionOf, updateCatalogObject, isCurrentRun, newProcessId, processesOf, processIds, processSlug, storedRun, withProcesses, type CatalogObject, type CatalogOperationResult, type ProcessDocument, type ProcessUse } from '@lila-modeler/engine/project';
+import { adoptReference, createCatalogObject, formatVersionOf, updateCatalogObject, isCurrentRun, newProcessId, processesOf, processIds, processSlug, storedRun, withProcesses, type CatalogObject, type CatalogOperationResult, type KnownCatalogType, type ProcessDocument, type ProcessUse } from '@lila-modeler/engine/project';
 import { confirmUpgrade, type UpgradeQuestion } from './catalogUpgrade';
-import { recordCatalogChange, undoCatalogChange, type CatalogUndoEntry } from './catalogUndo';
+import { editedSince, recordCatalogChange, undoCatalogChange, type CatalogUndoEntry } from './catalogUndo';
+import { attemptDelete, rewrittenProcesses, type DeleteChoice, type ReferenceChanges } from './catalogDelete';
 import type { CatalogoPanel } from './SelectorCatalogo';
 import { CatalogPanel } from './CatalogPanel';
 import { buildIndex, scanProcesses, type ProcessScan, type ScanCache } from './catalogo';
@@ -601,6 +602,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
   const [catalogoAbierto, setCatalogoAbierto] = useState(false);
   /** #674: why the panel's last change was refused. Its own: `ioError` is the app's file notices. */
   const [errorCatalogo, setErrorCatalogo] = useState<string | null>(null);
+  /** #675: the unresolved value a picker asked the panel to adopt; the panel opens on its review. */
+  const [adopcionPedida, setAdopcionPedida] = useState<{ readonly type: KnownCatalogType; readonly id: string } | null>(null);
   /**
    * #674: the references of every process, read in the background while the panel is open (RM-01
    * § 4); `'pending'` until the first read finishes, so no count shows as zero before. The cache
@@ -995,8 +998,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     try {
       const operado = await operar(antes);
       // The pickers only offer changes that rewrite no BPMN (an adoptable id); one that would is
-      // refused, before asking anything, rather than applied to a document that holds no processes
-      // (#675 rewrites them).
+      // refused, before asking anything, rather than applied to a document that holds no processes.
+      // Those go through `cambiarCatalogoEnProcesos` (#675), from the catalog panel.
       if (operado.change.processes.length > 0) return null;
       const resultado = await confirmUpgrade(operado, __LILA_VERSION__, preguntarMejora);
       if (resultado === null || extrasDelRepositorio.current !== leidos) return null;
@@ -1008,11 +1011,100 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
       return null;
     }
   }
-  /** #93: «Undo last catalog change»: the catalog as it was before it; the version 3 mark stays. */
-  function deshacerCambioCatalogo(): void {
-    if (deshacerCatalogo === null) return;
-    fijarExtras(extrasDe(undoCatalogChange(documentoDelCatalogo(), deshacerCatalogo)));
-    setDeshacerCatalogo(null);
+  /**
+   * #675: a catalog operation that may rewrite the BPMN of several processes — a delete (*replace
+   * with*, *remove references*) or an adopt of a value that cannot be an id. It is given the whole
+   * document, the canvas process read back live, under the file lock. A process that is not on the
+   * canvas takes the engine's XML; the canvas one is changed in place, outside its ⌘Z history
+   * (`Modelador.referencias`), and its revision goes one up as any other model change. `operar`
+   * answers `{ result }`, or anything else when it was refused and nothing is to be applied (an
+   * object in use). `null`: cancelled, failed or overtaken by another change.
+   */
+  async function cambiarCatalogoEnProcesos<R extends { readonly result?: CatalogOperationResult }>(operar: (doc: ProjectDocument) => Promise<R>): Promise<R | null> {
+    if (modelador === null) return null;
+    const soltar = tomarIoLock();
+    if (soltar === null) { setErrorCatalogo(S.catalogo.error(S.app.guardadoOcupado)); return null; }
+    setErrorCatalogo(null);
+    try {
+      const leidos = extrasDelRepositorio.current;
+      const { doc: antes, revision: leida, enLienzo } = await snapshotConRevision();
+      const operado = await operar(antes);
+      if (operado.result === undefined) return operado;
+      const resultado = await confirmUpgrade(operado.result, __LILA_VERSION__, preguntarMejora);
+      if (resultado === null || extrasDelRepositorio.current !== leidos || revisionRef.current !== leida) return null;
+      const reescritos = await rewrittenProcesses(antes, resultado);
+      const slugEnLienzo = processesOf(antes)[enLienzo]?.slug;
+      let lista = procesos;
+      for (const reescrito of reescritos) {
+        if (reescrito.slug === slugEnLienzo) await reescribirLienzo(reescrito.apply, reescrito.after.model.xml);
+        else lista = lista.map((p) => (p.slug === reescrito.slug ? { ...p, model: reescrito.after.model } : p));
+      }
+      if (lista !== procesos) setProcesos(lista);
+      fijarExtras(extrasDe(resultado.document));
+      setDeshacerCatalogo(recordCatalogChange(antes, resultado, reescritos));
+      return operado;
+    } catch (e) {
+      setErrorCatalogo(S.catalogo.error(e instanceof Error ? e.message : String(e)));
+      return null;
+    } finally { soltar(); }
+  }
+  /** #675: the canvas process with `cambios` applied in place; a canvas that cannot do that loads `xml` instead. */
+  async function reescribirLienzo(cambios: ReferenceChanges, xml: string | undefined): Promise<void> {
+    if (modelador?.referencias !== undefined) modelador.referencias(cambios);
+    else if (xml !== undefined) await modelador?.abrir(xml);
+    alCambiarModelo();
+  }
+  /**
+   * #93: «Undo last catalog change»: the catalog as it was before it; the version 3 mark stays.
+   * #675: a change that rewrote processes is undone in all of them: the ones not on the canvas go
+   * back to the BPMN they had, the canvas one gets its references back in place. Refused, naming
+   * it, while a process that is not on the canvas was edited after the change.
+   */
+  async function deshacerCambioCatalogo(): Promise<void> {
+    const entrada = deshacerCatalogo;
+    if (entrada === null) return;
+    if (entrada.change.processes.length === 0) {
+      fijarExtras(extrasDe(undoCatalogChange(documentoDelCatalogo(), entrada)));
+      setDeshacerCatalogo(null);
+      return;
+    }
+    const avisar = catalogoAbierto ? setErrorCatalogo : setIoError;
+    if (modelador === null) return;
+    const soltar = tomarIoLock();
+    if (soltar === null) { avisar(S.catalogo.error(S.app.guardadoOcupado)); return; }
+    try {
+      const { doc: actual, enLienzo } = await snapshotConRevision();
+      const slugEnLienzo = processesOf(actual)[enLienzo]?.slug;
+      // A process edited since, and not on the canvas, would lose that edit to the snapshot.
+      const editados = editedSince(actual, entrada, slugEnLienzo);
+      if (editados.length > 0) { avisar(S.catalogo.error(S.catalogo.deshacerEditado(editados.map((p) => p.name).join(', ')))); return; }
+      const restaurado = undoCatalogChange(actual, entrada);
+      const previos = new Map(processesOf(restaurado).map((p) => [p.slug, p]));
+      let lista = procesos;
+      for (const { slug } of entrada.change.processes) {
+        const previo = previos.get(slug);
+        if (previo === undefined) continue; // A process deleted since.
+        if (slug === slugEnLienzo) await reescribirLienzo(entrada.rewritten?.get(slug)?.revert ?? new Map(), previo.model.xml);
+        else lista = lista.map((p) => (p.slug === slug ? { ...p, model: previo.model } : p));
+      }
+      if (lista !== procesos) setProcesos(lista);
+      fijarExtras(extrasDe(restaurado));
+      setDeshacerCatalogo(null);
+    } catch (e) {
+      avisar(S.catalogo.error(e instanceof Error ? e.message : String(e)));
+    } finally { soltar(); }
+  }
+  /**
+   * The model on the canvas changed: its revision goes one up, the live reparse starts and the run
+   * in flight is dropped. From the command stack, and from a catalog change that rewrites the canvas
+   * process outside it (#675). A function declaration: the subscription below is made once per canvas.
+   */
+  function alCambiarModelo(): void {
+    revisionRef.current += 1;
+    setRevision(revisionRef.current);
+    setReparseando(true);
+    cancelarCorrida();
+    setCorrida(null);
   }
   /** #93: the catalog the properties panel picks from. A loose diagram is no repository: it has none. */
   const catalogoPanel: CatalogoPanel | undefined = suelto ? undefined : {
@@ -1020,13 +1112,17 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     conCatalogo: formatVersionOf(documentoDelCatalogo(extras)) === 3,
     crear: (tipo, nombre) => cambiarCatalogo((doc) => createCatalogObject(doc, { type: tipo, name: nombre })),
     adoptar: (tipo, id) => cambiarCatalogo((doc) => adoptReference(doc, { type: tipo, ref: id })),
+    // #675: a value that cannot be an id is adopted from the catalog panel, which lists what it rewrites first.
+    revisarAdopcion: (tipo, id) => { if (abrirCatalogo()) setAdopcionPedida({ type: tipo, id }); },
   };
 
   /** #674: the catalog panel, from the File menu and ⌘K. Not over another modal, nor for a loose diagram (no catalog). */
-  function abrirCatalogo(): void {
-    if (suelto || ioBusy || karaoke || modelador === null || document.querySelector('dialog[open], .bienvenida') !== null) return;
+  function abrirCatalogo(): boolean {
+    if (suelto || ioBusy || karaoke || modelador === null || document.querySelector('dialog[open], .bienvenida') !== null) return false;
     setErrorCatalogo(null);
+    setAdopcionPedida(null);
     setCatalogoAbierto(true);
+    return true;
   }
   /** #674: the slug each process is indexed by; a one-process project has no list, and its slug is the project's. */
   const procesosDelCatalogo = procesos.length > 0 ? procesos : [{ slug: processSlug(projectName), name: projectName }];
@@ -1102,7 +1198,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
    * The document plus the revision of the CANVAS process it read (QA of #511, must-fix 1): the save
    * compares that one with `revisionRef`, not `doc.model.revision`, which is the first process's.
    */
-  async function snapshotConRevision(): Promise<{ doc: ProjectDocument; revision: number }> {
+  async function snapshotConRevision(): Promise<{ doc: ProjectDocument; revision: number; enLienzo: number }> {
     const actual = await procesoActual();
     const doc: ProjectDocument = { version: 1, id: projectId, name: projectName,
       model: actual.model, scenarios: actual.scenarios, scenarioRevisions: actual.scenarioRevisions, runs: actual.runs,
@@ -1121,6 +1217,8 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     return {
       doc: procesos.length > 1 || v3 ? withProcesses(doc, lista.map(conId)) : doc,
       revision: actual.model.revision,
+      // #675: where the canvas process is in `processesOf(doc)`.
+      enLienzo: procesos.length > 0 ? activo : 0,
     };
   }
   async function guardar(saveAs = false, asFolder = false): Promise<boolean> {
@@ -1797,13 +1895,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
 
   useEffect(() => {
     if (modelador === null) return;
-    return modelador.suscribir(['commandStack.changed'], () => {
-      revisionRef.current += 1;
-      setRevision(revisionRef.current);
-      setReparseando(true);
-      cancelarCorrida();
-      setCorrida(null);
-    });
+    return modelador.suscribir(['commandStack.changed'], alCambiarModelo);
   }, [modelador]);
 
   useEffect(() => () => { enVuelo.current?.abort(); }, []);
@@ -2230,7 +2322,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
     const acciones: (Comando | false)[] = [
       accion('nuevo', libre), accion('abrir', libre), accion('guardar', libre), accion('guardarComo', libre),
       // #93: only while there is a catalog change to undo, as the menu entry is enabled.
-      deshacerCatalogo !== null && { grupo: 'acciones', nombre: S.catalogo.deshacer, elegir: deshacerCambioCatalogo },
+      deshacerCatalogo !== null && { grupo: 'acciones', nombre: S.catalogo.deshacer, elegir: () => void deshacerCambioCatalogo() },
       // #674: the catalog panel; a loose diagram has no catalog.
       !suelto && modelador !== null && { grupo: 'acciones', nombre: S.catalogo.panel.abrir, elegir: abrirCatalogo },
       accion('imprimir', modelador !== null),
@@ -3101,13 +3193,22 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
         catalogo={{
           ...catalogoPanel,
           crear: (tipo, nombre) => cambiarCatalogo((doc) => createCatalogObject(doc, { type: tipo, name: nombre }), true),
-          adoptar: (tipo, id) => cambiarCatalogo((doc) => adoptReference(doc, { type: tipo, ref: id }), true),
+          // #675: from the panel an adopt may rewrite references in every process.
+          adoptar: async (tipo, id) => (await cambiarCatalogoEnProcesos(async (doc) => ({ result: await adoptReference(doc, { type: tipo, ref: id }) })))?.result.object ?? null,
         }}
+        eliminar={async (objeto: CatalogObject, como?: DeleteChoice) => {
+          const intento = await cambiarCatalogoEnProcesos(async (doc) => {
+            const hecho = await attemptDelete(doc, objeto, como);
+            return hecho.state === 'deleted' ? { result: hecho.result } : { uses: hecho.uses };
+          });
+          return intento === null ? null : 'uses' in intento ? intento.uses : 'deleted';
+        }}
+        adopcion={adopcionPedida}
         indice={indiceCatalogo}
         procesos={procesosDelCatalogo}
         actualizar={(objeto, campos) => cambiarCatalogo((doc) => updateCatalogObject(doc, { ...campos, id: objeto.id, type: objeto.type, baseRevision: objeto.revision }), true)}
         puedeDeshacer={deshacerCatalogo !== null}
-        onDeshacer={deshacerCambioCatalogo}
+        onDeshacer={() => void deshacerCambioCatalogo()}
         onIr={(uso) => void irAUso(uso)}
         error={errorCatalogo}
         onCerrar={() => setCatalogoAbierto(false)}
@@ -3200,7 +3301,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               <button type="button" disabled={ioBusy || modelador === null} onClick={() => void guardar(true, true)}>{S.app.menuEscritorio.guardarComoCarpeta}</button>
               <hr />
               <button type="button" disabled={suelto || ioBusy || modelador === null} onClick={abrirCatalogo}>{S.catalogo.panel.abrir}</button>
-              <button type="button" disabled={deshacerCatalogo === null} onClick={deshacerCambioCatalogo}>{S.catalogo.deshacer}</button>
+              <button type="button" disabled={deshacerCatalogo === null} onClick={() => void deshacerCambioCatalogo()}>{S.catalogo.deshacer}</button>
               <hr />
               <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarSvg')}>{S.app.menuEscritorio.exportarSvg}</button>
               <button type="button" disabled={modelador === null} onClick={() => ejecutar('exportarPng')}>{S.app.menuEscritorio.exportarPng}</button>
@@ -3217,7 +3318,7 @@ export function App({ store, bpmnFilesEnabled = true }: { store: ProjectStore; b
               <button type="button" title={`${S.app.tituloGuardar}${atajo('guardar')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar()}>{S.app.guardar}</button>
               <button type="button" title={`${S.app.tituloGuardarComo}${atajo('guardarComo')}`} disabled={ioBusy || modelador === null} onClick={() => void guardar(true)}>{S.app.guardarComo}</button>
               <button type="button" disabled={suelto || ioBusy || modelador === null} onClick={abrirCatalogo}>{S.catalogo.panel.abrir}</button>
-              <button type="button" disabled={deshacerCatalogo === null} onClick={deshacerCambioCatalogo}>{S.catalogo.deshacer}</button>
+              <button type="button" disabled={deshacerCatalogo === null} onClick={() => void deshacerCambioCatalogo()}>{S.catalogo.deshacer}</button>
               {bpmnFilesEnabled && <>
                 <button type="button" disabled={ioBusy || modelador === null} onClick={() => void projectAction('bpmn')}>{S.app.importarBpmn}</button>
                 <button type="button" onClick={() => void exportar()}>{S.app.exportarBpmn}</button>

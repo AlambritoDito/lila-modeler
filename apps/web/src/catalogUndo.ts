@@ -8,19 +8,53 @@
  * (`withCatalog` keeps a version 3 document at version 3, RM-01 § 1.3). After an undo there is
  * nothing to undo until the next catalog change. Memory only: closing or opening a project drops it.
  *
- * Create and adopt (#93) rewrite no process; rename (#674) and delete (#675) register here too.
+ * Create and adopt (#93) rewrite no process; rename (#674) registers here too. A delete with
+ * *replace with* or *remove references* and an adopt that rewrites (#675) change several processes:
+ * the snapshot holds them all, and undoing restores each one. The one on the canvas is put back in
+ * place; one that is not, and was edited since, makes the caller refuse the undo (`editedSince`)
+ * rather than lose that edit to the snapshot.
  */
-import { processesOf, withCatalog, withProcesses, type CatalogChange, type CatalogOperationResult, type ProjectDocument } from '@lila-modeler/engine/project';
+import type { ReferenceChanges, RewrittenProcess } from './catalogDelete';
+import { processesOf, withCatalog, withProcesses, type CatalogChange, type CatalogOperationResult, type ProcessDocument, type ProjectDocument } from '@lila-modeler/engine/project';
 
 /** The one change that can be undone: the document before it and what it changed. */
 export interface CatalogUndoEntry {
   readonly before: ProjectDocument;
   readonly change: CatalogChange;
+  /**
+   * #675: by slug, each process the change rewrote (`catalogDelete.rewrittenProcesses`): the
+   * references its elements had before, and the revision the change left its model at.
+   * - The process on the canvas when the change is undone is put back with `revert`, in place,
+   *   instead of being loaded again from `before` — that would empty its ⌘Z history and drop what
+   *   was drawn since.
+   * - A process that is not on the canvas goes back to its BPMN of `before`; `revision` tells
+   *   whether it was edited since (`editedSince`), when that would drop the edit.
+   */
+  readonly rewritten?: ReadonlyMap<string, { readonly revert: ReferenceChanges; readonly revision: number }>;
 }
 
 /** The entry for the change from `before` to `result`, or `null` when nothing changed (nothing to undo). */
-export function recordCatalogChange(before: ProjectDocument, result: Pick<CatalogOperationResult, 'changed' | 'change'>): CatalogUndoEntry | null {
-  return result.changed ? { before, change: result.change } : null;
+export function recordCatalogChange(
+  before: ProjectDocument,
+  result: Pick<CatalogOperationResult, 'changed' | 'change'>,
+  rewritten: readonly Pick<RewrittenProcess, 'slug' | 'revert' | 'after'>[] = [],
+): CatalogUndoEntry | null {
+  if (!result.changed) return null;
+  if (rewritten.length === 0) return { before, change: result.change };
+  return { before, change: result.change, rewritten: new Map(rewritten.map((r) => [r.slug, { revert: r.revert, revision: r.after.model.revision }])) };
+}
+
+/**
+ * The processes of `current` that `entry` rewrote and that were edited after it (their model is
+ * not at the revision the change left it at), `canvas` aside: undoing by snapshot would put back
+ * their BPMN of before the change and drop that edit. The caller refuses the undo and names them;
+ * with one of them on the canvas the undo is done in place there and nothing is lost.
+ */
+export function editedSince(current: ProjectDocument, entry: CatalogUndoEntry, canvas?: string): ProcessDocument[] {
+  return processesOf(current).filter((p) => {
+    const left = entry.rewritten?.get(p.slug);
+    return left !== undefined && p.slug !== canvas && p.model.revision !== left.revision;
+  });
 }
 
 /**

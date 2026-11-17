@@ -122,7 +122,7 @@ interface Estado {
  * Mounts the panel's documentation tab with a catalog kept the way `App.tsx` keeps it: each
  * operation asks `preguntar` when it upgrades the document, and registers its undo snapshot.
  */
-function montar(modelador: Modelador, inicial: ProjectDocument, preguntar: (q: { appVersion: string }) => Promise<boolean>): { contenedor: HTMLElement; estado: () => Estado } {
+function montar(modelador: Modelador, inicial: ProjectDocument, preguntar: (q: { appVersion: string }) => Promise<boolean>, revisarAdopcion?: CatalogoPanel['revisarAdopcion']): { contenedor: HTMLElement; estado: () => Estado } {
   const contenedor = document.createElement('div');
   document.body.append(contenedor);
   const raizReact = createRoot(contenedor);
@@ -142,6 +142,7 @@ function montar(modelador: Modelador, inicial: ProjectDocument, preguntar: (q: {
       conCatalogo: formatVersionOf(doc) === 3,
       crear: (tipo, nombre) => cambiar((d) => createCatalogObject(d, { type: tipo, name: nombre })),
       adoptar: (tipo, id) => cambiar((d) => adoptReference(d, { type: tipo, ref: id })),
+      ...(revisarAdopcion !== undefined ? { revisarAdopcion } : {}),
     };
     ultimo = {
       doc,
@@ -250,6 +251,24 @@ describe('catalog pickers in the properties panel (#93)', () => {
     const nota = contenedor.querySelector('.selector-catalogo-nota')!;
     expect(campo(contenedor, T.propiedades.rol(2)).getAttribute('aria-describedby')).toBe(nota.id);
     expect(roles(b, 'Task_Charge')).toEqual(['cajero', 'Head Cashier']);
+  });
+
+  it('with a catalog panel to review it in, a value that is not an id gets «Adopt…», which hands it over and changes nothing itself (#675)', async () => {
+    const b = await banco();
+    const revisar = vi.fn();
+    const { contenedor, estado } = montar(b.modelador, V3, nunca, revisar);
+    b.clic('Task_Charge');
+    const antes = await b.exportar();
+    const boton = contenedor.querySelector<HTMLButtonElement>(`button[aria-label="${T.catalogo.adoptarRevisandoDe(T.propiedades.rol(2), 'Head Cashier')}"]`)!;
+    expect(boton.textContent).toBe(T.catalogo.adoptarRevisando);
+    expect(contenedor.textContent).toContain(T.catalogo.noAdoptableReescribe('Head Cashier'));
+    expect(contenedor.textContent).not.toContain(T.catalogo.noAdoptable('Head Cashier'));
+    await act(async () => { boton.click(); });
+    expect(revisar).toHaveBeenCalledExactlyOnceWith('role', 'Head Cashier');
+    expect(estado().doc).toBe(V3);
+    expect(await b.exportar()).toBe(antes);
+    // An adoptable id keeps its direct «Adopt»: it rewrites nothing, so there is nothing to review.
+    expect(contenedor.querySelector(`button[aria-label="${T.catalogo.adoptarDe(T.propiedades.rol(1), 'cajero')}"]`)).not.toBeNull();
   });
 
   it('a version 1 or 2 project shows its typed ids without warnings (RM-01 § 3.4), and still offers Adopt', async () => {

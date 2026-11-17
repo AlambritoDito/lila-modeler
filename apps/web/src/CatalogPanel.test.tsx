@@ -99,6 +99,7 @@ function montar(inicial: ProjectDocument, escaneos: readonly ProcessScan[] | 'pe
       procesos={PROCESOS}
       error={error}
       actualizar={(objeto, campos) => (espia?.(), cambiar((d) => updateCatalogObject(d, { ...campos, id: objeto.id, type: objeto.type, baseRevision: objeto.revision })))}
+      eliminar={async () => null}
       puedeDeshacer={entrada !== null}
       onDeshacer={() => { if (entrada !== null) { setDoc(undoCatalogChange(doc, entrada)); setEntrada(null); } }}
       onIr={ir}
@@ -465,7 +466,8 @@ describe('catalog panel (#674)', () => {
     expect(enlace.target).toBe('_blank');
     expect(enlace.rel).toBe('noopener noreferrer');
     expect(d.querySelector('input[type="file"]')).toBeNull();
-    expect(dialogo().textContent).not.toMatch(/delete|attach/i);
+    // No attachments (RM-01 § 6). Deleting came with #675 (`CatalogPanel.delete.test.tsx`).
+    expect(dialogo().textContent).not.toMatch(/attach/i);
 
     // The owner is picked from the roles, by name; the catalog holds the id.
     const dueno = campo(d, P.campos.ownerRef);
